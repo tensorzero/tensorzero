@@ -187,6 +187,22 @@ export function isErrorLike(error: unknown): error is ErrorLike {
   );
 }
 
+export function hexToDecimal(hex: string): string {
+  try {
+    return BigInt("0x" + hex).toString();
+  } catch {
+    return hex;
+  }
+}
+
+export function decimalToHex(decimal: string): string {
+  try {
+    return BigInt(decimal).toString(16);
+  } catch {
+    return decimal;
+  }
+}
+
 export class JSONParseError extends SyntaxError {
   constructor(
     public message: string,

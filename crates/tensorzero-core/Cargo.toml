@@ -130,8 +130,8 @@ urlencoding = "2.1.3"
 http-body = "1.0.1"
 tensorzero-auth = { path = "../tensorzero-auth" }
 autopilot-client = { path = "../autopilot-client" }
+durable-tools-spawn = { path = "../durable-tools-spawn" }
 schemars = { workspace = true, features = ["uuid1"] }
-git2 = { workspace = true }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
@@ -158,4 +158,4 @@ tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 redis-test = { workspace = true }
 
 [build-dependencies]
-built = { version = "0.8.0", features = ["git2"] }
+built = "0.8.0"

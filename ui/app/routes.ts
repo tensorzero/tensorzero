@@ -10,6 +10,8 @@ export default [
 
   // API routes
   ...prefix("api", [
+    route("auth/set_gateway_key", "routes/api/auth/set_gateway_key.route.ts"),
+
     route(
       "curated_inferences/count",
       "routes/api/curated_inferences/count.route.ts",
@@ -126,17 +128,8 @@ export default [
   // Evaluations
   route("evaluations", "routes/evaluations/layout.tsx", [
     index("routes/evaluations/route.tsx"),
-    route(
-      ":evaluation_name",
-      "routes/evaluations/$evaluation_name/layout.tsx",
-      [
-        index("routes/evaluations/$evaluation_name/route.tsx"),
-        route(
-          ":datapoint_id",
-          "routes/evaluations/$evaluation_name/$datapoint_id/route.tsx",
-        ),
-      ],
-    ),
+    route("runs", "routes/evaluations/runs.tsx"),
+    route("results/:datapoint_id", "routes/evaluations/results/route.tsx"),
   ]),
 
   // Workflow Evaluations (formerly Dynamic Evaluations)

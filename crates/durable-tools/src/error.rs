@@ -209,8 +209,10 @@ impl From<DurableError> for ToolError {
             DurableError::InvalidEventName { reason } => {
                 ToolError::NonControl(NonControlToolError::InvalidEventName { reason })
             }
-            DurableError::InvalidTaskParams { message, .. } => {
-                ToolError::NonControl(NonControlToolError::InvalidParams { message })
+            DurableError::InvalidTaskParams { task_name, message } => {
+                ToolError::NonControl(NonControlToolError::InvalidParams {
+                    message: format!("invalid task parameters for `{task_name}`: {message}"),
+                })
             }
             DurableError::InvalidState { state } => {
                 ToolError::NonControl(NonControlToolError::Internal {

@@ -51,7 +51,7 @@ export type LaunchOptimizationWorkflowToolParams = {
    */
   val_fraction?: number;
   /**
-   * The optimizer configuration (e.g., SFT, DPO, MIPROv2).
+   * The optimizer configuration (e.g., SFT, DICL).
    */
   optimizer_config: UninitializedOptimizerInfo;
 };

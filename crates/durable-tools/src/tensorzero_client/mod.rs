@@ -42,9 +42,9 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
-    ListEventsParams, ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    ToolOutcome,
+    CreateEventPayload, CreateEventPayloadToolResult, CreateEventResponse,
+    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
+    S3UploadRequest, S3UploadResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -330,6 +330,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 

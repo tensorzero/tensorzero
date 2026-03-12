@@ -836,6 +836,7 @@ impl TensorZeroClient for Client {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(_) => Err(TensorZeroClientError::NotSupported(
@@ -847,7 +848,7 @@ impl TensorZeroClient for Client {
             } => crate::run_evaluation::run_evaluation(
                 gateway.handle.app_state.clone(),
                 &params,
-                Arc::new(durable::NoopHeartbeater),
+                heartbeater,
             )
             .await
             .map_err(|e| TensorZeroClientError::Evaluation(e.to_string())),

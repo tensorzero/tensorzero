@@ -569,13 +569,10 @@ impl TensorZeroClient for EmbeddedClient {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError> {
-        crate::run_evaluation::run_evaluation(
-            self.app_state.clone(),
-            &params,
-            Arc::new(durable::NoopHeartbeater),
-        )
-        .await
-        .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
+        crate::run_evaluation::run_evaluation(self.app_state.clone(), &params, heartbeater)
+            .await
+            .map_err(|e| TensorZeroClientError::Evaluation(e.to_string()))
     }
 }

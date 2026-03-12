@@ -468,6 +468,18 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.task_ctx.uuid7().await.map_err(Into::into)
     }
 
+    /// Extend the task's lease to prevent timeout.
+    ///
+    /// Use this for long-running operations that don't naturally checkpoint.
+    /// Each `step()` call also extends the lease automatically.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the heartbeat fails.
+    pub async fn heartbeat(&self, duration: Option<Duration>) -> ToolResult<()> {
+        self.task_ctx.heartbeat(duration).await.map_err(Into::into)
+    }
+
     /// Call TensorZero inference with full parameter control.
     ///
     /// This is a checkpointed operation - results are cached on restart.

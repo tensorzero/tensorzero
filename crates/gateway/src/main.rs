@@ -21,7 +21,10 @@ use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
-use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
+use tensorzero_core::db::postgres::{
+    PostgresConnectionInfo, manual_run_postgres_migrations,
+    postgres_setup::check_pgcron_configured_correctly,
+};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{self, Error, ErrorDetails};
@@ -116,6 +119,28 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+async fn validate_pgcron_setup_for_postgres_primary(
+    gateway_handle: &gateway::GatewayHandle,
+) -> Result<(), ExitCode> {
+    if gateway_handle.app_state.primary_datastore != PrimaryDatastore::Postgres {
+        return Ok(());
+    }
+    let Some(pgpool) = gateway_handle.app_state.postgres_connection_info.get_pool() else {
+        tracing::error!(
+            "Postgres is configured to be the primary observability backend, but cannot establish a postgres connection."
+        );
+        return Err(ExitCode::FAILURE);
+    };
+
+    check_pgcron_configured_correctly(pgpool).await.map_err(|e| {
+        tracing::error!("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly.");
+        e.log();
+        ExitCode::FAILURE
+    })?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     match run().await {
@@ -133,8 +158,6 @@ async fn run() -> Result<(), ExitCode> {
     let delayed_log_config = observability::setup_observability(args.log_format, true)
         .await
         .log_err_pretty("Failed to set up logs")?;
-
-    let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
 
     if args.early_exit_commands.create_api_key {
         handle_create_api_key(args.early_exit_command_arguments.expiration)
@@ -177,7 +200,7 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION} (commit: {git_sha})");
+    tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
     // Handle `--config-file` or `--default-config`
     let (unwritten_config, glob) = match (args.default_config, args.config_file) {
@@ -304,6 +327,8 @@ async fn run() -> Result<(), ExitCode> {
         gateway::GatewayHandle::new(unwritten_config, available_tools, tool_whitelist)
             .await
             .log_err_pretty("Failed to initialize AppState")?;
+
+    validate_pgcron_setup_for_postgres_primary(&gateway_handle).await?;
 
     // Start autopilot worker if configured
     let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
@@ -624,24 +649,25 @@ pub async fn shutdown_signal() {
     };
 }
 
-/// Spawn the autopilot worker if environment variables are set.
+/// Spawn the durable worker if Postgres is configured.
+///
+/// The worker processes tasks from the durable queue. It starts whenever Postgres
+/// is available, regardless of whether the autopilot API key is set. This allows
+/// standalone durable tools (e.g. GEPA) to run without autopilot credentials.
 async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
-    // Only start if autopilot client is configured
-    if gateway_handle.app_state.autopilot_client.is_none() {
-        tracing::debug!("Autopilot worker not configured: TENSORZERO_AUTOPILOT_API_KEY not set");
-        return Ok(None);
-    }
-
-    // Only start if postgres is enabled (needed for durable task queue)
+    // Only start if Postgres is enabled (needed for durable task queue)
     let pool = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
-            tracing::error!(
-                "TENSORZERO_AUTOPILOT_API_KEY env var set, but Postgres is not enabled."
-            );
-            return Err(ExitCode::FAILURE);
+            if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {
+                tracing::error!(
+                    "`TENSORZERO_AUTOPILOT_API_KEY` is set, but Postgres is not enabled."
+                );
+                return Err(ExitCode::FAILURE);
+            }
+            return Ok(None);
         }
         #[cfg(test)]
         #[expect(unreachable_patterns)]

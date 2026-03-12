@@ -41,6 +41,8 @@ echo "Starting background ClickHouse wake-up..."
 curl --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
 
+REPO_ROOT="$(pwd)"
+
 # Set up cleanup function to run on exit
 cleanup_database() {
     if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
@@ -57,8 +59,8 @@ cleanup_database() {
             echo "Cleanup completed for database: $DB_NAME"
         fi
     fi
-    docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down -v || true
-    cat e2e_logs.txt || echo "e2e logs don't exist"
+    docker compose -f "$REPO_ROOT/crates/tensorzero-core/tests/e2e/docker-compose.yml" down -v || true
+    cat "$REPO_ROOT/crates/e2e_logs.txt" || echo "e2e logs don't exist"
 }
 
 # Register cleanup function to run on script exit (success or failure)
@@ -113,6 +115,7 @@ docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up -d --wa
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
+cd crates
 SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
@@ -140,7 +143,7 @@ export CLICKHOUSE_USER=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USER
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
 export CLICKHOUSE_SECURE=1
 export SQLX_OFFLINE=1
-cd ui/fixtures
+cd ../ui/fixtures
 max_retries=3
 for attempt in $(seq 1 $max_retries); do
     if ./load_fixtures.sh $DATABASE_NAME; then
@@ -153,7 +156,7 @@ for attempt in $(seq 1 $max_retries); do
     echo "load_fixtures.sh failed (attempt $attempt/$max_retries), retrying..."
     sleep 5
 done
-cd ../..
+cd ../../crates
 sleep 2
 
 # Wait for background test compilation to finish

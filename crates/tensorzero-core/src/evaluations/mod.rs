@@ -103,10 +103,6 @@ impl From<&FunctionConfig> for EvaluationFunctionConfig {
     }
 }
 
-/// A map of function names to their evaluation configurations.
-/// Used to look up output schemas when running evaluations.
-pub type EvaluationFunctionConfigTable = HashMap<String, EvaluationFunctionConfig>;
-
 impl EvaluatorConfig {
     // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
     #[expect(deprecated)]
@@ -1243,6 +1239,7 @@ impl UninitializedLLMJudgeVariantInfo {
         Ok(VariantInfo {
             inner,
             timeouts: self.timeouts.unwrap_or_default(),
+            namespace: None,
         })
     }
 }

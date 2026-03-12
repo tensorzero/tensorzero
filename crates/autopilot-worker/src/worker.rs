@@ -182,6 +182,15 @@ impl ToolVisitor for LocalToolVisitor<'_> {
             .await?;
         Ok(())
     }
+
+    async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
+    where
+        T: TaskTool<SideInfo = (), ExtraState = ()>,
+    {
+        // Register directly — no ClientTaskToolWrapper, no result publishing
+        self.executor.register_task_tool_instance(tool).await?;
+        Ok(())
+    }
 }
 
 /// Handle to the running autopilot worker.
