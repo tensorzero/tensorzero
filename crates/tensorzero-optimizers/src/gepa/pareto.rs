@@ -281,11 +281,14 @@ impl ParetoFrontier {
             }));
         }
 
-        let items: Vec<_> = self
+        let mut items: Vec<_> = self
             .variant_frequencies
             .iter()
             .filter(|(name, _)| self.variant_configs.contains_key(*name))
             .collect();
+        // Sort by name so weighted sampling is deterministic across process restarts
+        // (HashMap iteration order varies due to random hash seeds).
+        items.sort_by(|(a, _), (b, _)| a.cmp(b));
 
         if items.is_empty() {
             return Err(Error::new(ErrorDetails::InternalError {
