@@ -34,7 +34,7 @@ export function StepTab({
         state === "upcoming" &&
           "text-fg-muted hover:bg-purple-100/50 dark:hover:bg-purple-900/20",
       )}
-      aria-label={`Go to question ${index + 1}: ${label}`}
+      aria-label={`Go to step ${index + 1}: ${label}`}
       aria-current={state === "active" ? "step" : undefined}
     >
       {state === "completed" ? (
