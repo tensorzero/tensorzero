@@ -132,6 +132,16 @@ async fn test_check_pgcron_configured_correctly_returns_error_without_pgcron(poo
 
 // ===== pgvector tests =====
 
+#[tokio::test]
+async fn test_pgvector_available_in_e2e_setup() {
+    let conn = get_test_postgres().await;
+    let pool = conn.get_pool().expect("Pool should be available");
+
+    postgres_setup::check_pgvector_configured_correctly(pool)
+        .await
+        .expect("pgvector should be configured in our Postgres setup");
+}
+
 /// Tests that `check_pgvector_configured_correctly` returns an error when pgvector is not installed.
 /// Uses `#[sqlx::test]` to get a fresh database without pgvector.
 #[sqlx::test]
