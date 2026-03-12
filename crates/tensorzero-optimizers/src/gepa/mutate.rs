@@ -17,9 +17,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, from_value, json, to_value};
 
 use tensorzero_core::{
-    client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
-    },
+    client::{ClientInferenceParams, Input, InputMessage, InputMessageContent},
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
@@ -49,7 +47,7 @@ struct TemplateEntry {
 /// Builds uninitialized chat completion config with embedded templates using GEPAConfig settings.
 ///
 /// Returns configured UninitializedChatCompletionConfig with system and user templates.
-fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
+pub fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
     let mut mutate_config = UninitializedChatCompletionConfig {
         model: gepa_config.mutation_model.clone().into(),
         weight: None,
@@ -89,7 +87,7 @@ fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCo
 /// templates_map, and analyses.
 ///
 /// Returns error if serialization fails.
-fn build_mutate_input(
+pub fn build_mutate_input(
     analyses: &[Analysis],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
@@ -153,7 +151,7 @@ fn build_mutate_input(
 ///
 /// Returns error if mutation fails (LLM call fails, invalid response format, etc.).
 pub async fn mutate_variant(
-    gateway_client: &Client,
+    client: &(impl super::GepaClient + ?Sized),
     analyses: &[Analysis],
     function_context: &FunctionContext,
     parent: &GEPAVariant,
@@ -198,18 +196,11 @@ pub async fn mutate_variant(
     };
 
     // Call the inference API
-    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+    let response = client.inference(params).await.map_err(|e| {
         Error::new(ErrorDetails::Inference {
             message: format!("Failed to call mutate function: {e}"),
         })
     })?;
-
-    // Extract the response
-    let InferenceOutput::NonStreaming(response) = inference_output else {
-        return Err(Error::new(ErrorDetails::Inference {
-            message: "Expected NonStreaming response but got Streaming".to_string(),
-        }));
-    };
 
     // Extract JSON content from the response
     let InferenceResponse::Json(json_response) = &response else {
