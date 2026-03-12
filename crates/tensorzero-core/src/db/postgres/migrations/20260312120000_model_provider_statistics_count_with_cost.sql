@@ -97,3 +97,8 @@ BEGIN
     WHERE singleton = TRUE;
 END;
 $$;
+
+-- Backfill existing rows by running a full refresh so that `count_with_cost`
+-- is populated for all historical data (otherwise it remains NULL until the
+-- next incremental refresh covers those buckets).
+SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE);
