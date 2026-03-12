@@ -1,15 +1,13 @@
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { cn } from "~/utils/common";
 import type {
   EventPayloadUserQuestions,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 import { MultipleChoiceStep } from "./MultipleChoiceStep";
 import { FreeResponseStep } from "./FreeResponseStep";
-import { StepTab } from "./StepTab";
 import { useQuestionCardState } from "./useQuestionCardState";
-import { useAnimatedHeight } from "~/hooks/useAnimatedHeight";
+import { QuestionCard } from "./QuestionCard";
 
 type PendingQuestionCardProps = {
   eventId: string;
@@ -30,9 +28,6 @@ export function PendingQuestionCard({
   className,
 }: PendingQuestionCardProps) {
   const state = useQuestionCardState(payload, eventId, onSubmit);
-  const { ref: contentRef, height: contentHeight } = useAnimatedHeight(
-    state.activeStep,
-  );
 
   const handleDismiss = () => {
     const responses: Record<string, UserQuestionAnswer> = {};
@@ -76,61 +71,26 @@ export function PendingQuestionCard({
   };
 
   return (
-    <div
-      className={cn(
-        "flex flex-col rounded-md border border-purple-200 bg-white dark:border-purple-800 dark:bg-purple-950/10",
-        className,
-      )}
-    >
-      {/* Header row */}
-      <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-3">
-        <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-          {state.isSingleQuestion ? "Question" : "Questions"}
-        </span>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          disabled={isLoading}
-          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-300 transition-colors hover:text-purple-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-700 dark:hover:text-purple-500"
-          aria-label="Dismiss questions"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Step tabs (only for multi-question) */}
-      {!state.isSingleQuestion && (
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
-          {payload.questions.map((q, idx) => (
-            <StepTab
-              key={q.id}
-              index={idx}
-              label={q.header}
-              state={getStepTabState(idx)}
-              disabled={isLoading}
-              onClick={() => state.setActiveStep(idx)}
-            />
-          ))}
-        </nav>
-      )}
-
-      {/* Content area */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 px-4 pb-3">
-        <div
-          ref={contentRef}
-          className="overflow-hidden transition-[height] duration-300 ease-in-out"
-          style={{ height: contentHeight }}
-        >
-          <div
-            key={state.activeStep}
-            className="animate-in fade-in duration-300"
-          >
-            {renderActiveStep()}
-          </div>
-        </div>
-
-        {/* Footer: Back / Skip / Next / Submit */}
-        <div className="flex items-center justify-between">
+    <QuestionCard
+      title={state.isSingleQuestion ? "Question" : "Questions"}
+      onDismiss={handleDismiss}
+      isLoading={isLoading}
+      className={className}
+      activeStep={state.activeStep}
+      steps={
+        !state.isSingleQuestion
+          ? {
+              items: payload.questions.map((q, idx) => ({
+                id: q.id,
+                label: q.header,
+                state: getStepTabState(idx),
+              })),
+              onStepClick: (idx) => state.setActiveStep(idx),
+            }
+          : undefined
+      }
+      footer={
+        <div className="flex items-center justify-between px-4 pt-3 pb-3">
           <div>
             {!state.isSingleQuestion && !state.isFirstStep && (
               <Button
@@ -178,7 +138,9 @@ export function PendingQuestionCard({
             )}
           </div>
         </div>
-      </div>
-    </div>
+      }
+    >
+      {renderActiveStep()}
+    </QuestionCard>
   );
 }

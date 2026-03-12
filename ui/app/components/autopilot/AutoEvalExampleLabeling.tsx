@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { StepTab } from "~/components/autopilot/question-cards/StepTab";
 import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { ExpandableElement } from "~/components/input_output/ExpandableElement";
 import {
@@ -11,6 +10,7 @@ import {
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
 import { OptionButton } from "~/components/autopilot/question-cards/OptionButton";
+import { QuestionCard } from "~/components/autopilot/question-cards/QuestionCard";
 import type {
   AutoEvalContentBlock,
   EventPayloadAutoEvalExampleLabeling,
@@ -18,6 +18,7 @@ import type {
 } from "~/types/tensorzero";
 
 const MAX_TEXTAREA_ROWS = 3;
+const CONTEXT_MAX_HEIGHT = 200;
 
 function JsonBlock({ data }: { data: unknown }) {
   const formatted = useFormattedJson(
@@ -33,8 +34,6 @@ function JsonBlock({ data }: { data: unknown }) {
     />
   );
 }
-
-const CONTEXT_MAX_HEIGHT = 200;
 
 function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
   const content = (() => {
@@ -96,12 +95,14 @@ type AutoEvalExampleLabelingCardProps = {
   payload: EventPayloadAutoEvalExampleLabeling;
   onSubmit: (responses: Record<string, UserQuestionAnswer>) => void;
   isLoading?: boolean;
+  className?: string;
 };
 
 export function AutoEvalExampleLabelingCard({
   payload,
   onSubmit,
   isLoading = false,
+  className,
 }: AutoEvalExampleLabelingCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selections, setSelections] = useState<Record<number, string>>({});
@@ -186,44 +187,72 @@ export function AutoEvalExampleLabelingCard({
   };
 
   return (
-    <div className="mt-4 flex flex-col rounded-md border border-purple-200 bg-white dark:border-purple-800 dark:bg-purple-950/10">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-3">
-        <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-          Label examples to improve evaluator accuracy
-        </span>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          disabled={isLoading}
-          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-300 transition-colors hover:text-purple-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-700 dark:hover:text-purple-500"
-          aria-label="Dismiss examples"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Step tabs */}
-      {!isSingleExample && (
-        <nav
-          aria-label="Example steps"
-          className="flex gap-1 overflow-x-auto px-3 pb-3"
-        >
-          {payload.examples.map((ex, idx) => (
-            <StepTab
-              key={ex.label_question.id}
-              index={idx}
-              label={ex.label_question.header}
-              state={getStepTabState(idx)}
-              disabled={isLoading}
-              onClick={() => setActiveIndex(idx)}
-            />
-          ))}
-        </nav>
-      )}
-
-      {/* Content */}
-      <div className="flex flex-col gap-4 px-4">
+    <QuestionCard
+      title="Label examples to improve evaluator accuracy"
+      onDismiss={handleDismiss}
+      isLoading={isLoading}
+      className={className}
+      activeStep={activeIndex}
+      steps={
+        !isSingleExample
+          ? {
+              items: payload.examples.map((ex, idx) => ({
+                id: ex.label_question.id,
+                label: ex.label_question.header,
+                state: getStepTabState(idx),
+              })),
+              onStepClick: (idx) => setActiveIndex(idx),
+            }
+          : undefined
+      }
+      footer={
+        <div className="flex items-center justify-between px-4 pt-3 pb-3">
+          <div>
+            {!isSingleExample && !isFirst && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={isLoading}
+                onClick={() => setActiveIndex((s) => s - 1)}
+                className="gap-0.5 pl-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Back
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            {!isSingleExample && (
+              <span className="text-xs text-purple-600 dark:text-purple-400">
+                {answeredCount}/{totalExamples} labeled
+              </span>
+            )}
+            {isSingleExample || isLast ? (
+              <Button
+                size="xs"
+                disabled={!allAnswered || isLoading}
+                onClick={handleSubmit}
+                className="gap-1"
+              >
+                {isLoading ? "Submitting..." : "Submit"}
+                <Check className="h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                disabled={!isStepAnswered(activeIndex) || isLoading}
+                onClick={() => setActiveIndex((s) => s + 1)}
+                className="gap-0.5 pr-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
         <ContextGrid blocks={example.context} />
 
         <div className="flex flex-col gap-1.5">
@@ -303,52 +332,6 @@ export function AutoEvalExampleLabelingCard({
           </div>
         )}
       </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-3">
-        <div>
-          {!isSingleExample && !isFirst && (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={isLoading}
-              onClick={() => setActiveIndex((s) => s - 1)}
-              className="gap-0.5 pl-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Back
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {!isSingleExample && (
-            <span className="text-purple-600 dark:text-purple-400 text-xs">
-              {answeredCount}/{totalExamples} labeled
-            </span>
-          )}
-          {isSingleExample || isLast ? (
-            <Button
-              size="xs"
-              disabled={!allAnswered || isLoading}
-              onClick={handleSubmit}
-              className="gap-1"
-            >
-              {isLoading ? "Submitting..." : "Submit"}
-              <Check className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              size="xs"
-              disabled={!isStepAnswered(activeIndex) || isLoading}
-              onClick={() => setActiveIndex((s) => s + 1)}
-              className="gap-0.5 pr-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
+    </QuestionCard>
   );
 }
