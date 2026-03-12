@@ -27,12 +27,13 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
-        gepa::GepaLaunchRequest,
+        gepa::{GepaGetResponse, GepaLaunchRequest, GepaLaunchResponse},
     },
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
+use crate::gepa::durable::types::{GepaToolOutput, GepaToolParams};
 use crate::{JobHandle, Optimizer};
 
 // TODO(shuyangli): revisit this and see if it should be u32::MAX.
@@ -345,24 +346,140 @@ pub async fn poll_optimization(
         .await
 }
 
-#[expect(clippy::unused_async, reason = "axum handler must be async")]
 pub async fn gepa_launch_handler(
-    State(_app_state): AppState,
-    StructuredJson(_req): StructuredJson<GepaLaunchRequest>,
+    State(app_state): AppState,
+    StructuredJson(req): StructuredJson<GepaLaunchRequest>,
 ) -> Result<Response<Body>, Error> {
-    Err(Error::new(ErrorDetails::NotImplemented {
-        message: "GEPA launch endpoint is not yet implemented".to_string(),
-    }))
+    let spawn_client = app_state.spawn_client.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: "GEPA requires Postgres and a durable task queue to be configured".to_string(),
+        })
+    })?;
+
+    // Validate mutually exclusive fields before spawning
+    req.dataset().map_err(|msg| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: msg.to_string(),
+        })
+    })?;
+    req.evaluation().map_err(|msg| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: msg.to_string(),
+        })
+    })?;
+
+    // Inline evaluators mode is not yet supported — require evaluation_name
+    if req.evaluation_name.is_none() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Inline `evaluators` mode is not yet supported; provide `evaluation_name`"
+                .to_string(),
+        }));
+    }
+
+    // Convert GepaLaunchRequest → GepaToolParams
+    let tool_params = GepaToolParams {
+        function_name: req.function_name,
+        dataset_name: req.dataset_name,
+        train_dataset_name: req.train_dataset_name,
+        val_dataset_name: req.val_dataset_name,
+        evaluation_name: req.evaluation_name,
+        evaluators: req.evaluators,
+        analysis_model: req.analysis_model,
+        mutation_model: req.mutation_model,
+        initial_variants: req.initial_variants,
+        max_iterations: req.max_iterations,
+        variant_prefix: req.variant_prefix,
+        batch_size: req.batch_size,
+        seed: req.seed,
+        include_inference_for_mutation: req.include_inference_for_mutation,
+        max_concurrency: req.max_concurrency,
+        max_datapoints: req.max_datapoints,
+    };
+
+    let llm_params = serde_json::to_value(&tool_params).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize GEPA params: {e}"),
+        })
+    })?;
+
+    let episode_id = uuid::Uuid::now_v7();
+
+    let spawn_result = spawn_client
+        .spawn_tool_by_name(
+            "standalone_gepa",
+            llm_params,
+            serde_json::json!(null),
+            episode_id,
+            durable_tools_spawn::SpawnOptions::default(),
+        )
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to spawn GEPA task: {e}"),
+            })
+        })?;
+
+    Ok(Json(GepaLaunchResponse {
+        task_id: spawn_result.task_id.to_string(),
+    })
+    .into_response())
 }
 
-#[expect(clippy::unused_async, reason = "axum handler must be async")]
 pub async fn gepa_get_handler(
-    State(_app_state): AppState,
-    Path(_task_id): Path<String>,
+    State(app_state): AppState,
+    Path(task_id): Path<String>,
 ) -> Result<Response<Body>, Error> {
-    Err(Error::new(ErrorDetails::NotImplemented {
-        message: "GEPA get endpoint is not yet implemented".to_string(),
-    }))
+    let spawn_client = app_state.spawn_client.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: "GEPA requires Postgres and a durable task queue to be configured".to_string(),
+        })
+    })?;
+
+    let task_id: uuid::Uuid = task_id.parse().map_err(|_| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Invalid task_id: `{task_id}` is not a valid UUID"),
+        })
+    })?;
+
+    let poll_result = spawn_client.get_task_result(task_id).await.map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to poll GEPA task: {e}"),
+        })
+    })?;
+
+    use durable_tools_spawn::TaskStatus;
+
+    let response = match poll_result.status {
+        TaskStatus::Completed => {
+            if let Some(result_value) = poll_result.result {
+                let output: GepaToolOutput = serde_json::from_value(result_value).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to deserialize GEPA result: {e}"),
+                    })
+                })?;
+                GepaGetResponse::Completed {
+                    variants: output.variants,
+                    statistics: output.statistics,
+                }
+            } else {
+                GepaGetResponse::Error {
+                    error: "Task completed but no result payload found".to_string(),
+                }
+            }
+        }
+        TaskStatus::Failed | TaskStatus::Cancelled => {
+            let error = poll_result
+                .error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Unknown error".to_string());
+            GepaGetResponse::Error { error }
+        }
+        TaskStatus::Pending | TaskStatus::Running | TaskStatus::Sleeping => {
+            GepaGetResponse::Pending { progress: None }
+        }
+    };
+
+    Ok(Json(response).into_response())
 }
 
 /// Randomly split examples into train and val sets.

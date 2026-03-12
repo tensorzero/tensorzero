@@ -364,23 +364,37 @@ pub struct GepaLaunchRequest {
     pub function_name: String,
     /// Single dataset name (auto-split 50/50). Mutually exclusive with
     /// `train_dataset_name`/`val_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub dataset_name: Option<String>,
     /// Training dataset name. Must be paired with `val_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub train_dataset_name: Option<String>,
     /// Validation dataset name. Must be paired with `train_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub val_dataset_name: Option<String>,
     /// Named evaluation. Mutually exclusive with `evaluators`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluation_name: Option<String>,
     /// Inline list of evaluator names. Mutually exclusive with `evaluation_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluators: Option<Vec<String>>,
     pub analysis_model: String,
     pub mutation_model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_variants: Option<Vec<String>>,
     pub max_iterations: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variant_prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub batch_size: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub include_inference_for_mutation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrency: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_datapoints: Option<u32>,
 }
 
 impl GepaLaunchRequest {
@@ -453,8 +467,10 @@ pub struct GepaProgress {
     pub current_step: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GepaEvaluatorStats {
     pub mean: f64,
     pub stdev: f64,
