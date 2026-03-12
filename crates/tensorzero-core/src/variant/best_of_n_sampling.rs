@@ -593,13 +593,24 @@ async fn inner_select_best_candidate<'a>(
         model_inference_response,
         evaluator.inner.model().clone(),
     );
+    // Prefer `ToolCall` over `Text`: when `json_mode="tool"`, the model responds via a tool call
+    // but may also emit a conversational `Text` block before it. We must read the `ToolCall`
+    // arguments (which contain the actual JSON) rather than the preamble text.
     let raw = match model_inference_result
         .output
         .iter()
         .find_map(|block| match block {
-            ContentBlockOutput::Text(text) => Some(&text.text),
             ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
-            ContentBlockOutput::Thought(_) | ContentBlockOutput::Unknown(_) => None,
+            _ => None,
+        })
+        .or_else(|| {
+            model_inference_result
+                .output
+                .iter()
+                .find_map(|block| match block {
+                    ContentBlockOutput::Text(text) => Some(&text.text),
+                    _ => None,
+                })
         }) {
         Some(text) => text,
         None => {
