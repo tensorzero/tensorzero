@@ -22,6 +22,7 @@ import type {
 } from "~/types/tensorzero";
 
 const CONTEXT_MAX_HEIGHT = 300;
+const MAX_TEXTAREA_ROWS = 3;
 
 function asInferenceInput(data: unknown): Input | undefined {
   if (
@@ -49,6 +50,22 @@ function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
     }
   }
   return undefined;
+}
+
+function ScrollCard({
+  maxHeight,
+  children,
+}: {
+  maxHeight: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
+      <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
+        {children}
+      </ScrollFadeContainer>
+    </div>
+  );
 }
 
 function ContextBlock({
@@ -83,24 +100,18 @@ function ContextBlock({
             />
           );
         }
-        // JSON fallback — wrap in card + scroll container
+        // JSON fallback
         return (
-          <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
-            <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
-              <pre className="text-xs">
-                {JSON.stringify(block.data, null, 2)}
-              </pre>
-            </ScrollFadeContainer>
-          </div>
+          <ScrollCard maxHeight={maxHeight}>
+            <pre className="text-xs">{JSON.stringify(block.data, null, 2)}</pre>
+          </ScrollCard>
         );
       }
       case "markdown":
         return (
-          <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
-            <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
-              <Markdown className="text-sm">{block.text}</Markdown>
-            </ScrollFadeContainer>
-          </div>
+          <ScrollCard maxHeight={maxHeight}>
+            <Markdown className="text-sm">{block.text}</Markdown>
+          </ScrollCard>
         );
       default: {
         const _exhaustiveCheck: never = block;
@@ -148,7 +159,6 @@ export function AutoEvalExampleLabelingCard({
   const [selections, setSelections] = useState<Record<number, string>>({});
   const [rationales, setRationales] = useState<Record<number, string>>({});
 
-  const MAX_TEXTAREA_ROWS = 3;
   const autoResize = useCallback((el: HTMLTextAreaElement) => {
     el.style.height = "auto";
     const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;

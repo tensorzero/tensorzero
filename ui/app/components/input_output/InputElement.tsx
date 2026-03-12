@@ -52,8 +52,8 @@ export function InputElement({
   return (
     <div
       className={cn(
-        "bg-bg-primary border-border flex w-full flex-1 flex-col rounded-lg border",
-        isScroll ? "gap-0" : "gap-1 p-4",
+        "bg-bg-primary border-border flex w-full flex-col rounded-lg border",
+        isScroll ? "flex-1 gap-0" : "gap-1 p-4",
       )}
     >
       {isScroll ? (
