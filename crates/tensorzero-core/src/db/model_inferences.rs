@@ -43,12 +43,4 @@ pub trait ModelInferenceQueries {
     /// Get the inputs used for the database's latency quantiles query.
     /// ([0.01, 0.5, 0.90, 0.99], etc - not the actual quantile values.)
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64];
-
-    /// Flush pending statistics writes and wait for them to be queryable.
-    ///
-    /// ClickHouse: waits for the materialized view to process inserts.
-    /// Postgres: triggers a full refresh of the statistics rollup table.
-    ///
-    /// This is a no-op on backends where statistics are immediately consistent.
-    async fn flush_model_provider_statistics(&self) {}
 }

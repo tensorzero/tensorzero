@@ -175,19 +175,6 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         POSTGRES_QUANTILES
     }
-
-    #[expect(clippy::panic)]
-    async fn flush_model_provider_statistics(&self) {
-        let Some(pool) = self.get_pool() else {
-            return;
-        };
-        sqlx::query(
-            "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
-        )
-        .execute(pool)
-        .await
-        .unwrap_or_else(|e| panic!("refresh_model_provider_statistics_incremental failed: {e}"));
-    }
 }
 
 // =====================================================================

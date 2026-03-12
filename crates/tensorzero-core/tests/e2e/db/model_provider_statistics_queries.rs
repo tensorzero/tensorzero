@@ -7,6 +7,7 @@
 use rust_decimal::Decimal;
 use tensorzero::TimeWindow;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::{FinishReason, StoredModelInference};
 
 // ===== SHARED TESTS (both ClickHouse and Postgres) =====
@@ -904,24 +905,24 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
 
 /// Insert model inferences with known costs and verify the statistics are
 /// aggregated correctly on both backends.
-async fn test_cost_aggregation(conn: impl ModelInferenceQueries + Sync) {
+async fn test_cost_aggregation(conn: impl ModelInferenceQueries + TestDatabaseHelpers) {
     let model_name = format!("cost-aggregation-test-{}", uuid::Uuid::now_v7());
     let inferences = make_cost_test_inferences(&model_name);
 
     conn.insert_model_inferences(&inferences).await.unwrap();
-    conn.flush_model_provider_statistics().await;
+    conn.prepare_model_provider_statistics().await;
 
-    let usage = conn
-        .get_model_usage_timeseries(TimeWindow::Cumulative, 1)
-        .await
-        .unwrap();
+    let usage = crate::utils::poll_for_result::poll_for_result(
+        || conn.get_model_usage_timeseries(TimeWindow::Cumulative, 1),
+        |usage| usage.iter().any(|u| u.model_name == model_name),
+        "Timed out waiting for model provider statistics to appear",
+    )
+    .await;
 
-    let our_model = usage.iter().find(|u| u.model_name == model_name);
-    assert!(
-        our_model.is_some(),
-        "Should find aggregated data for test model `{model_name}`"
-    );
-    let our_model = our_model.unwrap();
+    let our_model = usage
+        .iter()
+        .find(|u| u.model_name == model_name)
+        .expect("poll_for_result guarantees the model is present");
 
     assert_eq!(
         our_model.count,
@@ -959,17 +960,21 @@ make_db_test!(test_cost_aggregation);
 /// Verify `count_with_cost` is computed correctly per-minute on both backends.
 /// Minute A (5 min ago) has 2 inferences with cost; minute B (3 min ago) has 1
 /// inference without cost. count_with_cost should be 2 total and 0 for minute B.
-async fn test_cost_aggregation_cross_minute(conn: impl ModelInferenceQueries + Sync) {
+async fn test_cost_aggregation_cross_minute(
+    conn: impl ModelInferenceQueries + TestDatabaseHelpers,
+) {
     let model_name = format!("cost-cross-minute-test-{}", uuid::Uuid::now_v7());
     let inferences = make_cross_minute_cost_test_inferences(&model_name);
 
     conn.insert_model_inferences(&inferences).await.unwrap();
-    conn.flush_model_provider_statistics().await;
+    conn.prepare_model_provider_statistics().await;
 
-    let usage = conn
-        .get_model_usage_timeseries(TimeWindow::Minute, 10)
-        .await
-        .unwrap();
+    let usage = crate::utils::poll_for_result::poll_for_result(
+        || conn.get_model_usage_timeseries(TimeWindow::Minute, 10),
+        |usage| usage.iter().filter(|u| u.model_name == model_name).count() == 2,
+        "Timed out waiting for 2 per-minute rows to appear",
+    )
+    .await;
 
     let our_rows: Vec<_> = usage
         .iter()

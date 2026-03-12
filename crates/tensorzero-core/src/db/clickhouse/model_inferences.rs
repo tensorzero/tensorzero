@@ -266,10 +266,6 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         QUANTILES
     }
-
-    async fn flush_model_provider_statistics(&self) {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
 }
 
 #[cfg(test)]
