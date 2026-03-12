@@ -20,7 +20,7 @@ import type {
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
 
-const CONTEXT_MAX_HEIGHT = 150;
+const CONTEXT_MAX_HEIGHT = 120;
 
 function asInferenceInput(data: unknown): Input | undefined {
   if (
@@ -51,19 +51,19 @@ function asChatOutput(data: unknown): ContentBlockChatOutput[] | undefined {
 
 interface ContextBlockProps {
   block: AutoEvalContentBlock;
-  maxHeight: number | "Content";
+  height: number | "Content";
 }
 
-function ContextBlock({ block, maxHeight }: ContextBlockProps) {
-  const heightStyle =
-    maxHeight === "Content" ? undefined : { maxHeight: `${maxHeight}px` };
+function ContextBlock({ block, height }: ContextBlockProps) {
+  // Pass maxHeight to sub-components so they handle internal scrolling
+  const maxHeight = height === "Content" ? ("Content" as const) : height;
 
   switch (block.type) {
     case "json": {
       const inferenceInput = asInferenceInput(block.data);
       if (inferenceInput) {
         return (
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             {block.label && (
               <span className="text-fg-tertiary text-xs font-medium">
                 {block.label}
@@ -77,7 +77,7 @@ function ContextBlock({ block, maxHeight }: ContextBlockProps) {
       const chatOutput = asChatOutput(block.data);
       if (chatOutput) {
         return (
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             {block.label && (
               <span className="text-fg-tertiary text-xs font-medium">
                 {block.label}
@@ -88,15 +88,17 @@ function ContextBlock({ block, maxHeight }: ContextBlockProps) {
         );
       }
 
+      const heightStyle =
+        height === "Content" ? undefined : { maxHeight: `${height}px` };
       return (
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           {block.label && (
             <span className="text-fg-tertiary text-xs font-medium">
               {block.label}
             </span>
           )}
           <pre
-            className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-xs"
+            className="bg-bg-primary border-border flex-1 overflow-auto rounded-lg border p-4 text-xs"
             style={heightStyle}
           >
             {JSON.stringify(block.data, null, 2)}
@@ -105,15 +107,17 @@ function ContextBlock({ block, maxHeight }: ContextBlockProps) {
       );
     }
     case "markdown": {
+      const heightStyle =
+        height === "Content" ? undefined : { maxHeight: `${height}px` };
       return (
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           {block.label && (
             <span className="text-fg-tertiary text-xs font-medium">
               {block.label}
             </span>
           )}
           <div
-            className="bg-bg-primary border-border overflow-auto rounded-lg border p-4 text-sm whitespace-pre-wrap"
+            className="bg-bg-primary border-border flex-1 overflow-auto rounded-lg border p-4 text-sm whitespace-pre-wrap"
             style={heightStyle}
           >
             {block.text}
@@ -129,12 +133,12 @@ function ContextBlock({ block, maxHeight }: ContextBlockProps) {
 }
 
 /**
- * Renders context blocks in a grid. When exactly 2 blocks are side-by-side
- * (md+ breakpoint), measures natural content heights and constrains both
- * to the shorter block's height so they visually match.
+ * Renders context blocks in a grid. When 2+ blocks are side-by-side
+ * (md+ breakpoint), measures natural content heights and sets both
+ * to the taller block's height (capped at CONTEXT_MAX_HEIGHT) so they match.
  */
 function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
-  const [matchedMaxHeight, setMatchedMaxHeight] = useState<number | "Content">(
+  const [matchedHeight, setMatchedHeight] = useState<number | "Content">(
     "Content",
   );
   const blockRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -142,34 +146,37 @@ function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
 
   useLayoutEffect(() => {
     if (!shouldMatch) {
-      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+      setMatchedHeight(CONTEXT_MAX_HEIGHT);
       return;
     }
 
     // Only match when side-by-side at md+ breakpoint
     if (!window.matchMedia("(min-width: 768px)").matches) {
-      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+      setMatchedHeight(CONTEXT_MAX_HEIGHT);
       return;
     }
 
     // Wait until "Content" mode render to measure natural heights
-    if (matchedMaxHeight !== "Content") return;
+    if (matchedHeight !== "Content") return;
 
     const heights = blockRefs.current
       .filter((el): el is HTMLDivElement => el !== null)
       .map((el) => el.scrollHeight);
 
     if (heights.length >= 2) {
-      setMatchedMaxHeight(Math.min(...heights, CONTEXT_MAX_HEIGHT));
+      // Both blocks match the taller one, capped at max
+      setMatchedHeight(Math.min(Math.max(...heights), CONTEXT_MAX_HEIGHT));
     } else {
-      setMatchedMaxHeight(CONTEXT_MAX_HEIGHT);
+      setMatchedHeight(CONTEXT_MAX_HEIGHT);
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs every render to measure after DOM updates
-  }, [shouldMatch, matchedMaxHeight]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- measure after DOM paint
+  }, [shouldMatch, matchedHeight]);
 
-  const effectiveMaxHeight = shouldMatch
-    ? matchedMaxHeight
-    : CONTEXT_MAX_HEIGHT;
+  const effectiveHeight = shouldMatch ? matchedHeight : CONTEXT_MAX_HEIGHT;
+  const wrapperStyle =
+    effectiveHeight === "Content"
+      ? undefined
+      : { height: `${effectiveHeight}px` };
 
   return (
     <div className="grid grid-cols-1 items-start gap-2 md:grid-cols-2 md:gap-4">
@@ -179,8 +186,10 @@ function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
           ref={(el) => {
             blockRefs.current[i] = el;
           }}
+          className="flex"
+          style={wrapperStyle}
         >
-          <ContextBlock block={block} maxHeight={effectiveMaxHeight} />
+          <ContextBlock block={block} height={effectiveHeight} />
         </div>
       ))}
     </div>
