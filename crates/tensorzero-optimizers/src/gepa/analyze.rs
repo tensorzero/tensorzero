@@ -11,9 +11,7 @@ use serde_json::{Map, Value, json, to_value};
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
-    client::{
-        Client, ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent,
-    },
+    client::{ClientInferenceParams, Input, InputMessage, InputMessageContent},
     config::{UninitializedVariantConfig, UninitializedVariantInfo, path::ResolvedTomlPathData},
     endpoints::{
         datasets::{ChatInferenceDatapoint, Datapoint},
@@ -93,7 +91,7 @@ fn strip_signatures_from_input(input: &mut Input) {
 }
 
 /// Strip signatures from stored input message content blocks.
-fn strip_signatures_from_stored_input(input: &mut StoredInput) {
+pub fn strip_signatures_from_stored_input(input: &mut StoredInput) {
     for message in &mut input.messages {
         for content in &mut message.content {
             if let StoredInputMessageContent::Thought(thought) = content {
@@ -104,7 +102,7 @@ fn strip_signatures_from_stored_input(input: &mut StoredInput) {
 }
 
 /// Strip signatures from chat output content blocks.
-fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
+pub fn strip_signatures_from_chat_output(blocks: &mut [ContentBlockChatOutput]) {
     for block in blocks {
         if let ContentBlockChatOutput::Thought(thought) = block {
             thought.signature = None;
@@ -151,7 +149,9 @@ pub struct Analysis {
 /// Builds uninitialized chat completion config with embedded templates using GEPAConfig settings.
 ///
 /// Returns configured UninitializedChatCompletionConfig with system and user templates.
-fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
+pub fn create_analyze_variant_config(
+    gepa_config: &GEPAConfig,
+) -> UninitializedChatCompletionConfig {
     let mut analyze_config = UninitializedChatCompletionConfig {
         model: gepa_config.analysis_model.clone().into(),
         weight: None,
@@ -284,7 +284,7 @@ pub fn build_analyze_input(
 /// Returns error if semaphore acquisition, input building, API call, or response parsing fails.
 async fn analyze_inference(
     semaphore: Arc<Semaphore>,
-    gateway_client: &Client,
+    client: &(impl super::GepaClient + ?Sized),
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
@@ -327,18 +327,11 @@ async fn analyze_inference(
     };
 
     // Call the inference API
-    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+    let response = client.inference(params).await.map_err(|e| {
         Error::new(ErrorDetails::Inference {
             message: format!("Failed to call analyze function: {e}"),
         })
     })?;
-
-    // Extract the response
-    let InferenceOutput::NonStreaming(response) = inference_output else {
-        return Err(Error::new(ErrorDetails::Inference {
-            message: "Expected NonStreaming response but got Streaming".to_string(),
-        }));
-    };
 
     // Extract text content from the response
     let InferenceResponse::Chat(chat_response) = &response else {
@@ -419,7 +412,7 @@ async fn analyze_inference(
 ///
 /// Returns error only if all analyses fail.
 pub async fn analyze_inferences(
-    gateway_client: &Client,
+    client: &(impl super::GepaClient + ?Sized),
     evaluation_infos: &[EvaluationInfo],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
@@ -452,7 +445,7 @@ pub async fn analyze_inferences(
 
             analyze_inference(
                 semaphore,
-                gateway_client,
+                client,
                 function_context,
                 variant_config,
                 gepa_config,
