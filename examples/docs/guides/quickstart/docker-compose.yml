@@ -25,6 +25,9 @@ services:
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:
       - "4000:4000"
+    depends_on:
+      gateway:
+        condition: service_healthy
 
   postgres:
     image: tensorzero/postgres:17
