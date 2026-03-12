@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AutopilotToolError;
 use autopilot_client::{
-    AutopilotSideInfo, EventPayload, EventPayloadToolCallAuthorization,
+    AutopilotSideInfo, CreateEventPayload, CreateEventPayloadToolCallAuthorization,
     ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 use schemars::JsonSchema;
@@ -102,8 +102,8 @@ impl TaskTool for AutoRejectToolCallTool {
             .create_autopilot_event(
                 side_info.session_id,
                 CreateEventGatewayRequest {
-                    payload: EventPayload::ToolCallAuthorization(
-                        EventPayloadToolCallAuthorization {
+                    payload: CreateEventPayload::ToolCallAuthorization(
+                        CreateEventPayloadToolCallAuthorization {
                             source: ToolCallDecisionSource::Automatic,
                             tool_call_event_id: side_info.tool_call_event_id,
                             status: ToolCallAuthorizationStatus::NotAvailable,

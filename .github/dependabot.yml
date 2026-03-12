@@ -6,8 +6,6 @@ updates:
       interval: "weekly"
     labels: []
     open-pull-requests-limit: 0 # only send security updates
-    exclude-paths:
-      - "docs/pnpm-lock.yaml"
 
   - package-ecosystem: "docker"
     directory: "/"

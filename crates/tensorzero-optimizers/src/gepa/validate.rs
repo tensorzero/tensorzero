@@ -1307,6 +1307,7 @@ mod tests {
                 template_content,
             )),
             timeouts: TimeoutsConfig::default(),
+            namespace: None,
         })
     }
 
@@ -1493,6 +1494,7 @@ mod tests {
         let variant_info = Arc::new(VariantInfo {
             inner: VariantConfig::ChatCompletion(config),
             timeouts: TimeoutsConfig::default(),
+            namespace: None,
         });
 
         let result = extract_chat_completion_from_variant_info(&variant_info, "test");

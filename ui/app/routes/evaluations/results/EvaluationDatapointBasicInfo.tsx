@@ -8,12 +8,7 @@ import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 import EditableChip from "~/components/ui/EditableChip";
-import {
-  toEvaluationUrl,
-  toFunctionUrl,
-  toDatasetUrl,
-  toDatapointUrl,
-} from "~/utils/urls";
+import { toFunctionUrl, toDatasetUrl, toDatapointUrl } from "~/utils/urls";
 import { Badge } from "~/components/ui/badge";
 import {
   Tooltip,
@@ -31,6 +26,7 @@ interface BasicInfoProps {
   datapoint_name?: string;
   datapoint_staled_at?: string;
   onRenameDatapoint?: (newName: string) => void | Promise<void>;
+  snapshotHash?: string;
 }
 
 export default function BasicInfo({
@@ -42,6 +38,7 @@ export default function BasicInfo({
   datapoint_name,
   datapoint_staled_at,
   onRenameDatapoint,
+  snapshotHash,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const isReadOnly = useReadOnly();
@@ -64,11 +61,7 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Evaluation</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <Chip
-            label={evaluation_name}
-            link={toEvaluationUrl(evaluation_name)}
-            font="mono"
-          />
+          <Chip label={evaluation_name} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>
@@ -80,7 +73,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={toFunctionUrl(functionName)}
+              link={toFunctionUrl(functionName, snapshotHash)}
               font="mono"
             />
           )}

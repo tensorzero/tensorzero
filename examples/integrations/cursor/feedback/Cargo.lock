@@ -1418,7 +1418,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=43d73ea835f1e528462105250ce01822af09d7fc#43d73ea835f1e528462105250ce01822af09d7fc"
+source = "git+https://github.com/tensorzero/durable?rev=2d69424943b1db91b055154062143457c91e8ee7#2d69424943b1db91b055154062143457c91e8ee7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1546,6 +1546,7 @@ version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "clap",
  "futures",
  "indicatif",
@@ -3330,9 +3331,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.13"
+version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1906b49b0c3bc04b5fe5d86a77925ae6524a19b816ae38ce1e426255f1d8a31"
+checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
 dependencies = [
  "aws-lc-rs",
  "bytes",

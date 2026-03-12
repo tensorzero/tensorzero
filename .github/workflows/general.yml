@@ -25,7 +25,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
+      clickhouse-tests-pr: ${{ steps.filter.outputs.clickhouse-tests-pr || 'true' }}
       client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
       docs: ${{ steps.filter.outputs.docs || 'true' }}
@@ -39,13 +40,10 @@ jobs:
         with:
           predicate-quantifier: "every"
           filters: |
-            clickhouse-tests:
-              - '**'
-              - '!**/README.md'
-              - '!docs/**'
-              - '!examples/**'
-              - '!recipes/**'
-              - '!ui/**'
+            clickhouse-tests-merge-queue:
+              - 'crates/**'
+            clickhouse-tests-pr:
+              - 'crates/tensorzero-core/src/db/**'
             client-tests:
               - '**'
               - '!**/README.md'
@@ -852,7 +850,14 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: >-
+      ${{
+        (
+          (github.event_name == 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-merge-queue == 'true') ||
+          (github.event_name != 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-pr == 'true')
+        ) &&
+        (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
+      }}
     permissions:
       contents: read
       actions: read
@@ -1319,24 +1324,24 @@ jobs:
 
       - name: Set up .env file for production deployment tests
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> ci/check-production-deployment-docker-compose/.env
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+        run: ci/check-production-deployment-docker-compose/run.sh
 
       - name: Print Docker compose logs
         if: always()
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml logs -t
 
       - name: Take down docker compose for production deployment tests
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml down
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
@@ -1400,9 +1405,9 @@ jobs:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
 
+  # We run this unconditionally, so that all tensorzero SHAs can be used in autopilot
   publish-dev-docker-hub-images:
-    needs: [detect-changes]
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     permissions:
       contents: read
       actions: read

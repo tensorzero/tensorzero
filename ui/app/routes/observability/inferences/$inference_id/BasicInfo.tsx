@@ -71,6 +71,7 @@ export function BasicInfo({
   variantType,
   modelInferences = [],
 }: BasicInfoProps) {
+  const snapshotHash = inference.snapshot_hash;
   const inferenceUsage = getTotalInferenceUsage(modelInferences);
 
   const functionIconConfig = getFunctionTypeIcon(inference.type);
@@ -93,7 +94,7 @@ export function BasicInfo({
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
             secondaryLabel={`· ${inference.type}`}
-            link={toFunctionUrl(inference.function_name)}
+            link={toFunctionUrl(inference.function_name, snapshotHash)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -105,7 +106,11 @@ export function BasicInfo({
           <Chip
             label={inference.variant_name}
             secondaryLabel={`· ${variantType}`}
-            link={toVariantUrl(inference.function_name, inference.variant_name)}
+            link={toVariantUrl(
+              inference.function_name,
+              inference.variant_name,
+              snapshotHash,
+            )}
             font="mono"
           />
         </BasicInfoItemContent>

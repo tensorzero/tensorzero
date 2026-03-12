@@ -30,14 +30,13 @@ import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
-import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import {
   formatMetricSummaryValue,
   formatConfidenceInterval,
 } from "~/utils/config/feedback";
 import type {
   InferenceEvaluationConfig,
-  MetricConfig,
+  RunMetricMetadata,
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
@@ -218,7 +217,9 @@ interface EvaluationTableProps {
   evaluator_names: string[];
   evaluation_name: string;
   evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
+  /** Maps evaluator_name → metric_name. */
+  evaluatorMetricNames: Record<string, string>;
   selectedRows: Map<string, SelectedRowData>;
   setSelectedRows: React.Dispatch<
     React.SetStateAction<Map<string, SelectedRowData>>
@@ -249,9 +250,19 @@ export function EvaluationTable({
   evaluation_name,
   evaluationConfig,
   metricsConfig,
+  evaluatorMetricNames,
   selectedRows,
   setSelectedRows,
 }: EvaluationTableProps) {
+  const resolveMetricName = (evaluatorName: string): string => {
+    const name = evaluatorMetricNames[evaluatorName];
+    if (!name) {
+      logger.warn(
+        `No metric name mapping for evaluator ${evaluatorName} in evaluation ${evaluation_name}`,
+      );
+    }
+    return name ?? evaluatorName;
+  };
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
   );
@@ -410,10 +421,7 @@ export function EvaluationTable({
                     {/* Dynamic metric columns */}
                     {evaluator_names.map((evaluator_name) => {
                       // Get the metric name for this evaluator
-                      const metric_name = getEvaluatorMetricName(
-                        evaluation_name,
-                        evaluator_name,
-                      );
+                      const metric_name = resolveMetricName(evaluator_name);
 
                       // Filter statistics for this specific metric
                       const filteredStats = evaluation_statistics.filter(
@@ -428,8 +436,8 @@ export function EvaluationTable({
                           <EvaluatorHeader
                             evaluation_name={evaluation_name}
                             evaluator_name={evaluator_name}
+                            metric_name={metric_name}
                             summaryStats={filteredStats}
-                            evaluationConfig={evaluationConfig}
                             metricsConfig={metricsConfig}
                           />
                         </TableHead>
@@ -481,11 +489,9 @@ export function EvaluationTable({
                                   .map(([runId]) => runId)
                                   .join(",");
                                 navigate(
-                                  toEvaluationDatapointUrl(
-                                    evaluation_name,
-                                    datapoint.id,
-                                    { evaluation_run_ids },
-                                  ),
+                                  toEvaluationDatapointUrl(datapoint.id, {
+                                    evaluation_run_ids,
+                                  }),
                                 );
                               }}
                             >
@@ -575,14 +581,15 @@ export function EvaluationTable({
 
                               {/* Metrics cells */}
                               {evaluator_names.map((evaluator_name) => {
-                                const metric_name = getEvaluatorMetricName(
-                                  evaluation_name,
-                                  evaluator_name,
-                                );
+                                const metric_name =
+                                  resolveMetricName(evaluator_name);
                                 const metricValue =
                                   data.metrics.get(metric_name);
-                                const metricType =
-                                  metricsConfig[metric_name]?.type;
+                                const metricType = metricsConfig[metric_name]
+                                  ?.value_type as
+                                  | "boolean"
+                                  | "float"
+                                  | undefined;
                                 const evaluatorConfig =
                                   evaluationConfig.evaluators[evaluator_name];
 
@@ -676,24 +683,16 @@ export function EvaluationTable({
 const EvaluatorHeader = ({
   evaluation_name,
   evaluator_name,
+  metric_name,
   summaryStats,
-  evaluationConfig,
   metricsConfig,
 }: {
   evaluation_name: string;
   evaluator_name: string;
+  metric_name: string;
   summaryStats: EvaluationStatistics[];
-  evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
+  metricsConfig: Record<string, RunMetricMetadata>;
 }) => {
-  const evaluatorConfig = evaluationConfig.evaluators[evaluator_name];
-  if (!evaluatorConfig) {
-    logger.warn(
-      `Evaluator config not found for evaluation ${evaluation_name} and evaluator ${evaluator_name}`,
-    );
-    return null;
-  }
-  const metric_name = getEvaluatorMetricName(evaluation_name, evaluator_name);
   const metricProperties = metricsConfig[metric_name];
   if (!metricProperties) {
     logger.warn(
@@ -716,12 +715,14 @@ const EvaluatorHeader = ({
         <div className="space-y-1 text-left text-xs">
           <div>
             <span className="font-medium">Type:</span>
-            <span className="ml-2 font-medium">{metricProperties.type}</span>
+            <span className="ml-2 font-medium">
+              {metricProperties.value_type}
+            </span>
           </div>
           <div>
             <span className="font-medium">Optimize:</span>
             <span className="ml-2 font-medium">
-              {metricProperties.optimize}
+              {metricProperties.optimize ?? "unknown"}
             </span>
           </div>
         </div>
@@ -734,7 +735,7 @@ const EvaluatorProperties = ({
   metricConfig,
   summaryStats,
 }: {
-  metricConfig: MetricConfig;
+  metricConfig: RunMetricMetadata;
   summaryStats: EvaluationStatistics[];
 }) => {
   const [searchParams] = useSearchParams();
@@ -774,15 +775,15 @@ const EvaluatorProperties = ({
                   className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
-                  {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
+                  {formatMetricSummaryValue(stat.mean_metric, {
+                    type: metricConfig.value_type,
+                  })}
                   {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      {formatConfidenceInterval(
-                        stat.ci_lower,
-                        stat.ci_upper,
-                        metricConfig,
-                      )}
+                      {formatConfidenceInterval(stat.ci_lower, stat.ci_upper, {
+                        type: metricConfig.value_type,
+                      })}
                     </>
                   ) : null}{" "}
                   (n={stat.datapoint_count})

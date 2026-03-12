@@ -1239,6 +1239,7 @@ impl UninitializedLLMJudgeVariantInfo {
         Ok(VariantInfo {
             inner,
             timeouts: self.timeouts.unwrap_or_default(),
+            namespace: None,
         })
     }
 }

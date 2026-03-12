@@ -15,7 +15,7 @@ use crate::config::Config;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::Error;
+use crate::error::{DelayedError, Error};
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 use rust_decimal::Decimal;
 
@@ -208,7 +208,7 @@ pub trait ConfigQueries: Send + Sync {
 
 #[async_trait]
 pub trait DeploymentIdQueries: Send + Sync {
-    async fn get_deployment_id(&self) -> Result<String, Error>;
+    async fn get_deployment_id(&self) -> Result<String, DelayedError>;
 }
 
 #[derive(Debug)]

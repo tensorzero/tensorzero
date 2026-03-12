@@ -60,7 +60,7 @@ use crate::db::{
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
@@ -265,7 +265,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
 
 #[async_trait]
 impl DeploymentIdQueries for DelegatingDatabaseConnection {
-    async fn get_deployment_id(&self) -> Result<String, Error> {
+    async fn get_deployment_id(&self) -> Result<String, DelayedError> {
         self.get_database().get_deployment_id().await
     }
 }

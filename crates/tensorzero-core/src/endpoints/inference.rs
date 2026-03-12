@@ -1044,6 +1044,7 @@ async fn find_function(
                         model_name.clone(),
                         Arc::new(VariantInfo {
                             timeouts: Default::default(),
+                            namespace: None,
                             inner: VariantConfig::ChatCompletion(
                                 UninitializedChatCompletionConfig {
                                     model: (&**model_name).into(),
