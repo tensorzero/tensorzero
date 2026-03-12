@@ -258,7 +258,7 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
-        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
 
         let primary_datastore = PrimaryDatastore::resolve(
@@ -621,18 +621,12 @@ impl AppStateData {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(
-        &Box::pin(Config::new_empty()).await?,
-        Some(clickhouse_url),
-        true,
-    )
-    .await
+    setup_clickhouse(&Box::pin(Config::new_empty()).await?, Some(clickhouse_url)).await
 }
 
 pub async fn setup_clickhouse(
     config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
-    _embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
     // ClickHouse.
@@ -1083,7 +1077,7 @@ mod tests {
         };
         let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(&config, None, false).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -1110,9 +1104,7 @@ mod tests {
             ..Default::default()
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
-            .await
-            .unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -1157,9 +1149,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
-            .await
-            .unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled,
@@ -1195,7 +1185,7 @@ mod tests {
             ..Default::default()
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
-        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()))
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -1236,7 +1226,6 @@ mod tests {
         setup_clickhouse(
             &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
-            false,
         )
         .await
         .expect_err("ClickHouse setup should fail given a URL that doesn't point to ClickHouse");

@@ -584,7 +584,7 @@ impl ClientBuilder {
                         })?
                 };
                 let clickhouse_connection_info =
-                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone())
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
@@ -768,7 +768,7 @@ impl ClientBuilder {
         })?;
 
         // Setup ClickHouse with runtime URL
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
