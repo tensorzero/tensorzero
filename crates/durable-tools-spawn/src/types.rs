@@ -62,4 +62,6 @@ pub struct TaskPollResult {
     pub result: Option<JsonValue>,
     /// Error information from the last failed run (only present when status is `Failed`).
     pub error: Option<JsonValue>,
+    /// The task's input params (from the `params` column).
+    pub params: Option<JsonValue>,
 }
