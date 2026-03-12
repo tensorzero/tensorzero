@@ -25,7 +25,7 @@ ts-rs = { workspace = true, optional = true }
 [features]
 default = []
 e2e_tests = []
-ts-bindings = ["dep:ts-rs"]
+ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings"]
 
 [lints]
 workspace = true
