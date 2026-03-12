@@ -35,13 +35,13 @@ use crate::{
         types::{
             ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-            ProviderInferenceResponse, ProviderInferenceResponseArgs,
-            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-            Text, TextChunk, Thought, ThoughtChunk,
+            ProviderInferenceResponse, ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStreamInner, RequestMessage, Text, TextChunk, Thought,
+            ThoughtChunk,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
-            build_provider_inference_response,
+            file::sanitize_raw_request,
         },
     },
     model::{Credential, ModelProvider},
@@ -1094,21 +1094,20 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(build_provider_inference_response(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response,
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: finish_reason.map(Into::into),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response,
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: finish_reason.map(Into::into),
+        })
     }
 }
 

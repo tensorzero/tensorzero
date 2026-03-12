@@ -48,7 +48,6 @@
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
-use file::sanitize_raw_request;
 pub use file::{
     Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
     ObjectStoragePointer, UrlFile,
@@ -144,8 +143,8 @@ pub use tensorzero_provider_types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FileFuture, FileUrl, FinishReason,
     FlattenUnknown, Latency, LazyFile, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, PendingObjectStoreFile, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, ThoughtChunk, UnknownChunk,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    TextChunk, ThoughtChunk, UnknownChunk,
 };
 
 /*
@@ -1678,13 +1677,6 @@ impl StoredModelInference {
             timestamp: None,
         })
     }
-}
-
-pub fn build_provider_inference_response(
-    mut args: ProviderInferenceResponseArgs,
-) -> ProviderInferenceResponse {
-    args.raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
-    args.build()
 }
 
 impl InferenceResult {

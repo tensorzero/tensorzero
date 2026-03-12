@@ -369,42 +369,6 @@ pub struct ProviderInferenceResponse {
     pub relay_raw_response: Option<Vec<tensorzero_types::RawResponseEntry>>,
 }
 
-pub struct ProviderInferenceResponseArgs {
-    pub output: Vec<ContentBlockOutput>,
-    pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
-    pub raw_request: String,
-    pub raw_response: String,
-    pub usage: Usage,
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    pub relay_raw_response: Option<Vec<tensorzero_types::RawResponseEntry>>,
-    /// Time elapsed between making the request to the model provider and receiving the response.
-    pub provider_latency: Latency,
-    pub finish_reason: Option<FinishReason>,
-    pub id: Uuid,
-}
-
-impl ProviderInferenceResponseArgs {
-    /// Build a `ProviderInferenceResponse` from these args.
-    /// `raw_request` is passed through as-is — call `sanitize_raw_request` on it before
-    /// constructing the args if needed.
-    pub fn build(self) -> ProviderInferenceResponse {
-        ProviderInferenceResponse {
-            id: self.id,
-            output: self.output,
-            system: self.system,
-            input_messages: self.input_messages,
-            raw_request: self.raw_request,
-            raw_response: self.raw_response,
-            usage: self.usage,
-            provider_latency: self.provider_latency,
-            finish_reason: self.finish_reason,
-            raw_usage: self.raw_usage,
-            relay_raw_response: self.relay_raw_response,
-        }
-    }
-}
-
 // =============================================================================
 // RequestMessage and ContentBlock
 // =============================================================================

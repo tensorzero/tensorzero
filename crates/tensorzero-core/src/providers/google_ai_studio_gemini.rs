@@ -24,11 +24,11 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, TextChunk, Thought,
-    ThoughtChunk, Unknown, UnknownChunk, build_provider_inference_response,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::types::{
@@ -1108,23 +1108,22 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = usage_metadata.into_usage();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        Ok(build_provider_inference_response(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages: messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: first_candidate
-                    .finish_reason
-                    .map(GeminiFinishReason::into_finish_reason),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages: messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: first_candidate
+                .finish_reason
+                .map(GeminiFinishReason::into_finish_reason),
+        })
     }
 }
 

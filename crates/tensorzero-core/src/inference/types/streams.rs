@@ -6,11 +6,12 @@ use crate::function::FunctionConfig;
 use crate::inference::types::ContentBlockChatOutput;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     JsonInferenceOutput, Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata,
-    ProviderInferenceResponseArgs, RawResponseEntry, RawUsageEntry, RequestMessage, Text, Thought,
-    ThoughtSummaryBlock, ToolCall, Unknown, Usage, build_provider_inference_response,
+    ProviderInferenceResponse, RawResponseEntry, RawUsageEntry, RequestMessage, Text, Thought,
+    ThoughtSummaryBlock, ToolCall, Unknown, Usage,
 };
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -672,7 +673,9 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         response_time: provider_response_time,
     };
     let content_blocks: Vec<_> = blocks.into_values().collect();
-    let model_response = build_provider_inference_response(ProviderInferenceResponseArgs {
+    let raw_request = sanitize_raw_request(&input_messages, raw_request);
+    let model_response = ProviderInferenceResponse {
+        id: model_inference_id,
         output: content_blocks.clone(),
         system,
         input_messages,
@@ -683,8 +686,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         relay_raw_response: None,
         provider_latency,
         finish_reason,
-        id: model_inference_id,
-    });
+    };
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, provider_type, cached);
     let original_response = model_inference_response.raw_response.clone();

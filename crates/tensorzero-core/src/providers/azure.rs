@@ -21,11 +21,9 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockOutput, ProviderInferenceResponseArgs, Thought,
-    build_provider_inference_response,
-};
+use crate::inference::types::{ApiType, ContentBlockOutput, Thought};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -883,21 +881,20 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
 
-        Ok(build_provider_inference_response(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response,
-                raw_usage,
-                relay_raw_response: None,
-                usage,
-                provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response,
+            raw_usage,
+            relay_raw_response: None,
+            usage,
+            provider_latency: latency,
+            finish_reason: Some(finish_reason.into()),
+        })
     }
 }
 

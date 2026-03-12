@@ -29,6 +29,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
@@ -38,10 +39,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
     Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{
-    FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk,
-    build_provider_inference_response,
-};
+use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use crate::tool::{
@@ -921,21 +919,20 @@ fn convert_converse_response(
         )
     });
 
-    Ok(build_provider_inference_response(
-        ProviderInferenceResponseArgs {
-            output: content,
-            system: ctx.system,
-            input_messages: ctx.input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            raw_usage,
-            relay_raw_response: None,
-            provider_latency: latency,
-            finish_reason: Some(convert_stop_reason(response.stop_reason)),
-            id: model_inference_id,
-        },
-    ))
+    let raw_request = sanitize_raw_request(&ctx.input_messages, raw_request);
+    Ok(ProviderInferenceResponse {
+        id: model_inference_id,
+        output: content,
+        system: ctx.system,
+        input_messages: ctx.input_messages,
+        raw_request,
+        raw_response,
+        usage,
+        raw_usage,
+        relay_raw_response: None,
+        provider_latency: latency,
+        finish_reason: Some(convert_stop_reason(response.stop_reason)),
+    })
 }
 
 /// Convert a Bedrock response content block to a TensorZero ContentBlockOutput
