@@ -132,10 +132,25 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
+/// Identifies the evaluation to run over HTTP.
+/// Mirrors the gateway's `EvaluationIdentifier` untagged enum for serialization.
+#[derive(Debug, serde::Serialize)]
+#[serde(untagged)]
+pub enum HttpEvaluationIdentifier {
+    /// Named evaluation resolved from gateway config.
+    NamedEvaluation { evaluation_name: String },
+    /// Named evaluators resolved from gateway config.
+    Evaluators {
+        function_name: String,
+        evaluator_names: Vec<String>,
+    },
+}
+
 /// Parameters for running an evaluation over HTTP via the SSE endpoint.
 #[derive(Debug, serde::Serialize)]
 pub struct RunEvaluationHttpParams {
-    pub evaluation_name: String,
+    #[serde(flatten)]
+    pub identifier: HttpEvaluationIdentifier,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dataset_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

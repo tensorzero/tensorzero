@@ -657,9 +657,14 @@ fn build_embedded_evaluation_args(
 }
 
 /// Builds `RunEvaluationHttpParams` for running an evaluation over HTTP.
+///
+/// Accepts either `evaluation_name` or `function_name` + `evaluator_names` to identify the evaluation,
+/// matching the gateway's `EvaluationIdentifier` untagged enum.
 #[expect(clippy::too_many_arguments)]
 fn build_http_evaluation_params(
-    evaluation_name: String,
+    evaluation_name: Option<String>,
+    function_name: Option<String>,
+    evaluator_names: Option<Vec<String>>,
     dataset_name: Option<String>,
     datapoint_ids: Option<Vec<Uuid>>,
     variant: EvaluationVariant,
@@ -668,6 +673,23 @@ fn build_http_evaluation_params(
     max_datapoints: Option<u32>,
     precision_targets_map: HashMap<String, f32>,
 ) -> PyResult<RunEvaluationHttpParams> {
+    let identifier = match (evaluation_name, function_name, evaluator_names) {
+        (Some(evaluation_name), None, None) => {
+            tensorzero_rust::HttpEvaluationIdentifier::NamedEvaluation { evaluation_name }
+        }
+        (None, Some(function_name), Some(evaluator_names)) => {
+            tensorzero_rust::HttpEvaluationIdentifier::Evaluators {
+                function_name,
+                evaluator_names,
+            }
+        }
+        _ => {
+            return Err(PyValueError::new_err(
+                "Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+            ));
+        }
+    };
+
     let concurrency: u32 = concurrency.try_into().map_err(|_| {
         PyValueError::new_err(format!(
             "`concurrency` must fit in a u32 (max {}), got {concurrency}",
@@ -705,7 +727,7 @@ fn build_http_evaluation_params(
     };
 
     Ok(RunEvaluationHttpParams {
-        evaluation_name,
+        identifier,
         dataset_name,
         datapoint_ids,
         variant_name,
@@ -1504,14 +1526,10 @@ impl TensorZeroGateway {
             }
         } else {
             // HTTP mode: use SSE endpoint
-            let evaluation_name = evaluation_name.ok_or_else(|| {
-                pyo3::exceptions::PyValueError::new_err(
-                    "`evaluation_name` is required for HTTP mode",
-                )
-            })?;
-
             let params = build_http_evaluation_params(
                 evaluation_name,
+                function_name,
+                evaluator_names,
                 dataset_name,
                 datapoint_ids,
                 variant,
@@ -2553,14 +2571,10 @@ impl AsyncTensorZeroGateway {
                 }
             } else {
                 // HTTP mode: use SSE endpoint
-                let evaluation_name = evaluation_name.ok_or_else(|| {
-                    pyo3::exceptions::PyValueError::new_err(
-                        "`evaluation_name` is required for HTTP mode",
-                    )
-                })?;
-
                 let params = build_http_evaluation_params(
                     evaluation_name,
+                    function_name,
+                    evaluator_names,
                     dataset_name,
                     datapoint_ids,
                     variant,

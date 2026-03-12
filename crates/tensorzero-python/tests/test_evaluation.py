@@ -757,10 +757,13 @@ async def test_async_run_evaluation_datapoint_ids_and_max_datapoints_error(
 
 def test_sync_run_evaluation_with_function_name_and_evaluator_names(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
-    """Test sync client using function_name + evaluator_names instead of evaluation_name."""
-    job = embedded_sync_client.experimental_run_evaluation(
+    """Test sync client using function_name + evaluator_names instead of evaluation_name.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    job = sync_client.experimental_run_evaluation(
         function_name="write_haiku",
         evaluator_names=["exact_match"],
         dataset_name=evaluation_datasets["good-haikus-no-output"],
@@ -793,10 +796,13 @@ def test_sync_run_evaluation_with_function_name_and_evaluator_names(
 @pytest.mark.asyncio
 async def test_async_run_evaluation_with_function_name_and_evaluator_names(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
-    """Test async client using function_name + evaluator_names instead of evaluation_name."""
-    job = await embedded_async_client.experimental_run_evaluation(
+    """Test async client using function_name + evaluator_names instead of evaluation_name.
+
+    Uses the parameterized async_client fixture to test both HTTP and embedded modes.
+    """
+    job = await async_client.experimental_run_evaluation(
         function_name="write_haiku",
         evaluator_names=["exact_match"],
         dataset_name=evaluation_datasets["good-haikus-no-output"],
@@ -827,28 +833,34 @@ async def test_async_run_evaluation_with_function_name_and_evaluator_names(
 
 
 def test_sync_run_evaluation_no_eval_source_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
-    """Test sync client rejects when neither evaluation_name nor function_name is provided."""
+    """Test sync client rejects when neither evaluation_name nor function_name is provided.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
     with pytest.raises(
         ValueError,
         match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
     ):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             dataset_name="some_dataset",
             variant_name="gpt_4o_mini",
         )
 
 
 def test_sync_run_evaluation_both_eval_sources_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
-    """Test sync client rejects when both evaluation_name and function_name are provided."""
+    """Test sync client rejects when both evaluation_name and function_name are provided.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
     with pytest.raises(
         ValueError,
         match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
     ):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             function_name="extract_entities",
             evaluator_names=["exact_match"],
@@ -858,14 +870,17 @@ def test_sync_run_evaluation_both_eval_sources_error(
 
 
 def test_sync_run_evaluation_function_name_without_evaluator_names_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
-    """Test sync client rejects function_name without evaluator_names."""
+    """Test sync client rejects function_name without evaluator_names.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
     with pytest.raises(
         ValueError,
         match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
     ):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             function_name="write_haiku",
             dataset_name="some_dataset",
             variant_name="gpt_4o_mini",
@@ -873,14 +888,17 @@ def test_sync_run_evaluation_function_name_without_evaluator_names_error(
 
 
 def test_sync_run_evaluation_evaluator_names_without_function_name_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
-    """Test sync client rejects evaluator_names without function_name."""
+    """Test sync client rejects evaluator_names without function_name.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
     with pytest.raises(
         ValueError,
         match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
     ):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             evaluator_names=["exact_match"],
             dataset_name="some_dataset",
             variant_name="gpt_4o_mini",
