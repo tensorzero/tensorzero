@@ -343,8 +343,8 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutorBuilder<S> {
         tool: T,
     ) -> Result<(), ToolError> {
         let tool = self.registry.register_task_tool_instance(tool)?;
-        let db = std::mem::replace(&mut self.durable_builder, DurableBuilder::new());
-        self.durable_builder = db.register_instance(TaskToolAdapter::new(tool))?;
+        self.durable_builder
+            .register_instance_mut(TaskToolAdapter::new(tool))?;
         Ok(())
     }
 
