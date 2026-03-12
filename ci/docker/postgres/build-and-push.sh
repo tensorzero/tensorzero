@@ -14,7 +14,6 @@ set -euo pipefail
 
 REPO="tensorzero/postgres"
 PLATFORMS="linux/amd64,linux/arm64"
-PGVECTOR_VERSION="0.8.2"
 
 # major:patch
 ALL_VERSIONS="18:18.3 17:17.9 16:16.13 15:15.17 14:14.22"
@@ -28,8 +27,8 @@ build_and_push() {
   echo "==> Building ${REPO}:${patch} and ${REPO}:${major} for ${PLATFORMS}"
   docker buildx build \
     --platform "${PLATFORMS}" \
-    --build-arg "PGVECTOR_VERSION=${PGVECTOR_VERSION}" \
     --build-arg "PG_MAJOR=${major}" \
+    --build-arg "PG_MINOR=${patch}" \
     --tag "${REPO}:${patch}" \
     --tag "${REPO}:${major}" \
     --push \

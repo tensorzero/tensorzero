@@ -42,6 +42,6 @@ Multi-arch builds with `--push` are not stored locally — the images go directl
 To build for your local architecture and test without pushing:
 
 ```bash
-docker build --build-arg PG_MAJOR=17 -t tensorzero/postgres:local docker/postgres
+docker build --build-arg PG_MAJOR=17 -t tensorzero/postgres:local ci/docker/postgres
 docker run --rm tensorzero/postgres:local
 ```
