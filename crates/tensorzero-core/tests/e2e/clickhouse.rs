@@ -1151,7 +1151,10 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let baseline_input_tokens: u64 = response.response.trim().parse().unwrap();
-    assert!(baseline_input_tokens >= 200000000, "Expected at least the fixture input tokens");
+    assert!(
+        baseline_input_tokens >= 200000000,
+        "Expected at least the fixture input tokens"
+    );
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -1159,7 +1162,10 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let baseline_output_tokens: u64 = response.response.trim().parse().unwrap();
-    assert!(baseline_output_tokens >= 200000000, "Expected at least the fixture output tokens");
+    assert!(
+        baseline_output_tokens >= 200000000,
+        "Expected at least the fixture output tokens"
+    );
     // Insert a ModelInference row with null output tokens to verify CumulativeUsage handles nulls correctly
     let row = StoredModelInference {
         id: Uuid::now_v7(),
