@@ -30,15 +30,15 @@ use crate::{
             ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
             ModelInferenceRequest, ModelInferenceRequestJsonMode,
             PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, RequestMessage, Role, TextChunk, Thought,
-            ThoughtChunk, Usage,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+            Role, TextChunk, Thought, ThoughtChunk, Usage,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
             chat_completion_inference_params::{
                 ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
             },
+            file::sanitize_raw_request,
         },
     },
     model::{Credential, ModelProvider},
@@ -929,23 +929,22 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let usage = mistral_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: Some(mistral_finish_reason_to_tensorzero_finish_reason(
-                    finish_reason,
-                )),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: Some(mistral_finish_reason_to_tensorzero_finish_reason(
+                finish_reason,
+            )),
+        })
     }
 }
 

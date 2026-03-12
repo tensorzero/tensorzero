@@ -32,17 +32,16 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
-};
+use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, ThoughtChunk, Unknown, Usage,
-    resolved_input::{FileUrl, LazyFile},
+    resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
@@ -1579,11 +1578,11 @@ pub(super) struct OpenRouterUsage {
     pub completion_tokens: Option<u32>,
 }
 
-impl From<OpenRouterUsage> for Usage {
-    fn from(usage: OpenRouterUsage) -> Self {
+impl OpenRouterUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
+            input_tokens: self.prompt_tokens,
+            output_tokens: self.completion_tokens,
             cost: None,
         }
     }
@@ -1635,9 +1634,9 @@ pub(super) enum OpenRouterFinishReason {
     Unknown,
 }
 
-impl From<OpenRouterFinishReason> for FinishReason {
-    fn from(finish_reason: OpenRouterFinishReason) -> Self {
-        match finish_reason {
+impl OpenRouterFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             OpenRouterFinishReason::Stop => FinishReason::Stop,
             OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
@@ -1734,24 +1733,23 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages: messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages: messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: Some(finish_reason.into_finish_reason()),
+        })
     }
 }
 
@@ -1992,12 +1990,12 @@ fn openrouter_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(OpenRouterUsage::into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
-            finish_reason = Some(choice_finish_reason.into());
+            finish_reason = Some(choice_finish_reason.into_finish_reason());
         }
         // Process reasoning_details first (thoughts should come before content)
         if let Some(reasoning_details) = choice.delta.reasoning_details {

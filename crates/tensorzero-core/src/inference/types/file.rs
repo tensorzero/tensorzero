@@ -49,7 +49,6 @@ use std::borrow::Cow;
 use aws_smithy_types::base64;
 use futures::FutureExt;
 use mime::MediaType;
-use serde::{Deserialize, Serialize};
 
 use super::{ContentBlock, RequestMessage};
 use crate::{
@@ -64,19 +63,7 @@ pub use tensorzero_types::{
     ObjectStoragePointer, UrlFile,
 };
 
-/// A newtype wrapper around `ObjectStorageFile` that represents file data
-/// from a base64 input that needs to be written to object storage.
-/// The `storage_path` inside is content-addressed (computed from data) and represents
-/// where the file WILL be written, not where it currently exists.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct PendingObjectStoreFile(pub ObjectStorageFile);
-
-impl std::ops::Deref for PendingObjectStoreFile {
-    type Target = ObjectStorageFile;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+pub use tensorzero_provider_types::PendingObjectStoreFile;
 
 /// Extension trait for File operations that require tensorzero-core dependencies.
 pub trait FileExt {

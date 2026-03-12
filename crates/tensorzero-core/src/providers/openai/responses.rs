@@ -28,8 +28,9 @@ use crate::{
     inference::types::{
         ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
         Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
+        ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Thought,
+        ThoughtChunk, Unknown, UnknownChunk, Usage,
+        file::{Detail, sanitize_raw_request},
     },
     providers::openai::{
         OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
@@ -121,11 +122,11 @@ pub struct OpenAIResponsesUsage {
     pub output_tokens: Option<u32>,
 }
 
-impl From<OpenAIResponsesUsage> for Usage {
-    fn from(usage: OpenAIResponsesUsage) -> Self {
+impl OpenAIResponsesUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
             cost: None,
         }
     }
@@ -257,22 +258,22 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
             )
         });
-        let usage = self.usage.map(|u| u.into()).unwrap_or_default();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output,
-                system: generic_request.system.clone(),
-                input_messages: generic_request.messages.clone(),
-                raw_request,
-                raw_response: raw_response.clone(),
-                raw_usage,
-                relay_raw_response: None,
-                usage,
-                provider_latency: latency,
-                finish_reason,
-                id: model_inference_id,
-            },
-        ))
+        let usage = self.usage.map(|u| u.into_usage()).unwrap_or_default();
+        let input_messages = generic_request.messages.clone();
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output,
+            system: generic_request.system.clone(),
+            input_messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            raw_usage,
+            relay_raw_response: None,
+            usage,
+            provider_latency: latency,
+            finish_reason,
+        })
     }
 }
 

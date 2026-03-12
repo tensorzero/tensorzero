@@ -49,12 +49,13 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
-    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
-    UnknownChunk,
+    Latency, ModelInferenceRequestJsonMode, ProviderInferenceResponseStreamInner, Role, Text,
+    TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{
     ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
@@ -2928,9 +2929,9 @@ enum GCPVertexGeminiFinishReason {
     Unknown,
 }
 
-impl From<GCPVertexGeminiFinishReason> for FinishReason {
-    fn from(finish_reason: GCPVertexGeminiFinishReason) -> Self {
-        match finish_reason {
+impl GCPVertexGeminiFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             GCPVertexGeminiFinishReason::Stop => FinishReason::Stop,
             GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
             GCPVertexGeminiFinishReason::Safety => FinishReason::ContentFilter,
@@ -3016,7 +3017,9 @@ fn get_response_content(
         })
     })?;
 
-    let finish_reason = first_candidate.finish_reason.map(Into::into);
+    let finish_reason = first_candidate
+        .finish_reason
+        .map(GCPVertexGeminiFinishReason::into_finish_reason);
 
     // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
     let content = match first_candidate.content {
@@ -3083,21 +3086,20 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             provider_name,
         )?;
 
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response,
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason,
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response,
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason,
+        })
     }
 }
 
@@ -3190,7 +3192,9 @@ fn convert_stream_response_with_metadata_to_chunk(
         usage,
         raw_response,
         latency,
-        first_candidate.finish_reason.map(Into::into),
+        first_candidate
+            .finish_reason
+            .map(GCPVertexGeminiFinishReason::into_finish_reason),
         raw_usage,
     ))
 }
