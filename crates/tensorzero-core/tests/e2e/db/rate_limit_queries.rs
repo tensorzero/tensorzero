@@ -13,6 +13,39 @@ use tensorzero_core::rate_limiting::{ActiveRateLimitKey, RateLimitInterval};
 
 use crate::utils::poll_for_result::poll_for_result_with_interval_and_timeout;
 
+/// Polls `get_balance` until the result satisfies `predicate` or the default timeout (10s) elapses.
+async fn poll_balance<C, F>(
+    conn: &C,
+    key: &str,
+    capacity: u64,
+    refill_amount: u64,
+    interval: RateLimitInterval,
+    predicate: F,
+    msg: &str,
+) -> u64
+where
+    C: RateLimitQueries + Clone,
+    F: Fn(&u64) -> bool,
+{
+    let conn = conn.clone();
+    let key = key.to_string();
+    poll_for_result_with_interval_and_timeout(
+        move || {
+            let conn = conn.clone();
+            let key = key.clone();
+            async move {
+                conn.get_balance(&key, capacity, refill_amount, interval)
+                    .await
+            }
+        },
+        predicate,
+        Duration::from_millis(100),
+        Duration::from_secs(10),
+        msg,
+    )
+    .await
+}
+
 /// Invokes a callback macro for each rate limit test.
 /// This ensures both Postgres and Valkey test suites include all tests.
 /// To add a new test, add it here and it will automatically be included in both backends.
@@ -514,50 +547,32 @@ pub async fn test_refill_mechanics(conn: impl RateLimitQueries + Clone, test_id:
 
     // Phase 2: Poll until at least one refill has occurred (balance >= 90 = 60 + 30).
     // Refills are computed server-side using the DB clock, so we poll instead of sleeping.
-    let balance = {
-        let conn = conn.clone();
-        let key = key.clone();
-        poll_for_result_with_interval_and_timeout(
-            || {
-                let conn = conn.clone();
-                let key = key.clone();
-                async move {
-                    conn.get_balance(&key, 100, 30, RateLimitInterval::Second)
-                        .await
-                }
-            },
-            |b| *b >= 90,
-            Duration::from_millis(100),
-            Duration::from_secs(10),
-            "Balance did not reach 90 (expected at least one refill of 30 from 60)",
-        )
-        .await
-    };
+    let balance = poll_balance(
+        &conn,
+        &key,
+        100,
+        30,
+        RateLimitInterval::Second,
+        |b| *b >= 90,
+        "Balance did not reach 90 (expected at least one refill of 30 from 60)",
+    )
+    .await;
     assert!(
         (90..=100).contains(&balance),
         "Expected balance between 90 and 100 after refill, got {balance}"
     );
 
     // Phase 3: Poll until balance is capped at capacity
-    let balance = {
-        let conn = conn.clone();
-        let key = key.clone();
-        poll_for_result_with_interval_and_timeout(
-            || {
-                let conn = conn.clone();
-                let key = key.clone();
-                async move {
-                    conn.get_balance(&key, 100, 30, RateLimitInterval::Second)
-                        .await
-                }
-            },
-            |b| *b >= 100,
-            Duration::from_millis(100),
-            Duration::from_secs(10),
-            "Balance did not reach capacity (100)",
-        )
-        .await
-    };
+    let balance = poll_balance(
+        &conn,
+        &key,
+        100,
+        30,
+        RateLimitInterval::Second,
+        |b| *b >= 100,
+        "Balance did not reach capacity (100)",
+    )
+    .await;
     assert_eq!(balance, 100); // Should be capped at capacity
 }
 
