@@ -537,12 +537,8 @@ async fn test_update_datapoints_tool_basic(pool: PgPool) {
             input: Some(create_test_input("updated input")),
             output: None,
             tool_params: Default::default(),
-            #[expect(deprecated)]
-            deprecated_do_not_use_tool_params: None,
             tags: None,
             metadata: Default::default(),
-            #[expect(deprecated)]
-            deprecated_do_not_use_metadata: None,
         })],
     };
 
@@ -587,12 +583,8 @@ async fn test_update_datapoints_tool_error(pool: PgPool) {
             input: Some(create_test_input("updated input")),
             output: None,
             tool_params: Default::default(),
-            #[expect(deprecated)]
-            deprecated_do_not_use_tool_params: None,
             tags: None,
             metadata: Default::default(),
-            #[expect(deprecated)]
-            deprecated_do_not_use_metadata: None,
         })],
     };
 
