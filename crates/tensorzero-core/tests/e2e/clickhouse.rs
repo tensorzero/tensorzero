@@ -1142,25 +1142,25 @@ async fn test_clickhouse_migration_manager() {
     run_all(&clickhouse, &migrations, &logs_contain).await;
     let mut new_rows = get_all_migration_records(&clickhouse).await.unwrap();
 
+    // Capture baseline totals (includes fixtures + any rows inserted by migration tests).
+    // We assert on deltas below so that new migrations inserting test data don't break these checks.
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
         )
         .await
         .unwrap();
-    let input_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000000 from fixtures + 300 from migration 0048 test rows (100 + 200) + 600 from migration 0051 test rows (100 + 200 + 300)
-    assert_eq!(input_token_total, 200000900);
+    let baseline_input_tokens: u64 = response.response.trim().parse().unwrap();
+    assert!(baseline_input_tokens >= 200000000, "Expected at least the fixture input tokens");
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
         )
         .await
         .unwrap();
-    let output_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000000 from fixtures + 150 from migration 0048 test rows (50 + 100) + 300 from migration 0051 test rows (50 + 100 + 150)
-    assert_eq!(output_token_total, 200000450);
-    // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
+    let baseline_output_tokens: u64 = response.response.trim().parse().unwrap();
+    assert!(baseline_output_tokens >= 200000000, "Expected at least the fixture output tokens");
+    // Insert a ModelInference row with null output tokens to verify CumulativeUsage handles nulls correctly
     let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
@@ -1193,8 +1193,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let input_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000900 (prior total) + 123 from this row
-    assert_eq!(input_token_total, 200001023);
+    // input_tokens should increase by exactly 123
+    assert_eq!(input_token_total, baseline_input_tokens + 123);
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -1202,8 +1202,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
-    // Unchanged from prior check — this row has null output tokens
-    assert_eq!(output_token_total, 200000450);
+    // output_tokens should be unchanged — the new row has null output_tokens
+    assert_eq!(output_token_total, baseline_output_tokens);
 
     // Check that the EpisodeById migration worked
     let response = clickhouse
