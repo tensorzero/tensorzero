@@ -1,9 +1,6 @@
 services:
   postgres:
-    build:
-      context: ../../crates/tensorzero-core/tests/e2e
-      dockerfile: Dockerfile.postgres
-    image: tensorzero/postgres-dev:14-trixie-slim
+    image: tensorzero/postgres:14
     environment:
       POSTGRES_DB: tensorzero_ui_fixtures
       POSTGRES_USER: postgres

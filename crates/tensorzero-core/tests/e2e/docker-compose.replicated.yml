@@ -1,9 +1,6 @@
 services:
   postgres:
-    build:
-      context: .
-      dockerfile: Dockerfile.postgres
-    image: tensorzero/postgres-dev:14-trixie-slim
+    image: tensorzero/postgres:14
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_PASSWORD: postgres
