@@ -4,13 +4,13 @@ Postgres images bundling [pgvector](https://github.com/pgvector/pgvector) and [p
 
 ## Published tags
 
-| Tag | Postgres version |
-|-----|-----------------|
-| `tensorzero/postgres:18.3`, `tensorzero/postgres:18` | 18.3 |
-| `tensorzero/postgres:17.9`, `tensorzero/postgres:17` | 17.9 |
-| `tensorzero/postgres:16.13`, `tensorzero/postgres:16` | 16.13 |
-| `tensorzero/postgres:15.17`, `tensorzero/postgres:15` | 15.17 |
-| `tensorzero/postgres:14.22`, `tensorzero/postgres:14` | 14.22 |
+| Tag                                                   | Postgres version |
+| ----------------------------------------------------- | ---------------- |
+| `tensorzero/postgres:18.3`, `tensorzero/postgres:18`  | 18.3             |
+| `tensorzero/postgres:17.9`, `tensorzero/postgres:17`  | 17.9             |
+| `tensorzero/postgres:16.13`, `tensorzero/postgres:16` | 16.13            |
+| `tensorzero/postgres:15.17`, `tensorzero/postgres:15` | 15.17            |
+| `tensorzero/postgres:14.22`, `tensorzero/postgres:14` | 14.22            |
 
 All images are multi-arch (`linux/amd64` and `linux/arm64`).
 
