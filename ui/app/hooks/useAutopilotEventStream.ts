@@ -260,7 +260,7 @@ export function useAutopilotEventStream({
                   }
 
                   // Update pending user questions based on event type
-                  // Both user_questions and auto_eval_example_labeling events
+                  // Both `user_questions` and `auto_eval_example_labeling` events
                   // require user input and share the same pending queue.
                   setPendingUserQuestions((prev) => {
                     if (
