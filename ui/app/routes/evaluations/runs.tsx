@@ -2,17 +2,11 @@ import { Suspense, useEffect, useState } from "react";
 import { AlertCircle, Loader2, StopCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/runs";
-import type { EvaluationConfig, EvaluationResultRow } from "~/types/tensorzero";
-import {
-  getConfig,
-  getFunctionConfig,
-  getConfigForSnapshot,
-} from "~/utils/config/index.server";
+import type { EvaluationResultRow } from "~/types/tensorzero";
 import {
   getEvaluationResults,
   pollForEvaluationResults,
 } from "~/utils/clickhouse/evaluations.server";
-import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import {
   EvaluationTable,
   type SelectedRowData,
@@ -61,10 +55,8 @@ import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
 import BasicInfo from "~/routes/evaluations/EvaluationBasicInfo";
 import { Skeleton } from "~/components/ui/skeleton";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
-import type {
-  EvaluationRunMetadata,
-  RunMetricMetadata,
-} from "~/types/tensorzero";
+import type { RunMetricMetadata } from "~/types/tensorzero";
+import { mergeRunMetrics } from "~/utils/clickhouse/evaluations";
 
 type EvaluationData = {
   selected_evaluation_run_infos: Awaited<
@@ -168,105 +160,38 @@ export async function loader({ request }: Route.LoaderArgs) {
     selected_evaluation_run_ids_array,
   );
 
-  // Use the first run's metadata as the primary source
-  const firstRunId = selected_evaluation_run_ids_array[0];
-  const firstRunMetadata: EvaluationRunMetadata | undefined =
-    runMetadataResponse.metadata[firstRunId];
-  if (!firstRunMetadata) {
-    throw data(`Evaluation run metadata not found for run ID: ${firstRunId}`, {
-      status: 404,
-    });
-  }
-
-  const evaluation_name = firstRunMetadata.evaluation_name;
-  const function_name = firstRunMetadata.function_name;
-  const function_type = firstRunMetadata.function_type as "chat" | "json";
-
-  // Try to look up the full evaluation config for richer UI
-  const config = await getConfig();
-  let evaluationConfig = config.evaluations[evaluation_name];
-  let effectiveConfig = config;
-  let snapshotHash: string | undefined;
-
-  if (!evaluationConfig) {
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === evaluation_name,
-    );
-    if (matchingRun?.snapshot_hash) {
-      snapshotHash = matchingRun.snapshot_hash;
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
-      evaluationConfig = effectiveConfig.evaluations[evaluation_name];
-    }
-  }
-
-  let evaluator_names: string[];
-  let metric_names: string[];
-  let metricsConfig: Record<string, RunMetricMetadata>;
-  let evaluatorMetricNames: Record<string, string>;
-
-  if (evaluationConfig) {
-    // Config found — derive from config (same as existing route)
-    evaluator_names = Object.keys(evaluationConfig.evaluators);
-    metric_names = evaluator_names.map((evaluatorName) =>
-      getEvaluatorMetricName(evaluation_name, evaluatorName),
-    );
-    evaluatorMetricNames = {};
-    for (let i = 0; i < evaluator_names.length; i++) {
-      evaluatorMetricNames[evaluator_names[i]] = metric_names[i];
-    }
-    metricsConfig = {};
-    for (let i = 0; i < metric_names.length; i++) {
-      const metricName = metric_names[i];
-      const metricConfig = effectiveConfig.metrics[metricName];
-      if (metricConfig) {
-        metricsConfig[metricName] = {
-          name: metricName,
-          evaluator_name: evaluator_names[i],
-          value_type: metricConfig.type,
-          optimize: metricConfig.optimize,
-        };
-      }
-    }
-  } else {
-    // Config not found — derive from DB metadata
-    metric_names = firstRunMetadata.metrics.map((m) => m.name);
-    evaluator_names = firstRunMetadata.metrics
-      .map((m) => m.evaluator_name)
-      .filter((name): name is string => name != null);
-    metricsConfig = {};
-    for (const metric of firstRunMetadata.metrics) {
-      metricsConfig[metric.name] = metric;
-    }
-    // Build evaluator_name → metric_name mapping from DB metadata
-    evaluatorMetricNames = {};
-    for (const metric of firstRunMetadata.metrics) {
-      if (metric.evaluator_name) {
-        evaluatorMetricNames[metric.evaluator_name] = metric.name;
-      }
-    }
-    // Build a minimal evaluationConfig for the components
-    const evaluators: Record<string, { type: "exact_match" }> = {};
-    for (const name of evaluator_names) {
-      evaluators[name] = { type: "exact_match" };
-    }
-    evaluationConfig = {
-      type: "inference" as const,
-      function_name,
-      evaluators,
-    };
-  }
-
-  // Verify function config exists
-  const functionConfig = await getFunctionConfig(
-    function_name,
-    effectiveConfig,
-  );
-  if (functionConfig?.type && functionConfig.type !== function_type) {
-    logger.warn(
-      `Function type mismatch: DB says ${function_type}, config says ${functionConfig.type}`,
+  // Merge metadata from all available runs
+  const allMetadata = Object.values(runMetadataResponse.metadata);
+  if (allMetadata.length === 0) {
+    throw data(
+      `Evaluation run metadata not found for any of the provided run IDs`,
+      { status: 404 },
     );
   }
+
+  const functionNames = new Set(allMetadata.map((m) => m.function_name));
+  if (functionNames.size > 1) {
+    throw data(
+      `All evaluation runs must target the same function, but found: ${[...functionNames].join(", ")}`,
+      { status: 400 },
+    );
+  }
+
+  // Use the first selected run ID (not Object.values order) for primary
+  // metadata, since the server returns a HashMap with no stable ordering.
+  const primaryMetadata =
+    runMetadataResponse.metadata[selected_evaluation_run_ids_array[0]] ??
+    allMetadata[0];
+  const evaluation_name = primaryMetadata.evaluation_name;
+  const function_name = primaryMetadata.function_name;
+  const function_type = primaryMetadata.function_type as "chat" | "json";
+
+  const {
+    metrics: mergedMetrics,
+    metricsConfig,
+    evaluatorMetricNames,
+  } = mergeRunMetrics(allMetadata);
+  const metric_names = mergedMetrics.map((m) => m.name);
 
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -313,8 +238,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     evaluation_name,
-    evaluationConfig,
-    snapshotHash,
+    function_name,
+    snapshotHash: undefined as string | undefined,
     function_type,
     metricsConfig,
     evaluationData: fetchEvaluationData(
@@ -329,7 +254,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
     limit,
-    evaluator_names,
+    metric_names,
     evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
@@ -428,11 +353,10 @@ function ResultsError() {
 
 function ResultsContent({
   evaluation_name,
-  evaluationConfig,
   metricsConfig,
   evaluatorMetricNames,
   data,
-  evaluator_names,
+  metric_names,
   any_evaluation_is_running,
   has_selected_runs,
   offset,
@@ -443,11 +367,10 @@ function ResultsContent({
   isCancelling,
 }: {
   evaluation_name: string;
-  evaluationConfig: EvaluationConfig;
   metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
-  evaluator_names: string[];
+  metric_names: string[];
   any_evaluation_is_running: boolean;
   has_selected_runs: boolean;
   offset: number;
@@ -510,13 +433,12 @@ function ResultsContent({
       </div>
       <EvaluationTable
         evaluation_name={evaluation_name}
-        evaluationConfig={evaluationConfig}
         metricsConfig={metricsConfig}
         evaluatorMetricNames={evaluatorMetricNames}
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
-        evaluator_names={evaluator_names}
+        metric_names={metric_names}
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
       />
@@ -541,7 +463,7 @@ export default function EvaluationRunsPage({
 }: Route.ComponentProps) {
   const {
     evaluation_name,
-    evaluationConfig: evaluation_config,
+    function_name,
     snapshotHash,
     function_type,
     metricsConfig,
@@ -549,7 +471,7 @@ export default function EvaluationRunsPage({
     has_selected_runs,
     offset,
     limit,
-    evaluator_names,
+    metric_names,
     evaluatorMetricNames,
     running_evaluation_run_ids,
     errors,
@@ -569,8 +491,6 @@ export default function EvaluationRunsPage({
     Map<string, SelectedRowData>
   >(new Map());
   const [selectedDataset, setSelectedDataset] = useState<string>("");
-
-  const function_name = evaluation_config.function_name;
 
   useAutoRefresh(anyEvaluationIsRunning);
 
@@ -624,7 +544,7 @@ export default function EvaluationRunsPage({
         name={evaluation_name}
       >
         <BasicInfo
-          evaluation_config={evaluation_config}
+          functionName={function_name}
           functionType={function_type}
           snapshotHash={snapshotHash}
         />
@@ -655,24 +575,25 @@ export default function EvaluationRunsPage({
           )}
           <Suspense key={location.key} fallback={<ResultsSkeleton />}>
             <Await resolve={evaluationData} errorElement={<ResultsError />}>
-              {(resolvedData) => (
-                <ResultsContent
-                  evaluation_name={evaluation_name}
-                  evaluationConfig={evaluation_config}
-                  metricsConfig={metricsConfig}
-                  evaluatorMetricNames={evaluatorMetricNames}
-                  data={resolvedData}
-                  evaluator_names={evaluator_names}
-                  any_evaluation_is_running={anyEvaluationIsRunning}
-                  has_selected_runs={has_selected_runs}
-                  offset={offset}
-                  limit={limit}
-                  selectedRows={selectedRows}
-                  setSelectedRows={setSelectedRows}
-                  onCancel={handleCancelEvaluation}
-                  isCancelling={isCancelling}
-                />
-              )}
+              {(resolvedData) => {
+                return (
+                  <ResultsContent
+                    evaluation_name={evaluation_name}
+                    metricsConfig={metricsConfig}
+                    evaluatorMetricNames={evaluatorMetricNames}
+                    data={resolvedData}
+                    metric_names={metric_names}
+                    any_evaluation_is_running={anyEvaluationIsRunning}
+                    has_selected_runs={has_selected_runs}
+                    offset={offset}
+                    limit={limit}
+                    selectedRows={selectedRows}
+                    setSelectedRows={setSelectedRows}
+                    onCancel={handleCancelEvaluation}
+                    isCancelling={isCancelling}
+                  />
+                );
+              }}
             </Await>
           </Suspense>
         </SectionLayout>

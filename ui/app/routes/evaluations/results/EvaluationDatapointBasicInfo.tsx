@@ -6,7 +6,6 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 import EditableChip from "~/components/ui/EditableChip";
 import { toFunctionUrl, toDatasetUrl, toDatapointUrl } from "~/utils/urls";
 import { Badge } from "~/components/ui/badge";
@@ -19,7 +18,7 @@ import { useReadOnly } from "~/context/read-only";
 
 interface BasicInfoProps {
   evaluation_name: string;
-  evaluation_config: InferenceEvaluationConfig;
+  functionName: string;
   functionType: "chat" | "json";
   dataset_name: string;
   datapoint_id: string;
@@ -31,7 +30,7 @@ interface BasicInfoProps {
 
 export default function BasicInfo({
   evaluation_name,
-  evaluation_config,
+  functionName,
   functionType,
   dataset_name,
   datapoint_id,
@@ -40,7 +39,6 @@ export default function BasicInfo({
   onRenameDatapoint,
   snapshotHash,
 }: BasicInfoProps) {
-  const functionName = evaluation_config.function_name;
   const isReadOnly = useReadOnly();
   const functionIconConfig = getFunctionTypeIcon(functionType);
 

@@ -7,20 +7,18 @@ import {
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { toFunctionUrl } from "~/utils/urls";
-import type { InferenceEvaluationConfig } from "~/types/tensorzero";
 
 interface BasicInfoProps {
-  evaluation_config: InferenceEvaluationConfig;
+  functionName: string;
   functionType: "chat" | "json";
   snapshotHash?: string;
 }
 
 export default function BasicInfo({
-  evaluation_config,
+  functionName,
   functionType,
   snapshotHash,
 }: BasicInfoProps) {
-  const functionName = evaluation_config.function_name;
   const functionIconConfig = getFunctionTypeIcon(functionType);
 
   return (
