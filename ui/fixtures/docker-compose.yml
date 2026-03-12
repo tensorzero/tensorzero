@@ -51,7 +51,7 @@ services:
       clickhouse:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
+        condition: service_completed_successfully
     command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-'/app/config/tensorzero.toml'}
     healthcheck:
       test:
@@ -90,7 +90,7 @@ services:
       postgres:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
+        condition: service_completed_successfully
     command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]

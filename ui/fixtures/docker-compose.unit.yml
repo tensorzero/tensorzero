@@ -55,7 +55,7 @@ services:
       clickhouse:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -92,7 +92,7 @@ services:
       postgres:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
+        condition: service_completed_successfully
     command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
@@ -129,6 +129,6 @@ services:
       postgres:
         condition: service_healthy
       gateway-postgres-migrations:
-        condition: service_healthy
+        condition: service_completed_successfully
       mock-provider-api:
         condition: service_healthy

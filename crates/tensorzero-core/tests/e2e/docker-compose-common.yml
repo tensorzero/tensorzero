@@ -143,19 +143,7 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      [
-        "gateway --run-clickhouse-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
-      ]
-    extra_hosts:
-      - "howdy.tensorzero.com:127.0.0.1"
-    healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
-      interval: 5s
-      timeout: 1s
-      retries: 72 # Retry for up to 6 minutes
-      start_period: 5s
+    command: ["--run-clickhouse-migrations"]
 
   # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
   # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
@@ -173,16 +161,5 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
     command:
-      [
-        "gateway --run-postgres-migrations --enable-optimization-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
-      ]
-    extra_hosts:
-      - "howdy.tensorzero.com:127.0.0.1"
-    healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
-      interval: 5s
-      timeout: 1s
-      retries: 72 # Retry for up to 6 minutes
-      start_period: 5s
+      ["--run-postgres-migrations", "--enable-optimization-postgres-migrations"]
