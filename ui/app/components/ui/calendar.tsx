@@ -18,18 +18,19 @@ function Calendar({
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row gap-2",
+        months: "relative flex flex-col sm:flex-row gap-2 justify-center",
         month: "flex flex-col gap-4",
-        month_caption: "flex justify-center pt-1 relative items-center w-full",
+        month_caption:
+          "flex justify-center pt-2 items-center w-full pointer-events-none",
         caption_label: "text-sm font-medium",
-        nav: "flex items-center gap-1",
+        nav: "absolute top-1 inset-x-0 flex items-center justify-between px-1",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-1 z-10 cursor-pointer",
+          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 cursor-pointer",
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-1 z-10 cursor-pointer",
+          "size-7 bg-transparent p-0 opacity-50 hover:opacity-100 cursor-pointer",
         ),
         month_grid: "w-full border-collapse",
         weekdays: "flex",
@@ -38,8 +39,9 @@ function Calendar({
         week: "flex w-full mt-2",
         day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md",
         day_button: cn(
-          buttonVariants({ variant: "ghost" }),
           "size-8 rounded-md p-0 font-normal transition-none aria-selected:opacity-100 cursor-pointer",
+          "hover:bg-bg-hover hover:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         ),
         range_start:
           "day-range-start rounded-s-md [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary [&>button]:hover:text-primary-foreground",

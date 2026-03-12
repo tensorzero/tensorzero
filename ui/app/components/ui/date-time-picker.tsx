@@ -1,16 +1,21 @@
 import * as React from "react";
-import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
+import { formatDate } from "~/utils/date";
 
 import { Button } from "~/components/ui/button";
 import { Calendar } from "~/components/ui/calendar";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { cn } from "~/utils/common";
 
 interface DateTimePickerProps {
@@ -22,6 +27,22 @@ interface DateTimePickerProps {
   id?: string;
 }
 
+function toHour12(date: Date): number {
+  return date.getHours() % 12 || 12;
+}
+
+function toAmPm(date: Date): "AM" | "PM" {
+  return date.getHours() >= 12 ? "PM" : "AM";
+}
+
+function toHours24(hour12: number, ampm: "AM" | "PM"): number {
+  if (ampm === "AM") return hour12 === 12 ? 0 : hour12;
+  return hour12 === 12 ? 12 : hour12 + 12;
+}
+
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+
 export function DateTimePicker({
   value,
   onChange,
@@ -31,29 +52,46 @@ export function DateTimePicker({
   id,
 }: DateTimePickerProps) {
   const [open, setOpen] = React.useState(false);
-  const [timeValue, setTimeValue] = React.useState(
-    value ? format(value, "HH:mm") : "00:00",
+  const [hour, setHour] = React.useState<number>(value ? toHour12(value) : 12);
+  const [minute, setMinute] = React.useState<number>(
+    value ? value.getMinutes() : 0,
   );
+  const [ampm, setAmPm] = React.useState<"AM" | "PM">(
+    value ? toAmPm(value) : "AM",
+  );
+
+  const applyTime = (h: number, m: number, ap: "AM" | "PM", base?: Date) => {
+    const day = base ?? value;
+    if (!day) return;
+    const combined = new Date(day);
+    combined.setHours(toHours24(h, ap), m, 0, 0);
+    onChange?.(combined);
+  };
 
   const handleDaySelect = (day: Date | undefined) => {
     if (!day) {
       onChange?.(undefined);
       return;
     }
-    const [hours, minutes] = timeValue.split(":").map(Number);
-    const combined = new Date(day);
-    combined.setHours(hours, minutes, 0, 0);
-    onChange?.(combined);
+    applyTime(hour, minute, ampm, day);
   };
 
-  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = e.target.value;
-    setTimeValue(time);
-    if (!value) return;
-    const [hours, minutes] = time.split(":").map(Number);
-    const combined = new Date(value);
-    combined.setHours(hours, minutes, 0, 0);
-    onChange?.(combined);
+  const handleHourChange = (val: string) => {
+    const h = Number(val);
+    setHour(h);
+    applyTime(h, minute, ampm);
+  };
+
+  const handleMinuteChange = (val: string) => {
+    const m = Number(val);
+    setMinute(m);
+    applyTime(hour, m, ampm);
+  };
+
+  const handleAmPmChange = (val: string) => {
+    const ap = val as "AM" | "PM";
+    setAmPm(ap);
+    applyTime(hour, minute, ap);
   };
 
   return (
@@ -69,7 +107,7 @@ export function DateTimePicker({
           )}
         >
           <CalendarIcon className="mr-2 size-4" />
-          {value ? format(value, "PPP HH:mm") : <span>{placeholder}</span>}
+          {value ? formatDate(value) : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
@@ -80,19 +118,50 @@ export function DateTimePicker({
           disabled={minDate ? (day) => day < minDate : undefined}
           initialFocus
         />
-        <div className="border-t p-3">
+        <div className="border-t p-3 flex flex-col gap-3 items-center">
           <div className="flex items-center gap-2">
-            <Label htmlFor="time-input" className="text-sm">
-              Time
-            </Label>
-            <Input
-              id="time-input"
-              type="time"
-              value={timeValue}
-              onChange={handleTimeChange}
-              className="h-8 w-28"
-            />
+            <div className="flex items-center gap-1">
+              <Select value={String(hour)} onValueChange={handleHourChange}>
+                <SelectTrigger className="h-8 w-[4rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {HOURS.map((h) => (
+                    <SelectItem key={h} value={String(h)}>
+                      {String(h).padStart(2, "0")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-muted-foreground text-sm font-medium">
+                :
+              </span>
+              <Select value={String(minute)} onValueChange={handleMinuteChange}>
+                <SelectTrigger className="h-8 w-[4rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MINUTES.map((m) => (
+                    <SelectItem key={m} value={String(m)}>
+                      {String(m).padStart(2, "0")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={ampm} onValueChange={handleAmPmChange}>
+                <SelectTrigger className="h-8 w-[4.5rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AM">AM</SelectItem>
+                  <SelectItem value="PM">PM</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
+            Done
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

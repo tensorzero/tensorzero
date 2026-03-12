@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import { DateTimePicker } from "~/components/ui/date-time-picker";
+import { formatDate } from "~/utils/date";
 import {
   Dialog,
   DialogBody,
@@ -12,6 +13,13 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/hooks/use-copy";
 import { useReadOnly } from "~/context/read-only";
@@ -27,6 +35,25 @@ interface ActionData {
   error?: string;
 }
 
+type ExpirationPreset = "none" | "7d" | "30d" | "90d" | "1y" | "custom";
+
+function computeExpiresAt(preset: ExpirationPreset): Date | undefined {
+  const now = new Date();
+  switch (preset) {
+    case "7d":
+      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    case "30d":
+      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    case "90d":
+      return new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    case "1y":
+      return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    case "none":
+    case "custom":
+      return undefined;
+  }
+}
+
 export function GenerateApiKeyModal({
   isOpen,
   onClose,
@@ -35,7 +62,16 @@ export function GenerateApiKeyModal({
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const isReadOnly = useReadOnly();
   const [description, setDescription] = useState("");
-  const [expiresAt, setExpiresAt] = useState<Date | undefined>(undefined);
+  const [expirationPreset, setExpirationPreset] =
+    useState<ExpirationPreset>("none");
+  const [customExpiresAt, setCustomExpiresAt] = useState<Date | undefined>(
+    undefined,
+  );
+
+  const expiresAt =
+    expirationPreset === "custom"
+      ? customExpiresAt
+      : computeExpiresAt(expirationPreset);
 
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
@@ -45,6 +81,10 @@ export function GenerateApiKeyModal({
     if (apiKey) {
       await copy(apiKey);
     }
+  };
+
+  const handlePresetChange = (value: string) => {
+    setExpirationPreset(value as ExpirationPreset);
   };
 
   return (
@@ -99,7 +139,7 @@ export function GenerateApiKeyModal({
                 <div className="space-y-2">
                   <Label>Expires</Label>
                   <p className="text-muted-foreground text-sm">
-                    {expiresAt.toLocaleString()}
+                    {formatDate(expiresAt)}
                   </p>
                 </div>
               )}
@@ -134,17 +174,35 @@ export function GenerateApiKeyModal({
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="expires_at">
-                  Expiration Date{" "}
+                <Label htmlFor="expiration-preset">
+                  Expiration{" "}
                   <span className="text-muted-foreground">(optional)</span>
                 </Label>
-                <DateTimePicker
-                  id="expires_at"
-                  value={expiresAt}
-                  onChange={setExpiresAt}
-                  minDate={new Date()}
-                  placeholder="No expiration"
-                />
+                <Select
+                  value={expirationPreset}
+                  onValueChange={handlePresetChange}
+                >
+                  <SelectTrigger id="expiration-preset">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No expiration</SelectItem>
+                    <SelectItem value="7d">7 days</SelectItem>
+                    <SelectItem value="30d">30 days</SelectItem>
+                    <SelectItem value="90d">90 days</SelectItem>
+                    <SelectItem value="1y">1 year</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+                {expirationPreset === "custom" && (
+                  <DateTimePicker
+                    id="expires_at"
+                    value={customExpiresAt}
+                    onChange={setCustomExpiresAt}
+                    minDate={new Date()}
+                    placeholder="Pick a date and time"
+                  />
+                )}
               </div>
               {error && (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
