@@ -1149,8 +1149,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let input_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000000 from fixtures + 300 from migration 0048 test rows (100 + 200)
-    assert_eq!(input_token_total, 200000300);
+    // 200000000 from fixtures + 300 from migration 0048 test rows (100 + 200) + 600 from migration 0051 test rows (100 + 200 + 300)
+    assert_eq!(input_token_total, 200000900);
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -1158,8 +1158,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000000 from fixtures + 150 from migration 0048 test rows (50 + 100)
-    assert_eq!(output_token_total, 200000150);
+    // 200000000 from fixtures + 150 from migration 0048 test rows (50 + 100) + 300 from migration 0051 test rows (50 + 100 + 150)
+    assert_eq!(output_token_total, 200000450);
     // Let's add a ModelInference row with null output tokens only then check the input tokens are correct
     let row = StoredModelInference {
         id: Uuid::now_v7(),
@@ -1193,8 +1193,8 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
     let input_token_total: u64 = response.response.trim().parse().unwrap();
-    // 200000300 (prior total) + 123 from this row
-    assert_eq!(input_token_total, 200000423);
+    // 200000900 (prior total) + 123 from this row
+    assert_eq!(input_token_total, 200001023);
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
@@ -1203,7 +1203,7 @@ async fn test_clickhouse_migration_manager() {
         .unwrap();
     let output_token_total: u64 = response.response.trim().parse().unwrap();
     // Unchanged from prior check — this row has null output tokens
-    assert_eq!(output_token_total, 200000150);
+    assert_eq!(output_token_total, 200000450);
 
     // Check that the EpisodeById migration worked
     let response = clickhouse
