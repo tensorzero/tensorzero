@@ -948,14 +948,12 @@ async fn test_cost_aggregation_clickhouse(
         Some(Decimal::new(2000, 6)),
         "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
     );
-    // count_with_cost operates at (model, provider, minute) bucket granularity,
-    // not per-inference (#6574). All 3 inferences land in the same bucket, and
-    // because at least one has a non-null cost, the entire bucket's
-    // inference_count is included.
+    // count_with_cost counts only inferences with non-null cost (per-inference granularity).
+    // 2 of 3 inferences have cost data.
     assert_eq!(
         our_model.count_with_cost,
-        Some(3),
-        "count_with_cost should be 3 (all inferences in a bucket with any cost data)"
+        Some(2),
+        "count_with_cost should be 2 (only inferences with non-null cost)"
     );
 }
 
@@ -1018,14 +1016,12 @@ async fn test_cost_aggregation_postgres() {
         Some(Decimal::new(2000, 6)),
         "Cost should sum to 0.002000 (NULL costs excluded from SUM)"
     );
-    // count_with_cost operates at (model, provider, minute) bucket granularity,
-    // not per-inference (#6574). All 3 inferences land in the same bucket, and
-    // because at least one has a non-null cost, the entire bucket's
-    // inference_count is included.
+    // count_with_cost counts only inferences with non-null cost (per-inference granularity).
+    // 2 of 3 inferences have cost data.
     assert_eq!(
         our_model.count_with_cost,
-        Some(3),
-        "count_with_cost should be 3 (all inferences in a bucket with any cost data)"
+        Some(2),
+        "count_with_cost should be 2 (only inferences with non-null cost)"
     );
 }
 
@@ -1034,12 +1030,6 @@ async fn test_cost_aggregation_postgres() {
 /// ClickHouse test: verify count_with_cost works correctly across separate
 /// minute buckets. Inferences with cost in minute A should be counted, while
 /// inferences without cost in minute B should not.
-///
-/// NOTE: We use `TimeWindow::Minute` here because ClickHouse's `sumMerge`
-/// loses per-bucket NULL distinction when merging states across minutes
-/// (as happens with `Cumulative`). At minute granularity, each bucket is
-/// queried independently, preserving the NULL/non-null cost distinction.
-/// See #6574 for a proposed fix using `COUNT(cost)` in the rollup table.
 async fn test_cost_aggregation_cross_minute_clickhouse(
     conn: tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
 ) {
@@ -1051,9 +1041,6 @@ async fn test_cost_aggregation_cross_minute_clickhouse(
     // Wait for the ClickHouse MV to process the inserts
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    // Use Minute granularity so each minute bucket is queried separately.
-    // With Cumulative, ClickHouse's sumMerge would merge states across all
-    // minutes, losing the per-minute NULL distinction for cost.
     let usage = conn
         .get_model_usage_timeseries(TimeWindow::Minute, 10)
         .await
@@ -1087,12 +1074,10 @@ async fn test_cost_aggregation_cross_minute_clickhouse(
         total_output_tokens, 300,
         "Output tokens should sum to 50 + 100 + 150 = 300"
     );
-    // count_with_cost should be 2: only the 2 inferences from minute A
-    // where the bucket has non-null cost. Minute B's inference is excluded
-    // because its bucket has no cost data.
+    // count_with_cost should be 2: only the 2 inferences with non-null cost.
     assert_eq!(
         total_count_with_cost, 2,
-        "count_with_cost should be 2 (only inferences from minute-bucket with cost)"
+        "count_with_cost should be 2 (only inferences with non-null cost)"
     );
 
     // Verify each minute row individually
@@ -1176,12 +1161,10 @@ async fn test_cost_aggregation_cross_minute_postgres() {
         Some(Decimal::new(2000, 6)),
         "Cost should sum to 0.002000 (only minute A has cost data)"
     );
-    // count_with_cost should be 2: only the 2 inferences from minute A
-    // where the bucket has non-null cost. Minute B's inference is excluded
-    // because its bucket has no cost data.
+    // count_with_cost should be 2: only the 2 inferences with non-null cost.
     assert_eq!(
         our_model.count_with_cost,
         Some(2),
-        "count_with_cost should be 2 (only inferences from minute-bucket with cost)"
+        "count_with_cost should be 2 (only inferences with non-null cost)"
     );
 }

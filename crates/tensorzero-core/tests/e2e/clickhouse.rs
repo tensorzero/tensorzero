@@ -687,6 +687,116 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
+async fn run_migration_0051_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+    clickhouse: &ClickHouseConnectionInfo,
+    run_migration: F,
+) -> bool {
+    // Insert ModelInference rows: two with cost, one without (NULL cost).
+    // Migration 0051 adds `count_with_cost` via `countState(cost)`, so only
+    // rows with non-null cost should be counted in the backfill.
+    let test_model_name = "test_count_with_cost_model_0051";
+    let test_provider_name = "test_count_with_cost_provider_0051";
+    let cost1 = Decimal::from_str("0.001500000").unwrap();
+    let cost2 = Decimal::from_str("0.002500000").unwrap();
+
+    let rows = vec![
+        StoredModelInference {
+            id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            raw_request: Some(String::new()),
+            raw_response: Some(String::new()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            response_time_ms: None,
+            model_name: test_model_name.to_string(),
+            model_provider_name: test_provider_name.to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(cost1),
+            finish_reason: None,
+            snapshot_hash: Some(SnapshotHash::new_test()),
+            timestamp: None,
+        },
+        StoredModelInference {
+            id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            raw_request: Some(String::new()),
+            raw_response: Some(String::new()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(200),
+            output_tokens: Some(100),
+            response_time_ms: None,
+            model_name: test_model_name.to_string(),
+            model_provider_name: test_provider_name.to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: Some(cost2),
+            finish_reason: None,
+            snapshot_hash: Some(SnapshotHash::new_test()),
+            timestamp: None,
+        },
+        StoredModelInference {
+            id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            raw_request: Some(String::new()),
+            raw_response: Some(String::new()),
+            system: None,
+            input_messages: Some(vec![]),
+            output: Some(vec![]),
+            input_tokens: Some(300),
+            output_tokens: Some(150),
+            response_time_ms: None,
+            model_name: test_model_name.to_string(),
+            model_provider_name: test_provider_name.to_string(),
+            ttft_ms: None,
+            cached: false,
+            cost: None,
+            finish_reason: None,
+            snapshot_hash: Some(SnapshotHash::new_test()),
+            timestamp: None,
+        },
+    ];
+
+    clickhouse
+        .write_non_batched(Rows::Unserialized(&rows), TableName::ModelInference)
+        .await
+        .unwrap();
+
+    // Wait for ClickHouse to process the inserts
+    sleep(Duration::from_millis(500)).await;
+
+    let clean_start = run_migration().await;
+
+    // Query ModelProviderStatistics for our test model/provider to verify the backfill
+    let response = clickhouse
+        .run_query_synchronous_no_params(format!(
+            "SELECT countMerge(count_with_cost) \
+             FROM ModelProviderStatistics FINAL \
+             WHERE model_name = '{test_model_name}' \
+             AND model_provider_name = '{test_provider_name}'"
+        ))
+        .await
+        .unwrap();
+
+    let count_with_cost: u64 = response
+        .response
+        .trim()
+        .parse()
+        .expect("count_with_cost should be a valid u64");
+
+    assert_eq!(
+        count_with_cost, 2,
+        "Backfilled count_with_cost should be 2 (only rows with non-null cost)"
+    );
+
+    clean_start
+}
+
 async fn run_rollback_instructions(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(dyn Migration + Send + Sync),
@@ -759,7 +869,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44
     ]
 );
 
@@ -936,6 +1046,13 @@ async fn test_clickhouse_migration_manager() {
                         "Migration0050 should not be run on a clean start"
                     );
                     run_migration_0050_with_data(clickhouse, run_migration).await
+                }
+                "Migration0051" => {
+                    assert!(
+                        !initial_clean_start.get(),
+                        "Migration0051 should not be run on a clean start"
+                    );
+                    run_migration_0051_with_data(clickhouse, run_migration).await
                 }
                 _ => run_migration().await,
             };
