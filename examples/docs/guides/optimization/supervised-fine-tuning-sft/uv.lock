@@ -458,7 +458,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-examples-docs-guides-optimization-gepa"
+name = "tensorzero-examples-docs-guides-optimization-supervised-fine-tuning"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

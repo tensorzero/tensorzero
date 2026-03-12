@@ -1,8 +1,8 @@
 import type { Decorator } from "@storybook/react-vite";
 import type { Preview } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
-import { TooltipProvider } from "../app/components/ui/tooltip";
-import { EntitySheetProvider } from "../app/context/entity-sheet";
+import { useMemo } from "react";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { AppProviders } from "../app/providers/app-providers";
 
 import "../app/tailwind.css";
 
@@ -12,25 +12,29 @@ const resetBrowserStorageDecorator: Decorator = (Story) => {
   return <Story />;
 };
 
-const tooltipProviderDecorator: Decorator = (Story) => (
-  <TooltipProvider>
-    <Story />
-  </TooltipProvider>
-);
-
-const entitySheetProviderDecorator: Decorator = (Story) => (
-  <EntitySheetProvider>
-    <Story />
-  </EntitySheetProvider>
-);
+const appProviderDecorator: Decorator = (Story) => {
+  const router = useMemo(
+    () =>
+      createMemoryRouter(
+        [
+          {
+            path: "*",
+            element: (
+              <AppProviders>
+                <Story />
+              </AppProviders>
+            ),
+          },
+        ],
+        { initialEntries: ["/"] },
+      ),
+    [Story],
+  );
+  return <RouterProvider router={router} />;
+};
 
 const preview: Preview = {
-  decorators: [
-    withRouter,
-    resetBrowserStorageDecorator,
-    tooltipProviderDecorator,
-    entitySheetProviderDecorator,
-  ],
+  decorators: [resetBrowserStorageDecorator, appProviderDecorator],
   parameters: {
     layout: "centered",
     controls: {

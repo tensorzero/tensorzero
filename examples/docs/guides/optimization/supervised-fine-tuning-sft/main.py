@@ -5,26 +5,19 @@ from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
     CreateDatapointRequestJson,
-    DICLOptimizationConfig,
     JsonDatapointOutputUpdate,
+    OpenAISFTConfig,
+    OptimizationJobStatus,
 )
 
 FUNCTION_NAME = "extract_entities"
 
-# The variant to use as a template for DICL examples
+# The variant to use as a template for fine-tuning examples
 BASELINE_VARIANT_NAME = "baseline"
 
-# DICL variant name (will be created by the optimization)
-DICL_VARIANT_NAME = "dicl"
-
-# Embedding model to use for DICL (must be configured in tensorzero.toml)
-EMBEDDING_MODEL = "openai::text-embedding-3-small"
-
-# Number of nearest neighbors to retrieve at inference time
-K = 10
-
-# Model to use for the DICL variant
-MODEL = "openai::gpt-5-mini"
+# Fine-tuning configuration
+MODEL_NAME = "gpt-4.1-2025-04-14"  # OpenAI model to fine-tune
+VAL_FRACTION = 0.2  # 20% of data for validation
 
 DATASET_NAME = "extract_entities_dataset"
 
@@ -73,19 +66,14 @@ async def main():
 
     print(f"Created {len(datapoints)} datapoints")
 
-    # Configure DICL optimization
-    optimization_config = DICLOptimizationConfig(
-        function_name=FUNCTION_NAME,
-        variant_name=DICL_VARIANT_NAME,
-        embedding_model=EMBEDDING_MODEL,
-        k=K,
-        model=MODEL,
+    # Configure SFT optimization
+    optimization_config = OpenAISFTConfig(
+        model=MODEL_NAME,
     )
 
-    print("\nLaunching DICL optimization...")
-    print(f"  - Embedding model: {EMBEDDING_MODEL}")
-    print(f"  - k (nearest neighbors): {K}")
-    print(f"  - Generation model: {MODEL}")
+    print("\nLaunching SFT optimization...")
+    print(f"  - Base model: {MODEL_NAME}")
+    print(f"  - Validation fraction: {VAL_FRACTION}")
 
     # Launch the optimization workflow
     job_handle = await t0.experimental_launch_optimization_workflow(
@@ -93,43 +81,55 @@ async def main():
         template_variant_name=BASELINE_VARIANT_NAME,
         dataset_name=DATASET_NAME,
         optimizer_config=optimization_config,
+        val_fraction=VAL_FRACTION,
     )
 
+    print("Job launched!")
+
     # Poll for completion
+    print("\nWaiting for fine-tuning to complete...")
+
     job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
 
+    # For long-running jobs, poll periodically:
+    while job_info.status == OptimizationJobStatus.Pending:
+        print(f"  Status: {job_info.status}")
+        await asyncio.sleep(60)  # wait 1 minute between polls
+        job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
+
     print("\n" + "=" * 60)
-    print("DICL Optimization Complete!")
-    print("=" * 60)
+    if job_info.status == OptimizationJobStatus.Completed:
+        print("SFT Optimization Complete!")
+        print("=" * 60)
 
-    # Print the generated DICL variant configuration
-    assert job_info.output is not None
-    variant_config = job_info.output
+        # Extract the fine-tuned model name from the job output
+        assert job_info.output is not None
+        fine_tuned_model = job_info.output["routing"][0]
+        print(f"\nFine-tuned model: {fine_tuned_model}")
 
-    print("\nGenerated DICL variant configuration:")
-    print("-" * 40)
+        print("\n" + "-" * 40)
+        print("To use this model, add to your tensorzero.toml:")
+        print("-" * 40)
+        print(f"""
+[models.{FUNCTION_NAME}_fine_tuned]
+routing = ["openai"]
 
-    if "content" in variant_config:
-        content = variant_config["content"]
-        print(f"  embedding_model: {content.get('embedding_model', EMBEDDING_MODEL)}")
-        print(f"  k: {content.get('k', K)}")
-        print(f"  model: {content.get('model', MODEL)}")
+[models.{FUNCTION_NAME}_fine_tuned.providers.openai]
+type = "openai"
+model_name = "{fine_tuned_model}"
 
-    print("\n" + "-" * 40)
-    print("To use this DICL variant, add the following to your tensorzero.toml:")
-    print("-" * 40)
-    print(f"""
-[functions.{FUNCTION_NAME}.variants.{DICL_VARIANT_NAME}]
-type = "experimental_dynamic_in_context_learning"
-embedding_model = "{EMBEDDING_MODEL}"
-k = {K}
-model = "{MODEL}"
+[functions.{FUNCTION_NAME}.variants.fine_tuned]
+type = "chat_completion"
+model = "{FUNCTION_NAME}_fine_tuned"
+templates.system.path = "functions/{FUNCTION_NAME}/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 """)
-
-    print("The DICL examples have been stored in ClickHouse.")
-    print("At inference time, the k most similar examples will be retrieved")
-    print("and included as context for in-context learning.")
+    else:
+        print("SFT Optimization Failed!")
+        print("=" * 60)
+        print(f"Status: {job_info.status}")
+        if job_info.message:
+            print(f"Message: {job_info.message}")
 
 
 if __name__ == "__main__":
