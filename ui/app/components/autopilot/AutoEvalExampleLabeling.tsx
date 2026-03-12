@@ -11,6 +11,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
+import { OptionButton } from "~/components/autopilot/question-cards/OptionButton";
 import type {
   AutoEvalContentBlock,
   EventPayloadAutoEvalExampleLabeling,
@@ -119,6 +120,10 @@ function ContextBlock({ block, maxHeight }: ContextBlockProps) {
           </div>
         </div>
       );
+    }
+    default: {
+      const _exhaustiveCheck: never = block;
+      return _exhaustiveCheck;
     }
   }
 }
@@ -303,9 +308,9 @@ export function AutoEvalExampleLabelingCard({
               {example.label_question.options.map((opt) => {
                 const isSelected = selections[activeIndex] === opt.id;
                 const button = (
-                  <button
+                  <OptionButton
                     key={opt.id}
-                    type="button"
+                    isSelected={isSelected}
                     disabled={isLoading}
                     onClick={() =>
                       setSelections((prev) => ({
@@ -314,17 +319,14 @@ export function AutoEvalExampleLabelingCard({
                       }))
                     }
                     className={cn(
-                      "cursor-pointer rounded-lg border px-3 py-2 text-left text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50",
-                      isSelected
-                        ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:ring-purple-400"
-                        : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
+                      "text-sm font-medium",
                       isSelected
                         ? "text-purple-700 dark:text-purple-300"
                         : "text-fg-primary",
                     )}
                   >
                     {opt.label}
-                  </button>
+                  </OptionButton>
                 );
 
                 if (opt.description) {
