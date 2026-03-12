@@ -10,7 +10,6 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
-import { Markdown } from "~/components/ui/markdown";
 import { OptionButton } from "~/components/autopilot/question-cards/OptionButton";
 import type {
   AutoEvalContentBlock,
@@ -18,63 +17,50 @@ import type {
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 
-const CONTEXT_MAX_HEIGHT = 300;
 const MAX_TEXTAREA_ROWS = 3;
 
-function ScrollCard({
-  maxHeight,
-  children,
-}: {
-  maxHeight: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-bg-primary border-border flex flex-1 flex-col rounded-lg border">
-      <ScrollFadeContainer maxHeight={maxHeight} contentClassName="px-4">
-        {children}
-      </ScrollFadeContainer>
-    </div>
-  );
-}
-
-function JsonBlock({ data, maxHeight }: { data: unknown; maxHeight: number }) {
+function JsonBlock({ data }: { data: unknown }) {
   const formatted = useFormattedJson(
     data as Parameters<typeof useFormattedJson>[0],
   );
   return (
-    <div className="flex flex-1 flex-col">
+    <ScrollFadeContainer maxHeight={9999} contentClassName="-mt-4 -mb-4">
       <CodeEditor
         value={formatted}
         readOnly
-        showLineNumbers={false}
-        maxHeight={`${maxHeight}px`}
         allowedLanguages={["json"]}
         autoDetectLanguage={false}
       />
-    </div>
+    </ScrollFadeContainer>
   );
 }
 
 function ContextBlock({
   block,
-  maxHeight,
+  index,
 }: {
   block: AutoEvalContentBlock;
-  maxHeight: number;
+  index: number;
 }) {
-  const label = block.label && (
-    <span className="text-fg-tertiary text-xs font-medium">{block.label}</span>
-  );
+  const isFirst = index === 0;
+  const labelColor = isFirst ? "text-blue-500" : "text-emerald-500";
+  const borderColor = isFirst ? "border-blue-200" : "border-emerald-200";
 
   const content = (() => {
     switch (block.type) {
       case "json":
-        return <JsonBlock data={block.data} maxHeight={maxHeight} />;
+        return <JsonBlock data={block.data} />;
       case "markdown":
         return (
-          <ScrollCard maxHeight={maxHeight}>
-            <Markdown className="font-mono text-sm">{block.text}</Markdown>
-          </ScrollCard>
+          <ScrollFadeContainer maxHeight={9999} contentClassName="-mt-4 -mb-4">
+            <CodeEditor
+              value={block.text}
+              readOnly
+              showLineNumbers={false}
+              allowedLanguages={["markdown"]}
+              autoDetectLanguage={false}
+            />
+          </ScrollFadeContainer>
         );
       default: {
         const _exhaustiveCheck: never = block;
@@ -84,9 +70,20 @@ function ContextBlock({
   })();
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1">
-      {label}
-      <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+      {block.label && (
+        <span className={cn("shrink-0 text-sm font-medium", labelColor)}>
+          {block.label}
+        </span>
+      )}
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col border-l-2 pl-2",
+          borderColor,
+        )}
+      >
+        {content}
+      </div>
     </div>
   );
 }
@@ -96,12 +93,12 @@ function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
   return (
     <div
       className={cn(
-        "grid grid-cols-1 gap-2 md:gap-4",
+        "grid min-h-0 flex-1 grid-cols-1 gap-2 md:gap-4",
         isSideBySide && "md:grid-cols-2",
       )}
     >
       {blocks.map((block, i) => (
-        <ContextBlock key={i} block={block} maxHeight={CONTEXT_MAX_HEIGHT} />
+        <ContextBlock key={i} block={block} index={i} />
       ))}
     </div>
   );
@@ -201,17 +198,17 @@ export function AutoEvalExampleLabelingCard({
   };
 
   return (
-    <div className="flex flex-col rounded-md border border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30">
+    <div className="flex max-h-[70vh] flex-col rounded-md border border-border bg-bg-primary dark:bg-bg-primary">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-3">
-        <span className="text-sm font-medium">
+      <div className="flex shrink-0 items-center justify-between gap-4 px-4 pt-3 pb-3">
+        <span className="text-sm font-medium text-fg-primary">
           Label examples to improve evaluator accuracy
         </span>
         <button
           type="button"
           onClick={handleDismiss}
           disabled={isLoading}
-          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
+          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-fg-tertiary transition-colors hover:text-fg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="Dismiss examples"
         >
           <X className="h-4 w-4" />
@@ -220,7 +217,7 @@ export function AutoEvalExampleLabelingCard({
 
       {/* Step tabs */}
       {!isSingleExample && (
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
+        <nav className="flex shrink-0 gap-1 overflow-x-auto px-3 pb-3">
           {payload.examples.map((ex, idx) => (
             <StepTab
               key={ex.label_question.id}
@@ -234,93 +231,86 @@ export function AutoEvalExampleLabelingCard({
         </nav>
       )}
 
-      {/* Content */}
-      <div className="px-4">
-        <div
-          key={activeIndex}
-          className="animate-in fade-in flex flex-col gap-3 duration-200"
-        >
-          <ContextGrid blocks={example.context} />
+      {/* Content — code blocks flex to fill, controls are fixed at bottom */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-4">
+        <ContextGrid blocks={example.context} />
 
-          <div className="flex flex-col gap-1.5">
-            <span className="text-fg-secondary text-sm">
-              {example.label_question.question}
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {example.label_question.options.map((opt) => {
-                const isSelected = selections[activeIndex] === opt.id;
-                const button = (
-                  <OptionButton
-                    key={opt.id}
-                    isSelected={isSelected}
-                    disabled={isLoading}
-                    onClick={() =>
-                      setSelections((prev) => ({
-                        ...prev,
-                        [activeIndex]: opt.id,
-                      }))
-                    }
-                    className={cn(
-                      "text-sm font-medium",
-                      isSelected
-                        ? "text-purple-700 dark:text-purple-300"
-                        : "text-fg-primary",
-                    )}
-                  >
-                    {opt.label}
-                  </OptionButton>
+        <div className="flex shrink-0 flex-col gap-1.5">
+          <span className="text-fg-primary text-sm">
+            {example.label_question.question}
+          </span>
+          <div className="flex gap-2">
+            {example.label_question.options.map((opt) => {
+              const isSelected = selections[activeIndex] === opt.id;
+              const button = (
+                <OptionButton
+                  key={opt.id}
+                  isSelected={isSelected}
+                  disabled={isLoading}
+                  onClick={() =>
+                    setSelections((prev) => ({
+                      ...prev,
+                      [activeIndex]: opt.id,
+                    }))
+                  }
+                  className={cn(
+                    "flex-1 text-center text-sm font-medium",
+                    isSelected
+                      ? "text-orange-700 dark:text-orange-300"
+                      : "text-fg-primary",
+                  )}
+                >
+                  {opt.label}
+                </OptionButton>
+              );
+
+              if (opt.description) {
+                return (
+                  <Tooltip key={opt.id}>
+                    <TooltipTrigger asChild className="flex-1">
+                      {button}
+                    </TooltipTrigger>
+                    <TooltipContent
+                      className="border-border bg-fg-primary text-bg-primary border text-xs shadow-lg"
+                      sideOffset={5}
+                    >
+                      {opt.description}
+                    </TooltipContent>
+                  </Tooltip>
                 );
+              }
 
-                if (opt.description) {
-                  return (
-                    <Tooltip key={opt.id}>
-                      <TooltipTrigger asChild>{button}</TooltipTrigger>
-                      <TooltipContent
-                        className="border-border bg-fg-primary text-bg-primary border text-xs shadow-lg"
-                        sideOffset={5}
-                      >
-                        {opt.description}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-
-                return button;
-              })}
-            </div>
+              return button;
+            })}
           </div>
-
-          {example.explanation_question && (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-fg-secondary text-sm">
-                  {example.explanation_question.question}
-                </span>
-                <span className="text-fg-tertiary shrink-0 text-xs">
-                  Optional
-                </span>
-              </div>
-              <textarea
-                ref={autoResizeRef}
-                value={rationales[activeIndex] ?? ""}
-                disabled={isLoading}
-                onChange={(e) => {
-                  setRationales((prev) => ({
-                    ...prev,
-                    [activeIndex]: e.target.value,
-                  }));
-                  autoResize(e.target);
-                }}
-                className="border-input focus-visible:border-border-accent bg-bg-secondary w-full resize-none overscroll-none rounded-md border px-3 py-2 text-sm transition-colors focus-visible:ring-0 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
-                rows={1}
-              />
-            </div>
-          )}
         </div>
+
+        {example.explanation_question && selections[activeIndex] && (
+          <div className="flex shrink-0 flex-col gap-1.5">
+            <span className="text-fg-primary text-sm">
+              {example.explanation_question.question}{" "}
+              <span className="text-fg-tertiary text-xs">(optional)</span>
+            </span>
+            <textarea
+              ref={autoResizeRef}
+              value={rationales[activeIndex] ?? ""}
+              disabled={isLoading}
+              onChange={(e) => {
+                setRationales((prev) => ({
+                  ...prev,
+                  [activeIndex]: e.target.value,
+                }));
+                autoResize(e.target);
+              }}
+              className="border-input focus-visible:border-border-accent bg-bg-primary w-full resize-none overscroll-none rounded-md border px-3 py-2 text-sm transition-colors focus-visible:ring-0 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+              rows={1}
+            />
+          </div>
+        )}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-3">
+      <div className="flex shrink-0 items-center justify-between px-4 pt-3 pb-3">
         <div>
           {!isSingleExample && !isFirst && (
             <Button
@@ -328,7 +318,7 @@ export function AutoEvalExampleLabelingCard({
               size="xs"
               disabled={isLoading}
               onClick={() => setActiveIndex((s) => s - 1)}
-              className="gap-0.5 pl-1 text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
+              className="gap-0.5 pl-1 text-neutral-700 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-neutral-200"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               Back
@@ -337,7 +327,7 @@ export function AutoEvalExampleLabelingCard({
         </div>
         <div className="flex items-center gap-2">
           {!isSingleExample && (
-            <span className="text-fg-tertiary text-xs">
+            <span className="text-fg-primary text-xs">
               {answeredCount}/{totalExamples} labeled
             </span>
           )}
@@ -346,7 +336,7 @@ export function AutoEvalExampleLabelingCard({
               size="xs"
               disabled={!allAnswered || isLoading}
               onClick={handleSubmit}
-              className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+              className="gap-1"
             >
               {isLoading ? "Submitting..." : "Submit"}
               <Check className="h-3.5 w-3.5" />
@@ -356,7 +346,7 @@ export function AutoEvalExampleLabelingCard({
               size="xs"
               disabled={!isStepAnswered(activeIndex) || isLoading}
               onClick={() => setActiveIndex((s) => s + 1)}
-              className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+              className="gap-0.5 pr-1"
             >
               Next
               <ChevronRight className="h-3.5 w-3.5" />

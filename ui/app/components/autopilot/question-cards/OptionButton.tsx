@@ -23,8 +23,8 @@ export function OptionButton({
       className={cn(
         "cursor-pointer rounded-lg border px-3 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50",
         isSelected
-          ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:ring-purple-400"
-          : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
+          ? "border-orange-500 bg-orange-50 ring-1 ring-orange-500 ring-inset dark:border-orange-400 dark:bg-orange-950/40 dark:ring-orange-400"
+          : "border-border bg-bg-primary hover:border-orange-300 hover:bg-orange-50/50 dark:hover:border-orange-600 dark:hover:bg-orange-950/20",
         className,
       )}
     >
