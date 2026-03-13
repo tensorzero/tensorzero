@@ -22,7 +22,7 @@ impl TryFrom<&dyn ErasedTool> for Tool {
 
     fn try_from(tool: &dyn ErasedTool) -> Result<Self, Self::Error> {
         Ok(Tool::Function(FunctionTool {
-            name: tool.name().to_string(),
+            name: tool.llm_name().to_string(),
             description: tool.description().to_string(),
             parameters: serde_json::to_value(tool.parameters_schema()?)?,
             strict: tool.strict(),
@@ -36,6 +36,9 @@ impl TryFrom<&dyn ErasedTool> for Tool {
 pub trait ErasedTool: Send + Sync {
     /// Get the tool's unique name.
     fn name(&self) -> Cow<'static, str>;
+
+    /// Get the tool's LLM-visible name.
+    fn llm_name(&self) -> Cow<'static, str>;
 
     /// Get the tool's description.
     fn description(&self) -> Cow<'static, str>;
@@ -117,6 +120,10 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         self.0.name()
     }
 
+    fn llm_name(&self) -> Cow<'static, str> {
+        self.0.llm_name()
+    }
+
     fn description(&self) -> Cow<'static, str> {
         self.0.description()
     }
@@ -166,6 +173,10 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
 impl<T: SimpleTool> ErasedTool for T {
     fn name(&self) -> Cow<'static, str> {
         ToolMetadata::name(self)
+    }
+
+    fn llm_name(&self) -> Cow<'static, str> {
+        ToolMetadata::llm_name(self)
     }
 
     fn description(&self) -> Cow<'static, str> {

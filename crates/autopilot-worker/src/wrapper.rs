@@ -63,6 +63,10 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
         self.inner.name()
     }
 
+    fn llm_name(&self) -> Cow<'static, str> {
+        self.inner.llm_name()
+    }
+
     fn description(&self) -> Cow<'static, str> {
         self.inner.description()
     }
@@ -213,6 +217,10 @@ where
 {
     fn name(&self) -> Cow<'static, str> {
         self.inner.name()
+    }
+
+    fn llm_name(&self) -> Cow<'static, str> {
+        self.inner.llm_name()
     }
 
     fn description(&self) -> Cow<'static, str> {

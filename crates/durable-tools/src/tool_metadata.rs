@@ -68,8 +68,18 @@ pub trait ToolMetadata: Send + Sync + 'static {
 
     /// Unique name for this tool.
     ///
-    /// This is used for registration, invocation, and as an identifier in the LLM.
+    /// This is used for registration, invocation, and as the durable task name.
+    /// It must be unique within a registry.
     fn name(&self) -> Cow<'static, str>;
+
+    /// Name shown to the LLM in function definitions.
+    ///
+    /// Defaults to `self.name()`. Override this when the tool's registry/durable
+    /// identity needs to differ from the name the LLM sees (e.g. a new version
+    /// of a tool that should appear with the same name to the LLM).
+    fn llm_name(&self) -> Cow<'static, str> {
+        self.name()
+    }
 
     /// Human-readable description of what this tool does.
     ///
