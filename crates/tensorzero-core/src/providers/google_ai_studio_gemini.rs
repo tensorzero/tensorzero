@@ -1028,6 +1028,8 @@ impl From<GeminiUsageMetadata> for Usage {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens,
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -1777,6 +1779,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1893,6 +1897,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2022,6 +2028,8 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );

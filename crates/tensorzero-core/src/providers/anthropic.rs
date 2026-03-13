@@ -1304,6 +1304,8 @@ impl From<AnthropicUsage> for Usage {
         Usage {
             input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
+            cache_read_input_tokens: value.cache_read_input_tokens,
+            cache_write_input_tokens: value.cache_creation_input_tokens,
             cost: None,
         }
     }

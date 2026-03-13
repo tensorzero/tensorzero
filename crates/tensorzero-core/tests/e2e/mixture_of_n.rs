@@ -94,6 +94,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
         )
@@ -114,6 +116,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
         )
@@ -172,6 +176,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     let mut usage_sum = Usage {
         input_tokens: Some(0),
         output_tokens: Some(0),
+        cache_read_input_tokens: None,
+        cache_write_input_tokens: None,
         cost: None,
     };
 
@@ -221,6 +227,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(8),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -231,6 +239,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(4),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -244,6 +254,8 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }
         );

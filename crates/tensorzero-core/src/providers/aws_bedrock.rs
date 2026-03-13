@@ -904,6 +904,8 @@ fn convert_converse_response(
     let usage = Usage {
         input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
+        cache_read_input_tokens: response.usage.cache_read_input_tokens.map(|v| v as u32),
+        cache_write_input_tokens: response.usage.cache_write_input_tokens.map(|v| v as u32),
         cost: None,
     };
 
@@ -1275,6 +1277,8 @@ fn process_stream_event(
             let usage = Some(Usage {
                 input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
+                cache_read_input_tokens: event.usage.cache_read_input_tokens.map(|v| v as u32),
+                cache_write_input_tokens: event.usage.cache_write_input_tokens.map(|v| v as u32),
                 cost: None,
             });
 

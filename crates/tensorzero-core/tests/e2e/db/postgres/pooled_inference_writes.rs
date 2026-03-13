@@ -86,6 +86,8 @@ fn make_model_inference(inference_id: Uuid) -> StoredModelInference {
         output: Some(vec![]),
         input_tokens: Some(10),
         output_tokens: Some(20),
+        cache_read_input_tokens: None,
+        cache_write_input_tokens: None,
         response_time_ms: Some(100),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
