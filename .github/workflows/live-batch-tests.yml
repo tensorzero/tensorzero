@@ -87,11 +87,6 @@ jobs:
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
-          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-
-      - name: Launch Postgres for batch tests
-        run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait postgres gateway-postgres-migrations
 
       - name: Launch the gateway for batch tests
         working-directory: crates
