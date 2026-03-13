@@ -1371,6 +1371,26 @@ impl Config {
         .into_iter()
         .collect::<HashMap<_, _>>();
 
+        if relay_mode && !is_config_snapshot {
+            let models_without_skip_relay: Vec<&Arc<str>> = loaded_models
+                .iter()
+                .filter(|(_, config)| !config.skip_relay)
+                .map(|(name, _)| name)
+                .collect();
+            if !models_without_skip_relay.is_empty() {
+                let names = models_without_skip_relay
+                    .iter()
+                    .map(|n| format!("`{n}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                tracing::warn!(
+                    "Relay mode is enabled but the following models do not have `skip_relay` set: {names}. \
+                     Their configured providers will not be used for inference — requests will be relayed instead. \
+                     Set `skip_relay = true` on models that should use their own providers directly."
+                );
+            }
+        }
+
         let loaded_embedding_models =
             try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
