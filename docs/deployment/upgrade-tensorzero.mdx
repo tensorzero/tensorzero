@@ -17,7 +17,7 @@ Review the [release notes on GitHub](https://github.com/tensorzero/tensorzero/re
 
 <Step title="Back up your databases">
 
-We recommend backing up your ClickHouse and Postgres databases according to your provider's backup procedures.
+We recommend backing up your Postgres and ClickHouse databases according to your provider's backup procedures.
 
 </Step>
 
@@ -39,7 +39,7 @@ Update the gateway image tag (e.g. in your `docker-compose.yml`, Helm values, or
 
 <Step title="Run database migrations">
 
-Run any required [ClickHouse](/deployment/clickhouse) and [Postgres](/deployment/postgres) migrations before starting the new gateway.
+Run any required [Postgres](/deployment/postgres) and [ClickHouse](/deployment/clickhouse) migrations before starting the new gateway.
 Valkey (Redis) does not require any migrations.
 
 <Warning>

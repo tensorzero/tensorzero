@@ -5,6 +5,7 @@ from asyncio import Semaphore
 from agent import ask_question
 from dataset import load_beerqa
 from judge import judge_answer
+from openai import AsyncOpenAI
 from tensorzero import AsyncTensorZeroGateway
 from tensorzero.util import UUID
 from tqdm.asyncio import tqdm_asyncio
@@ -14,9 +15,15 @@ CONCURRENCY = 10
 
 
 async def main():
-    # Initialize a TensorZero client with our configuration file.
+    # Initialize a TensorZero client for workflow evaluation management and feedback.
     t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore
         gateway_url="http://localhost:3000",
+    )
+
+    # Initialize an OpenAI client pointed at the TensorZero Gateway for inference.
+    openai_client = AsyncOpenAI(
+        base_url="http://localhost:3000/openai/v1",
+        api_key="not-used",
     )
 
     semaphore = Semaphore(CONCURRENCY)
@@ -32,10 +39,11 @@ async def main():
             "compact_context": compact_context_variant,
         }
         print(f"Evaluating: {variant_pins}")
-        await evaluate_variant_pins(t0, semaphore, data, variant_pins)
+        await evaluate_variant_pins(openai_client, t0, semaphore, data, variant_pins)
 
 
 async def evaluate_variant_pins(
+    openai_client: AsyncOpenAI,
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     data: list[dict],
@@ -53,13 +61,14 @@ async def evaluate_variant_pins(
     # `data` is a list of dictionaries; each has a `question` (string) and `answers` (list of strings)
     question_tasks = []
     for question in data[:MAX_SAMPLES]:  # Apply MAX_SAMPLES limit here
-        question_tasks.append(evaluate_question(t0, semaphore, question, run_info.run_id))
+        question_tasks.append(evaluate_question(openai_client, t0, semaphore, question, run_info.run_id))
 
     # Run all question evaluations concurrently
     await tqdm_asyncio.gather(*question_tasks)
 
 
 async def evaluate_question(
+    openai_client: AsyncOpenAI,
     t0: AsyncTensorZeroGateway,
     semaphore: Semaphore,
     question: dict,
@@ -71,13 +80,13 @@ async def evaluate_question(
         )
         episode_id = episode_info.episode_id
         result = await ask_question(
-            t0,
+            openai_client,
             semaphore,
             question["question"],
-            episode_id=episode_id,
+            episode_id=str(episode_id),
             verbose=False,
         )
-        await judge_answer(t0, semaphore, question, result.answer, episode_id, result.t)
+        await judge_answer(openai_client, t0, semaphore, question, result.answer, episode_id, result.t)
     except Exception as e:
         print(f"Error evaluating question {question['id']}: {e}")
 

@@ -72,6 +72,29 @@ pub async fn check_pgcron_configured_correctly(pool: &PgPool) -> Result<(), Dela
     Ok(())
 }
 
+/// Checks whether pgvector is installed and usable for similarity search.
+///
+/// Returns a `DelayedError` so the caller can control logging level.
+pub async fn check_pgvector_configured_correctly(pool: &PgPool) -> Result<(), DelayedError> {
+    let extension_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| {
+                DelayedError::new(ErrorDetails::PostgresQuery {
+                    message: format!("Failed to check pgvector extension: {e}"),
+                })
+            })?;
+
+    if !extension_exists {
+        return Err(DelayedError::new(ErrorDetails::PostgresMigration {
+            message: "pgvector extension is not installed".to_string(),
+        }));
+    }
+
+    Ok(())
+}
+
 /// Checks whether pg_trgm extension is installed and trigram indexes exist on all target tables.
 ///
 /// Returns a `DelayedError` so the caller can control logging level.

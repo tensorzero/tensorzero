@@ -16,6 +16,8 @@ ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 evaluations = { path = "../evaluations" }
+durable-tools-spawn = { path = "../durable-tools-spawn" }
+schemars = { workspace = true }
 
 # Core async and serialization
 serde = { workspace = true }

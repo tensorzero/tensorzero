@@ -210,8 +210,7 @@ pub async fn run_evaluation(
     )
     .await?;
 
-    let clickhouse_client =
-        setup_clickhouse(&unwritten_config, clickhouse_url.clone(), false).await?;
+    let clickhouse_client = setup_clickhouse(&unwritten_config, clickhouse_url.clone()).await?;
     let postgres_connection = setup_postgres(&unwritten_config, postgres_url.as_deref()).await?;
     let primary_datastore = PrimaryDatastore::resolve(
         &unwritten_config.gateway.observability,

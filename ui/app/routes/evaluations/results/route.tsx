@@ -30,10 +30,10 @@ import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
 import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import {
   consolidateEvaluationResults,
+  mergeRunMetrics,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
 import MetricValue from "~/components/metric/MetricValue";
-import { getMetricType } from "~/utils/config/evaluations";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import {
   Tooltip,
@@ -45,16 +45,9 @@ import {
   ColorAssignerProvider,
   useColorAssigner,
 } from "~/hooks/evaluations/ColorAssigner";
-import { getConfig, getConfigForSnapshot } from "~/utils/config/index.server";
 import type {
-  EvaluatorConfig,
-  InferenceEvaluationConfig,
-  MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "~/types/tensorzero";
-import type {
-  EvaluationRunMetadata,
   RunMetricMetadata,
 } from "~/types/tensorzero";
 
@@ -70,7 +63,7 @@ import { logger } from "~/utils/logger";
 import { SectionAsyncErrorState } from "~/components/ui/error/ErrorContentPrimitives";
 import { BasicInfoLayoutSkeleton } from "~/components/layout/BasicInfoLayout";
 import { Skeleton } from "~/components/ui/skeleton";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunInfoById as EvaluationRunInfo } from "~/types/tensorzero";
 import type { ConsolidatedEvaluationResult } from "~/utils/clickhouse/evaluations";
 import BasicInfo from "~/routes/evaluations/results/EvaluationDatapointBasicInfo";
 
@@ -112,6 +105,7 @@ async function fetchEvaluationResultsData(
   datapoint_id: string,
   selectedRunIds: string[],
   newFeedbackId: string | null,
+  metricsConfig: Record<string, RunMetricMetadata>,
 ): Promise<EvaluationResultsData> {
   const evaluationResults = newFeedbackId
     ? await pollForEvaluations(
@@ -126,8 +120,10 @@ async function fetchEvaluationResultsData(
         selectedRunIds,
       );
 
-  const consolidatedEvaluationResults =
-    consolidateEvaluationResults(evaluationResults);
+  const consolidatedEvaluationResults = consolidateEvaluationResults(
+    evaluationResults,
+    metricsConfig,
+  );
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     const foundEvaluationRunIds = new Set(
       consolidatedEvaluationResults.map((result) => result.evaluation_run_id),
@@ -147,33 +143,6 @@ async function fetchEvaluationResultsData(
   };
 }
 
-/// TODO(#6636): Stop constructing metric configs.
-function buildMetricsConfigFromRunMetadata(
-  metrics: RunMetricMetadata[],
-): Record<string, MetricConfig> {
-  const metricsConfig: Record<string, MetricConfig> = {};
-  for (const metric of metrics) {
-    metricsConfig[metric.name] = {
-      type: metric.value_type === "boolean" ? "boolean" : "float",
-      level: "inference",
-      optimize: metric.optimize ?? "max",
-    };
-  }
-  return metricsConfig;
-}
-
-function buildEvaluatorMetricNames(
-  metrics: RunMetricMetadata[],
-): Record<string, string> {
-  const mapping: Record<string, string> = {};
-  for (const metric of metrics) {
-    if (metric.evaluator_name) {
-      mapping[metric.evaluator_name] = metric.name;
-    }
-  }
-  return mapping;
-}
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const datapoint_id = params.datapoint_id;
   const url = new URL(request.url);
@@ -191,66 +160,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const client = getTensorZeroClient();
   const runMetadataResponse =
     await client.getEvaluationRunMetadata(selectedRunIds);
-  const firstRunId = selectedRunIds[0];
-  const firstRunMetadata: EvaluationRunMetadata | undefined =
-    runMetadataResponse.metadata[firstRunId];
-  if (!firstRunMetadata) {
-    throw data(`Evaluation run metadata not found for run ID: ${firstRunId}`, {
-      status: 404,
-    });
-  }
 
-  const evaluation_name = firstRunMetadata.evaluation_name;
-  const function_name = firstRunMetadata.function_name;
-  const function_type = firstRunMetadata.function_type as "chat" | "json";
-
-  // Try to look up the full evaluation config for richer UI
-  const config = await getConfig();
-  let evaluationConfig = config.evaluations[evaluation_name];
-  let effectiveConfig = config;
-
-  if (!evaluationConfig) {
-    const runs = await client.listEvaluationRuns(100, 0);
-    const matchingRun = runs.runs.find(
-      (r) => r.evaluation_name === evaluation_name,
+  // Merge metadata from all available runs
+  // All runs should be in the database.
+  const allMetadata = Object.values(runMetadataResponse.metadata);
+  if (allMetadata.length === 0) {
+    throw data(
+      `Evaluation run metadata not found for any of the provided run IDs`,
+      { status: 404 },
     );
-    if (matchingRun?.snapshot_hash) {
-      effectiveConfig = await getConfigForSnapshot(matchingRun.snapshot_hash);
-      evaluationConfig = effectiveConfig.evaluations[evaluation_name];
-    }
   }
 
-  let metricsConfig: Record<string, MetricConfig>;
-  let evaluatorMetricNames: Record<string, string>;
-
-  if (evaluationConfig) {
-    const evaluator_names = Object.keys(evaluationConfig.evaluators);
-    evaluatorMetricNames = {};
-    metricsConfig = {};
-    for (const evaluatorName of evaluator_names) {
-      const metricName = `tensorzero::evaluation_name::${evaluation_name}::evaluator_name::${evaluatorName}`;
-      evaluatorMetricNames[evaluatorName] = metricName;
-      const metricConfig = effectiveConfig.metrics[metricName];
-      if (metricConfig) {
-        metricsConfig[metricName] = metricConfig;
-      }
-    }
-  } else {
-    metricsConfig = buildMetricsConfigFromRunMetadata(firstRunMetadata.metrics);
-    evaluatorMetricNames = buildEvaluatorMetricNames(firstRunMetadata.metrics);
-    // Build a minimal evaluationConfig for the components
-    const evaluators: Record<string, { type: "exact_match" }> = {};
-    for (const metric of firstRunMetadata.metrics) {
-      if (metric.evaluator_name) {
-        evaluators[metric.evaluator_name] = { type: "exact_match" };
-      }
-    }
-    evaluationConfig = {
-      type: "inference" as const,
-      function_name,
-      evaluators,
-    };
+  const functionNames = new Set(allMetadata.map((m) => m.function_name));
+  if (functionNames.size > 1) {
+    throw data(
+      `All evaluation runs must target the same function, but found: ${[...functionNames].join(", ")}`,
+      { status: 400 },
+    );
   }
+
+  const evaluation_name = allMetadata[0].evaluation_name;
+  const function_name = allMetadata[0].function_name;
+  const function_type = allMetadata[0].function_type as "chat" | "json";
+
+  const { metricsConfig } = mergeRunMetrics(allMetadata);
 
   const newFeedbackId = searchParams.get("newFeedbackId");
   const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
@@ -272,14 +205,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     datapoint_id,
     selectedRunIds,
     newFeedbackId,
+    metricsConfig,
   );
 
   return {
     evaluation_name,
-    evaluationConfig,
+    functionName: function_name,
     functionType: function_type,
     metricsConfig,
-    evaluatorMetricNames,
     runInfoData,
     evaluationResultsData,
     selectedRunIds,
@@ -368,13 +301,13 @@ function OutputsSkeleton() {
 function BasicInfoWithData({
   data,
   evaluation_name,
-  evaluationConfig: evaluation_config,
+  functionName,
   functionType,
   datapoint_id,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
+  functionName: string;
   functionType: "chat" | "json";
   datapoint_id: string;
 }) {
@@ -396,7 +329,7 @@ function BasicInfoWithData({
   return (
     <BasicInfo
       evaluation_name={evaluation_name}
-      evaluation_config={evaluation_config}
+      functionName={functionName}
       functionType={functionType}
       dataset_name={consolidatedEvaluationResults[0].dataset_name}
       datapoint_id={datapoint_id}
@@ -410,16 +343,14 @@ function BasicInfoWithData({
 function MainContent({
   data,
   evaluation_name,
-  evaluationConfig: evaluation_config,
+  function_name,
   metricsConfig,
-  evaluatorMetricNames,
   datapoint_id,
 }: {
   data: EvaluationResultsData;
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
-  evaluatorMetricNames: Record<string, string>;
+  function_name: string;
+  metricsConfig: Record<string, RunMetricMetadata>;
   datapoint_id: string;
 }) {
   const { consolidatedEvaluationResults } = data;
@@ -460,9 +391,8 @@ function MainContent({
       <OutputsSection
         outputsToDisplay={outputsToDisplay}
         evaluation_name={evaluation_name}
-        evaluation_config={evaluation_config}
+        function_name={function_name}
         metricsConfig={metricsConfig}
-        evaluatorMetricNames={evaluatorMetricNames}
         datapointId={datapoint_id}
       />
     </SectionsGroup>
@@ -491,10 +421,9 @@ export default function EvaluationDatapointPage({
 }: Route.ComponentProps) {
   const {
     evaluation_name,
-    evaluationConfig,
+    functionName,
     functionType,
     metricsConfig,
-    evaluatorMetricNames,
     runInfoData,
     evaluationResultsData,
     selectedRunIds,
@@ -545,7 +474,7 @@ export default function EvaluationDatapointPage({
                 <BasicInfoWithData
                   data={resultsData}
                   evaluation_name={evaluation_name}
-                  evaluationConfig={evaluationConfig}
+                  functionName={functionName}
                   functionType={functionType}
                   datapoint_id={params.datapoint_id}
                 />
@@ -595,9 +524,8 @@ export default function EvaluationDatapointPage({
               <MainContent
                 data={resultsData}
                 evaluation_name={evaluation_name}
-                evaluationConfig={evaluationConfig}
+                function_name={functionName}
                 metricsConfig={metricsConfig}
-                evaluatorMetricNames={evaluatorMetricNames}
                 datapoint_id={params.datapoint_id}
               />
             )}
@@ -610,18 +538,14 @@ export default function EvaluationDatapointPage({
 
 const MetricsDisplay = ({
   metrics,
-  evaluatorsConfig,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
   inferenceId,
   evalRunId,
   variantName,
 }: {
   metrics: ConsolidatedMetric[];
-  evaluatorsConfig: Record<string, EvaluatorConfig | undefined>;
-  metricsConfig: Record<string, MetricConfig>;
-  evaluatorMetricNames: Record<string, string>;
+  metricsConfig: Record<string, RunMetricMetadata>;
   datapointId: string;
   inferenceId: string | null;
   evalRunId: string;
@@ -630,38 +554,33 @@ const MetricsDisplay = ({
   return (
     <div className="pt-2">
       <div className="space-y-1">
-        {metrics.map((metricObj) => {
-          const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
-          if (!evaluatorConfig) return null;
-
-          return (
-            <MetricRow
-              key={metricObj.evaluator_name}
-              evaluatorName={metricObj.evaluator_name}
-              metricValue={metricObj.metric_value}
-              evaluatorConfig={evaluatorConfig}
-              metricsConfig={metricsConfig}
-              evaluatorMetricNames={evaluatorMetricNames}
-              datapointId={datapointId}
-              inferenceId={inferenceId}
-              evaluatorInferenceId={metricObj.evaluator_inference_id}
-              evalRunId={evalRunId}
-              variantName={variantName}
-              isHumanFeedback={metricObj.is_human_feedback}
-            />
-          );
-        })}
+        {metrics.map((metricObj) => (
+          <MetricRow
+            key={metricObj.metric_name}
+            metricName={metricObj.metric_name}
+            evaluatorName={metricObj.evaluator_name}
+            metricValue={metricObj.metric_value}
+            isLlmJudgeEvaluation={!!metricObj.evaluator_inference_id}
+            metricsConfig={metricsConfig}
+            datapointId={datapointId}
+            inferenceId={inferenceId}
+            evaluatorInferenceId={metricObj.evaluator_inference_id}
+            evalRunId={evalRunId}
+            variantName={variantName}
+            isHumanFeedback={metricObj.is_human_feedback}
+          />
+        ))}
       </div>
     </div>
   );
 };
 
 const MetricRow = ({
+  metricName,
   evaluatorName,
   metricValue,
-  evaluatorConfig,
+  isLlmJudgeEvaluation,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
   inferenceId,
   evalRunId,
@@ -669,11 +588,11 @@ const MetricRow = ({
   variantName,
   isHumanFeedback,
 }: {
+  metricName: string;
   evaluatorName: string;
   metricValue: string;
-  evaluatorConfig: EvaluatorConfig;
-  metricsConfig: Record<string, MetricConfig>;
-  evaluatorMetricNames: Record<string, string>;
+  isLlmJudgeEvaluation: boolean;
+  metricsConfig: Record<string, RunMetricMetadata>;
   datapointId: string;
   inferenceId: string | null;
   evaluatorInferenceId?: string;
@@ -681,21 +600,15 @@ const MetricRow = ({
   variantName: string;
   isHumanFeedback: boolean;
 }) => {
-  const metric_name = evaluatorMetricNames[evaluatorName];
-  if (!metric_name) {
-    logger.warn(`No metric name mapping for evaluator ${evaluatorName}`);
-    return null;
-  }
-  const metricProperties = metricsConfig[metric_name];
+  const metricProperties = metricsConfig[metricName];
   if (!metricProperties) {
     return null;
   }
   if (inferenceId === null) {
     logger.warn(
-      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
+      `Inference ID is null for metric ${metricName} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
-  const evaluationType = evaluatorConfig.type;
   return (
     <div className="group flex items-center gap-2">
       <Tooltip>
@@ -708,12 +621,14 @@ const MetricRow = ({
           <div className="space-y-1 text-left text-xs">
             <div>
               <span className="font-medium">Type:</span>
-              <span className="ml-2 font-medium">{metricProperties.type}</span>
+              <span className="ml-2 font-medium">
+                {metricProperties.value_type}
+              </span>
             </div>
             <div>
               <span className="font-medium">Optimize:</span>
               <span className="ml-2 font-medium">
-                {metricProperties.optimize}
+                {metricProperties.optimize ?? "unknown"}
               </span>
             </div>
           </div>
@@ -721,21 +636,17 @@ const MetricRow = ({
       </Tooltip>
       <MetricValue
         value={String(metricValue)}
-        metricType={getMetricType(evaluatorConfig)}
-        optimize={
-          evaluatorConfig.type === "llm_judge"
-            ? evaluatorConfig.optimize
-            : "max"
-        }
+        metricType={metricProperties.value_type as "boolean" | "float"}
+        optimize={metricProperties.optimize}
         isHumanFeedback={isHumanFeedback}
         className="text-sm"
       />
-      {inferenceId !== null && evaluationType === "llm_judge" && (
+      {inferenceId !== null && isLlmJudgeEvaluation && (
         <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <EvaluationFeedbackEditor
             inferenceId={inferenceId}
             datapointId={datapointId}
-            metricName={metric_name}
+            metricName={metricName}
             originalValue={metricValue}
             evalRunId={evalRunId}
             evaluatorInferenceId={evaluatorInferenceId}
@@ -767,17 +678,15 @@ type OutputsSectionProps = {
     episodeId: string | null;
   }>;
   evaluation_name: string;
-  evaluation_config: InferenceEvaluationConfig;
-  metricsConfig: Record<string, MetricConfig>;
-  evaluatorMetricNames: Record<string, string>;
+  function_name: string;
+  metricsConfig: Record<string, RunMetricMetadata>;
   datapointId: string;
 };
 
 function OutputsSection({
   outputsToDisplay,
-  evaluation_config,
+  function_name,
   metricsConfig,
-  evaluatorMetricNames,
   datapointId,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
@@ -820,7 +729,7 @@ function OutputsSection({
                       {result.inferenceId && result.episodeId && (
                         <AddToDatasetButton
                           inferenceId={result.inferenceId}
-                          functionName={evaluation_config.function_name}
+                          functionName={function_name}
                           variantName={result.variant_name}
                           episodeId={result.episodeId}
                           hasDemonstration={false}
@@ -848,9 +757,7 @@ function OutputsSection({
               result.metrics.length > 0 && (
                 <MetricsDisplay
                   metrics={result.metrics}
-                  evaluatorsConfig={evaluation_config.evaluators}
                   metricsConfig={metricsConfig}
-                  evaluatorMetricNames={evaluatorMetricNames}
                   datapointId={datapointId}
                   inferenceId={result.inferenceId}
                   evalRunId={result.id}

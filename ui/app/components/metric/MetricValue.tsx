@@ -1,3 +1,4 @@
+import type { MetricConfigOptimize } from "~/types/tensorzero";
 import { UserFeedback } from "../icons/Icons";
 
 // Format metric value display component
@@ -10,14 +11,15 @@ export default function MetricValue({
 }: {
   value: string;
   metricType: "boolean" | "float" | "comment" | "demonstration";
-  optimize: "min" | "max";
+  optimize?: MetricConfigOptimize;
   isHumanFeedback: boolean;
   className?: string;
 }): React.ReactElement {
   if (metricType === "boolean") {
     const boolValue = value === "true" || value === "1";
     const failed =
-      (!boolValue && optimize === "max") || (boolValue && optimize === "min");
+      optimize !== undefined &&
+      ((!boolValue && optimize === "max") || (boolValue && optimize === "min"));
 
     return (
       <span

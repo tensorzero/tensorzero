@@ -1,6 +1,7 @@
+import json
+
 import wikipedia
 from markdownify import markdownify
-from tensorzero import ToolCall, ToolResult
 
 # ## Tools
 #
@@ -10,51 +11,36 @@ from tensorzero import ToolCall, ToolResult
 # These are also described in the config/tensorzero.toml file so that our agent automatically knows about them.
 
 
-def search_wikipedia(tool_call: ToolCall) -> ToolResult:
+def search_wikipedia(arguments: dict) -> str:
     """
     Searches Wikipedia for a given query and returns a list of search results.
 
     Args:
-        tool_call (ToolCall): A tool call object containing the search query in its arguments.
-            Expected arguments: {"query": str}
+        arguments: A dictionary containing the search query.
+            Expected keys: {"query": str}
 
     Returns:
-        ToolResult: A tool result containing the newline-separated list of Wikipedia search results.
-            The result field contains the search results as a string.
+        A newline-separated list of Wikipedia search results.
     """
-    if tool_call.arguments is None:
-        raise ValueError("The tool call doesn't have `arguments`, so it must not have parsed correctly.")
-
-    query = tool_call.arguments.get("query")
+    query = arguments.get("query")
     if query is None:
         raise ValueError("The `query` argument is required for `search_wikipedia` tool.")
 
-    search_wikipedia_result = "\n".join(wikipedia.search(query))
-
-    return ToolResult(
-        name="search_wikipedia",
-        id=tool_call.id,
-        result=search_wikipedia_result,
-    )
+    return "\n".join(wikipedia.search(query))
 
 
-def load_wikipedia_page(tool_call: ToolCall) -> ToolResult:
+def load_wikipedia_page(arguments: dict) -> str:
     """
     Loads and formats the content of a Wikipedia page.
 
     Args:
-        tool_call (ToolCall): A tool call object containing the page title in its arguments.
-            Expected arguments: {"title": str}
+        arguments: A dictionary containing the page title.
+            Expected keys: {"title": str}
 
     Returns:
-        ToolResult: A tool result containing the formatted Wikipedia page content.
-            The result field contains the page URL and content in Markdown format.
-            If the page is not found or there's a disambiguation error, returns an error message.
+        The formatted Wikipedia page content, or an error message if the page is not found.
     """
-    if tool_call.arguments is None:
-        raise ValueError("The tool call doesn't have `arguments`, so it must not have parsed correctly.")
-
-    title = tool_call.arguments.get("title")
+    title = arguments.get("title")
     if title is None:
         raise ValueError("The `title` argument is required for `load_wikipedia_page` tool.")
 
@@ -62,14 +48,16 @@ def load_wikipedia_page(tool_call: ToolCall) -> ToolResult:
         page = wikipedia.page(title)
         # Preprocess result by converting the HTML content to Markdown to reduce token usage
         page_markdown = markdownify(page.html())
-        load_wikipedia_page_result = f"# URL\n\n{page.url}\n\n# CONTENT\n\n{page_markdown}"
+        return f"# URL\n\n{page.url}\n\n# CONTENT\n\n{page_markdown}"
     except wikipedia.exceptions.PageError:
-        load_wikipedia_page_result = f"ERROR: page '{title}' not found."
+        return f"ERROR: page '{title}' not found."
     except wikipedia.exceptions.DisambiguationError as e:
-        load_wikipedia_page_result = f"ERROR: disambiguation error for '{title}': {e}"
+        return f"ERROR: disambiguation error for '{title}': {e}"
 
-    return ToolResult(
-        name="load_wikipedia_page",
-        id=tool_call.id,
-        result=load_wikipedia_page_result,
-    )
+
+def parse_tool_arguments(arguments_str: str) -> dict:
+    """Parse tool call arguments from a JSON string."""
+    try:
+        return json.loads(arguments_str)
+    except (json.JSONDecodeError, TypeError):
+        return {}

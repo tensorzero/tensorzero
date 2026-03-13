@@ -584,7 +584,7 @@ impl ClientBuilder {
                         })?
                 };
                 let clickhouse_connection_info =
-                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone())
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
@@ -768,7 +768,7 @@ impl ClientBuilder {
         })?;
 
         // Setup ClickHouse with runtime URL
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
@@ -1512,12 +1512,13 @@ mod tests {
         .build()
         .await
         .expect("Failed to build client");
+
+        // This setup has no Clickhouse or Postgres, and observability is not explicitly enabled.
+        // We should be able to start up, but log warnings.
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
-        ));
+        assert!(logs_contain("Disabling observability:"));
     }
 
     #[tokio::test]
@@ -1541,9 +1542,10 @@ mod tests {
         assert!(logs_contain(
             "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
-        ));
+
+        // This setup has no Clickhouse or Postgres, and observability is not explicitly enabled.
+        // We should be able to start up, but log warnings.
+        assert!(logs_contain("Disabling observability:"));
     }
 
     #[tokio::test]

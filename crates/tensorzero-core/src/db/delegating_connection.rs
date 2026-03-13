@@ -60,7 +60,7 @@ use crate::db::{
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::inference::types::batch::{BatchModelInferenceRow, BatchRequestRow};
 use crate::inference::types::{
@@ -140,8 +140,7 @@ impl PrimaryDatastore {
             None => {
                 if resolved == Self::Disabled {
                     tracing::warn!(
-                        "No observability backend available. \
-                         Observability writes will be disabled."
+                        "Disabling observability: `gateway.observability.enabled` is not explicitly enabled in the configuration and no backend is available (`TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`)."
                     );
                 }
                 Ok(resolved)
@@ -265,7 +264,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
 
 #[async_trait]
 impl DeploymentIdQueries for DelegatingDatabaseConnection {
-    async fn get_deployment_id(&self) -> Result<String, Error> {
+    async fn get_deployment_id(&self) -> Result<String, DelayedError> {
         self.get_database().get_deployment_id().await
     }
 }

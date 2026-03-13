@@ -32,8 +32,8 @@ Retrieve specific inferences when you know their IDs.
 </ParamField>
 
 <ParamField body="function_name" type="string">
-  Filter by function name. Including this improves query performance since
-  `function_name` is the first column in the ClickHouse primary key.
+  Filter by function name. Including this improves query performance if your
+  observability backend is ClickHouse.
 </ParamField>
 
 <ParamField body="output_source" type="string" default="inference">

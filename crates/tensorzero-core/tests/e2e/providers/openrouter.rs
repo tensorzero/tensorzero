@@ -4,8 +4,10 @@ use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
     E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
 };
+use googletest::prelude::*;
+use googletest_matchers::{matches_json_literal, partially};
 use reqwest::{Client, StatusCode};
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 crate::generate_provider_tests!(get_providers);
@@ -169,6 +171,45 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: vec![],
         credential_fallbacks,
     }
+}
+
+#[gtest]
+#[tokio::test]
+pub async fn test_shorthand_embedding() {
+    let shorthand_model = "openrouter::qwen/qwen3-embedding-8b";
+    let payload = json!({
+        "input": "Hello, world!",
+        "model": format!("tensorzero::embedding_model_name::{}", shorthand_model),
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response
+        .json::<Value>()
+        .await
+        .expect("Response should be OK");
+    expect_that!(
+        response_json,
+        partially(matches_json_literal!({
+            "object": "list",
+            "model": "tensorzero::embedding_model_name::openrouter::qwen/qwen3-embedding-8b",
+            "data": [
+                {
+                    "index": 0,
+                    "object": "embedding"
+                }
+            ]
+        }))
+    );
+    expect_that!(
+        response_json["data"][0]["embedding"].as_array(),
+        some(len(gt(0))),
+        "embedding array should not be empty"
+    );
 }
 
 /// Test to verify that OpenRouter-specific headers (X-Title and HTTP-Referer) are included in inference requests

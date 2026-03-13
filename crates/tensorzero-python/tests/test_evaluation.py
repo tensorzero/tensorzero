@@ -749,3 +749,138 @@ async def test_async_run_evaluation_datapoint_ids_and_max_datapoints_error(
             inference_cache="on",
             max_datapoints=10,
         )
+
+
+# TESTS FOR function_name + evaluator_names
+
+
+def test_sync_run_evaluation_with_function_name_and_evaluator_names(
+    evaluation_datasets: Dict[str, str],
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client using function_name + evaluator_names instead of evaluation_name."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=["exact_match"],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+    # A default evaluation_name is generated when using function_name + evaluator_names
+    assert "evaluation_name" in run_info
+    assert "write_haiku" in run_info["evaluation_name"]
+
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert "exact_match" in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert "exact_match" in stats
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_function_name_and_evaluator_names(
+    evaluation_datasets: Dict[str, str],
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client using function_name + evaluator_names instead of evaluation_name."""
+    job = await embedded_async_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=["exact_match"],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+    # A default evaluation_name is generated when using function_name + evaluator_names
+    assert "evaluation_name" in run_info
+    assert "write_haiku" in run_info["evaluation_name"]
+
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert "exact_match" in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert "exact_match" in stats
+
+
+def test_sync_run_evaluation_no_eval_source_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects when neither evaluation_name nor function_name is provided."""
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        embedded_sync_client.experimental_run_evaluation(
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_both_eval_sources_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects when both evaluation_name and function_name are provided."""
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            function_name="extract_entities",
+            evaluator_names=["exact_match"],
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_function_name_without_evaluator_names_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects function_name without evaluator_names."""
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        embedded_sync_client.experimental_run_evaluation(
+            function_name="write_haiku",
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_evaluator_names_without_function_name_error(
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects evaluator_names without function_name."""
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        embedded_sync_client.experimental_run_evaluation(
+            evaluator_names=["exact_match"],
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
