@@ -105,6 +105,8 @@ impl TensorZeroClient for Client {
                     usage: Usage {
                         input_tokens: usage.as_ref().and_then(|u| u.prompt_tokens),
                         output_tokens: None,
+                        cache_read_input_tokens: None,
+                        cache_write_input_tokens: None,
                         cost: usage.as_ref().and_then(|u| u.tensorzero_cost),
                     },
                     model,

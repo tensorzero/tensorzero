@@ -277,6 +277,8 @@ impl TensorzeroRelay {
                             (Some(total), Some(prompt)) => Some(total - prompt),
                             _ => None,
                         },
+                        cache_read_input_tokens: None,
+                        cache_write_input_tokens: None,
                         cost: usage.tensorzero_cost,
                     })
                     .unwrap_or_default(),

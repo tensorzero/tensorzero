@@ -73,6 +73,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             raw_usage: None,
@@ -95,6 +97,8 @@ mod tests {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(10),
+                    cache_read_input_tokens: None,
+                    cache_write_input_tokens: None,
                     cost: None,
                 },
                 raw_usage: None,

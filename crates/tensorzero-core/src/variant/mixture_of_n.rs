@@ -1250,6 +1250,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1288,6 +1290,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1345,6 +1349,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1386,6 +1392,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1468,6 +1476,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1506,6 +1516,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1632,6 +1644,8 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(35),
             output_tokens: Some(46),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let expected_content = InternalJsonInferenceOutput {
@@ -1911,6 +1925,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             None, // raw_usage_entries
@@ -1962,6 +1978,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    cache_read_input_tokens: None,
+                    cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,

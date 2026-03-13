@@ -2023,6 +2023,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {
@@ -2094,6 +2096,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {
@@ -2151,6 +2155,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {
@@ -2211,6 +2217,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
@@ -2268,6 +2276,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
@@ -2325,6 +2335,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(0),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
@@ -2400,6 +2412,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {
@@ -2451,6 +2465,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {
@@ -2510,6 +2526,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
@@ -2566,6 +2584,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
@@ -2628,6 +2648,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(10),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {

@@ -1,0 +1,109 @@
+-- Add cache token columns to model_inferences.
+-- These track prompt caching (cache reads and cache writes) reported by providers.
+-- NULL means the provider did not report cache token information for this inference.
+ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS cache_read_input_tokens INTEGER;
+ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS cache_write_input_tokens INTEGER;
+
+-- Add cache token columns to model_provider_statistics for aggregation.
+ALTER TABLE tensorzero.model_provider_statistics
+    ADD COLUMN IF NOT EXISTS total_cache_read_input_tokens BIGINT;
+ALTER TABLE tensorzero.model_provider_statistics
+    ADD COLUMN IF NOT EXISTS total_cache_write_input_tokens BIGINT;
+
+-- Recreate the incremental refresh function to include cache token columns.
+CREATE OR REPLACE FUNCTION tensorzero.refresh_model_provider_statistics_incremental(
+    lookback INTERVAL DEFAULT INTERVAL '10 minutes',
+    full_refresh BOOLEAN DEFAULT FALSE
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    state_created_at TIMESTAMPTZ;
+    refresh_from TIMESTAMPTZ;
+    refresh_to TIMESTAMPTZ := NOW();
+    newest_created_at TIMESTAMPTZ;
+    newest_id UUID;
+    oldest_created_at TIMESTAMPTZ;
+BEGIN
+    INSERT INTO tensorzero.model_provider_statistics_refresh_state (singleton)
+    VALUES (TRUE)
+    ON CONFLICT (singleton) DO NOTHING;
+
+    SELECT last_processed_created_at
+    INTO state_created_at
+    FROM tensorzero.model_provider_statistics_refresh_state
+    WHERE singleton = TRUE
+    FOR UPDATE;
+
+    IF full_refresh THEN
+        TRUNCATE TABLE tensorzero.model_provider_statistics;
+        refresh_from := TIMESTAMPTZ '-infinity';
+    ELSIF state_created_at IS NULL THEN
+        refresh_from := TIMESTAMPTZ '-infinity';
+    ELSE
+        refresh_from := date_trunc('minute', state_created_at - lookback);
+    END IF;
+
+    -- Upsert only affected minute buckets in the trailing refresh window.
+    INSERT INTO tensorzero.model_provider_statistics (
+        model_name,
+        model_provider_name,
+        minute,
+        total_input_tokens,
+        total_output_tokens,
+        inference_count,
+        total_cost,
+        total_cache_read_input_tokens,
+        total_cache_write_input_tokens
+    )
+    SELECT
+        model_name,
+        model_provider_name,
+        date_trunc('minute', created_at) AS minute,
+        -- Don't coalesce NULL values to 0
+        SUM(input_tokens)::BIGINT AS total_input_tokens,
+        SUM(output_tokens)::BIGINT AS total_output_tokens,
+        COUNT(*)::BIGINT AS inference_count,
+        SUM(cost)::NUMERIC AS total_cost,
+        SUM(cache_read_input_tokens)::BIGINT AS total_cache_read_input_tokens,
+        SUM(cache_write_input_tokens)::BIGINT AS total_cache_write_input_tokens
+    FROM tensorzero.model_inferences
+    WHERE created_at >= refresh_from
+      AND created_at <= refresh_to
+    GROUP BY model_name, model_provider_name, date_trunc('minute', created_at)
+    ON CONFLICT (model_name, model_provider_name, minute) DO UPDATE
+    SET
+        total_input_tokens = EXCLUDED.total_input_tokens,
+        total_output_tokens = EXCLUDED.total_output_tokens,
+        inference_count = EXCLUDED.inference_count,
+        total_cost = EXCLUDED.total_cost,
+        total_cache_read_input_tokens = EXCLUDED.total_cache_read_input_tokens,
+        total_cache_write_input_tokens = EXCLUDED.total_cache_write_input_tokens;
+
+    -- Keep retention behavior correct: if old source partitions were dropped,
+    -- remove stale stats buckets that are now older than the earliest source row.
+    SELECT MIN(created_at)
+    INTO oldest_created_at
+    FROM tensorzero.model_inferences;
+
+    IF oldest_created_at IS NULL THEN
+        TRUNCATE TABLE tensorzero.model_provider_statistics;
+    ELSE
+        DELETE FROM tensorzero.model_provider_statistics
+        WHERE minute < date_trunc('minute', oldest_created_at);
+    END IF;
+
+    SELECT created_at, id
+    INTO newest_created_at, newest_id
+    FROM tensorzero.model_inferences
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1;
+
+    UPDATE tensorzero.model_provider_statistics_refresh_state
+    SET
+        last_processed_created_at = newest_created_at,
+        last_processed_id = newest_id
+    WHERE singleton = TRUE;
+END;
+$$;

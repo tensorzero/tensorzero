@@ -1837,6 +1837,8 @@ async fn test_run_llm_judge_evaluator_chat() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         },
         raw_usage: None,
@@ -2030,6 +2032,8 @@ async fn test_run_llm_judge_evaluator_json() {
         usage: Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         },
         raw_usage: None,
