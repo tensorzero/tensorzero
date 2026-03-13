@@ -80,8 +80,10 @@ pub struct SimpleStoredSampleInfo {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
+    #[schema(title = "StoredInferenceChat")]
     Chat(StoredChatInference),
     #[schemars(title = "StoredInferenceJson")]
+    #[schema(title = "StoredInferenceJson")]
     Json(StoredJsonInference),
 }
 

@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::error::Error as StdError;
 use std::path::PathBuf;
 use std::thread;

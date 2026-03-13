@@ -2176,7 +2176,8 @@
                   }
                 }
               }
-            ]
+            ],
+            "title": "StoredInferenceChat"
           },
           {
             "allOf": [
@@ -2197,7 +2198,8 @@
                   }
                 }
               }
-            ]
+            ],
+            "title": "StoredInferenceJson"
           }
         ],
         "description": "Wire variant of StoredInference for API responses with Python/TypeScript bindings\nThis one should be used in all public interfaces"
