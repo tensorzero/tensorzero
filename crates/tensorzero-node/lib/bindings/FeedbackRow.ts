@@ -4,8 +4,4 @@ import type { CommentFeedbackRow } from "./CommentFeedbackRow";
 import type { DemonstrationFeedbackRow } from "./DemonstrationFeedbackRow";
 import type { FloatMetricFeedbackRow } from "./FloatMetricFeedbackRow";
 
-export type FeedbackRow =
-  | ({ type: "boolean" } & BooleanMetricFeedbackRow)
-  | ({ type: "float" } & FloatMetricFeedbackRow)
-  | ({ type: "comment" } & CommentFeedbackRow)
-  | ({ type: "demonstration" } & DemonstrationFeedbackRow);
+export type FeedbackRow = { "type": "boolean" } & BooleanMetricFeedbackRow | { "type": "float" } & FloatMetricFeedbackRow | { "type": "comment" } & CommentFeedbackRow | { "type": "demonstration" } & DemonstrationFeedbackRow;

@@ -3,11 +3,4 @@
 /**
  * Statistics for a single evaluation run and metric.
  */
-export type EvaluationStatistics = {
-  evaluation_run_id: string;
-  metric_name: string;
-  datapoint_count: number;
-  mean_metric: number;
-  ci_lower?: number;
-  ci_upper?: number;
-};
+export type EvaluationStatistics = { evaluation_run_id: string, metric_name: string, datapoint_count: number, mean_metric: number, ci_lower?: number, ci_upper?: number, };

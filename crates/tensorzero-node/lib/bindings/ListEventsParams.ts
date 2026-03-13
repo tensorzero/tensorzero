@@ -3,13 +3,12 @@
 /**
  * Query parameters for listing events.
  */
-export type ListEventsParams = {
-  /**
-   * Maximum number of events to return. Defaults to 20.
-   */
-  limit?: number;
-  /**
-   * Cursor for pagination: return events with id < before.
-   */
-  before?: string;
-};
+export type ListEventsParams = { 
+/**
+ * Maximum number of events to return. Defaults to 20.
+ */
+limit?: number, 
+/**
+ * Cursor for pagination: return events with id < before.
+ */
+before?: string, };

@@ -4,9 +4,4 @@ import type { JSONSchema } from "./JSONSchema";
 /**
  * Contains the configuration information for a tool defined at runtime
  */
-export type DynamicToolConfig = {
-  description: string;
-  parameters: JSONSchema;
-  name: string;
-  strict: boolean;
-};
+export type DynamicToolConfig = { description: string, parameters: JSONSchema, name: string, strict: boolean, };

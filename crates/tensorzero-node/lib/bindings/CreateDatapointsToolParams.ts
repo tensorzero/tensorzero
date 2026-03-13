@@ -4,13 +4,12 @@ import type { CreateDatapointRequest } from "./CreateDatapointRequest";
 /**
  * Parameters for the create_datapoints tool (visible to LLM).
  */
-export type CreateDatapointsToolParams = {
-  /**
-   * The name of the dataset to create datapoints in.
-   */
-  dataset_name: string;
-  /**
-   * The datapoints to create. Can be Chat or Json type.
-   */
-  datapoints: Array<CreateDatapointRequest>;
-};
+export type CreateDatapointsToolParams = { 
+/**
+ * The name of the dataset to create datapoints in.
+ */
+dataset_name: string, 
+/**
+ * The datapoints to create. Can be Chat or Json type.
+ */
+datapoints: Array<CreateDatapointRequest>, };

@@ -3,13 +3,12 @@
 /**
  * A request to update the metadata of a single datapoint.
  */
-export type UpdateDatapointMetadataRequest = {
-  /**
-   * The ID of the datapoint to update. Required.
-   */
-  id: string;
-  /**
-   * Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-   */
-  name?: string | null;
-};
+export type UpdateDatapointMetadataRequest = { 
+/**
+ * The ID of the datapoint to update. Required.
+ */
+id: string, 
+/**
+ * Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+ */
+name?: string | null, };

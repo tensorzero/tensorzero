@@ -5,10 +5,4 @@ import type { EvaluationFunctionConfig } from "./EvaluationFunctionConfig";
 /**
  * Identifies the evaluation to run.
  */
-export type EvaluationIdentifier =
-  | {
-      evaluation_config: EvaluationConfig;
-      evaluation_name: string;
-      function_config: EvaluationFunctionConfig;
-    }
-  | { function_name: string; evaluator_names: Array<string> };
+export type EvaluationIdentifier = { evaluation_config: EvaluationConfig, evaluation_name: string, function_config: EvaluationFunctionConfig, } | { function_name: string, evaluator_names: Array<string>, };

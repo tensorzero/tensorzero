@@ -5,8 +5,4 @@ import type { ToolCallDecisionSource } from "./ToolCallDecisionSource";
 /**
  * Minimal input payload for creating a tool call authorization event.
  */
-export type CreateEventPayloadToolCallAuthorization = {
-  source: ToolCallDecisionSource;
-  tool_call_event_id: string;
-  status: ToolCallAuthorizationStatus;
-};
+export type CreateEventPayloadToolCallAuthorization = { source: ToolCallDecisionSource, tool_call_event_id: string, status: ToolCallAuthorizationStatus, };

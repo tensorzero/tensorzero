@@ -4,14 +4,12 @@ import type { UploadDatasetFormat } from "./UploadDatasetFormat";
 /**
  * Output of the upload_dataset tool.
  */
-export type UploadDatasetToolOutput = {
-  /**
-   * The S3 URI where the dataset was uploaded (e.g., `s3://bucket/path/to/dataset.parquet`).
-   */
-  s3_uri: string;
-  /**
-   * Total number of rows uploaded.
-   */
-  total_rows: number;
-  format: UploadDatasetFormat;
-};
+export type UploadDatasetToolOutput = { 
+/**
+ * The S3 URI where the dataset was uploaded (e.g., `s3://bucket/path/to/dataset.parquet`).
+ */
+s3_uri: string, 
+/**
+ * Total number of rows uploaded.
+ */
+total_rows: number, format: UploadDatasetFormat, };

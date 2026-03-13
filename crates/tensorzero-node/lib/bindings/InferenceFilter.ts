@@ -8,12 +8,4 @@ import type { TimeFilter } from "./TimeFilter";
 /**
  * Filters for querying inferences.
  */
-export type InferenceFilter =
-  | ({ type: "float_metric" } & FloatMetricFilter)
-  | ({ type: "boolean_metric" } & BooleanMetricFilter)
-  | ({ type: "demonstration_feedback" } & DemonstrationFeedbackFilter)
-  | ({ type: "tag" } & TagFilter)
-  | ({ type: "time" } & TimeFilter)
-  | { type: "and"; children: Array<InferenceFilter> }
-  | { type: "or"; children: Array<InferenceFilter> }
-  | { type: "not"; child: InferenceFilter };
+export type InferenceFilter = { "type": "float_metric" } & FloatMetricFilter | { "type": "boolean_metric" } & BooleanMetricFilter | { "type": "demonstration_feedback" } & DemonstrationFeedbackFilter | { "type": "tag" } & TagFilter | { "type": "time" } & TimeFilter | { "type": "and", children: Array<InferenceFilter>, } | { "type": "or", children: Array<InferenceFilter>, } | { "type": "not", child: InferenceFilter, };

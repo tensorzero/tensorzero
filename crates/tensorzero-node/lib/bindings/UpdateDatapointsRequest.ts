@@ -4,9 +4,8 @@ import type { UpdateDatapointRequest } from "./UpdateDatapointRequest";
 /**
  * Request to update one or more datapoints in a dataset.
  */
-export type UpdateDatapointsRequest = {
-  /**
-   * The datapoints to update.
-   */
-  datapoints: Array<UpdateDatapointRequest>;
-};
+export type UpdateDatapointsRequest = { 
+/**
+ * The datapoints to update.
+ */
+datapoints: Array<UpdateDatapointRequest>, };

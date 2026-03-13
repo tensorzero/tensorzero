@@ -6,44 +6,36 @@ import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
 /**
  * Request body for running an evaluation.
  */
-export type RunEvaluationRequest = {
-  /**
-   * Name of the dataset to evaluate (optional, either this or datapoint_ids must be provided)
-   */
-  dataset_name?: string;
-  /**
-   * Specific datapoint IDs to evaluate (optional)
-   */
-  datapoint_ids?: Array<string>;
-  /**
-   * Variant to use: either a variant name or a dynamic variant configuration
-   */
-  variant_name?: string;
-  /**
-   * Dynamic variant configuration (alternative to variant_name)
-   */
-  internal_dynamic_variant_config?: UninitializedVariantInfo;
-  /**
-   * Number of concurrent requests
-   */
-  concurrency: number;
-  /**
-   * Cache mode for inference requests
-   */
-  inference_cache: string;
-  /**
-   * Maximum number of datapoints to evaluate
-   */
-  max_datapoints?: number;
-  /**
-   * Per-evaluator precision targets for adaptive stopping
-   */
-  precision_targets?: { [key in string]: number };
-} & (
-  | {
-      evaluation_config: EvaluationConfig;
-      evaluation_name: string;
-      function_config: EvaluationFunctionConfig;
-    }
-  | { function_name: string; evaluator_names: Array<string> }
-);
+export type RunEvaluationRequest = { 
+/**
+ * Name of the dataset to evaluate (optional, either this or datapoint_ids must be provided)
+ */
+dataset_name?: string, 
+/**
+ * Specific datapoint IDs to evaluate (optional)
+ */
+datapoint_ids?: Array<string>, 
+/**
+ * Variant to use: either a variant name or a dynamic variant configuration
+ */
+variant_name?: string, 
+/**
+ * Dynamic variant configuration (alternative to variant_name)
+ */
+internal_dynamic_variant_config?: UninitializedVariantInfo, 
+/**
+ * Number of concurrent requests
+ */
+concurrency: number, 
+/**
+ * Cache mode for inference requests
+ */
+inference_cache: string, 
+/**
+ * Maximum number of datapoints to evaluate
+ */
+max_datapoints?: number, 
+/**
+ * Per-evaluator precision targets for adaptive stopping
+ */
+precision_targets?: { [key in string]: number }, } & ({ evaluation_config: EvaluationConfig, evaluation_name: string, function_config: EvaluationFunctionConfig, } | { function_name: string, evaluator_names: Array<string>, });

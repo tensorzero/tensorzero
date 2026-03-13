@@ -3,17 +3,16 @@
 /**
  * Metadata for a single dataset.
  */
-export type DatasetMetadata = {
-  /**
-   * The name of the dataset.
-   */
-  dataset_name: string;
-  /**
-   * The total number of datapoints in the dataset.
-   */
-  datapoint_count: number;
-  /**
-   * The timestamp of the last update (ISO 8601 format).
-   */
-  last_updated: string;
-};
+export type DatasetMetadata = { 
+/**
+ * The name of the dataset.
+ */
+dataset_name: string, 
+/**
+ * The total number of datapoints in the dataset.
+ */
+datapoint_count: number, 
+/**
+ * The timestamp of the last update (ISO 8601 format).
+ */
+last_updated: string, };

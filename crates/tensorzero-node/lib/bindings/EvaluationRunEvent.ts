@@ -8,9 +8,4 @@ import type { EvaluationRunSuccessEvent } from "./EvaluationRunSuccessEvent";
 /**
  * SSE event types for evaluation streaming.
  */
-export type EvaluationRunEvent =
-  | ({ type: "start" } & EvaluationRunStartEvent)
-  | ({ type: "success" } & EvaluationRunSuccessEvent)
-  | ({ type: "error" } & EvaluationRunErrorEvent)
-  | ({ type: "fatal_error" } & EvaluationRunFatalErrorEvent)
-  | ({ type: "complete" } & EvaluationRunCompleteEvent);
+export type EvaluationRunEvent = { "type": "start" } & EvaluationRunStartEvent | { "type": "success" } & EvaluationRunSuccessEvent | { "type": "error" } & EvaluationRunErrorEvent | { "type": "fatal_error" } & EvaluationRunFatalErrorEvent | { "type": "complete" } & EvaluationRunCompleteEvent;

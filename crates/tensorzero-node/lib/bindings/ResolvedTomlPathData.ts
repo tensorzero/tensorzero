@@ -6,10 +6,8 @@
  * all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
  * track the original `.toml` file in order to perform correct relative path resolution.
  */
-export type ResolvedTomlPathData = {
-  __tensorzero_remapped_path: string;
-  /**
-   * This should contain the data that was stored at the path above
-   */
-  __data: string;
-};
+export type ResolvedTomlPathData = { __tensorzero_remapped_path: string, 
+/**
+ * This should contain the data that was stored at the path above
+ */
+__data: string, };

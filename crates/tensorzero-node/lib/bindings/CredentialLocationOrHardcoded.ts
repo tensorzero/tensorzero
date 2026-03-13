@@ -4,6 +4,4 @@
  * Credential location that also allows hardcoded string values.
  * Used for non-sensitive fields like AWS region and endpoint_url.
  */
-export type CredentialLocationOrHardcoded =
-  | { Hardcoded: string }
-  | { Location: string };
+export type CredentialLocationOrHardcoded = { "Hardcoded": string } | { "Location": string };

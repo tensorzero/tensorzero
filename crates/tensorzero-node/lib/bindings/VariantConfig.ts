@@ -8,9 +8,4 @@ import type { MixtureOfNConfig } from "./MixtureOfNConfig";
 /**
  * NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
  */
-export type VariantConfig =
-  | ({ type: "chat_completion" } & ChatCompletionConfig)
-  | ({ type: "best_of_n_sampling" } & BestOfNSamplingConfig)
-  | ({ type: "dicl" } & DiclConfig)
-  | ({ type: "mixture_of_n" } & MixtureOfNConfig)
-  | ({ type: "chain_of_thought" } & ChainOfThoughtConfig);
+export type VariantConfig = { "type": "chat_completion" } & ChatCompletionConfig | { "type": "best_of_n_sampling" } & BestOfNSamplingConfig | { "type": "dicl" } & DiclConfig | { "type": "mixture_of_n" } & MixtureOfNConfig | { "type": "chain_of_thought" } & ChainOfThoughtConfig;

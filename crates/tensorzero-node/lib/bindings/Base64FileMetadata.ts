@@ -4,9 +4,4 @@ import type { Detail } from "./Detail";
 /**
  * Like `Base64File`, but without the data field.
  */
-export type Base64FileMetadata = {
-  source_url?: string;
-  mime_type: string;
-  detail?: Detail;
-  filename?: string;
-};
+export type Base64FileMetadata = { source_url?: string, mime_type: string, detail?: Detail, filename?: string, };

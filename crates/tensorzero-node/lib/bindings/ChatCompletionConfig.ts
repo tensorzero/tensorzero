@@ -4,21 +4,4 @@ import type { JsonMode } from "./JsonMode";
 import type { RetryConfig } from "./RetryConfig";
 import type { ServiceTier } from "./ServiceTier";
 
-export type ChatCompletionConfig = {
-  weight: number | null;
-  model: string;
-  templates: ChatTemplates;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-  reasoning_effort?: string;
-  service_tier?: ServiceTier;
-  thinking_budget_tokens?: number;
-  verbosity?: string;
-};
+export type ChatCompletionConfig = { weight: number | null, model: string, templates: ChatTemplates, temperature: number | null, top_p: number | null, max_tokens: number | null, presence_penalty: number | null, frequency_penalty: number | null, seed: number | null, stop_sequences: Array<string> | null, json_mode: JsonMode | null, retries: RetryConfig, reasoning_effort?: string, service_tier?: ServiceTier, thinking_budget_tokens?: number, verbosity?: string, };

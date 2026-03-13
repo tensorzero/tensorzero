@@ -4,6 +4,4 @@ import type { EvaluationRunMetadata } from "./EvaluationRunMetadata";
 /**
  * Response containing evaluation run metadata, keyed by run ID.
  */
-export type GetEvaluationRunMetadataResponse = {
-  metadata: { [key in string]: EvaluationRunMetadata };
-};
+export type GetEvaluationRunMetadataResponse = { metadata: { [key in string]: EvaluationRunMetadata }, };

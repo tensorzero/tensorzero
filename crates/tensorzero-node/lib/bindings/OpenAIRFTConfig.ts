@@ -7,17 +7,4 @@ import type { OpenAIRFTResponseFormat } from "./OpenAIRFTResponseFormat";
  * Provider-level settings (credentials) come from
  * `provider_types.openai` defaults in the gateway config.
  */
-export type OpenAIRFTConfig = {
-  model: string;
-  grader: OpenAIGrader;
-  response_format?: OpenAIRFTResponseFormat;
-  batch_size?: number;
-  compute_multiplier?: number;
-  eval_interval?: number;
-  eval_samples?: number;
-  learning_rate_multiplier?: number;
-  n_epochs?: number;
-  reasoning_effort?: string;
-  seed?: bigint;
-  suffix?: string;
-};
+export type OpenAIRFTConfig = { model: string, grader: OpenAIGrader, response_format?: OpenAIRFTResponseFormat, batch_size?: number, compute_multiplier?: number, eval_interval?: number, eval_samples?: number, learning_rate_multiplier?: number, n_epochs?: number, reasoning_effort?: string, seed?: bigint, suffix?: string, };

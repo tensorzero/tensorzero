@@ -2,6 +2,4 @@
 import type { FunctionToolConfig } from "./FunctionToolConfig";
 import type { OpenAICustomTool } from "./OpenAICustomTool";
 
-export type ToolConfig =
-  | { Function: FunctionToolConfig }
-  | { OpenAICustom: OpenAICustomTool };
+export type ToolConfig = { "Function": FunctionToolConfig } | { "OpenAICustom": OpenAICustomTool };

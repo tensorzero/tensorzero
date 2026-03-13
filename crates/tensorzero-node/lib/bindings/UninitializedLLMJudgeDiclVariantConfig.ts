@@ -5,21 +5,4 @@ import type { JsonMode } from "./JsonMode";
 import type { ResolvedTomlPathData } from "./ResolvedTomlPathData";
 import type { RetryConfig } from "./RetryConfig";
 
-export type UninitializedLLMJudgeDiclVariantConfig = {
-  active?: boolean;
-  embedding_model: string;
-  k: number;
-  model: string;
-  system_instructions?: ResolvedTomlPathData;
-  temperature?: number;
-  top_p?: number;
-  presence_penalty?: number;
-  frequency_penalty?: number;
-  max_tokens?: number;
-  seed?: number;
-  json_mode?: JsonMode;
-  stop_sequences?: Array<string>;
-  extra_body?: ExtraBodyConfig;
-  retries: RetryConfig;
-  extra_headers?: ExtraHeadersConfig;
-};
+export type UninitializedLLMJudgeDiclVariantConfig = { active?: boolean, embedding_model: string, k: number, model: string, system_instructions?: ResolvedTomlPathData, temperature?: number, top_p?: number, presence_penalty?: number, frequency_penalty?: number, max_tokens?: number, seed?: number, json_mode?: JsonMode, stop_sequences?: Array<string>, extra_body?: ExtraBodyConfig, retries: RetryConfig, extra_headers?: ExtraHeadersConfig, };

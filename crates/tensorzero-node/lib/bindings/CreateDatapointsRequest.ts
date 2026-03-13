@@ -5,9 +5,8 @@ import type { CreateDatapointRequest } from "./CreateDatapointRequest";
  * Request to create datapoints manually.
  * Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
  */
-export type CreateDatapointsRequest = {
-  /**
-   * The datapoints to create.
-   */
-  datapoints: Array<CreateDatapointRequest>;
-};
+export type CreateDatapointsRequest = { 
+/**
+ * The datapoints to create.
+ */
+datapoints: Array<CreateDatapointRequest>, };

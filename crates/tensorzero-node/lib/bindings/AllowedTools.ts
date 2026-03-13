@@ -2,7 +2,7 @@
 import type { AllowedToolsChoice } from "./AllowedToolsChoice";
 
 /**
- * Records / lists the tools that were allowed in the request
- * Also lists how they were set (default, dynamically set)
+ * Records / lists the tools that were allowed in the request.
+ * Also lists how they were set (default, dynamically set).
  */
-export type AllowedTools = { tools: Array<string>; choice: AllowedToolsChoice };
+export type AllowedTools = { tools: Array<string>, choice: AllowedToolsChoice, };

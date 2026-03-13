@@ -8,9 +8,4 @@ import type { UrlFile } from "./UrlFile";
 /**
  * A file for an inference or a datapoint.
  */
-export type File =
-  | ({ file_type: "url" } & UrlFile)
-  | ({ file_type: "base64" } & Base64File)
-  | ({ file_type: "object_storage_pointer" } & ObjectStoragePointer)
-  | ({ file_type: "object_storage" } & ObjectStorageFile)
-  | ({ file_type: "object_storage_error" } & ObjectStorageError);
+export type File = { "file_type": "url" } & UrlFile | { "file_type": "base64" } & Base64File | { "file_type": "object_storage_pointer" } & ObjectStoragePointer | { "file_type": "object_storage" } & ObjectStorageFile | { "file_type": "object_storage_error" } & ObjectStorageError;

@@ -5,17 +5,8 @@ import type { RawResponseEntry } from "./RawResponseEntry";
 import type { RawUsageEntry } from "./RawUsageEntry";
 import type { Usage } from "./Usage";
 
-export type JsonInferenceResponse = {
-  inference_id: string;
-  episode_id: string;
-  variant_name: string;
-  output: JsonInferenceOutput;
-  usage: Usage;
-  raw_usage?: Array<RawUsageEntry>;
-  /**
-   * DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
-   */
-  original_response?: string;
-  raw_response?: Array<RawResponseEntry>;
-  finish_reason: FinishReason | null;
-};
+export type JsonInferenceResponse = { inference_id: string, episode_id: string, variant_name: string, output: JsonInferenceOutput, usage: Usage, raw_usage?: Array<RawUsageEntry>, 
+/**
+ * DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
+ */
+original_response?: string, raw_response?: Array<RawResponseEntry>, finish_reason: FinishReason | null, };

@@ -5,22 +5,21 @@ import type { InferenceOutputSource } from "./InferenceOutputSource";
  * Request to get specific inferences by their IDs.
  * Used by the `POST /v1/inferences/get_inferences` endpoint.
  */
-export type GetInferencesRequest = {
-  /**
-   * The IDs of the inferences to retrieve. Required.
-   */
-  ids: Array<string>;
-  /**
-   * Optional function name to filter by.
-   * Including this improves query performance since `function_name` is the first column
-   * in the ClickHouse primary key.
-   */
-  function_name?: string;
-  /**
-   * Source of the inference output.
-   * Determines whether to return the original inference output or demonstration feedback
-   * (manually-curated output) if available.
-   * Defaults to `Inference` if not specified.
-   */
-  output_source: InferenceOutputSource;
-};
+export type GetInferencesRequest = { 
+/**
+ * The IDs of the inferences to retrieve. Required.
+ */
+ids: Array<string>, 
+/**
+ * Optional function name to filter by.
+ * Including this improves query performance since `function_name` is the first column
+ * in the ClickHouse primary key.
+ */
+function_name?: string, 
+/**
+ * Source of the inference output.
+ * Determines whether to return the original inference output or demonstration feedback
+ * (manually-curated output) if available.
+ * Defaults to `Inference` if not specified.
+ */
+output_source: InferenceOutputSource, };

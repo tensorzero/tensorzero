@@ -135,7 +135,6 @@ export * from "./ExtraBody";
 export * from "./ExtraBodyConfig";
 export * from "./ExtraBodyReplacement";
 export * from "./ExtraHeader";
-export * from "./ExtraHeaderKind";
 export * from "./ExtraHeadersConfig";
 export * from "./FeedbackBounds";
 export * from "./FeedbackBoundsByType";

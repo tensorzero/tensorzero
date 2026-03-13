@@ -4,13 +4,8 @@
  * The property to order by.
  * This is flattened in the public API inside the `OrderBy` struct.
  */
-export type OrderByTerm =
-  | { by: "timestamp" }
-  | {
-      by: "metric";
-      /**
-       * The name of the metric to order by.
-       */
-      name: string;
-    }
-  | { by: "search_relevance" };
+export type OrderByTerm = { "by": "timestamp" } | { "by": "metric", 
+/**
+ * The name of the metric to order by.
+ */
+name: string, } | { "by": "search_relevance" };

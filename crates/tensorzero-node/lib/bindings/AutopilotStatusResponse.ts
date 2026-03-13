@@ -6,4 +6,4 @@
  * Indicates whether the autopilot client is configured (i.e., whether
  * `TENSORZERO_AUTOPILOT_API_KEY` is set).
  */
-export type AutopilotStatusResponse = { enabled: boolean };
+export type AutopilotStatusResponse = { enabled: boolean, };

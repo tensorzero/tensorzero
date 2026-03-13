@@ -3,9 +3,8 @@
 /**
  * A user's answer to a multiple choice question.
  */
-export type MultipleChoiceAnswer = {
-  /**
-   * IDs of the selected options.
-   */
-  selected: Array<string>;
-};
+export type MultipleChoiceAnswer = { 
+/**
+ * IDs of the selected options.
+ */
+selected: Array<string>, };

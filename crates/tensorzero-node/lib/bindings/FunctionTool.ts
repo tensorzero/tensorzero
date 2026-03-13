@@ -8,16 +8,12 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Notably, we assume there is a JSON schema `parameters` that specifies the
  * set of arguments that the tool will accept.
  */
-export type FunctionTool = {
-  description: string;
-  parameters: JsonValue;
-  name: string;
-  /**
-   * `strict` here specifies that TensorZero should attempt to use any facilities
-   * available from the model provider to force the model to generate an accurate tool call,
-   * notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
-   * This imposes additional restrictions on the JSON schema that may vary across providers
-   * so we allow it to be configurable.
-   */
-  strict: boolean;
-};
+export type FunctionTool = { description: string, parameters: JsonValue, name: string, 
+/**
+ * `strict` here specifies that TensorZero should attempt to use any facilities
+ * available from the model provider to force the model to generate an accurate tool call,
+ * notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+ * This imposes additional restrictions on the JSON schema that may vary across providers
+ * so we allow it to be configurable.
+ */
+strict: boolean, };

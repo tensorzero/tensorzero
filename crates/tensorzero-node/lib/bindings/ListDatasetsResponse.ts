@@ -4,9 +4,8 @@ import type { DatasetMetadata } from "./DatasetMetadata";
 /**
  * Response containing a list of datasets.
  */
-export type ListDatasetsResponse = {
-  /**
-   * List of dataset metadata.
-   */
-  datasets: Array<DatasetMetadata>;
-};
+export type ListDatasetsResponse = { 
+/**
+ * List of dataset metadata.
+ */
+datasets: Array<DatasetMetadata>, };

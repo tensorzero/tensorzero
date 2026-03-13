@@ -3,7 +3,4 @@
 /**
  * A single search result for an evaluation run.
  */
-export type SearchEvaluationRunResult = {
-  evaluation_run_id: string;
-  variant_name: string;
-};
+export type SearchEvaluationRunResult = { evaluation_run_id: string, variant_name: string, };

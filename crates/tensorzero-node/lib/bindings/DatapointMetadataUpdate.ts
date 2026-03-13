@@ -3,9 +3,8 @@
 /**
  * A request to update the metadata of a datapoint.
  */
-export type DatapointMetadataUpdate = {
-  /**
-   * Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-   */
-  name?: string | null;
-};
+export type DatapointMetadataUpdate = { 
+/**
+ * Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+ */
+name?: string | null, };

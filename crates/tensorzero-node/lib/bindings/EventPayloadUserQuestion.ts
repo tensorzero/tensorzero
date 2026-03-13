@@ -4,17 +4,12 @@ import type { MultipleChoiceQuestion } from "./MultipleChoiceQuestion";
 /**
  * A single question to display to the user.
  */
-export type EventPayloadUserQuestion = {
-  id: string;
-  /**
-   * Very short label displayed as a chip/tag (max 12 chars). Examples: "Auth method", "Library", "Approach".
-   */
-  header: string;
-  /**
-   * The complete question to ask the user. Should be clear, specific, and end with a question mark.
-   */
-  question: string;
-} & (
-  | ({ type: "multiple_choice" } & MultipleChoiceQuestion)
-  | { type: "free_response" }
-);
+export type EventPayloadUserQuestion = { id: string, 
+/**
+ * Very short label displayed as a chip/tag (max 12 chars). Examples: "Auth method", "Library", "Approach".
+ */
+header: string, 
+/**
+ * The complete question to ask the user. Should be clear, specific, and end with a question mark.
+ */
+question: string, } & ({ "type": "multiple_choice" } & MultipleChoiceQuestion | { "type": "free_response" });

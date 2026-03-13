@@ -6,17 +6,16 @@ import type { AutoEvalLabelQuestion } from "./AutoEvalLabelQuestion";
 /**
  * A single example to label, with context and a structured labeling question.
  */
-export type AutoEvalExampleLabeling = {
-  /**
-   * Rich content blocks providing context (e.g. the prompt and response).
-   */
-  context: Array<AutoEvalContentBlock>;
-  /**
-   * The multiple-choice labeling question for this example.
-   */
-  label_question: AutoEvalLabelQuestion;
-  /**
-   * An optional free-response explanation question.
-   */
-  explanation_question?: AutoEvalExplanationQuestion;
-};
+export type AutoEvalExampleLabeling = { 
+/**
+ * Rich content blocks providing context (e.g. the prompt and response).
+ */
+context: Array<AutoEvalContentBlock>, 
+/**
+ * The multiple-choice labeling question for this example.
+ */
+label_question: AutoEvalLabelQuestion, 
+/**
+ * An optional free-response explanation question.
+ */
+explanation_question?: AutoEvalExplanationQuestion, };

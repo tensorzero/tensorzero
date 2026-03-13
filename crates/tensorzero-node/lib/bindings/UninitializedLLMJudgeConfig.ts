@@ -5,12 +5,4 @@ import type { LLMJudgeOptimize } from "./LLMJudgeOptimize";
 import type { LLMJudgeOutputType } from "./LLMJudgeOutputType";
 import type { UninitializedLLMJudgeVariantInfo } from "./UninitializedLLMJudgeVariantInfo";
 
-export type UninitializedLLMJudgeConfig = {
-  input_format: LLMJudgeInputFormat;
-  variants: { [key in string]: UninitializedLLMJudgeVariantInfo };
-  output_type: LLMJudgeOutputType;
-  optimize: LLMJudgeOptimize;
-  include: LLMJudgeIncludeConfig;
-  cutoff?: number;
-  description?: string;
-};
+export type UninitializedLLMJudgeConfig = { input_format: LLMJudgeInputFormat, variants: { [key in string]: UninitializedLLMJudgeVariantInfo }, output_type: LLMJudgeOutputType, optimize: LLMJudgeOptimize, include: LLMJudgeIncludeConfig, cutoff?: number, description?: string, };

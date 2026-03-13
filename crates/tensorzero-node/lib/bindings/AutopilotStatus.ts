@@ -3,11 +3,4 @@
 /**
  * The UX-relevant status of the Autopilot.
  */
-export type AutopilotStatus =
-  | { status: "idle" }
-  | { status: "server_side_processing" }
-  | { status: "waiting_for_tool_call_authorization" }
-  | { status: "waiting_for_tool_execution" }
-  | { status: "waiting_for_user_questions_answers" }
-  | { status: "waiting_for_retry" }
-  | { status: "failed" };
+export type AutopilotStatus = { "status": "idle" } | { "status": "server_side_processing" } | { "status": "waiting_for_tool_call_authorization" } | { "status": "waiting_for_tool_execution" } | { "status": "waiting_for_user_questions_answers" } | { "status": "waiting_for_retry" } | { "status": "failed" };

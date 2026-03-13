@@ -5,13 +5,12 @@ import type { System } from "./System";
 /**
  * API representation of an input to a model.
  */
-export type Input = {
-  /**
-   * System prompt of the input.
-   */
-  system?: System;
-  /**
-   * Messages in the input.
-   */
-  messages: Array<InputMessage>;
-};
+export type Input = { 
+/**
+ * System prompt of the input.
+ */
+system?: System, 
+/**
+ * Messages in the input.
+ */
+messages: Array<InputMessage>, };

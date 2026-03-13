@@ -3,11 +3,4 @@
 /**
  * Statistics for a single metric within a workflow evaluation run.
  */
-export type WorkflowEvaluationRunStatistics = {
-  metric_name: string;
-  count: number;
-  avg_metric: number;
-  stdev?: number;
-  ci_lower?: number;
-  ci_upper?: number;
-};
+export type WorkflowEvaluationRunStatistics = { metric_name: string, count: number, avg_metric: number, stdev?: number, ci_lower?: number, ci_upper?: number, };

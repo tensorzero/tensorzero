@@ -4,13 +4,12 @@ import type { ModelLatencyDatapoint } from "./ModelLatencyDatapoint";
 /**
  * Response containing model latency quantile data.
  */
-export type GetModelLatencyResponse = {
-  /**
-   * The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.
-   */
-  quantiles: Array<number>;
-  /**
-   * The model latency data points with quantile distributions.
-   */
-  data: Array<ModelLatencyDatapoint>;
-};
+export type GetModelLatencyResponse = { 
+/**
+ * The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.
+ */
+quantiles: Array<number>, 
+/**
+ * The model latency data points with quantile distributions.
+ */
+data: Array<ModelLatencyDatapoint>, };

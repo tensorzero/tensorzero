@@ -4,4 +4,4 @@ import type { Session } from "./Session";
 /**
  * Response from listing sessions.
  */
-export type ListSessionsResponse = { sessions: Array<Session> };
+export type ListSessionsResponse = { sessions: Array<Session>, };

@@ -5,30 +5,29 @@ import type { InferenceOutputSource } from "./InferenceOutputSource";
 /**
  * Request to count inferences matching the given parameters.
  */
-export type CountInferencesRequest = {
-  /**
-   * Optional function name to filter inferences by.
-   */
-  function_name?: string;
-  /**
-   * Optional variant name to filter inferences by.
-   */
-  variant_name?: string;
-  /**
-   * Optional episode ID to filter inferences by.
-   */
-  episode_id?: string;
-  /**
-   * Source of the inference output. When set to "demonstration", only inferences
-   * with demonstration feedback will be counted.
-   */
-  output_source: InferenceOutputSource;
-  /**
-   * Optional filter to apply when counting inferences.
-   */
-  filters?: InferenceFilter;
-  /**
-   * Experimental: search query to filter inferences by.
-   */
-  search_query_experimental?: string;
-};
+export type CountInferencesRequest = { 
+/**
+ * Optional function name to filter inferences by.
+ */
+function_name?: string, 
+/**
+ * Optional variant name to filter inferences by.
+ */
+variant_name?: string, 
+/**
+ * Optional episode ID to filter inferences by.
+ */
+episode_id?: string, 
+/**
+ * Source of the inference output. When set to "demonstration", only inferences
+ * with demonstration feedback will be counted.
+ */
+output_source: InferenceOutputSource, 
+/**
+ * Optional filter to apply when counting inferences.
+ */
+filters?: InferenceFilter, 
+/**
+ * Experimental: search query to filter inferences by.
+ */
+search_query_experimental?: string, };

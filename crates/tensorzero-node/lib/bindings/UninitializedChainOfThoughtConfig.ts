@@ -10,25 +10,4 @@ import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
  * DEPRECATED (#5298 / 2026.2+): Chain of thought variant is deprecated now that reasoning models are prevalent.
  * Use `chat_completion` with reasoning instead.
  */
-export type UninitializedChainOfThoughtConfig = {
-  weight: number | null;
-  model: string;
-  system_template: ResolvedTomlPathData | null;
-  user_template: ResolvedTomlPathData | null;
-  assistant_template: ResolvedTomlPathData | null;
-  input_wrappers: UninitializedInputWrappers | null;
-  templates: UninitializedChatTemplates;
-  temperature: number | null;
-  top_p: number | null;
-  max_tokens: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  seed: number | null;
-  stop_sequences: Array<string> | null;
-  reasoning_effort?: string;
-  service_tier?: ServiceTier;
-  thinking_budget_tokens?: number;
-  verbosity?: string;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
-};
+export type UninitializedChainOfThoughtConfig = { weight: number | null, model: string, system_template: ResolvedTomlPathData | null, user_template: ResolvedTomlPathData | null, assistant_template: ResolvedTomlPathData | null, input_wrappers: UninitializedInputWrappers | null, templates: UninitializedChatTemplates, temperature: number | null, top_p: number | null, max_tokens: number | null, presence_penalty: number | null, frequency_penalty: number | null, seed: number | null, stop_sequences: Array<string> | null, reasoning_effort?: string, service_tier?: ServiceTier, thinking_budget_tokens?: number, verbosity?: string, json_mode: JsonMode | null, retries: RetryConfig, };

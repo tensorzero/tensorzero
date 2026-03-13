@@ -3,4 +3,4 @@
 /**
  * Response containing the count of unique datapoints.
  */
-export type DatapointStatsResponse = { count: bigint };
+export type DatapointStatsResponse = { count: bigint, };

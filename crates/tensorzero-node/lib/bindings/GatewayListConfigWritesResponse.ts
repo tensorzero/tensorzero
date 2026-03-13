@@ -6,6 +6,4 @@ import type { GatewayEvent } from "./GatewayEvent";
  *
  * Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
  */
-export type GatewayListConfigWritesResponse = {
-  config_writes: Array<GatewayEvent>;
-};
+export type GatewayListConfigWritesResponse = { config_writes: Array<GatewayEvent>, };

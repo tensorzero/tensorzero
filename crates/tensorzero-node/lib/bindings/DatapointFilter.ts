@@ -6,9 +6,4 @@ import type { TimeFilter } from "./TimeFilter";
  * Filter tree for querying datapoints.
  * This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
  */
-export type DatapointFilter =
-  | ({ type: "tag" } & TagFilter)
-  | ({ type: "time" } & TimeFilter)
-  | { type: "and"; children: Array<DatapointFilter> }
-  | { type: "or"; children: Array<DatapointFilter> }
-  | { type: "not"; child: DatapointFilter };
+export type DatapointFilter = { "type": "tag" } & TagFilter | { "type": "time" } & TimeFilter | { "type": "and", children: Array<DatapointFilter>, } | { "type": "or", children: Array<DatapointFilter>, } | { "type": "not", child: DatapointFilter, };

@@ -4,6 +4,4 @@ import type { EventPayloadUserQuestion } from "./EventPayloadUserQuestion";
 /**
  * Questions payload for an event.
  */
-export type EventPayloadUserQuestions = {
-  questions: Array<EventPayloadUserQuestion>;
-};
+export type EventPayloadUserQuestions = { questions: Array<EventPayloadUserQuestion>, };

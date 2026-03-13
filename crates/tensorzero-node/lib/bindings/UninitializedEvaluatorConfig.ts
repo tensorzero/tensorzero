@@ -4,8 +4,4 @@ import type { RegexConfig } from "./RegexConfig";
 import type { ToolUseConfig } from "./ToolUseConfig";
 import type { UninitializedLLMJudgeConfig } from "./UninitializedLLMJudgeConfig";
 
-export type UninitializedEvaluatorConfig =
-  | ({ type: "exact_match" } & ExactMatchConfig)
-  | ({ type: "llm_judge" } & UninitializedLLMJudgeConfig)
-  | ({ type: "tool_use" } & ToolUseConfig)
-  | ({ type: "regex" } & RegexConfig);
+export type UninitializedEvaluatorConfig = { "type": "exact_match" } & ExactMatchConfig | { "type": "llm_judge" } & UninitializedLLMJudgeConfig | { "type": "tool_use" } & ToolUseConfig | { "type": "regex" } & RegexConfig;

@@ -6,15 +6,4 @@ import type { AdaptiveExperimentationAlgorithm } from "./AdaptiveExperimentation
  * Wraps a track-and-stop config (the only algorithm currently supported) with
  * an additional `algorithm` field.
  */
-export type UninitializedAdaptiveExperimentationConfig = {
-  algorithm: AdaptiveExperimentationAlgorithm;
-  metric: string;
-  candidate_variants: Array<string>;
-  fallback_variants: Array<string>;
-  min_samples_per_variant: bigint;
-  delta: number;
-  epsilon: number;
-  update_period_s: bigint;
-  min_prob?: number;
-  max_samples_per_variant?: bigint;
-};
+export type UninitializedAdaptiveExperimentationConfig = { algorithm: AdaptiveExperimentationAlgorithm, metric: string, candidate_variants: Array<string>, fallback_variants: Array<string>, min_samples_per_variant: bigint, delta: number, epsilon: number, update_period_s: bigint, min_prob?: number, max_samples_per_variant?: bigint, };

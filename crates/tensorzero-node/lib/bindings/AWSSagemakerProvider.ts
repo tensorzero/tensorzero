@@ -3,4 +3,4 @@
 /**
  * AWS SageMaker provider using direct HTTP calls.
  */
-export type AWSSagemakerProvider = { endpoint_name: string };
+export type AWSSagemakerProvider = { endpoint_name: string, };

@@ -7,7 +7,4 @@ import type { GatewayEvent } from "./GatewayEvent";
  *
  * Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
  */
-export type GatewayStreamUpdate = {
-  event: GatewayEvent;
-  status: AutopilotStatus;
-};
+export type GatewayStreamUpdate = { event: GatewayEvent, status: AutopilotStatus, };

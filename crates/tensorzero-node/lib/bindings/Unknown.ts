@@ -5,17 +5,16 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Struct that represents an unknown provider-specific content block.
  * We pass this along as-is without any validation or transformation.
  */
-export type Unknown = {
-  /**
-   * The underlying content block to be passed to the model provider.
-   */
-  data: JsonValue;
-  /**
-   * A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
-   */
-  model_name?: string;
-  /**
-   * A provider name for the model you specified (e.g. `my_openai`)
-   */
-  provider_name?: string;
-};
+export type Unknown = { 
+/**
+ * The underlying content block to be passed to the model provider.
+ */
+data: JsonValue, 
+/**
+ * A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+ */
+model_name?: string, 
+/**
+ * A provider name for the model you specified (e.g. `my_openai`)
+ */
+provider_name?: string, };

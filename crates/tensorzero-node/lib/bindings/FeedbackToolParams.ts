@@ -4,31 +4,30 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Parameters for the feedback tool (visible to LLM).
  */
-export type FeedbackToolParams = {
-  /**
-   * The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-   */
-  episode_id: string | null;
-  /**
-   * The inference ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-   */
-  inference_id: string | null;
-  /**
-   * The name of the metric to provide feedback for.
-   * Use "comment" for free-text comments, "demonstration" for demonstration feedback,
-   * or a configured metric name for float/boolean feedback.
-   */
-  metric_name: string;
-  /**
-   * The value of the feedback. Type depends on metric_name:
-   * - "comment": string
-   * - "demonstration": string or array of content blocks
-   * - float metric: number
-   * - boolean metric: boolean
-   */
-  value: JsonValue;
-  /**
-   * If true, the feedback will not be stored (useful for testing).
-   */
-  dryrun: boolean | null;
-};
+export type FeedbackToolParams = { 
+/**
+ * The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
+ */
+episode_id: string | null, 
+/**
+ * The inference ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
+ */
+inference_id: string | null, 
+/**
+ * The name of the metric to provide feedback for.
+ * Use "comment" for free-text comments, "demonstration" for demonstration feedback,
+ * or a configured metric name for float/boolean feedback.
+ */
+metric_name: string, 
+/**
+ * The value of the feedback. Type depends on metric_name:
+ * - "comment": string
+ * - "demonstration": string or array of content blocks
+ * - float metric: number
+ * - boolean metric: boolean
+ */
+value: JsonValue, 
+/**
+ * If true, the feedback will not be stored (useful for testing).
+ */
+dryrun: boolean | null, };

@@ -5,11 +5,4 @@ import type { SchemaData } from "./SchemaData";
 import type { ToolCallConfig } from "./ToolCallConfig";
 import type { VariantInfo } from "./VariantInfo";
 
-export type FunctionConfigJson = {
-  variants: { [key in string]: VariantInfo };
-  schemas: SchemaData;
-  output_schema: JSONSchema;
-  json_mode_tool_call_config: ToolCallConfig;
-  description: string | null;
-  experimentation: ExperimentationConfigWithNamespaces;
-};
+export type FunctionConfigJson = { variants: { [key in string]: VariantInfo }, schemas: SchemaData, output_schema: JSONSchema, json_mode_tool_call_config: ToolCallConfig, description: string | null, experimentation: ExperimentationConfigWithNamespaces, };

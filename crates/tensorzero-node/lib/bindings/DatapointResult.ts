@@ -3,25 +3,24 @@
 /**
  * Result for a single datapoint evaluation.
  */
-export type DatapointResult = {
-  /**
-   * ID of the datapoint that was evaluated.
-   */
-  datapoint_id: string;
-  /**
-   * Whether the evaluation succeeded (inference + at least one evaluator ran).
-   */
-  success: boolean;
-  /**
-   * Per-evaluator scores (None if that evaluator failed or returned non-numeric).
-   */
-  evaluations: { [key in string]: number | null };
-  /**
-   * Per-evaluator error messages for evaluators that failed on this datapoint.
-   */
-  evaluator_errors?: { [key in string]: string };
-  /**
-   * Error message if the entire datapoint evaluation failed (e.g., inference error).
-   */
-  error?: string | null;
-};
+export type DatapointResult = { 
+/**
+ * ID of the datapoint that was evaluated.
+ */
+datapoint_id: string, 
+/**
+ * Whether the evaluation succeeded (inference + at least one evaluator ran).
+ */
+success: boolean, 
+/**
+ * Per-evaluator scores (None if that evaluator failed or returned non-numeric).
+ */
+evaluations: { [key in string]: number | null }, 
+/**
+ * Per-evaluator error messages for evaluators that failed on this datapoint.
+ */
+evaluator_errors?: { [key in string]: string }, 
+/**
+ * Error message if the entire datapoint evaluation failed (e.g., inference error).
+ */
+error?: string | null, };

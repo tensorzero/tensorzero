@@ -5,6 +5,4 @@ import type { JSONSchema } from "./JSONSchema";
  * Minimal function configuration for evaluation purposes.
  * Contains only the information needed to validate output schemas during evaluation.
  */
-export type EvaluationFunctionConfig =
-  | { type: "chat" }
-  | { type: "json"; output_schema: JSONSchema };
+export type EvaluationFunctionConfig = { "type": "chat" } | { "type": "json", output_schema: JSONSchema, };

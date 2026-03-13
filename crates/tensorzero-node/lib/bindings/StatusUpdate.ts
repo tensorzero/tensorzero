@@ -3,4 +3,4 @@
 /**
  * A status update within a session.
  */
-export type StatusUpdate = { type: "text"; text: string };
+export type StatusUpdate = { "type": "text", text: string, };

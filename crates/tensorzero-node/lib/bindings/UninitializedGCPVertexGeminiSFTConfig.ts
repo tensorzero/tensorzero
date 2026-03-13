@@ -5,12 +5,4 @@
  * Provider-level settings (project_id, region, bucket_name, credentials, etc.)
  * come from `provider_types.gcp_vertex_gemini.sft` in the gateway config.
  */
-export type UninitializedGCPVertexGeminiSFTConfig = {
-  model: string;
-  learning_rate_multiplier?: number;
-  adapter_size?: number;
-  n_epochs?: number;
-  export_last_checkpoint_only?: boolean;
-  seed?: bigint;
-  tuned_model_display_name?: string;
-};
+export type UninitializedGCPVertexGeminiSFTConfig = { model: string, learning_rate_multiplier?: number, adapter_size?: number, n_epochs?: number, export_last_checkpoint_only?: boolean, seed?: bigint, tuned_model_display_name?: string, };

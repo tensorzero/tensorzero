@@ -4,18 +4,17 @@
  * Request to list datasets with optional filtering and pagination.
  * Used by the `GET /internal/datasets` endpoint.
  */
-export type ListDatasetsRequest = {
-  /**
-   * Optional function name to filter datasets by.
-   * If provided, only datasets with datapoints for this function will be returned.
-   */
-  function_name?: string;
-  /**
-   * The maximum number of datasets to return.
-   */
-  limit?: number;
-  /**
-   * The number of datasets to skip before starting to return results.
-   */
-  offset?: number;
-};
+export type ListDatasetsRequest = { 
+/**
+ * Optional function name to filter datasets by.
+ * If provided, only datasets with datapoints for this function will be returned.
+ */
+function_name?: string, 
+/**
+ * The maximum number of datasets to return.
+ */
+limit?: number, 
+/**
+ * The number of datasets to skip before starting to return results.
+ */
+offset?: number, };

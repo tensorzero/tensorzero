@@ -3,4 +3,4 @@
 /**
  * Filter by whether an inference has a demonstration.
  */
-export type DemonstrationFeedbackFilter = { has_demonstration: boolean };
+export type DemonstrationFeedbackFilter = { has_demonstration: boolean, };

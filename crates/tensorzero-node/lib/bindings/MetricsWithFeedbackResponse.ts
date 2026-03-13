@@ -4,9 +4,8 @@ import type { MetricWithFeedback } from "./MetricWithFeedback";
 /**
  * Response containing metrics with feedback statistics
  */
-export type MetricsWithFeedbackResponse = {
-  /**
-   * Metrics with feedback statistics
-   */
-  metrics: Array<MetricWithFeedback>;
-};
+export type MetricsWithFeedbackResponse = { 
+/**
+ * Metrics with feedback statistics
+ */
+metrics: Array<MetricWithFeedback>, };

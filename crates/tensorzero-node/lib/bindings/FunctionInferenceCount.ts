@@ -3,14 +3,12 @@
 /**
  * Row returned from the list_functions_with_inference_count query.
  */
-export type FunctionInferenceCount = {
-  function_name: string;
-  /**
-   * ISO 8601 timestamp of the most recent inference for this function
-   */
-  last_inference_timestamp: string;
-  /**
-   * Total number of inferences for this function
-   */
-  inference_count: number;
-};
+export type FunctionInferenceCount = { function_name: string, 
+/**
+ * ISO 8601 timestamp of the most recent inference for this function
+ */
+last_inference_timestamp: string, 
+/**
+ * Total number of inferences for this function
+ */
+inference_count: number, };

@@ -2,4 +2,4 @@
 import type { ProviderToolScope } from "./ProviderToolScope";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type ProviderTool = { scope: ProviderToolScope; tool: JsonValue };
+export type ProviderTool = { scope: ProviderToolScope, tool: JsonValue, };

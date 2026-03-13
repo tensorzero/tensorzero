@@ -3,9 +3,4 @@ import type { DatasetDataSource } from "./DatasetDataSource";
 import type { InferencesDataSource } from "./InferencesDataSource";
 import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 
-export type LaunchOptimizationWorkflowParams = {
-  function_name: string;
-  template_variant_name: string;
-  val_fraction?: number;
-  optimizer_config: UninitializedOptimizerInfo;
-} & (InferencesDataSource | DatasetDataSource);
+export type LaunchOptimizationWorkflowParams = { function_name: string, template_variant_name: string, val_fraction?: number, optimizer_config: UninitializedOptimizerInfo, } & (InferencesDataSource | DatasetDataSource);

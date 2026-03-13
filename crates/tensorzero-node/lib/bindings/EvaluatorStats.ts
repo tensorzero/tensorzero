@@ -4,4 +4,4 @@
  * Statistics computed about a particular evaluator
  * We anticipate extending this over time
  */
-export type EvaluatorStats = { mean: number; stderr: number; count: number };
+export type EvaluatorStats = { mean: number, stderr: number, count: number, };

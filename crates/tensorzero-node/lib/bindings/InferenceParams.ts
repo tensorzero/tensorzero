@@ -5,6 +5,4 @@ import type { ChatCompletionInferenceParams } from "./ChatCompletionInferencePar
  * Top-level struct for inference parameters.
  * We backfill these from the configs given in the variants used and ultimately write them to the database.
  */
-export type InferenceParams = {
-  chat_completion: ChatCompletionInferenceParams;
-};
+export type InferenceParams = { chat_completion: ChatCompletionInferenceParams, };

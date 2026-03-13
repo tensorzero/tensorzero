@@ -3,17 +3,16 @@
 /**
  * Parameters for the get_feedback_by_variant tool (visible to LLM).
  */
-export type GetFeedbackByVariantToolParams = {
-  /**
-   * The name of the metric to query.
-   */
-  metric_name: string;
-  /**
-   * The name of the function to query.
-   */
-  function_name: string;
-  /**
-   * Optional filter for specific variants. If not provided, all variants are included.
-   */
-  variant_names: Array<string> | null;
-};
+export type GetFeedbackByVariantToolParams = { 
+/**
+ * The name of the metric to query.
+ */
+metric_name: string, 
+/**
+ * The name of the function to query.
+ */
+function_name: string, 
+/**
+ * Optional filter for specific variants. If not provided, all variants are included.
+ */
+variant_names: Array<string> | null, };

@@ -2,6 +2,4 @@
 import type { FunctionConfigChat } from "./FunctionConfigChat";
 import type { FunctionConfigJson } from "./FunctionConfigJson";
 
-export type FunctionConfig =
-  | ({ type: "chat" } & FunctionConfigChat)
-  | ({ type: "json" } & FunctionConfigJson);
+export type FunctionConfig = { "type": "chat" } & FunctionConfigChat | { "type": "json" } & FunctionConfigJson;

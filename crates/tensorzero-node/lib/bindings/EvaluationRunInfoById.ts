@@ -3,8 +3,4 @@
 /**
  * Information about a single evaluation run (returned by get_evaluation_run_infos).
  */
-export type EvaluationRunInfoById = {
-  evaluation_run_id: string;
-  variant_name: string;
-  created_at: string;
-};
+export type EvaluationRunInfoById = { evaluation_run_id: string, variant_name: string, created_at: string, };

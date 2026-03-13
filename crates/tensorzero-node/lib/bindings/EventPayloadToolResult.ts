@@ -7,26 +7,23 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Tool result payload for an event.
  */
-export type EventPayloadToolResult = {
-  tool_call_event_id: string;
-  outcome: ToolOutcome;
-  /**
-   * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
-   */
-  tool_call_name?: string;
-  /**
-   * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
-   */
-  tool_call_arguments?: JsonValue;
-  /**
-   * Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
-   * tool results may not have a corresponding authorization event.
-   */
-  tool_call_authorization_source?: ToolCallDecisionSource;
-  /**
-   * Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
-   */
-  tool_call_authorization_status?: ToolCallAuthorizationStatus;
-};
+export type EventPayloadToolResult = { tool_call_event_id: string, outcome: ToolOutcome, 
+/**
+ * Populated by the server from the originating tool call event.
+ * Optional for backwards compatibility until the API is deployed with enrichment.
+ */
+tool_call_name?: string, 
+/**
+ * Populated by the server from the originating tool call event.
+ * Optional for backwards compatibility until the API is deployed with enrichment.
+ */
+tool_call_arguments?: JsonValue, 
+/**
+ * Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
+ * tool results may not have a corresponding authorization event.
+ */
+tool_call_authorization_source?: ToolCallDecisionSource, 
+/**
+ * Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
+ */
+tool_call_authorization_status?: ToolCallAuthorizationStatus, };

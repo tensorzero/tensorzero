@@ -4,11 +4,4 @@ import type { FunctionType } from "./FunctionType";
 /**
  * Inference metadata from the InferenceById table.
  */
-export type InferenceMetadata = {
-  id: string;
-  function_name: string;
-  variant_name: string;
-  episode_id: string;
-  function_type: FunctionType;
-  snapshot_hash?: string;
-};
+export type InferenceMetadata = { id: string, function_name: string, variant_name: string, episode_id: string, function_type: FunctionType, snapshot_hash?: string, };

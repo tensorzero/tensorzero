@@ -6,13 +6,12 @@
  * At least one of `must_match` or `must_not_match` must be specified.
  * If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
  */
-export type RegexConfig = {
-  /**
-   * Regex pattern that the inference output must match for the evaluation to pass.
-   */
-  must_match?: string;
-  /**
-   * Regex pattern that the inference output must *not* match for the evaluation to pass.
-   */
-  must_not_match?: string;
-};
+export type RegexConfig = { 
+/**
+ * Regex pattern that the inference output must match for the evaluation to pass.
+ */
+must_match?: string, 
+/**
+ * Regex pattern that the inference output must *not* match for the evaluation to pass.
+ */
+must_not_match?: string, };

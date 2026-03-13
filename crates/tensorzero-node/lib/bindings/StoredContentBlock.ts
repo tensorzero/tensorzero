@@ -10,10 +10,4 @@ import type { Unknown } from "./Unknown";
  * The version of `ContentBlock` that is stored in ClickHouse.
  * This is almost identical to `ContentBlock`, but without `File` data.
  */
-export type StoredContentBlock =
-  | ({ type: "text" } & Text)
-  | ({ type: "tool_call" } & ToolCall)
-  | ({ type: "tool_result" } & ToolResult)
-  | ({ type: "file" } & StoredFile)
-  | ({ type: "thought" } & Thought)
-  | ({ type: "unknown" } & Unknown);
+export type StoredContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & StoredFile | { "type": "thought" } & Thought | { "type": "unknown" } & Unknown;

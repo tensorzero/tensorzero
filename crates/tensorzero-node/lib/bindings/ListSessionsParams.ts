@@ -3,13 +3,12 @@
 /**
  * Query parameters for listing sessions.
  */
-export type ListSessionsParams = {
-  /**
-   * Maximum number of sessions to return. Defaults to 20.
-   */
-  limit?: number;
-  /**
-   * Offset for pagination.
-   */
-  offset?: number;
-};
+export type ListSessionsParams = { 
+/**
+ * Maximum number of sessions to return. Defaults to 20.
+ */
+limit?: number, 
+/**
+ * Offset for pagination.
+ */
+offset?: number, };

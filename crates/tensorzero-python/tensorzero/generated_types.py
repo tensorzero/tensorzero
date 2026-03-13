@@ -232,120 +232,6 @@ ExtraBody = (
 )
 
 
-@dataclass(kw_only=True)
-class ExtraBodyReplacementKindValue:
-    value: Any
-
-
-ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
-
-
-@dataclass(kw_only=True)
-class VariantExtraHeader:
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    value: str
-    """
-    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-    """
-    variant_name: str
-    """
-    A variant name in your configuration (e.g. `my_variant`)
-    """
-
-
-@dataclass(kw_only=True)
-class VariantExtraHeaderDelete:
-    delete: Literal[True] = True
-    """
-    Set to true to remove the header from the model provider request
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    variant_name: str
-    """
-    A variant name in your configuration (e.g. `my_variant`)
-    """
-
-
-@dataclass(kw_only=True)
-class ModelProviderExtraHeader:
-    model_name: str
-    """
-    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    value: str
-    """
-    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-    """
-    provider_name: str | None = None
-    """
-    A provider name for the model you specified (e.g. `my_openai`).
-    """
-
-
-@dataclass(kw_only=True)
-class ModelProviderExtraHeaderDelete:
-    delete: Literal[True] = True
-    """
-    Set to true to remove the header from the model provider request
-    """
-    model_name: str
-    """
-    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    provider_name: str | None = None
-    """
-    A provider name for the model you specified (e.g. `my_openai`)
-    """
-
-
-@dataclass(kw_only=True)
-class AlwaysExtraHeader:
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-    value: str
-    """
-    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
-    """
-
-
-@dataclass(kw_only=True)
-class AlwaysExtraHeaderDelete:
-    delete: Literal[True] = True
-    """
-    Set to true to remove the header from the model provider request
-    """
-    name: str
-    """
-    The name of the HTTP header (e.g. `anthropic-beta`)
-    """
-
-
-ExtraHeader = (
-    VariantExtraHeader
-    | VariantExtraHeaderDelete
-    | ModelProviderExtraHeader
-    | ModelProviderExtraHeaderDelete
-    | AlwaysExtraHeader
-    | AlwaysExtraHeaderDelete
-)
-
-
 FloatComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 
@@ -1370,11 +1256,20 @@ StoredInputMessageContent = (
 @dataclass(kw_only=True)
 class OpenAICustomTool:
     """
-    `OpenAICustomTool` represents OpenAI's custom tool format, which allows
-    for text or grammar-based tool definitions beyond standard function calling.
-    Currently, this type is a wire + outbound + storage type so it forces a consistent format.
-    This only applies to the Chat Completions API. The Responses API has a slightly different request
-    shape so we implement a conversion in `responses.rs`.
+    `Tool` is the generic form for all tools that TensorZero itself manages.
+    This includes function tools (the original kind) and OpenAI's custom tools
+    (which support text and grammar formats). Future additions may include MCP and other standards.
+
+    We store this type (serialized) in the Array(String) in the `dynamic_tools` column
+    in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
+
+    For the wire format, we use `DynamicTool` which wraps this enum with a custom deserializer
+    that allows function tools to be specified without type tags for backward compatibility,
+    while other tool types require explicit tagging.
+
+    Notably, provider tools (like OpenAI websearch) are not part of this enum
+    as there's not really anything we can do besides experiment with them.
+    They are a separate type `ProviderTool`.
     """
 
     name: str

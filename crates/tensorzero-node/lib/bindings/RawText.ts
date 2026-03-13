@@ -4,4 +4,4 @@
  * Struct that represents raw text content that should be passed directly to the model
  * without any template processing or validation
  */
-export type RawText = { value: string };
+export type RawText = { value: string, };

@@ -15,19 +15,4 @@ import type { GatewayEventPayloadToolCallAuthorization } from "./GatewayEventPay
  *
  * Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
  */
-export type GatewayEventPayload =
-  | ({ type: "message" } & EventPayloadMessage)
-  | ({ type: "error" } & EventPayloadError)
-  | ({ type: "status_update" } & EventPayloadStatusUpdate)
-  | ({ type: "tool_call" } & GatewayEventPayloadToolCall)
-  | ({
-      type: "tool_call_authorization";
-    } & GatewayEventPayloadToolCallAuthorization)
-  | ({ type: "tool_result" } & EventPayloadToolResult)
-  | ({ type: "visualization" } & EventPayloadVisualization)
-  | ({ type: "user_questions" } & EventPayloadUserQuestions)
-  | ({ type: "user_questions_answers" } & EventPayloadUserQuestionsAnswers)
-  | ({
-      type: "auto_eval_example_labeling";
-    } & EventPayloadAutoEvalExampleLabeling)
-  | { type: "unknown" };
+export type GatewayEventPayload = { "type": "message" } & EventPayloadMessage | { "type": "error" } & EventPayloadError | { "type": "status_update" } & EventPayloadStatusUpdate | { "type": "tool_call" } & GatewayEventPayloadToolCall | { "type": "tool_call_authorization" } & GatewayEventPayloadToolCallAuthorization | { "type": "tool_result" } & EventPayloadToolResult | { "type": "visualization" } & EventPayloadVisualization | { "type": "user_questions" } & EventPayloadUserQuestions | { "type": "user_questions_answers" } & EventPayloadUserQuestionsAnswers | { "type": "auto_eval_example_labeling" } & EventPayloadAutoEvalExampleLabeling | { "type": "unknown" };

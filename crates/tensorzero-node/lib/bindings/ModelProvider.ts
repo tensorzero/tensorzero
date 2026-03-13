@@ -2,12 +2,8 @@
 import type { ProviderConfig } from "./ProviderConfig";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 
-export type ModelProvider = {
-  name: string;
-  config: ProviderConfig;
-  timeouts: TimeoutsConfig;
-  /**
-   * See `UninitializedModelProvider.discard_unknown_chunks`.
-   */
-  discard_unknown_chunks: boolean;
-};
+export type ModelProvider = { name: string, config: ProviderConfig, timeouts: TimeoutsConfig, 
+/**
+ * See `UninitializedModelProvider.discard_unknown_chunks`.
+ */
+discard_unknown_chunks: boolean, };

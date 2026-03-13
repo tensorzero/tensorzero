@@ -4,6 +4,4 @@ import type { EvaluationRunInfoById } from "./EvaluationRunInfoById";
 /**
  * Response containing evaluation run infos.
  */
-export type GetEvaluationRunInfosResponse = {
-  run_infos: Array<EvaluationRunInfoById>;
-};
+export type GetEvaluationRunInfosResponse = { run_infos: Array<EvaluationRunInfoById>, };

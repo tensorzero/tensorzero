@@ -8,32 +8,12 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * plus a `User` variant for tool-specific errors. Tool implementations should
  * define their own error types and convert them to `NonControlToolError::User`.
  */
-export type NonControlToolError =
-  | { kind: "step"; base_name: string; error: string }
-  | { kind: "serialization"; message: string }
-  | { kind: "task_panicked"; message: string }
-  | { kind: "tool_not_found"; name: string }
-  | { kind: "duplicate_tool_name"; name: string }
-  | { kind: "invalid_params"; message: string }
-  | { kind: "schema_generation"; message: string }
-  | { kind: "timeout"; step_name: string }
-  | { kind: "validation"; message: string }
-  | { kind: "internal"; message: string }
-  | { kind: "child_failed"; step_name: string; message: string }
-  | { kind: "child_cancelled"; step_name: string }
-  | { kind: "invalid_configuration"; reason: string }
-  | { kind: "reserved_header_prefix"; key: string }
-  | { kind: "invalid_event_name"; reason: string }
-  | {
-      kind: "user";
-      /**
-       * Human-readable error message.
-       */
-      message: string;
-      /**
-       * Structured error data for persistence and later retrieval.
-       */
-      error_data: JsonValue;
-    }
-  | { kind: "subtask_spawn_failed"; name: string; error: string }
-  | { kind: "emit_event_failed"; event_name: string; error: string };
+export type NonControlToolError = { "kind": "step", base_name: string, error: string, } | { "kind": "serialization", message: string, } | { "kind": "task_panicked", message: string, } | { "kind": "tool_not_found", name: string, } | { "kind": "duplicate_tool_name", name: string, } | { "kind": "invalid_params", message: string, } | { "kind": "schema_generation", message: string, } | { "kind": "timeout", step_name: string, } | { "kind": "validation", message: string, } | { "kind": "internal", message: string, } | { "kind": "child_failed", step_name: string, message: string, } | { "kind": "child_cancelled", step_name: string, } | { "kind": "invalid_configuration", reason: string, } | { "kind": "reserved_header_prefix", key: string, } | { "kind": "invalid_event_name", reason: string, } | { "kind": "user", 
+/**
+ * Human-readable error message.
+ */
+message: string, 
+/**
+ * Structured error data for persistence and later retrieval.
+ */
+error_data: JsonValue, } | { "kind": "subtask_spawn_failed", name: string, error: string, } | { "kind": "emit_event_failed", event_name: string, error: string, };

@@ -4,10 +4,8 @@
  * Minimal job handle for Together SFT.
  * All configuration needed for polling comes from provider_types at poll time.
  */
-export type TogetherSFTJobHandle = {
-  job_id: string;
-  /**
-   * A url to a human-readable page for the job.
-   */
-  job_url: string;
-};
+export type TogetherSFTJobHandle = { job_id: string, 
+/**
+ * A url to a human-readable page for the job.
+ */
+job_url: string, };

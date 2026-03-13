@@ -3,6 +3,4 @@
 /**
  * Response containing the count of distinct episodes by task_name.
  */
-export type CountWorkflowEvaluationRunEpisodesByTaskNameResponse = {
-  count: number;
-};
+export type CountWorkflowEvaluationRunEpisodesByTaskNameResponse = { count: number, };

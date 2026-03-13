@@ -8,12 +8,9 @@ import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompl
  * GEPA optimization is synchronous, so polling immediately returns the completed
  * results or failure status.
  */
-export type GEPAJobHandle = {
-  /**
-   * Result of the GEPA optimization - either a map of variant names to their
-   * configurations (the Pareto frontier) or an error message
-   */
-  result:
-    | { Ok: { [key in string]: UninitializedChatCompletionConfig } }
-    | { Err: string };
-};
+export type GEPAJobHandle = { 
+/**
+ * Result of the GEPA optimization - either a map of variant names to their
+ * configurations (the Pareto frontier) or an error message
+ */
+result: { Ok : { [key in string]: UninitializedChatCompletionConfig } } | { Err : string }, };

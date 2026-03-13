@@ -8,18 +8,14 @@ import type { JsonValue } from "./serde_json/JsonValue";
  *
  * Uses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.
  */
-export type GatewayEventPayloadToolCallAuthorization = {
-  source: ToolCallDecisionSource;
-  tool_call_event_id: string;
-  status: GatewayToolCallAuthorizationStatus;
-  /**
-   * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
-   */
-  tool_call_name?: string;
-  /**
-   * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
-   */
-  tool_call_arguments?: JsonValue;
-};
+export type GatewayEventPayloadToolCallAuthorization = { source: ToolCallDecisionSource, tool_call_event_id: string, status: GatewayToolCallAuthorizationStatus, 
+/**
+ * Populated by the server from the originating tool call event.
+ * Optional for backwards compatibility until the API is deployed with enrichment.
+ */
+tool_call_name?: string, 
+/**
+ * Populated by the server from the originating tool call event.
+ * Optional for backwards compatibility until the API is deployed with enrichment.
+ */
+tool_call_arguments?: JsonValue, };

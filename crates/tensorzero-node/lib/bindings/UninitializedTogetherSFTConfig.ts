@@ -9,23 +9,4 @@ import type { TogetherTrainingType } from "./TogetherTrainingType";
  * Provider-level settings (credentials, wandb, hf_api_token) come from
  * `provider_types.together` in the gateway config.
  */
-export type UninitializedTogetherSFTConfig = {
-  model: string;
-  n_epochs: number;
-  n_checkpoints: number;
-  n_evals?: number;
-  batch_size: TogetherBatchSize;
-  learning_rate: number;
-  warmup_ratio: number;
-  max_grad_norm: number;
-  weight_decay: number;
-  suffix?: string;
-  lr_scheduler: TogetherLRScheduler;
-  wandb_name?: string;
-  training_method: TogetherTrainingMethod;
-  training_type: TogetherTrainingType;
-  from_checkpoint?: string;
-  from_hf_model?: string;
-  hf_model_revision?: string;
-  hf_output_repo_name?: string;
-};
+export type UninitializedTogetherSFTConfig = { model: string, n_epochs: number, n_checkpoints: number, n_evals?: number, batch_size: TogetherBatchSize, learning_rate: number, warmup_ratio: number, max_grad_norm: number, weight_decay: number, suffix?: string, lr_scheduler: TogetherLRScheduler, wandb_name?: string, training_method: TogetherTrainingMethod, training_type: TogetherTrainingType, from_checkpoint?: string, from_hf_model?: string, hf_model_revision?: string, hf_output_repo_name?: string, };

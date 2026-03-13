@@ -4,12 +4,8 @@ import type { MetricConfigOptimize } from "./MetricConfigOptimize";
 /**
  * Metric metadata from an evaluation run.
  */
-export type RunMetricMetadata = {
-  name: string;
-  evaluator_name?: string;
-  /**
-   * `boolean` or `float`
-   */
-  value_type: string;
-  optimize?: MetricConfigOptimize;
-};
+export type RunMetricMetadata = { name: string, evaluator_name?: string, 
+/**
+ * `boolean` or `float`
+ */
+value_type: string, optimize?: MetricConfigOptimize, };

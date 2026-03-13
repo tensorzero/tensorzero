@@ -7,25 +7,23 @@ import type { GatewayEvent } from "./GatewayEvent";
  *
  * Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
  */
-export type GatewayListEventsResponse = {
-  events: Array<GatewayEvent>;
-  /**
-   * The most recent `message` event with role `user` in this session.
-   */
-  previous_user_message_event_id: string;
-  /**
-   * The current status of the Autopilot in this session.
-   * Ignores pagination parameters.
-   */
-  status: AutopilotStatus;
-  /**
-   * All tool calls in Event history that do not have responses.
-   * These may be duplicates of some of the values in events.
-   * All EventPayloads in these Events should be of type ToolCall.
-   */
-  pending_tool_calls: Array<GatewayEvent>;
-  /**
-   * All user_questions events that do not have a matching user_questions_answers event.
-   */
-  pending_user_questions: Array<GatewayEvent>;
-};
+export type GatewayListEventsResponse = { events: Array<GatewayEvent>, 
+/**
+ * The most recent `message` event with role `user` in this session.
+ */
+previous_user_message_event_id: string, 
+/**
+ * The current status of the Autopilot in this session.
+ * Ignores pagination parameters.
+ */
+status: AutopilotStatus, 
+/**
+ * All tool calls in Event history that do not have responses.
+ * These may be duplicates of some of the values in events.
+ * All EventPayloads in these Events should be of type ToolCall.
+ */
+pending_tool_calls: Array<GatewayEvent>, 
+/**
+ * All user_questions events that do not have a matching user_questions_answers event.
+ */
+pending_user_questions: Array<GatewayEvent>, };

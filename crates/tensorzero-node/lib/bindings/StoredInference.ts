@@ -6,6 +6,4 @@ import type { StoredJsonInference } from "./StoredJsonInference";
  * Wire variant of StoredInference for API responses with Python/TypeScript bindings
  * This one should be used in all public interfaces
  */
-export type StoredInference =
-  | ({ type: "chat" } & StoredChatInference)
-  | ({ type: "json" } & StoredJsonInference);
+export type StoredInference = { "type": "chat" } & StoredChatInference | { "type": "json" } & StoredJsonInference;

@@ -4,11 +4,4 @@ import type { LLMJudgeInputFormat } from "./LLMJudgeInputFormat";
 import type { LLMJudgeOptimize } from "./LLMJudgeOptimize";
 import type { LLMJudgeOutputType } from "./LLMJudgeOutputType";
 
-export type LLMJudgeConfig = {
-  input_format: LLMJudgeInputFormat;
-  output_type: LLMJudgeOutputType;
-  include: LLMJudgeIncludeConfig;
-  optimize: LLMJudgeOptimize;
-  cutoff?: number;
-  description?: string;
-};
+export type LLMJudgeConfig = { input_format: LLMJudgeInputFormat, output_type: LLMJudgeOutputType, include: LLMJudgeIncludeConfig, optimize: LLMJudgeOptimize, cutoff?: number, description?: string, };

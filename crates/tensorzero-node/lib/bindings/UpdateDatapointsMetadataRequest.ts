@@ -5,9 +5,8 @@ import type { UpdateDatapointMetadataRequest } from "./UpdateDatapointMetadataRe
  * Request to update metadata for one or more datapoints in a dataset.
  * Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
  */
-export type UpdateDatapointsMetadataRequest = {
-  /**
-   * The datapoints to update metadata for.
-   */
-  datapoints: Array<UpdateDatapointMetadataRequest>;
-};
+export type UpdateDatapointsMetadataRequest = { 
+/**
+ * The datapoints to update metadata for.
+ */
+datapoints: Array<UpdateDatapointMetadataRequest>, };

@@ -4,7 +4,4 @@ import type { NonControlToolError } from "./NonControlToolError";
 /**
  * The type written in `ToolOutcome::Failure` for tool errors.
  */
-export type ToolFailure =
-  | { kind: "control"; message: string }
-  | { kind: "tool"; error: NonControlToolError }
-  | { kind: "database"; message: string };
+export type ToolFailure = { "kind": "control", message: string, } | { "kind": "tool", error: NonControlToolError, } | { "kind": "database", message: string, };

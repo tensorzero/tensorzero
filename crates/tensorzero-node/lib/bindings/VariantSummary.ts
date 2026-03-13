@@ -3,25 +3,24 @@
 /**
  * Summary statistics for a variant's performance.
  */
-export type VariantSummary = {
-  /**
-   * Estimated mean performance.
-   */
-  mean_est: number;
-  /**
-   * Lower confidence bound.
-   */
-  cs_lower: number;
-  /**
-   * Upper confidence bound.
-   */
-  cs_upper: number;
-  /**
-   * Number of observations.
-   */
-  count: bigint;
-  /**
-   * Whether this variant failed during evaluation.
-   */
-  failed: boolean;
-};
+export type VariantSummary = { 
+/**
+ * Estimated mean performance.
+ */
+mean_est: number, 
+/**
+ * Lower confidence bound.
+ */
+cs_lower: number, 
+/**
+ * Upper confidence bound.
+ */
+cs_upper: number, 
+/**
+ * Number of observations.
+ */
+count: bigint, 
+/**
+ * Whether this variant failed during evaluation.
+ */
+failed: boolean, };

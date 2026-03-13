@@ -4,8 +4,4 @@ import type { TagComparisonOperator } from "./TagComparisonOperator";
 /**
  * Filter by tag key-value pair.
  */
-export type TagFilter = {
-  key: string;
-  value: string;
-  comparison_operator: TagComparisonOperator;
-};
+export type TagFilter = { key: string, value: string, comparison_operator: TagComparisonOperator, };

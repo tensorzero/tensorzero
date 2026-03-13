@@ -5,4 +5,4 @@
  * Currently only used for `gateway.template_filesystem_access.base_path`.
  * Unlike `ResolvedTomlPathData`, this doesn't eagerly load file contents since directories don't have contents.
  */
-export type ResolvedTomlPathDirectory = { __tensorzero_remapped_path: string };
+export type ResolvedTomlPathDirectory = { __tensorzero_remapped_path: string, };

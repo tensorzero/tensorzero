@@ -5,24 +5,21 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Struct that represents a model's reasoning
  */
-export type Thought = {
-  text?: string;
-  /**
-   * An optional signature - used with Anthropic and OpenRouter for multi-turn
-   * reasoning conversations. Other providers will ignore this field.
-   */
-  signature?: string;
-  summary?: Array<ThoughtSummaryBlock>;
-  /**
-   * When set, this `Thought` block will only be used for providers
-   * matching this type (e.g. `anthropic`). Other providers will emit
-   * a warning and discard the block.
-   */
-  provider_type?: string;
-  /**
-   * Provider-specific opaque data for multi-turn reasoning support.
-   * For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
-   * Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
-   */
-  extra_data?: JsonValue;
-};
+export type Thought = { text?: string, 
+/**
+ * An optional signature - used with Anthropic and OpenRouter for multi-turn
+ * reasoning conversations. Other providers will ignore this field.
+ */
+signature?: string, summary?: Array<ThoughtSummaryBlock>, 
+/**
+ * When set, this `Thought` block will only be used for providers
+ * matching this type (e.g. `anthropic`). Other providers will emit
+ * a warning and discard the block.
+ */
+provider_type?: string, 
+/**
+ * Provider-specific opaque data for multi-turn reasoning support.
+ * For example, OpenRouter stores encrypted reasoning blocks with `{"format": "...", "encrypted": true}` structure.
+ * Note: Not exposed to Python because `Value` doesn't implement `IntoPyObject`.
+ */
+extra_data?: JsonValue, };

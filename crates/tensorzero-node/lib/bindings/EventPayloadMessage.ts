@@ -6,8 +6,4 @@ import type { Role } from "./Role";
  * A message payload specific to autopilot events.
  * Content is restricted to Text blocks only.
  */
-export type EventPayloadMessage = {
-  role: Role;
-  content: Array<EventPayloadMessageContent>;
-  metadata: Record<string, never>;
-};
+export type EventPayloadMessage = { role: Role, content: Array<EventPayloadMessageContent>, metadata: Record<string, never>, };

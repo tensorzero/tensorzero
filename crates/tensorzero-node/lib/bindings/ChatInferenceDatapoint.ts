@@ -9,43 +9,28 @@ import type { ToolChoice } from "./ToolChoice";
  * Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
  * This one should be used in all public interfaces.
  */
-export type ChatInferenceDatapoint = {
-  dataset_name: string;
-  function_name: string;
-  id: string;
-  episode_id?: string;
-  input: Input;
-  output?: Array<ContentBlockChatOutput>;
-  tags?: Record<string, string>;
-  auxiliary: string;
-  is_deleted: boolean;
-  is_custom: boolean;
-  source_inference_id?: string;
-  staled_at?: string;
-  updated_at: string;
-  name?: string;
-  /**
-   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
-   * If not provided, all static tools are allowed.
-   */
-  allowed_tools?: Array<string>;
-  /**
-   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
-   * tools, that are also allowed.
-   */
-  additional_tools?: Array<Tool>;
-  /**
-   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-   * Optional.
-   */
-  tool_choice?: ToolChoice;
-  /**
-   * Whether to use parallel tool calls in the inference. Optional.
-   * If provided during inference, it will override the function-configured parallel tool calls.
-   */
-  parallel_tool_calls?: boolean;
-  /**
-   * Provider-specific tool configurations
-   */
-  provider_tools: Array<ProviderTool>;
-};
+export type ChatInferenceDatapoint = { dataset_name: string, function_name: string, id: string, episode_id?: string, input: Input, output?: Array<ContentBlockChatOutput>, tags?: Record<string, string>, auxiliary: string, is_deleted: boolean, is_custom: boolean, source_inference_id?: string, staled_at?: string, updated_at: string, name?: string, 
+/**
+ * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+ * If not provided, all static tools are allowed.
+ */
+allowed_tools?: Array<string>, 
+/**
+ * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+ * tools, that are also allowed.
+ */
+additional_tools?: Array<Tool>, 
+/**
+ * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+ * Optional.
+ */
+tool_choice?: ToolChoice, 
+/**
+ * Whether to use parallel tool calls in the inference. Optional.
+ * If provided during inference, it will override the function-configured parallel tool calls.
+ */
+parallel_tool_calls?: boolean, 
+/**
+ * Provider-specific tool configurations
+ */
+provider_tools: Array<ProviderTool>, };

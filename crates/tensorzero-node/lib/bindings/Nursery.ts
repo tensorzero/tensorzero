@@ -10,4 +10,4 @@
  *
  * When serialized for external use, only the variant list is exposed (not the atomic counter).
  */
-export type Nursery = { variants: Array<string> };
+export type Nursery = { variants: Array<string>, };

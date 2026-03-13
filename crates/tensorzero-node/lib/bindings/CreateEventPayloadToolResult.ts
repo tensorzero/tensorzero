@@ -5,7 +5,4 @@ import type { ToolOutcome } from "./ToolOutcome";
  * Minimal tool result payload for creating events.
  * Omits server-enriched fields like `tool_call_name`, `tool_call_arguments`, etc.
  */
-export type CreateEventPayloadToolResult = {
-  tool_call_event_id: string;
-  outcome: ToolOutcome;
-};
+export type CreateEventPayloadToolResult = { tool_call_event_id: string, outcome: ToolOutcome, };

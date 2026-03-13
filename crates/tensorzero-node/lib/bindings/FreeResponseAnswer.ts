@@ -3,4 +3,4 @@
 /**
  * A user's free-form text answer.
  */
-export type FreeResponseAnswer = { text: string };
+export type FreeResponseAnswer = { text: string, };

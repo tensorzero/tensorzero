@@ -3,4 +3,4 @@
 /**
  * A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
  */
-export type ToolResult = { name: string; result: string; id: string };
+export type ToolResult = { name: string, result: string, id: string, };

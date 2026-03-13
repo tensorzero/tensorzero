@@ -5,29 +5,28 @@ import type { EvaluatorStats } from "./EvaluatorStats";
 /**
  * Response from running an evaluation.
  */
-export type RunEvaluationResponse = {
-  /**
-   * Unique identifier for this evaluation run.
-   */
-  evaluation_run_id: string;
-  /**
-   * Number of datapoints evaluated.
-   */
-  num_datapoints: number;
-  /**
-   * Number of successful evaluations.
-   */
-  num_successes: number;
-  /**
-   * Number of errors.
-   */
-  num_errors: number;
-  /**
-   * Per-evaluator statistics.
-   */
-  stats: { [key in string]: EvaluatorStats };
-  /**
-   * Per-datapoint results (only populated if `include_datapoint_results` was true).
-   */
-  datapoint_results?: Array<DatapointResult> | null;
-};
+export type RunEvaluationResponse = { 
+/**
+ * Unique identifier for this evaluation run.
+ */
+evaluation_run_id: string, 
+/**
+ * Number of datapoints evaluated.
+ */
+num_datapoints: number, 
+/**
+ * Number of successful evaluations.
+ */
+num_successes: number, 
+/**
+ * Number of errors.
+ */
+num_errors: number, 
+/**
+ * Per-evaluator statistics.
+ */
+stats: { [key in string]: EvaluatorStats }, 
+/**
+ * Per-datapoint results (only populated if `include_datapoint_results` was true).
+ */
+datapoint_results?: Array<DatapointResult> | null, };

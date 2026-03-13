@@ -4,9 +4,8 @@ import type { FunctionInferenceCount } from "./FunctionInferenceCount";
 /**
  * Response containing all functions with their inference counts
  */
-export type ListFunctionsWithInferenceCountResponse = {
-  /**
-   * List of functions with their inference counts, ordered by most recent inference
-   */
-  functions: Array<FunctionInferenceCount>;
-};
+export type ListFunctionsWithInferenceCountResponse = { 
+/**
+ * List of functions with their inference counts, ordered by most recent inference
+ */
+functions: Array<FunctionInferenceCount>, };

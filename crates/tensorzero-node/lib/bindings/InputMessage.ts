@@ -7,4 +7,4 @@ import type { Role } from "./Role";
  * prior to any processing into LLM representations below.
  * `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
  */
-export type InputMessage = { role: Role; content: Array<InputMessageContent> };
+export type InputMessage = { role: Role, content: Array<InputMessageContent>, };

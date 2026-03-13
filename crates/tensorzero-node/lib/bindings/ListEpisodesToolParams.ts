@@ -4,26 +4,25 @@ import type { InferenceFilter } from "./InferenceFilter";
 /**
  * Parameters for the list_episodes tool (visible to LLM).
  */
-export type ListEpisodesToolParams = {
-  /**
-   * Maximum number of episodes to return (max 100).
-   */
-  limit: number;
-  /**
-   * Return episodes before this episode_id (for pagination).
-   */
-  before: string | null;
-  /**
-   * Return episodes after this episode_id (for pagination).
-   */
-  after: string | null;
-  /**
-   * Filter to episodes containing inferences for this function.
-   */
-  function_name: string | null;
-  /**
-   * Filter to episodes containing inferences matching these criteria.
-   * Supports boolean_metric, float_metric, tag, time, and logical combinators.
-   */
-  filters: InferenceFilter | null;
-};
+export type ListEpisodesToolParams = { 
+/**
+ * Maximum number of episodes to return (max 100).
+ */
+limit: number, 
+/**
+ * Return episodes before this episode_id (for pagination).
+ */
+before: string | null, 
+/**
+ * Return episodes after this episode_id (for pagination).
+ */
+after: string | null, 
+/**
+ * Filter to episodes containing inferences for this function.
+ */
+function_name: string | null, 
+/**
+ * Filter to episodes containing inferences matching these criteria.
+ * Supports boolean_metric, float_metric, tag, time, and logical combinators.
+ */
+filters: InferenceFilter | null, };

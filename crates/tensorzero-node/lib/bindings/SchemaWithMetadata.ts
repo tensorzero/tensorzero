@@ -6,7 +6,4 @@ import type { JSONSchema } from "./JSONSchema";
  * (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
  * This is used to determine whether to show a "Legacy" badge in the UI.
  */
-export type SchemaWithMetadata = {
-  schema: JSONSchema;
-  legacy_definition: boolean;
-};
+export type SchemaWithMetadata = { schema: JSONSchema, legacy_definition: boolean, };

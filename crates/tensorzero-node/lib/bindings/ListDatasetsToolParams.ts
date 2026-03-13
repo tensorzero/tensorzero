@@ -3,18 +3,17 @@
 /**
  * Parameters for the list_datasets tool (visible to LLM).
  */
-export type ListDatasetsToolParams = {
-  /**
-   * Optional function name to filter datasets by.
-   * If provided, only datasets with datapoints for this function will be returned.
-   */
-  function_name?: string;
-  /**
-   * The maximum number of datasets to return.
-   */
-  limit?: number;
-  /**
-   * The number of datasets to skip before starting to return results.
-   */
-  offset?: number;
-};
+export type ListDatasetsToolParams = { 
+/**
+ * Optional function name to filter datasets by.
+ * If provided, only datasets with datapoints for this function will be returned.
+ */
+function_name?: string, 
+/**
+ * The maximum number of datasets to return.
+ */
+limit?: number, 
+/**
+ * The number of datasets to skip before starting to return results.
+ */
+offset?: number, };

@@ -4,9 +4,8 @@ import type { VariantThroughput } from "./VariantThroughput";
 /**
  * Response containing function throughput data grouped by variant and time period
  */
-export type GetFunctionThroughputByVariantResponse = {
-  /**
-   * Throughput data for each (period, variant) combination
-   */
-  throughput: Array<VariantThroughput>;
-};
+export type GetFunctionThroughputByVariantResponse = { 
+/**
+ * Throughput data for each (period, variant) combination
+ */
+throughput: Array<VariantThroughput>, };

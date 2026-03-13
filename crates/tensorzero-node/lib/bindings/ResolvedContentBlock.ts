@@ -10,10 +10,4 @@ import type { Unknown } from "./Unknown";
  * Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
  * As a result, it can implement both `Serialize` and `Deserialize`
  */
-export type ResolvedContentBlock =
-  | ({ type: "text" } & Text)
-  | ({ type: "tool_call" } & ToolCall)
-  | ({ type: "tool_result" } & ToolResult)
-  | ({ type: "file" } & ObjectStorageFile)
-  | ({ type: "thought" } & Thought)
-  | ({ type: "unknown" } & Unknown);
+export type ResolvedContentBlock = { "type": "text" } & Text | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "file" } & ObjectStorageFile | { "type": "thought" } & Thought | { "type": "unknown" } & Unknown;

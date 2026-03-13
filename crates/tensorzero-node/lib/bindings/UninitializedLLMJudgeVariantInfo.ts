@@ -6,20 +6,4 @@ import type { UninitializedLLMJudgeChatCompletionVariantConfig } from "./Uniniti
 import type { UninitializedLLMJudgeDiclVariantConfig } from "./UninitializedLLMJudgeDiclVariantConfig";
 import type { UninitializedLLMJudgeMixtureOfNVariantConfig } from "./UninitializedLLMJudgeMixtureOfNVariantConfig";
 
-export type UninitializedLLMJudgeVariantInfo = { timeouts?: TimeoutsConfig } & (
-  | ({
-      type: "chat_completion";
-    } & UninitializedLLMJudgeChatCompletionVariantConfig)
-  | ({
-      type: "experimental_best_of_n_sampling";
-    } & UninitializedLLMJudgeBestOfNVariantConfig)
-  | ({
-      type: "experimental_mixture_of_n";
-    } & UninitializedLLMJudgeMixtureOfNVariantConfig)
-  | ({
-      type: "experimental_dynamic_in_context_learning";
-    } & UninitializedLLMJudgeDiclVariantConfig)
-  | ({
-      type: "experimental_chain_of_thought";
-    } & UninitializedLLMJudgeChainOfThoughtVariantConfig)
-);
+export type UninitializedLLMJudgeVariantInfo = { timeouts?: TimeoutsConfig, } & ({ "type": "chat_completion" } & UninitializedLLMJudgeChatCompletionVariantConfig | { "type": "experimental_best_of_n_sampling" } & UninitializedLLMJudgeBestOfNVariantConfig | { "type": "experimental_mixture_of_n" } & UninitializedLLMJudgeMixtureOfNVariantConfig | { "type": "experimental_dynamic_in_context_learning" } & UninitializedLLMJudgeDiclVariantConfig | { "type": "experimental_chain_of_thought" } & UninitializedLLMJudgeChainOfThoughtVariantConfig);

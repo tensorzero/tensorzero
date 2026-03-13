@@ -3,4 +3,4 @@
 /**
  * Response containing the count of episodes for a workflow evaluation run.
  */
-export type CountWorkflowEvaluationRunEpisodesResponse = { count: number };
+export type CountWorkflowEvaluationRunEpisodesResponse = { count: number, };
