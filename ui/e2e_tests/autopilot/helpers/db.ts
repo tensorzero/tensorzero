@@ -40,13 +40,23 @@ export function insertEvent(
     SELECT '${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}', workspace_lock.monotonic_message_id
     FROM workspace_lock`;
   const sqlOld = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
+  let useOld = false;
   try {
-    execSync(`${PSQL_PREFIX} -q`, {
+    const result = execSync(`${PSQL_PREFIX}`, {
       input: sqlNew,
       timeout: 5000,
+      encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
+    // psql prints "INSERT 0 N" where N is the number of rows inserted.
+    // If the CTE matched zero workspace rows, N will be 0 and the event was silently not inserted.
+    if (!result.includes("INSERT 0 1")) {
+      useOld = true;
+    }
   } catch {
+    useOld = true;
+  }
+  if (useOld) {
     execSync(`${PSQL_PREFIX} -q`, {
       input: sqlOld,
       timeout: 5000,
