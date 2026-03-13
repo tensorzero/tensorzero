@@ -66,8 +66,8 @@ pub use visitor::{ToolNameCollector, ToolVisitor};
 ///
 /// Returns an error if visiting any tool fails (e.g., lock poisoning).
 pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
-    let collector = ToolNameCollector::new();
-    for_each_tool(&collector).await?;
+    let mut collector = ToolNameCollector::new();
+    for_each_tool(&mut collector).await?;
     Ok(collector.into_names())
 }
 
@@ -113,24 +113,27 @@ pub fn default_whitelisted_tool_names() -> HashSet<String> {
 /// Register tools with their `execute()` implementations:
 ///
 /// ```ignore
-/// struct LocalVisitor<'a>(&'a ToolExecutor);
+/// struct BuilderVisitor<'a>(&'a mut ToolExecutorBuilder);
 ///
 /// #[async_trait]
-/// impl ToolVisitor for LocalVisitor<'_> {
+/// impl ToolVisitor for BuilderVisitor<'_> {
 ///     type Error = ToolError;
 ///
-///     async fn visit_task_tool<T: TaskTool>(&self, tool: T) -> Result<(), ToolError> {
-///         self.0.register_task_tool_instance(tool).await?;
+///     async fn visit_task_tool<T: TaskTool>(&mut self, tool: T) -> Result<(), ToolError> {
+///         self.0.push_task_tool_instance(tool)?;
 ///         Ok(())
 ///     }
 ///
-///     async fn visit_simple_tool<T: SimpleTool + Default>(&self) -> Result<(), ToolError> {
-///         self.0.register_simple_tool::<T>().await?;
+///     async fn visit_simple_tool<T: SimpleTool + Default>(&mut self) -> Result<(), ToolError> {
+///         self.0.push_simple_tool_instance(T::default())?;
 ///         Ok(())
 ///     }
 /// }
 ///
-/// for_each_tool(&LocalVisitor(&executor)).await?;
+/// let mut builder = ToolExecutor::builder(());
+/// let mut visitor = BuilderVisitor(&mut builder);
+/// for_each_tool(&mut visitor).await?;
+/// let executor = builder.build().await?;
 /// ```
 ///
 /// # Remote Execution
@@ -161,7 +164,7 @@ pub fn default_whitelisted_tool_names() -> HashSet<String> {
 /// # Errors
 ///
 /// Returns an error if any tool visit fails.
-pub async fn for_each_tool<V: ToolVisitor>(visitor: &V) -> Result<(), V::Error> {
+pub async fn for_each_tool<V: ToolVisitor>(visitor: &mut V) -> Result<(), V::Error> {
     // Production tools
     // ----------------
 
