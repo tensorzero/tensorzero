@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -230,7 +230,7 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 impl GatewayHandle {
     pub async fn new(
         config: UnwrittenConfig,
-        available_tools: HashSet<String>,
+        available_tools: HashMap<String, String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
@@ -255,7 +255,7 @@ impl GatewayHandle {
         postgres_url: Option<String>,
         valkey_url: Option<String>,
         valkey_cache_url: Option<String>,
-        available_tools: HashSet<String>,
+        available_tools: HashMap<String, String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
@@ -352,7 +352,7 @@ impl GatewayHandle {
         valkey_cache_connection_info: ValkeyConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
-        available_tools: HashSet<String>,
+        available_tools: HashMap<String, String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
         let primary_datastore = PrimaryDatastore::resolve(
@@ -429,7 +429,7 @@ impl GatewayHandle {
         // Validate that all whitelisted tool names exist in available_tools
         let unknown_whitelist_tools: Vec<&str> = tool_whitelist
             .iter()
-            .filter(|name| !available_tools.contains(name.as_str()))
+            .filter(|name| !available_tools.contains_key(name.as_str()))
             .map(|s| s.as_str())
             .collect();
         if !unknown_whitelist_tools.is_empty() {
@@ -822,7 +822,7 @@ pub async fn setup_valkey_cache(
 async fn setup_autopilot_client(
     postgres_connection_info: &PostgresConnectionInfo,
     deployment_id: Option<&String>,
-    available_tools: HashSet<String>,
+    available_tools: HashMap<String, String>,
     tool_whitelist: HashSet<String>,
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
@@ -991,7 +991,7 @@ pub async fn start_openai_compatible_gateway(
         postgres_url,
         valkey_url,
         None, // Embedded gateways use the same Valkey instance for rate limiting and caching
-        HashSet::new(), // available_tools
+        HashMap::new(), // available_tools
         HashSet::new(), // tool_whitelist
     ))
     .await?;
@@ -1355,7 +1355,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await;
@@ -1391,7 +1391,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await;
@@ -1425,7 +1425,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await
@@ -1453,7 +1453,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await
@@ -1484,7 +1484,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(), // available_tools
+            HashMap::new(), // available_tools
             HashSet::new(), // tool_whitelist
         )
         .await
@@ -1512,7 +1512,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await;
@@ -1546,7 +1546,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await
@@ -1574,7 +1574,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await
@@ -1669,7 +1669,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await;
@@ -1701,7 +1701,7 @@ mod tests {
             ValkeyConnectionInfo::Disabled,
             http_client,
             None,
-            HashSet::new(),
+            HashMap::new(),
             HashSet::new(),
         )
         .await

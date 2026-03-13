@@ -1,6 +1,6 @@
 //! Autopilot API client implementation.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,7 +62,7 @@ pub struct AutopilotClientBuilder {
     spawn_queue_name: String,
     tool_call_cache_capacity: u64,
     tool_call_cache_ttl: Duration,
-    available_tools: Option<HashSet<String>>,
+    available_tools: Option<HashMap<String, String>>,
     tool_whitelist: Option<HashSet<String>>,
     deployment_id: Option<String>,
     tensorzero_version: Option<String>,
@@ -157,8 +157,10 @@ impl AutopilotClientBuilder {
     /// Sets the set of available tool names for filtering unknown tool calls.
     ///
     /// This is a required field. When tool calls are received for tools not in
-    /// this set, they will be automatically rejected with a `NotAvailable` status.
-    pub fn available_tools(mut self, tools: HashSet<String>) -> Self {
+    /// this map, they will be automatically rejected with a `NotAvailable` status.
+    ///
+    /// Keys are LLM-visible names, values are registry (dispatch) names.
+    pub fn available_tools(mut self, tools: HashMap<String, String>) -> Self {
         self.available_tools = Some(tools);
         self
     }
@@ -270,8 +272,9 @@ pub struct AutopilotClient {
     api_key: SecretString,
     spawn_client: Arc<SpawnClient>,
     tool_call_cache: Cache<Uuid, EventPayloadToolCall>,
-    /// Set of available tool names for filtering unknown tool calls.
-    available_tools: Arc<HashSet<String>>,
+    /// Mapping from LLM-visible tool name to registry (dispatch) name.
+    /// Used for filtering unknown tool calls and resolving names for dispatch.
+    available_tools: Arc<HashMap<String, String>>,
     /// Set of tool names that are automatically approved without manual intervention.
     pub tool_whitelist: Arc<HashSet<String>>,
     /// The deployment ID used for creating events (e.g. tool call authorizations).
@@ -313,7 +316,7 @@ impl AutopilotClient {
 
     /// Check if a tool call is for an unknown tool.
     fn is_unknown_tool(&self, tool_call: &EventPayloadToolCall) -> bool {
-        !self.available_tools.contains(&tool_call.name)
+        !self.available_tools.contains_key(&tool_call.name)
     }
 
     /// Check if an event should be filtered from responses.
@@ -321,14 +324,14 @@ impl AutopilotClient {
     /// Returns `true` for:
     /// - `ToolCallAuthorization` events with `NotAvailable` status
     /// - `ToolCall` events for unknown tools (not in `available_tools`)
-    fn should_filter_event(event: &Event, available_tools: &HashSet<String>) -> bool {
+    fn should_filter_event(event: &Event, available_tools: &HashMap<String, String>) -> bool {
         match &event.payload {
             EventPayload::ToolCallAuthorization(auth)
                 if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable) =>
             {
                 true
             }
-            EventPayload::ToolCall(tool_call) if !available_tools.contains(&tool_call.name) => {
+            EventPayload::ToolCall(tool_call) if !available_tools.contains_key(&tool_call.name) => {
                 tracing::warn!(
                     "Ignoring autopilot tool call of unknown tool `{}`",
                     tool_call.name
@@ -380,15 +383,22 @@ impl AutopilotClient {
             }
         };
 
-        let tool_name = autopilot_tool_call.name.clone();
+        let llm_name = &autopilot_tool_call.name;
         let llm_params = autopilot_tool_call.arguments.clone();
+
+        // Resolve LLM-visible name to registry (dispatch) name
+        let registry_name = self.available_tools.get(llm_name).ok_or_else(|| {
+            AutopilotError::Internal(format!(
+                "Tool `{llm_name}` not found in available tools mapping"
+            ))
+        })?;
 
         // Use the side_info from the ToolCall event (propagated from caller)
 
         let episode_id = Uuid::now_v7();
         self.spawn_client
             .spawn_tool_by_name(
-                &tool_name,
+                registry_name,
                 llm_params,
                 serde_json::to_value(autopilot_tool_call.side_info)?,
                 episode_id,
@@ -881,7 +891,7 @@ impl AutopilotClient {
                                         cache.insert(update.event.id, tool_call.clone());
 
                                         // Reject unknown tool calls
-                                        if !available_tools.contains(&tool_call.name)
+                                        if !available_tools.contains_key(&tool_call.name)
                                             && let Err(e) =
                                                 reject_missing_tool(&spawn_client, tool_call).await
                                         {
@@ -1010,7 +1020,7 @@ impl AutopilotClient {
                                         cache.insert(update.event.id, tool_call.clone());
 
                                         // Reject unknown tool calls
-                                        if !available_tools.contains(&tool_call.name)
+                                        if !available_tools.contains_key(&tool_call.name)
                                             && let Err(e) =
                                                 reject_missing_tool(&spawn_client, tool_call).await
                                         {
@@ -1214,27 +1224,27 @@ mod tests {
     use super::*;
     #[test]
     fn test_is_unknown_tool_with_known_tool() {
-        let mut tools = HashSet::new();
-        tools.insert("inference".to_string());
-        tools.insert("feedback".to_string());
-        let available_tools: Arc<HashSet<String>> = Arc::new(tools);
+        let mut tools = HashMap::new();
+        tools.insert("inference".to_string(), "inference".to_string());
+        tools.insert("feedback".to_string(), "feedback".to_string());
+        let available_tools: Arc<HashMap<String, String>> = Arc::new(tools);
 
         let tool_name = "inference".to_string();
 
-        let is_unknown = !available_tools.contains(&tool_name);
+        let is_unknown = !available_tools.contains_key(&tool_name);
         assert!(!is_unknown, "Known tool should not be marked as unknown");
     }
 
     #[test]
     fn test_is_unknown_tool_with_unknown_tool() {
-        let mut tools = HashSet::new();
-        tools.insert("inference".to_string());
-        tools.insert("feedback".to_string());
-        let available_tools: Arc<HashSet<String>> = Arc::new(tools);
+        let mut tools = HashMap::new();
+        tools.insert("inference".to_string(), "inference".to_string());
+        tools.insert("feedback".to_string(), "feedback".to_string());
+        let available_tools: Arc<HashMap<String, String>> = Arc::new(tools);
 
         let tool_name = "fake_nonexistent_tool".to_string();
 
-        let is_unknown = !available_tools.contains(&tool_name);
+        let is_unknown = !available_tools.contains_key(&tool_name);
         assert!(is_unknown, "Unknown tool should be marked as unknown");
     }
 
@@ -1274,7 +1284,7 @@ mod tests {
             AutopilotClient::builder()
                 .api_key("test_key")
                 .spawn_database_url("postgres://localhost/test")
-                .available_tools(HashSet::new())
+                .available_tools(HashMap::new())
                 .tensorzero_version("0.0.0".to_string())
                 .build(),
         );
@@ -1291,7 +1301,7 @@ mod tests {
             AutopilotClient::builder()
                 .api_key("test_key")
                 .spawn_database_url("postgres://localhost/test")
-                .available_tools(HashSet::new())
+                .available_tools(HashMap::new())
                 .deployment_id("test_deployment".to_string())
                 .build(),
         );

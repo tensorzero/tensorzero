@@ -4,7 +4,7 @@
 //! different registration strategies while ensuring the same set of tools is
 //! processed regardless of the visitor implementation.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
@@ -64,20 +64,31 @@ pub trait ToolVisitor {
 ///
 /// This is used by `collect_tool_names` to derive the set of available
 /// tool names from the single source of truth in `for_each_tool`.
+///
+/// Collects both:
+/// - `names`: set of registry names (for backward compat)
+/// - `llm_name_to_name`: mapping from LLM-visible name to registry name
 pub struct ToolNameCollector {
     names: HashSet<String>,
+    llm_name_to_name: HashMap<String, String>,
 }
 
 impl ToolNameCollector {
     pub fn new() -> Self {
         Self {
             names: HashSet::new(),
+            llm_name_to_name: HashMap::new(),
         }
     }
 
     /// Consume the collector and return the collected tool names.
     pub fn into_names(self) -> HashSet<String> {
         self.names
+    }
+
+    /// Consume the collector and return the `llm_name → registry name` mapping.
+    pub fn into_llm_name_mapping(self) -> HashMap<String, String> {
+        self.llm_name_to_name
     }
 }
 
@@ -95,7 +106,10 @@ impl ToolVisitor for ToolNameCollector {
     where
         T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
-        self.names.insert(tool.name().to_string());
+        let name = tool.name().to_string();
+        let llm_name = tool.llm_name().to_string();
+        self.names.insert(name.clone());
+        self.llm_name_to_name.insert(llm_name, name);
         Ok(())
     }
 
@@ -103,7 +117,11 @@ impl ToolVisitor for ToolNameCollector {
     where
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
-        self.names.insert(T::default().name().to_string());
+        let tool = T::default();
+        let name = tool.name().to_string();
+        let llm_name = tool.llm_name().to_string();
+        self.names.insert(name.clone());
+        self.llm_name_to_name.insert(llm_name, name);
         Ok(())
     }
 

@@ -256,10 +256,15 @@ impl<T: SimpleTool> ErasedSimpleTool for T {
 /// which is important for LLM request/prompt caching
 /// (the tools get passed to the LLM input)
 pub struct ToolRegistry {
-    /// All tools (for metadata queries).
+    /// All tools (for metadata queries), keyed by registry `name()`.
     tools: IndexMap<String, Arc<dyn ErasedTool>>,
-    /// `SimpleTools` specifically (for step execution).
+    /// `SimpleTools` specifically (for step execution), keyed by registry `name()`.
     simple_tools: IndexMap<String, Arc<dyn ErasedSimpleTool>>,
+    /// Reverse index: `llm_name()` → list of registry `name()`s.
+    ///
+    /// Multiple tools may share the same `llm_name` (e.g., versioned tools),
+    /// though only one can be sent to the LLM at a time.
+    llm_name_to_names: IndexMap<String, Vec<String>>,
 }
 
 impl ToolRegistry {
@@ -268,6 +273,7 @@ impl ToolRegistry {
         Self {
             tools: IndexMap::new(),
             simple_tools: IndexMap::new(),
+            llm_name_to_names: IndexMap::new(),
         }
     }
 
@@ -289,8 +295,14 @@ impl ToolRegistry {
             .into());
         }
 
+        let name = name.into_owned();
+        let llm_name = tool.llm_name().into_owned();
+        self.llm_name_to_names
+            .entry(llm_name)
+            .or_default()
+            .push(name.clone());
         let wrapper = Arc::new(ErasedTaskToolWrapper::new(tool.clone()));
-        self.tools.insert(name.into_owned(), wrapper);
+        self.tools.insert(name, wrapper);
         Ok(tool)
     }
 
@@ -313,11 +325,36 @@ impl ToolRegistry {
         }
 
         let name = name.into_owned();
+        let llm_name = tool.llm_name().into_owned();
+        self.llm_name_to_names
+            .entry(llm_name)
+            .or_default()
+            .push(name.clone());
         self.tools
             .insert(name.clone(), tool.clone() as Arc<dyn ErasedTool>);
         self.simple_tools
             .insert(name, tool.clone() as Arc<dyn ErasedSimpleTool>);
         Ok(tool)
+    }
+
+    /// Resolve an LLM-visible name to a registered tool name.
+    ///
+    /// Tries direct registry name lookup first (backwards compatible for when
+    /// `llm_name == name`), then falls back to the `llm_name` reverse index.
+    ///
+    /// Returns `None` if the name is not found or if multiple tools share
+    /// the same `llm_name` (ambiguous — use an active-tool set to disambiguate).
+    pub fn resolve_llm_name(&self, llm_name: &str) -> Option<&str> {
+        // Fast path: llm_name is already the registered name
+        if let Some((key, _)) = self.tools.get_key_value(llm_name) {
+            return Some(key.as_str());
+        }
+        // Reverse lookup
+        let candidates = self.llm_name_to_names.get(llm_name)?;
+        match candidates.as_slice() {
+            [single] => Some(single.as_str()),
+            _ => None, // ambiguous: multiple tools share this llm_name
+        }
     }
 
     /// Get a tool by name.
