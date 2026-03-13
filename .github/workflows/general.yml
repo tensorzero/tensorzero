@@ -1396,11 +1396,10 @@ jobs:
     secrets: inherit
 
   autopilot-e2e:
-    needs: [detect-changes]
     permissions:
       contents: read
     if: needs.detect-changes.outputs.code == 'true' && github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container, build-ui-container]
+    needs: [detect-changes, build-gateway-e2e-container, build-ui-container]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
