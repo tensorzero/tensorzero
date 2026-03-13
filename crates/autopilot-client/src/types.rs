@@ -265,7 +265,7 @@ pub enum CreateEventPayload {
     ToolCallAuthorization(CreateEventPayloadToolCallAuthorization),
     ToolResult(CreateEventPayloadToolResult),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
-    AutoEvalExampleLabelingAnswers(CreateEventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
 }
 
 /// Event payload as seen by gateway consumers.
@@ -862,19 +862,7 @@ pub enum AutoEvalContentBlock {
     },
 }
 
-/// Minimal input payload for submitting autoeval example labeling answers.
-/// The server enriches this with context from the original labeling event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
-    /// Map from question UUID to response.
-    pub responses: HashMap<Uuid, UserQuestionAnswer>,
-    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-    pub auto_eval_example_labeling_event_id: Uuid,
-}
-
-/// Self-contained read-only payload for labeled autoeval examples.
+/// Self-contained payload for labeled autoeval examples.
 /// Includes the full context blocks so the UI can render everything
 /// without looking up the original labeling event.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

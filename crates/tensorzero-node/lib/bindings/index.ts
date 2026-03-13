@@ -63,7 +63,6 @@ export * from "./CreateDatapointsResponse";
 export * from "./CreateDatapointsToolParams";
 export * from "./CreateEventGatewayRequest";
 export * from "./CreateEventPayload";
-export * from "./CreateEventPayloadAutoEvalExampleLabelingAnswers";
 export * from "./CreateEventPayloadToolCallAuthorization";
 export * from "./CreateEventPayloadToolResult";
 export * from "./CreateEventResponse";
