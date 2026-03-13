@@ -125,8 +125,8 @@
             "pages": [
               "deployment/tensorzero-gateway",
               "deployment/tensorzero-ui",
-              "deployment/clickhouse",
               "deployment/postgres",
+              "deployment/clickhouse",
               "deployment/valkey-redis",
               "deployment/tensorzero-autopilot",
               "deployment/upgrade-tensorzero",
