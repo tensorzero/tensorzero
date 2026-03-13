@@ -1312,9 +1312,7 @@ mod tests {
         assert_eq!(
             result.tool_config,
             Some(Cow::Owned(ProviderToolCallConfig::from(
-                &create_dynamic_implicit_tool_config(
-                    dynamic_output_schema_value.clone(),
-                )
+                &create_dynamic_implicit_tool_config(dynamic_output_schema_value.clone(),)
             )))
         );
         assert_eq!(result.output_schema, Some(&dynamic_output_schema_value));

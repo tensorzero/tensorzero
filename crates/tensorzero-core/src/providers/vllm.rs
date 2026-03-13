@@ -617,8 +617,7 @@ mod tests {
                 OpenAIToolChoiceString, OpenAIUsage,
             },
             test_helpers::{
-                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL,
-                WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
+                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
             },
         },
     };
