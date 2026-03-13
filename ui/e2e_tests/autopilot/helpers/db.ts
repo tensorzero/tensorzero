@@ -26,12 +26,33 @@ export function insertEvent(
   payload: object,
 ): void {
   const payloadJson = JSON.stringify(payload);
-  const sql = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
-  execSync(`${PSQL_PREFIX} -q`, {
-    input: sql,
-    timeout: 5000,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  // Use the monotonic_message_id insert (new schema) with fallback to the old schema.
+  // The new schema requires allocating a monotonic_message_id from the workspace counter.
+  const sqlNew = `
+    WITH workspace_lock AS (
+      UPDATE autopilot.workspace w
+      SET next_stream_id = w.next_stream_id + 1
+      FROM autopilot.sessions s
+      WHERE s.id = '${sessionId}' AND w.workspace_id = s.workspace_id
+      RETURNING w.next_stream_id - 1 AS monotonic_message_id
+    )
+    INSERT INTO autopilot.events (id, payload, session_id, monotonic_message_id)
+    SELECT '${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}', workspace_lock.monotonic_message_id
+    FROM workspace_lock`;
+  const sqlOld = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
+  try {
+    execSync(`${PSQL_PREFIX} -q`, {
+      input: sqlNew,
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    execSync(`${PSQL_PREFIX} -q`, {
+      input: sqlOld,
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
 }
 
 /**
