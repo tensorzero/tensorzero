@@ -74,8 +74,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command:
-      ["--run-postgres-migrations", "--enable-optimization-postgres-migrations"]
+    command: ["--run-postgres-migrations"]
 
 volumes:
   postgres-data:
