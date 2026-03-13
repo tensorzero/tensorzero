@@ -127,7 +127,7 @@ model = "{MODEL}"
 json_mode = "strict"
 """)
 
-    print("The DICL examples have been stored in ClickHouse.")
+    print("The DICL examples have been stored in Postgres.")
     print("At inference time, the k most similar examples will be retrieved")
     print("and included as context for in-context learning.")
 

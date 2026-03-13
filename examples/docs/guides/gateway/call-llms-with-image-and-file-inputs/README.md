@@ -10,7 +10,7 @@ This directory contains the code for the **[Call LLMs with image & file inputs](
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Launch the TensorZero Gateway, ClickHouse, and MinIO (a local S3-compatible object storage service):
+2. Launch the TensorZero Gateway, Postgres, and MinIO (a local S3-compatible object storage service):
 
 ```bash
 docker compose up
