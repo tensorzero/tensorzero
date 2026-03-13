@@ -6,19 +6,29 @@
 //! - Isolated serde derive expansion
 //! - Tighter incremental compilation boundaries
 
+pub mod extra_body;
+pub mod extra_headers;
+pub(crate) mod serde_helpers;
+
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+use derive_builder::Builder;
 use futures::Stream;
 use futures::future::Shared;
 use futures::stream::Peekable;
 use mime::MediaType;
 use rust_decimal::Decimal;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
-use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 use tensorzero_error::Error;
 use tensorzero_types::inference_params::JsonMode;
 use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
@@ -590,5 +600,406 @@ impl From<XAIUsage> for Usage {
             output_tokens,
             cost: None,
         }
+    }
+}
+
+// =============================================================================
+// BatchStatus, StartBatchProviderInferenceResponse, PollBatchInferenceResponse,
+// ProviderBatchInferenceOutput, ProviderBatchInferenceResponse
+// =============================================================================
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum BatchStatus {
+    Pending,
+    Completed,
+    Failed,
+}
+
+/// Returned from start_batch_inference from an InferenceProvider
+pub struct StartBatchProviderInferenceResponse {
+    pub batch_id: Uuid,
+    pub raw_requests: Vec<String>,
+    pub batch_params: Value,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub status: BatchStatus,
+    pub errors: Vec<Value>,
+}
+
+#[derive(Debug)]
+pub enum PollBatchInferenceResponse {
+    Pending {
+        raw_request: String,
+        raw_response: String,
+    },
+    Completed(ProviderBatchInferenceResponse),
+    Failed {
+        raw_request: String,
+        raw_response: String,
+    },
+}
+
+#[derive(Debug)]
+pub struct ProviderBatchInferenceOutput {
+    pub id: Uuid,
+    pub output: Vec<ContentBlockOutput>,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub finish_reason: Option<FinishReason>,
+}
+
+#[derive(Debug)]
+pub struct ProviderBatchInferenceResponse {
+    pub raw_request: String,
+    pub raw_response: String,
+    pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
+}
+
+// =============================================================================
+// Tool types (no core deps)
+// =============================================================================
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[schemars(title = "ProviderToolScopeModelProvider")]
+#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+pub struct ProviderToolScopeModelProvider {
+    pub model_name: String,
+    #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
+    pub provider_name: Option<String>,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[serde(untagged)]
+#[export_schema]
+#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+pub enum ProviderToolScope {
+    #[default]
+    Unscoped,
+    ModelProvider(ProviderToolScopeModelProvider),
+}
+
+impl ProviderToolScope {
+    pub fn matches(&self, scope_model_name: &str, scope_provider_name: &str) -> bool {
+        match self {
+            ProviderToolScope::Unscoped => true,
+            ProviderToolScope::ModelProvider(mp) => {
+                if scope_model_name != mp.model_name {
+                    return false;
+                }
+                match &mp.provider_name {
+                    Some(pn) => scope_provider_name == pn,
+                    None => true, // If provider_name is None, match any provider for this model
+                }
+            }
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ProviderTool {
+    #[serde(default)]
+    pub scope: ProviderToolScope,
+    pub tool: Value,
+}
+
+impl std::fmt::Display for ProviderTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct OpenAICustomTool {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<OpenAICustomToolFormat>,
+}
+
+impl std::fmt::Display for OpenAICustomTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OpenAICustomTool {
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    #[getter]
+    pub fn get_format<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Option<pyo3::Bound<'py, pyo3::PyAny>>> {
+        match &self.format {
+            Some(format) => {
+                let json_str = serde_json::to_string(format).map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Failed to serialize format: {e:?}"
+                    ))
+                })?;
+                let json_mod = py.import("json")?;
+                let result = json_mod.call_method1("loads", (json_str,))?;
+                Ok(Some(result))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("OpenAICustomTool(name='{}')", self.name)
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAICustomToolFormat {
+    #[schemars(title = "OpenAICustomToolFormatText")]
+    Text,
+    #[schemars(title = "OpenAICustomToolFormatGrammar")]
+    Grammar { grammar: OpenAIGrammarDefinition },
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct OpenAIGrammarDefinition {
+    pub syntax: OpenAIGrammarSyntax,
+    pub definition: String,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIGrammarSyntax {
+    Lark,
+    Regex,
+}
+
+/// Records / lists the tools that were allowed in the request.
+/// Also lists how they were set (default, dynamically set).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AllowedTools {
+    pub tools: Vec<String>,
+    pub choice: AllowedToolsChoice,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum AllowedToolsChoice {
+    /// If `allowed_tools` is not explicitly passed, we set the function tools
+    /// by default and add any dynamic tools
+    #[default]
+    FunctionDefault,
+    /// If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools.
+    /// This is deprecated but we keep it around as it may still be in the database.
+    #[deprecated]
+    DynamicAllowedTools,
+    /// Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
+    Explicit,
+}
+
+impl AllowedTools {
+    pub fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+        #[expect(deprecated)]
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
+                Some(self.tools.into_iter().collect())
+            }
+        }
+    }
+
+    pub fn as_dynamic_allowed_tools(&self) -> Option<Vec<&str>> {
+        #[expect(deprecated)]
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
+                Some(self.tools.iter().map(|s| s.as_str()).collect())
+            }
+        }
+    }
+}
+
+// =============================================================================
+// FunctionToolDef, ProviderToolCallConfig, ToolConfigRef
+// =============================================================================
+
+/// A tool definition as seen by providers — carries the compiled schema value.
+/// This is the provider-facing counterpart of `FunctionToolConfig` in tensorzero-core.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(Deserialize))]
+pub struct FunctionToolDef {
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
+    pub strict: bool,
+}
+
+/// Provider-facing tool call configuration.
+/// This is constructed from `ToolCallConfig` in tensorzero-core before building a `ModelInferenceRequest`.
+/// Note: `ToolCallConfig` in tensorzero-core holds compiled `JSONSchema` objects for server-side
+/// validation; this type holds only what providers need (raw `Value` parameters).
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(Deserialize))]
+pub struct ProviderToolCallConfig {
+    pub tools: Vec<FunctionToolDef>,
+    pub provider_tools: Vec<ProviderTool>,
+    pub openai_custom_tools: Vec<OpenAICustomTool>,
+    pub tool_choice: tensorzero_types::ToolChoice,
+    pub parallel_tool_calls: Option<bool>,
+    pub allowed_tools: AllowedTools,
+}
+
+impl ProviderToolCallConfig {
+    /// Returns an iterator over all function tool defs (no custom tools).
+    /// Returns an error if OpenAI custom tools are present and the provider doesn't support them.
+    pub fn tools_available(
+        &self,
+    ) -> Result<impl Iterator<Item = &FunctionToolDef>, tensorzero_error::Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(tensorzero_error::Error::new(
+                tensorzero_error::ErrorDetails::IncompatibleTool {
+                    message: "OpenAI custom tools are not supported by this provider".to_string(),
+                },
+            ));
+        }
+        Ok(self.tools.iter())
+    }
+
+    /// Like `tools_available` but also applies `AllowedTools::Explicit` filtering.
+    pub fn strict_tools_available(
+        &self,
+    ) -> Result<impl Iterator<Item = &FunctionToolDef>, tensorzero_error::Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(tensorzero_error::Error::new(
+                tensorzero_error::ErrorDetails::IncompatibleTool {
+                    message: "OpenAI custom tools are not supported by this provider".to_string(),
+                },
+            ));
+        }
+        let iter: Box<dyn Iterator<Item = &FunctionToolDef>> = match self.allowed_tools.choice {
+            #[expect(deprecated)]
+            AllowedToolsChoice::FunctionDefault | AllowedToolsChoice::DynamicAllowedTools => {
+                Box::new(self.tools.iter())
+            }
+            AllowedToolsChoice::Explicit => Box::new(
+                self.tools
+                    .iter()
+                    .filter(|t| self.allowed_tools.tools.contains(&t.name)),
+            ),
+        };
+        Ok(iter)
+    }
+
+    pub fn any_tools_available(&self) -> bool {
+        !self.tools.is_empty()
+    }
+
+    pub fn get_function_tool(&self, name: &str) -> Option<&FunctionToolDef> {
+        self.tools.iter().find(|t| t.name == name)
+    }
+
+    pub fn get_scoped_provider_tools(
+        &self,
+        model_name: &str,
+        model_provider_name: &str,
+    ) -> Vec<&ProviderTool> {
+        self.provider_tools
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect()
+    }
+
+    /// Returns an iterator over all tools including OpenAI custom tools.
+    /// Used by the OpenAI provider.
+    pub fn tools_available_with_openai_custom(&self) -> impl Iterator<Item = ToolConfigRef<'_>> {
+        self.tools.iter().map(ToolConfigRef::Function).chain(
+            self.openai_custom_tools
+                .iter()
+                .map(ToolConfigRef::OpenAICustom),
+        )
+    }
+}
+
+/// Reference to either a function tool def or an OpenAI custom tool.
+pub enum ToolConfigRef<'a> {
+    Function(&'a FunctionToolDef),
+    OpenAICustom(&'a OpenAICustomTool),
+}
+
+// =============================================================================
+// ModelInferenceRequest
+// =============================================================================
+
+/// Top-level TensorZero type for an inference request to a particular model.
+/// This should contain all the information required to make a valid inference request
+/// for a provider, except for information about what model to actually request,
+/// and to convert it back to the appropriate response format.
+#[derive(Builder, Clone, Debug, Default, Serialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[builder(setter(into, strip_option), default)]
+pub struct ModelInferenceRequest<'a> {
+    pub inference_id: Uuid,
+    pub messages: Vec<RequestMessage>,
+    pub system: Option<String>,
+    pub tool_config: Option<Cow<'a, ProviderToolCallConfig>>,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub seed: Option<u32>,
+    pub stop_sequences: Option<Cow<'a, [String]>>,
+    pub stream: bool,
+    pub json_mode: ModelInferenceRequestJsonMode,
+    pub function_type: tensorzero_types::FunctionType,
+    pub output_schema: Option<&'a Value>,
+    pub extra_body: extra_body::FullExtraBodyConfig,
+    pub extra_headers: extra_headers::FullExtraHeadersConfig,
+    pub extra_cache_key: Option<String>,
+    #[serde(flatten)]
+    pub inference_params_v2: tensorzero_types::inference_params::ChatCompletionInferenceParamsV2,
+    pub fetch_and_encode_input_files_before_inference: bool,
+}
+
+impl<'a> ModelInferenceRequest<'a> {
+    pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
+        self.stop_sequences.as_ref().map(|cow| match cow {
+            Cow::Borrowed(s) => Cow::Borrowed(*s),
+            Cow::Owned(s) => Cow::Borrowed(s.as_slice()),
+        })
     }
 }

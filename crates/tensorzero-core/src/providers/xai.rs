@@ -906,7 +906,7 @@ mod tests {
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
     use tensorzero_types_providers::xai::XAIUsage;
 
     #[tokio::test]
@@ -926,7 +926,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -976,7 +976,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: Default::default(),

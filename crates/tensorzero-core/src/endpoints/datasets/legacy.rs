@@ -357,11 +357,10 @@ impl Datapoint {
     #[getter]
     pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint
-                .tool_params
-                .provider_tools
-                .clone()
-                .into_bound_py_any(py),
+            Datapoint::Chat(datapoint) => {
+                serialize_to_dict(py, &datapoint.tool_params.provider_tools)
+                    .map(|x| x.into_bound(py))
+            }
             Datapoint::Json(_) => Ok(py.None().into_bound(py)),
         }
     }

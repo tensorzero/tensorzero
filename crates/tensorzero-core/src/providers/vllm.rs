@@ -616,11 +616,15 @@ mod tests {
                 OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
                 OpenAIToolChoiceString, OpenAIUsage,
             },
-            test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            test_helpers::{
+                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL,
+                WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
+            },
         },
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use tensorzero_provider_types::ProviderToolCallConfig;
 
     #[tokio::test]
     async fn test_vllm_request_new() {
@@ -690,7 +694,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: Default::default(),
@@ -936,7 +940,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*MULTI_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -975,6 +979,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -992,7 +997,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

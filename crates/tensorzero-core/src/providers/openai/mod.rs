@@ -64,9 +64,11 @@ use crate::providers::openai::responses::{
     OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
     get_responses_url,
 };
+use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+
 use crate::tool::{
-    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
-    ToolChoice, ToolConfigRef,
+    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice,
+    ToolConfigRef,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -1746,7 +1748,7 @@ pub async fn prepare_openai_messages<'a>(
 ///
 /// This is shared logic across OpenAI-compatible providers (OpenAI, Groq, OpenRouter).
 pub(crate) fn prepare_allowed_tools_constraint<'a>(
-    tool_config: &'a ToolCallConfig,
+    tool_config: &'a ProviderToolCallConfig,
 ) -> Option<AllowedToolsChoice<'a>> {
     // OpenAI-compatible providers don't allow both tool-choice "none" and tool-choice "allowed_tools",
     // since they're both set via the top-level "tool_choice" field.
@@ -2323,6 +2325,19 @@ impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
                 parameters: tool.parameters(),
             },
             strict: tool.strict(),
+        }
+    }
+}
+
+impl<'a> From<&'a FunctionToolDef> for OpenAITool<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
+        OpenAITool::Function {
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
+            },
+            strict: tool.strict,
         }
     }
 }
@@ -3230,7 +3245,8 @@ mod tests {
         PendingObjectStoreFile, RequestMessage,
     };
     use crate::providers::test_helpers::{
-        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+        MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
+        WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
@@ -3456,7 +3472,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -3971,7 +3987,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*MULTI_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -4006,6 +4022,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -4023,7 +4040,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -5463,7 +5480,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5512,7 +5529,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5564,7 +5581,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5593,7 +5610,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5623,7 +5640,7 @@ mod tests {
         // MULTI_TOOL_CONFIG has ToolChoice::Required but no explicit allowed_tools
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5649,7 +5666,7 @@ mod tests {
         // This has ToolChoice::Specific and no explicit allowed_tools
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 
@@ -5680,7 +5697,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
-            tool_config: Some(Cow::Owned(tool_config)),
+            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
             ..Default::default()
         };
 

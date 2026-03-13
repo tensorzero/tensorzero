@@ -895,7 +895,7 @@ mod tests {
                 ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
                 ChatCompletionToolChoice, ChatCompletionToolType,
             },
-            test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL},
         },
     };
 
@@ -962,7 +962,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

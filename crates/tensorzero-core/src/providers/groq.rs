@@ -1482,10 +1482,11 @@ mod tests {
         PendingObjectStoreFile, RequestMessage,
     };
     use crate::providers::test_helpers::{
-        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
+    use tensorzero_provider_types::ProviderToolCallConfig;
     use tensorzero_types_providers::groq::{
         GroqChatChunkChoice, GroqDelta, GroqFunctionCallChunk, GroqResponseFunctionCall,
         GroqResponseMessage, GroqToolCallChunk,
@@ -1666,7 +1667,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -2148,7 +2149,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*MULTI_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -2174,6 +2175,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -2191,7 +2193,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -2222,6 +2224,7 @@ mod tests {
             },
         };
 
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let request = ModelInferenceRequest {
             inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2237,7 +2240,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

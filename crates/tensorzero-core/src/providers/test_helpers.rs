@@ -4,6 +4,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::tool::{FunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice};
 use lazy_static::lazy_static;
 use serde_json::json;
+use tensorzero_provider_types::ProviderToolCallConfig;
 
 lazy_static! {
     /// These are useful for tests which don't need mutable tools.
@@ -57,6 +58,10 @@ lazy_static! {
             vec![],
         )
     };
+    pub static ref WEATHER_PROVIDER_TOOL_CONFIG: ProviderToolCallConfig =
+        ProviderToolCallConfig::from(&*WEATHER_TOOL_CONFIG);
+    pub static ref MULTI_PROVIDER_TOOL_CONFIG: ProviderToolCallConfig =
+        ProviderToolCallConfig::from(&*MULTI_TOOL_CONFIG);
 }
 
 // For use in tests which need a mutable tool config.

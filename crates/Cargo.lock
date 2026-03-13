@@ -7113,9 +7113,12 @@ dependencies = [
 name = "tensorzero-provider-types"
 version = "2026.3.1"
 dependencies = [
+ "derive_builder 0.20.2",
  "futures",
  "mime 0.4.0-a.0",
+ "pyo3",
  "rust_decimal",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -7124,6 +7127,7 @@ dependencies = [
  "tensorzero-error",
  "tensorzero-types",
  "tensorzero-types-providers",
+ "tracing",
  "ts-rs",
  "url",
  "uuid",

@@ -2972,7 +2972,7 @@ mod tests {
     use crate::cache::{CacheEnabledMode, CacheManager};
     use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
-    use crate::tool::ToolCallConfig;
+
     use crate::{
         cache::CacheOptions,
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
@@ -2988,6 +2988,7 @@ mod tests {
         rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
+    use tensorzero_provider_types::ProviderToolCallConfig;
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
@@ -3022,7 +3023,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -3716,7 +3717,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -3855,7 +3856,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

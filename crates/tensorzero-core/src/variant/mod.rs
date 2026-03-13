@@ -45,6 +45,8 @@ use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
 use crate::relay::TensorzeroRelay;
+use tensorzero_provider_types::ProviderToolCallConfig;
+
 use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
@@ -753,12 +755,12 @@ fn prepare_model_inference_request<'request>(
     Ok(match function {
         FunctionConfig::Chat(_) => {
             // For chat functions with `json_mode="tool"`, create a tool config based on the output schema
-            let tool_config = match json_mode {
+            let tool_config: Option<Cow<'_, ProviderToolCallConfig>> = match json_mode {
                 Some(JsonMode::Tool) => {
                     // We know dynamic_output_schema exists because validation already checked this
                     match &inference_config.dynamic_output_schema {
-                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                            schema.value.clone(),
+                        Some(schema) => Some(Cow::Owned(ProviderToolCallConfig::from(
+                            &create_dynamic_implicit_tool_config(schema.value.clone()),
                         ))),
                         None => {
                             return Err(ErrorDetails::InvalidRequest {
@@ -771,7 +773,7 @@ fn prepare_model_inference_request<'request>(
                 _ => inference_config
                     .tool_config
                     .as_ref()
-                    .map(|arc| Cow::Borrowed(arc.as_ref())),
+                    .map(|arc| Cow::Owned(ProviderToolCallConfig::from(arc.as_ref()))),
             };
 
             ModelInferenceRequest {
@@ -813,12 +815,14 @@ fn prepare_model_inference_request<'request>(
             }
         }
         FunctionConfig::Json(json_config) => {
-            let tool_config = match json_mode {
+            let tool_config: Option<Cow<'_, ProviderToolCallConfig>> = match json_mode {
                 Some(JsonMode::Tool) => match &inference_config.dynamic_output_schema {
-                    Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                        schema.value.clone(),
+                    Some(schema) => Some(Cow::Owned(ProviderToolCallConfig::from(
+                        &create_dynamic_implicit_tool_config(schema.value.clone()),
                     ))),
-                    None => Some(Cow::Borrowed(&json_config.json_mode_tool_call_config)),
+                    None => Some(Cow::Owned(ProviderToolCallConfig::from(
+                        &json_config.json_mode_tool_call_config,
+                    ))),
                 },
                 _ => None,
             };
@@ -1127,6 +1131,7 @@ mod tests {
 
         // Define a dummy tool config for testing
         let tool_config = ToolCallConfig::default();
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let tool_config_arc = Arc::new(tool_config.clone());
 
         // Create a sample inference config
@@ -1202,7 +1207,10 @@ mod tests {
 
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.system, system);
-        assert_eq!(result.tool_config, Some(Cow::Borrowed(&tool_config)));
+        assert_eq!(
+            result.tool_config,
+            Some(Cow::Borrowed(&provider_tool_config))
+        );
         assert_eq!(result.temperature, Some(0.7));
         assert_eq!(result.top_p, Some(0.9));
         assert_eq!(result.max_tokens, Some(50));
@@ -1303,8 +1311,10 @@ mod tests {
 
         assert_eq!(
             result.tool_config,
-            Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                dynamic_output_schema_value.clone(),
+            Some(Cow::Owned(ProviderToolCallConfig::from(
+                &create_dynamic_implicit_tool_config(
+                    dynamic_output_schema_value.clone(),
+                )
             )))
         );
         assert_eq!(result.output_schema, Some(&dynamic_output_schema_value));

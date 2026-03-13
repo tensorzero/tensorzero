@@ -6,25 +6,30 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+derive_builder.workspace = true
 futures.workspace = true
 mime.workspace = true
 rust_decimal = { workspace = true }
+schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
+tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 url = { workspace = true, features = ["serde"] }
 uuid.workspace = true
 
+pyo3 = { workspace = true, optional = true }
 ts-rs = { workspace = true, optional = true }
 
 [features]
 default = []
 e2e_tests = []
+pyo3 = ["dep:pyo3"]
 ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings"]
 
 [lints]

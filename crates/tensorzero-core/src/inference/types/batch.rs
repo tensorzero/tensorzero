@@ -11,6 +11,8 @@ use super::{
 use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use tensorzero_provider_types::ProviderToolCallConfig;
+
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -18,7 +20,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     jsonschema_util::JSONSchema,
-    tool::{ToolCallConfig, ToolCallConfigDatabaseInsert, deserialize_optional_tool_info},
+    tool::{ToolCallConfigDatabaseInsert, deserialize_optional_tool_info},
     utils::uuid::validate_tensorzero_uuid,
 };
 
@@ -87,7 +89,7 @@ pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub errors: Vec<Value>,
     pub input_messages: Vec<Vec<RequestMessage>>,
     pub systems: Vec<Option<String>>,
-    pub tool_configs: Vec<Option<Cow<'a, ToolCallConfig>>>,
+    pub tool_configs: Vec<Option<Cow<'a, ProviderToolCallConfig>>>,
     pub inference_params: Vec<InferenceParams>,
     pub output_schemas: Vec<Option<&'a Value>>,
     pub raw_requests: Vec<String>,
@@ -108,7 +110,7 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
     ) -> Self {
         let mut input_messages: Vec<Vec<RequestMessage>> = vec![];
         let mut systems: Vec<Option<String>> = vec![];
-        let mut tool_configs: Vec<Option<Cow<'a, ToolCallConfig>>> = vec![];
+        let mut tool_configs: Vec<Option<Cow<'a, ProviderToolCallConfig>>> = vec![];
         let mut output_schemas: Vec<Option<&'a Value>> = vec![];
         for request in model_inference_requests {
             input_messages.push(request.messages);
