@@ -28,6 +28,8 @@ services:
       start_interval: 1s
       timeout: 1s
     depends_on:
+      postgres:
+        condition: service_healthy
       gateway-run-postgres-migrations:
         condition: service_completed_successfully
 
