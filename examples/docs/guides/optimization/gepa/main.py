@@ -1,15 +1,13 @@
 import asyncio
-import os
-import random
+import json
 
-from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
+from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
+    CreateDatapointRequestJson,
     GEPAConfig,
-    JsonInferenceResponse,
-    ListInferencesRequest,
+    JsonDatapointOutputUpdate,
 )
-from tqdm.asyncio import tqdm
 
 FUNCTION_NAME = "extract_entities"
 EVALUATION_NAME = "extract_entities_eval"
@@ -26,92 +24,57 @@ INITIAL_VARIANTS = ["baseline"]
 # Number of evolution iterations (each iteration evaluates, analyzes, and mutates variants)
 MAX_ITERATIONS = 10
 
+DATASET_NAME = "extract_entities_dataset"
+
 NUM_SAMPLES = 500
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
 
+VAL_FRACTION = 0.5
 
-async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore):
-    async with semaphore:
-        try:
-            response = await t0.inference(
-                function_name="extract_entities",
-                input={
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": datapoint.input,
-                        }
-                    ]
-                },
-                cache_options={"enabled": "on"},
-            )
-            assert isinstance(response, JsonInferenceResponse)
-        except Exception as e:
-            print(f"Error occurred: {e}")
-            return None
 
-        # Get the predicted output
-        predicted = response.output.parsed if response.output.parsed else {}
-
-        # Compute metrics and send feedback to TensorZero
-        # Note: these metrics are not used by GEPA but can be used for other purposes
-        exact_match = compute_exact_match(predicted, datapoint.label)
-        jaccard_similarity = compute_jaccard_similarity(predicted, datapoint.label)
-
-        await t0.feedback(
-            metric_name="exact_match",
-            value=exact_match,
-            inference_id=response.inference_id,
-        )
-
-        await t0.feedback(
-            metric_name="jaccard_similarity",
-            value=jaccard_similarity,
-            inference_id=response.inference_id,
-        )
-
-        return response
+def make_datapoint(row: Row) -> CreateDatapointRequestJson:
+    """Create a CreateDatapointRequestJson from a dataset row."""
+    return CreateDatapointRequestJson(
+        function_name=FUNCTION_NAME,
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": row.input,
+                }
+            ]
+        },
+        output=JsonDatapointOutputUpdate(raw=json.dumps(row.label)),
+    )
 
 
 async def main():
-    t0 = await AsyncTensorZeroGateway.build_embedded(  # type: ignore[misc]
-        config_file="config/tensorzero.toml",
-        clickhouse_url=os.environ.get("TENSORZERO_CLICKHOUSE_URL"),
+    t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore[misc]
+        gateway_url="http://localhost:3000",
     )
 
-    # Load datapoints
+    # Load datapoints from the NER dataset
     dataset = load_dataset()
-    datapoints = []
+    rows: list[Row] = []
     for i in range(NUM_SAMPLES):
         try:
-            datapoints.append(next(dataset))
+            rows.append(next(dataset))
         except StopIteration:
             print(f"Dataset exhausted after {i} samples")
             break
 
-    # Run inferences in parallel with semaphore
-    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
-    await tqdm.gather(*tasks, desc="Processing samples")
+    print(f"Creating {len(rows)} datapoints in dataset `{DATASET_NAME}`...")
 
-    inferences_response = await t0.list_inferences(
-        request=ListInferencesRequest(
-            function_name=FUNCTION_NAME,
-            output_source="inference",  # could also be "demonstration"
-            limit=NUM_SAMPLES,
-        ),
+    # Create datapoints in a TensorZero dataset
+    datapoints = [make_datapoint(row) for row in rows]
+    await t0.create_datapoints(
+        dataset_name=DATASET_NAME,
+        requests=datapoints,
     )
 
-    rendered_samples = await t0.experimental_render_samples(
-        stored_samples=inferences_response.inferences,
-        variants={FUNCTION_NAME: TEMPLATE_VARIANT_NAME},
-    )
+    print(f"Created {len(datapoints)} datapoints")
 
-    random.shuffle(rendered_samples)
-    split_idx = len(rendered_samples) // 2
-    train_samples = rendered_samples[:split_idx]
-    val_samples = rendered_samples[split_idx:]
-
+    # Configure GEPA optimization
     optimization_config = GEPAConfig(
         function_name=FUNCTION_NAME,
         evaluation_name=EVALUATION_NAME,
@@ -123,12 +86,18 @@ async def main():
         max_tokens=16384,
     )
 
-    job_handle = await t0.experimental_launch_optimization(
-        train_samples=train_samples,
-        val_samples=val_samples,
-        optimization_config=optimization_config,
+    print("\nLaunching GEPA optimization...")
+
+    # Launch the optimization workflow
+    job_handle = await t0.experimental_launch_optimization_workflow(
+        function_name=FUNCTION_NAME,
+        template_variant_name=TEMPLATE_VARIANT_NAME,
+        dataset_name=DATASET_NAME,
+        optimizer_config=optimization_config,
+        val_fraction=VAL_FRACTION,
     )
 
+    # Poll for completion
     job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
 
     assert job_info.output is not None

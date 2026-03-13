@@ -1,13 +1,13 @@
 use std::sync::Arc;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_optimizers::gepa::GEPAVariant;
 use tensorzero_optimizers::gepa::analyze::analyze_inferences;
 use tensorzero_optimizers::gepa::evaluate::{
     EvaluateVariantParams, create_evaluation_dataset, evaluate_variant,
 };
 use tensorzero_optimizers::gepa::mutate::mutate_variant;
 use tensorzero_optimizers::gepa::validate::get_uninitialized_variant_configs;
+use tensorzero_optimizers::gepa::{GEPAVariant, GatewayGepaClient};
 use tokio::time::{Duration, sleep};
 
 use super::{
@@ -72,7 +72,7 @@ async fn test_mutate_variant_chat() {
 
     // Analyze parent results
     let analyses = analyze_inferences(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -103,7 +103,7 @@ async fn test_mutate_variant_chat() {
 
     // Mutate variant
     let mutate_result = mutate_variant(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         &analyses,
         &function_context,
         &parent,
@@ -207,7 +207,7 @@ async fn test_mutate_variant_json() {
 
     // Analyze parent results
     let analyses = analyze_inferences(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -224,7 +224,7 @@ async fn test_mutate_variant_json() {
 
     // Mutate variant
     let mutate_result = mutate_variant(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         &analyses,
         &function_context,
         &parent,
@@ -315,7 +315,7 @@ async fn test_mutate_variant_preserves_variables() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -331,7 +331,7 @@ async fn test_mutate_variant_preserves_variables() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         &analyses,
         &function_context,
         &parent,
@@ -412,7 +412,7 @@ async fn test_mutate_variant_preserves_schema_references() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -428,7 +428,7 @@ async fn test_mutate_variant_preserves_schema_references() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         &analyses,
         &function_context,
         &parent,
@@ -527,7 +527,7 @@ async fn test_mutate_variant_naming() {
         .expect("Failed to evaluate parent");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         parent_results.evaluation_infos(),
         &function_context,
         parent_config,
@@ -543,7 +543,7 @@ async fn test_mutate_variant_naming() {
     };
 
     let child = mutate_variant(
-        &gateway_client,
+        &GatewayGepaClient(&gateway_client),
         &analyses,
         &function_context,
         &parent,
