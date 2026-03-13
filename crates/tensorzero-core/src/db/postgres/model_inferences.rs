@@ -195,6 +195,8 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             io.output,
             i.input_tokens,
             i.output_tokens,
+            i.cache_read_input_tokens,
+            i.cache_write_input_tokens,
             i.response_time_ms,
             i.model_name,
             i.model_provider_name,
@@ -227,6 +229,7 @@ pub(super) fn build_insert_model_inferences_query(
         r"
         INSERT INTO tensorzero.model_inferences (
             id, inference_id, input_tokens, output_tokens,
+            cache_read_input_tokens, cache_write_input_tokens,
             response_time_ms, model_name, model_provider_name,
             ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
         ) ",
@@ -237,6 +240,8 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.inference_id)
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
+            .push_bind(row.cache_read_input_tokens.map(|v| v as i32))
+            .push_bind(row.cache_write_input_tokens.map(|v| v as i32))
             .push_bind(row.response_time_ms.map(|v| v as i32))
             .push_bind(&row.model_name)
             .push_bind(&row.model_provider_name)
@@ -696,6 +701,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let output: Option<Json<Vec<ContentBlockOutput>>> = row.try_get("output")?;
         let input_tokens: Option<i32> = row.try_get("input_tokens")?;
         let output_tokens: Option<i32> = row.try_get("output_tokens")?;
+        let cache_read_input_tokens: Option<i32> = row.try_get("cache_read_input_tokens")?;
+        let cache_write_input_tokens: Option<i32> = row.try_get("cache_write_input_tokens")?;
         let response_time_ms: Option<i32> = row.try_get("response_time_ms")?;
         let model_name: String = row.try_get("model_name")?;
         let model_provider_name: String = row.try_get("model_provider_name")?;
@@ -716,6 +723,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             output: output.map(|v| v.0),
             input_tokens: input_tokens.map(|v| v as u32),
             output_tokens: output_tokens.map(|v| v as u32),
+            cache_read_input_tokens: cache_read_input_tokens.map(|v| v as u32),
+            cache_write_input_tokens: cache_write_input_tokens.map(|v| v as u32),
             response_time_ms: response_time_ms.map(|v| v as u32),
             model_name,
             model_provider_name,
@@ -1189,6 +1198,8 @@ mod tests {
                 io.output,
                 i.input_tokens,
                 i.output_tokens,
+                i.cache_read_input_tokens,
+                i.cache_write_input_tokens,
                 i.response_time_ms,
                 i.model_name,
                 i.model_provider_name,
@@ -1217,6 +1228,8 @@ mod tests {
             output: Some(vec![]),
             input_tokens: Some(10),
             output_tokens: Some(20),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             response_time_ms: Some(100),
             model_name: "test_model".to_string(),
             model_provider_name: "test_provider".to_string(),
@@ -1234,9 +1247,10 @@ mod tests {
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
+                cache_read_input_tokens, cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ",
         );
 
@@ -1265,6 +1279,8 @@ mod tests {
                 output: Some(vec![]),
                 input_tokens: None,
                 output_tokens: None,
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 response_time_ms: None,
                 model_name: "model1".to_string(),
                 model_provider_name: "provider1".to_string(),
@@ -1285,6 +1301,8 @@ mod tests {
                 output: Some(vec![]),
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 response_time_ms: Some(500),
                 model_name: "model2".to_string(),
                 model_provider_name: "provider2".to_string(),
@@ -1303,10 +1321,11 @@ mod tests {
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
+                cache_read_input_tokens, cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13),
-            ($14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15),
+            ($16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
             ",
         );
 

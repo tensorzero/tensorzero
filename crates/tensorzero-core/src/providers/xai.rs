@@ -71,6 +71,8 @@ impl From<XAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens,
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         }
     }

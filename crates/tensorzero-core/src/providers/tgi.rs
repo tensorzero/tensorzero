@@ -694,6 +694,8 @@ impl From<TGIUsage> for Usage {
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         }
     }

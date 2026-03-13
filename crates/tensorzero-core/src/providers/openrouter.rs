@@ -1584,6 +1584,8 @@ impl From<OpenRouterUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -3152,6 +3154,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"

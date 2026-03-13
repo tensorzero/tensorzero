@@ -387,6 +387,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -493,6 +495,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(50),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: Some(vec![raw_usage_entry.clone()]),
@@ -552,6 +556,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(50),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: Some(vec![raw_usage_entry]),
@@ -594,6 +600,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -647,6 +655,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                cache_read_input_tokens: None,
+                cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
