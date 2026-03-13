@@ -64,10 +64,11 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-    OptimizationDataSource, OptimizationJobHandle, OrderBy, PostgresConfig, RenderedSample,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ClientSecretString, DynamicToolParams, FeedbackParams, GepaLaunchRequest, GepaLaunchResponse,
+    InferenceOutput, InferenceParams, InferenceStream, Input, LaunchOptimizationParams,
+    LaunchOptimizationWorkflowParams, OptimizationDataSource, OptimizationJobHandle, OrderBy,
+    PostgresConfig, RenderedSample, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -126,6 +127,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;
+    m.add_class::<GepaLaunchResponse>()?;
+    m.add_class::<tensorzero_core::optimization::gepa::GepaProgress>()?;
+    m.add_class::<tensorzero_core::optimization::gepa::GepaEvaluatorStats>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -196,6 +200,171 @@ fn _start_http_gateway(
         Ok(tokio_block_on_without_gil(py, gateway_fut)
             .map_err(|e| convert_error(py, TensorZeroError::Other { source: e }))?
             .into_bound_py_any(py)?)
+    }
+}
+
+// ================================================================
+// GEPA namespace classes
+// ================================================================
+
+#[pyclass(frozen)]
+struct GepaNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl GepaNamespace {
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
+    fn launch(
+        &self,
+        py: Python<'_>,
+        function_name: String,
+        analysis_model: String,
+        mutation_model: String,
+        max_iterations: u32,
+        dataset_name: Option<String>,
+        train_dataset_name: Option<String>,
+        val_dataset_name: Option<String>,
+        evaluation_name: Option<String>,
+        evaluators: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        seed: Option<u32>,
+        include_inference_for_mutation: Option<bool>,
+        max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
+    ) -> PyResult<GepaLaunchResponse> {
+        let request = GepaLaunchRequest {
+            function_name,
+            dataset_name,
+            train_dataset_name,
+            val_dataset_name,
+            evaluation_name,
+            evaluators,
+            analysis_model,
+            mutation_model,
+            initial_variants,
+            max_iterations,
+            variant_prefix,
+            batch_size,
+            seed,
+            include_inference_for_mutation,
+            max_concurrency,
+            max_datapoints,
+        };
+        let client = self.client.clone();
+        let fut = client.gepa_launch(request);
+        tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))
+    }
+
+    #[pyo3(signature = (*, task_id))]
+    fn get(&self, py: Python<'_>, task_id: String) -> PyResult<Py<PyAny>> {
+        let client = self.client.clone();
+        let fut = client.gepa_get(&task_id);
+        let response = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
+        serialize_to_dict(py, &response)
+    }
+}
+
+#[pyclass(frozen)]
+struct AsyncGepaNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl AsyncGepaNamespace {
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
+    fn launch<'py>(
+        &self,
+        py: Python<'py>,
+        function_name: String,
+        analysis_model: String,
+        mutation_model: String,
+        max_iterations: u32,
+        dataset_name: Option<String>,
+        train_dataset_name: Option<String>,
+        val_dataset_name: Option<String>,
+        evaluation_name: Option<String>,
+        evaluators: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        seed: Option<u32>,
+        include_inference_for_mutation: Option<bool>,
+        max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let request = GepaLaunchRequest {
+            function_name,
+            dataset_name,
+            train_dataset_name,
+            val_dataset_name,
+            evaluation_name,
+            evaluators,
+            analysis_model,
+            mutation_model,
+            initial_variants,
+            max_iterations,
+            variant_prefix,
+            batch_size,
+            seed,
+            include_inference_for_mutation,
+            max_concurrency,
+            max_datapoints,
+        };
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let res = client.gepa_launch(request).await;
+            match res {
+                Ok(response) => Ok(response),
+                Err(e) => Python::attach(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    #[pyo3(signature = (*, task_id))]
+    fn get<'py>(&self, py: Python<'py>, task_id: String) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let res = client.gepa_get(&task_id).await;
+            match res {
+                Ok(response) => Python::attach(|py| serialize_to_dict(py, &response)),
+                Err(e) => Python::attach(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+}
+
+#[pyclass(frozen)]
+struct OptimizationNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl OptimizationNamespace {
+    #[getter]
+    fn gepa(&self) -> GepaNamespace {
+        GepaNamespace {
+            client: self.client.clone(),
+        }
+    }
+}
+
+#[pyclass(frozen)]
+struct AsyncOptimizationNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl AsyncOptimizationNamespace {
+    #[getter]
+    fn gepa(&self) -> AsyncGepaNamespace {
+        AsyncGepaNamespace {
+            client: self.client.clone(),
+        }
     }
 }
 
@@ -1650,6 +1819,13 @@ impl TensorZeroGateway {
             Err(e) => Err(convert_error(this.py(), e)),
         }
     }
+
+    #[getter]
+    fn optimization(this: PyRef<'_, Self>) -> OptimizationNamespace {
+        OptimizationNamespace {
+            client: this.as_super().client.clone(),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -2763,6 +2939,13 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Python::attach(|py| Err(convert_error(py, e))),
             }
         })
+    }
+
+    #[getter]
+    fn optimization(this: PyRef<'_, Self>) -> AsyncOptimizationNamespace {
+        AsyncOptimizationNamespace {
+            client: this.as_super().client.clone(),
+        }
     }
 }
 
