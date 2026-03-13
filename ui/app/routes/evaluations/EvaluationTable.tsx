@@ -689,6 +689,16 @@ const EvaluatorHeader = ({
       <TooltipContent side="top" className="p-3">
         <div className="space-y-1 text-left text-xs">
           <div>
+            <span className="font-medium">Metric:</span>
+            <span className="ml-2 font-medium">{metric_name}</span>
+          </div>
+          {evaluator_name !== metric_name && (
+            <div>
+              <span className="font-medium">Evaluator:</span>
+              <span className="ml-2 font-medium">{evaluator_name}</span>
+            </div>
+          )}
+          <div>
             <span className="font-medium">Type:</span>
             <span className="ml-2 font-medium">
               {metricProperties.value_type}
