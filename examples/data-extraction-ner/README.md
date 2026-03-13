@@ -50,7 +50,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 ### Setup
 
 1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
-2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development Postgres database.
 3. Run the `data-extraction-ner.ipynb` Jupyter notebook.
 
 ## Running the Example
@@ -65,15 +65,14 @@ You might notice that the best performing LLM is GPT-4o from OpenAI (not surpris
 
 ## Improving the NER System
 
-At this point, your ClickHouse database will include inferences in a structured format along with feedback on how they went.
+At this point, your Postgres database will include inferences in a structured format along with feedback on how they went.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
 
 You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
 Let's run fine-tuning on GPT-4o Mini with OpenAI using the `exact_match` metric.
 Go grab a coffee as fine-tuning can take some time.
 
-Alternatively, you can run other optimization recipes like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations) programmatically using the Jupyter notebooks in `recipes/`.
-We also show the performance of DICL with demonstrations.
+Alternatively, you can run other optimization recipes like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/optimization/dynamic-in-context-learning-dicl).
 
 Once you finish fine-tuning, you'll see additional configuration blocks.
 For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.

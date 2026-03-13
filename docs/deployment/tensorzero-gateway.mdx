@@ -16,8 +16,8 @@ The gateway requires one of the following command line arguments:
     `--config-file` supports glob patterns, e.g. `--config-file
     /path/to/**/*.toml`.
   </Tip>
-- `--run-clickhouse-migrations`: Run ClickHouse database migrations and exit.
 - `--run-postgres-migrations`: Run Postgres database migrations and exit.
+- `--run-clickhouse-migrations`: Run ClickHouse database migrations and exit.
 
 There are many ways to deploy the TensorZero Gateway.
 Here are a few examples:
@@ -76,7 +76,7 @@ services:
       retries: 2
 ```
 
-Make sure to create a `.env` file with the relevant environment variables (e.g. `TENSORZERO_CLICKHOUSE_URL` and model provider API keys).
+Make sure to create a `.env` file with the relevant environment variables (e.g. `TENSORZERO_POSTGRES_URL` and model provider API keys).
 
 </Accordion>
 
@@ -161,13 +161,22 @@ Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSE
 
 </Accordion>
 
-### Set up observability with ClickHouse
+### Set up observability
 
 Optionally, the TensorZero Gateway can collect inference and feedback data for observability, optimization, evaluations, and experimentation.
-After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
-If you don't provide this environment variable, observability will be disabled.
+TensorZero supports both Postgres and ClickHouse as observability backends.
+Postgres is the simpler choice; we recommend ClickHouse if you're handling >100 inferences per second.
 
+If you don't provide either of the environment variables below, observability will be disabled.
 We recommend setting up observability early to monitor your LLM application and collect data for future optimization, but this can be done incrementally as needed.
+
+#### Postgres
+
+After [deploying Postgres](/deployment/postgres), you need to configure the `TENSORZERO_POSTGRES_URL` environment variable with the connection details.
+
+#### ClickHouse
+
+After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
 
 ### Customize the bind address and port
 
@@ -203,8 +212,8 @@ The `/status` endpoint checks that the gateway is running successfully.
 { "status": "ok" }
 ```
 
-The `/health` endpoint additionally checks that it can communicate with ClickHouse (if observability is enabled).
+The `/health` endpoint additionally checks that it can communicate with dependencies like Postgres or ClickHouse (if enabled).
 
 ```json title="GET /health"
-{ "gateway": "ok", "clickhouse": "ok" }
+{ "gateway": "ok", "postgres": "ok" }
 ```

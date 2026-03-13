@@ -8,7 +8,8 @@ use autopilot_client::AutopilotSideInfo;
 use autopilot_tools::ToolVisitor;
 use autopilot_tools::tools::AutoRejectToolCallTool;
 use durable_tools::{
-    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, Worker, WorkerOptions,
+    SimpleTool, TaskTool, TensorZeroClient, ToolError, ToolExecutor, ToolExecutorBuilder, Worker,
+    WorkerOptions,
 };
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
@@ -73,42 +74,35 @@ pub struct AutopilotWorker {
 }
 
 impl AutopilotWorker {
-    /// Create a new autopilot worker.
+    /// Create a new autopilot worker with all tools registered.
     ///
     /// # Errors
     ///
-    /// Returns an error if the executor cannot be created.
+    /// Returns an error if the executor cannot be created or tool registration fails.
     pub async fn new(config: AutopilotWorkerConfig) -> Result<Self> {
-        let executor = ToolExecutor::builder(())
+        let mut builder = ToolExecutor::builder(())
             .pool(config.pool)
             .queue_name(&config.queue_name)
             .t0_client(config.t0_client)
-            .default_max_attempts(config.default_max_attempts)
-            .build()
-            .await?;
+            .default_max_attempts(config.default_max_attempts);
+
+        // Register all autopilot tools on the builder
+        let mut visitor = LocalToolVisitor {
+            builder: &mut builder,
+        };
+        autopilot_tools::for_each_tool(&mut visitor).await?;
+
+        // Register internal tools directly without the ClientTaskToolWrapper.
+        // AutoRejectToolCallTool only writes a NotAvailable authorization -
+        // it doesn't need the wrapper to publish a tool_result.
+        builder.push_task_tool_instance(AutoRejectToolCallTool)?;
+
+        let executor = builder.build().await?;
 
         Ok(Self {
             executor: Arc::new(executor),
             worker_options: config.worker_options,
         })
-    }
-
-    /// Register all autopilot tools with the executor.
-    #[allow(clippy::unused_async, clippy::allow_attributes)]
-    pub async fn register_tools(&self) -> Result<()> {
-        let visitor = LocalToolVisitor {
-            executor: &self.executor,
-        };
-        autopilot_tools::for_each_tool(&visitor).await?;
-
-        // Register internal tools directly without the ClientTaskToolWrapper.
-        // AutoRejectToolCallTool only writes a NotAvailable authorization -
-        // it doesn't need the wrapper to publish a tool_result.
-        self.executor
-            .register_task_tool_instance(AutoRejectToolCallTool)
-            .await?;
-
-        Ok(())
     }
 
     /// Get a clone of the Arc-wrapped executor for tool spawning.
@@ -146,49 +140,47 @@ impl AutopilotWorker {
     }
 }
 
-/// Visitor that registers tools for local execution on the autopilot worker.
+/// Visitor that registers tools on the builder for local execution on the autopilot worker.
 ///
 /// All tools are wrapped to:
 /// 1. Inject [`AutopilotSideInfo`] around the tool's native `SideInfo`
 /// 2. Publish results to the autopilot API after execution
 ///
-/// - TaskTools are wrapped in [`ClientToolWrapper`]
+/// - TaskTools are wrapped in [`ClientTaskToolWrapper`]
 /// - SimpleTools are wrapped in [`ClientSimpleToolWrapper`] which promotes them to TaskTools
 struct LocalToolVisitor<'a> {
-    executor: &'a ToolExecutor,
+    builder: &'a mut ToolExecutorBuilder,
 }
 
 #[async_trait]
 impl ToolVisitor for LocalToolVisitor<'_> {
     type Error = ToolError;
 
-    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
+    async fn visit_task_tool<T>(&mut self, tool: T) -> Result<(), ToolError>
     where
         T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
-        self.executor
-            .register_task_tool_instance(ClientTaskToolWrapper::new(tool))
-            .await?;
+        self.builder
+            .push_task_tool_instance(ClientTaskToolWrapper::new(tool))?;
         Ok(())
     }
 
-    async fn visit_simple_tool<T>(&self) -> Result<(), ToolError>
+    async fn visit_simple_tool<T>(&mut self) -> Result<(), ToolError>
     where
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
         // Register as a TaskTool (ClientSimpleToolWrapper promotes SimpleTool to TaskTool)
-        self.executor
-            .register_task_tool_instance(ClientSimpleToolWrapper::<T>::default())
-            .await?;
+        self.builder
+            .push_task_tool_instance(ClientSimpleToolWrapper::<T>::default())?;
         Ok(())
     }
 
-    async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), ToolError>
+    async fn visit_standalone_task_tool<T>(&mut self, tool: T) -> Result<(), ToolError>
     where
         T: TaskTool<SideInfo = (), ExtraState = ()>,
     {
         // Register directly — no ClientTaskToolWrapper, no result publishing
-        self.executor.register_task_tool_instance(tool).await?;
+        self.builder.push_task_tool_instance(tool)?;
         Ok(())
     }
 }
@@ -235,7 +227,6 @@ pub async fn spawn_autopilot_worker(
     config: AutopilotWorkerConfig,
 ) -> Result<AutopilotWorkerHandle> {
     let worker = AutopilotWorker::new(config).await?;
-    worker.register_tools().await?;
 
     // Start the durable worker before spawning to catch configuration errors early.
     // If durable is misconfigured (queue missing, migrations not applied), this will

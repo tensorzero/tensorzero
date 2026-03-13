@@ -27,7 +27,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo,
-        gepa::{GepaGetResponse, GepaLaunchRequest, GepaLaunchResponse},
+        gepa::{GepaGetResponse, GepaLaunchRequest, GepaLaunchResponse, GepaProgress},
     },
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
@@ -475,11 +475,63 @@ pub async fn gepa_get_handler(
             GepaGetResponse::Error { error }
         }
         TaskStatus::Pending | TaskStatus::Running | TaskStatus::Sleeping => {
-            GepaGetResponse::Pending { progress: None }
+            let max_iterations = poll_result
+                .params
+                .as_ref()
+                .and_then(|p| p.get("llm_params"))
+                .and_then(|p| p.get("max_iterations"))
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u32)
+                .unwrap_or(0);
+
+            let progress = match spawn_client.get_task_progress(task_id).await {
+                Ok(Some(checkpoint_name)) => parse_gepa_progress(&checkpoint_name, max_iterations),
+                Ok(None) => None,
+                Err(e) => {
+                    tracing::warn!("Failed to get GEPA progress: {e}");
+                    None
+                }
+            };
+            GepaGetResponse::Pending { progress }
         }
     };
 
     Ok(Json(response).into_response())
+}
+
+fn parse_gepa_progress(checkpoint_name: &str, max_iterations: u32) -> Option<GepaProgress> {
+    match checkpoint_name {
+        "setup" => {
+            return Some(GepaProgress {
+                current_iteration: 0,
+                max_iterations,
+                current_step: "setup".to_string(),
+            });
+        }
+        "init_eval" => {
+            return Some(GepaProgress {
+                current_iteration: 0,
+                max_iterations,
+                current_step: "init_eval".to_string(),
+            });
+        }
+        _ => {}
+    }
+
+    // Iteration steps: "iter_{n}_{step}" where step can contain underscores
+    // e.g. "iter_3_eval_analyze_mutate" → iteration 3, step "eval_analyze_mutate"
+    if let Some(rest) = checkpoint_name.strip_prefix("iter_")
+        && let Some((n_str, step)) = rest.split_once('_')
+        && let Ok(iteration) = n_str.parse::<u32>()
+    {
+        return Some(GepaProgress {
+            current_iteration: iteration,
+            max_iterations,
+            current_step: step.to_string(),
+        });
+    }
+
+    None
 }
 
 /// Randomly split examples into train and val sets.

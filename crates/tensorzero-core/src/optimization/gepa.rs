@@ -359,7 +359,7 @@ pub enum GepaEvaluationConfig {
 /// flat optional fields to avoid serde's flatten+untagged incompatibility.
 /// Use [`GepaLaunchRequest::dataset`] and [`GepaLaunchRequest::evaluation`] to
 /// resolve them into their typed enum forms.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GepaLaunchRequest {
     pub function_name: String,
     /// Single dataset name (auto-split 50/50). Mutually exclusive with
@@ -433,15 +433,15 @@ impl GepaLaunchRequest {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct GepaLaunchResponse {
     pub task_id: String,
 }
 
 /// GET response is a tagged enum on `status`.
 /// Serializes as: `{"status": "pending"}` | `{"status": "error", ...}` | `{"status": "completed", ...}`
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum GepaGetResponse {
     Pending {
@@ -459,8 +459,8 @@ pub enum GepaGetResponse {
     },
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct GepaProgress {
     pub current_iteration: u32,
     pub max_iterations: u32,
@@ -468,7 +468,7 @@ pub struct GepaProgress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GepaEvaluatorStats {

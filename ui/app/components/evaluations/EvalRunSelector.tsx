@@ -16,8 +16,10 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useSearchParams, useNavigate, useFetcher } from "react-router";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
-import type { SearchEvaluationRunResult } from "~/types/tensorzero";
+import type {
+  EvaluationRunInfoById as EvaluationRunInfo,
+  SearchEvaluationRunResult,
+} from "~/types/tensorzero";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";

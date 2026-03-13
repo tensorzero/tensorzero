@@ -17,29 +17,22 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { toEvaluationDatapointUrl } from "~/utils/urls";
-
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunInfoById as EvaluationRunInfo } from "~/types/tensorzero";
 import type {
   EvaluationStatistics,
   EvaluationResultRow,
   Input,
-} from "~/types/tensorzero";
-import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
-import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-
-// Import the custom tooltip styles
-import "./tooltip-styles.css";
-import {
-  formatMetricSummaryValue,
-  formatConfidenceInterval,
-} from "~/utils/config/feedback";
-import type {
-  InferenceEvaluationConfig,
   RunMetricMetadata,
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import {
   useColorAssigner,
   ColorAssignerProvider,
@@ -50,6 +43,9 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
+
+// Import the custom tooltip styles
+import "./tooltip-styles.css";
 
 type TruncatedContentProps = (
   | {
@@ -214,11 +210,10 @@ interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
-  evaluator_names: string[];
+  metric_names: string[];
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
   metricsConfig: Record<string, RunMetricMetadata>;
-  /** Maps evaluator_name → metric_name. */
+  /** Maps full metric_name → short evaluator_name. */
   evaluatorMetricNames: Record<string, string>;
   selectedRows: Map<string, SelectedRowData>;
   setSelectedRows: React.Dispatch<
@@ -246,22 +241,15 @@ export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
-  evaluator_names,
+  metric_names,
   evaluation_name,
-  evaluationConfig,
   metricsConfig,
   evaluatorMetricNames,
   selectedRows,
   setSelectedRows,
 }: EvaluationTableProps) {
-  const resolveMetricName = (evaluatorName: string): string => {
-    const name = evaluatorMetricNames[evaluatorName];
-    if (!name) {
-      logger.warn(
-        `No metric name mapping for evaluator ${evaluatorName} in evaluation ${evaluation_name}`,
-      );
-    }
-    return name ?? evaluatorName;
+  const resolveEvaluatorName = (metricName: string): string => {
+    return evaluatorMetricNames[metricName] ?? metricName;
   };
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -419,18 +407,16 @@ export function EvaluationTable({
                       Generated Output
                     </TableHead>
                     {/* Dynamic metric columns */}
-                    {evaluator_names.map((evaluator_name) => {
-                      // Get the metric name for this evaluator
-                      const metric_name = resolveMetricName(evaluator_name);
+                    {metric_names.map((metric_name) => {
+                      const evaluator_name = resolveEvaluatorName(metric_name);
 
-                      // Filter statistics for this specific metric
                       const filteredStats = evaluation_statistics.filter(
                         (stat) => stat.metric_name === metric_name,
                       );
 
                       return (
                         <TableHead
-                          key={evaluator_name}
+                          key={metric_name}
                           className="py-2 text-center"
                         >
                           <EvaluatorHeader
@@ -580,18 +566,16 @@ export function EvaluationTable({
                               </TableCell>
 
                               {/* Metrics cells */}
-                              {evaluator_names.map((evaluator_name) => {
-                                const metric_name =
-                                  resolveMetricName(evaluator_name);
+                              {metric_names.map((metric_name) => {
                                 const metricValue =
                                   data.metrics.get(metric_name);
+                                const metricConfig = metricsConfig[metric_name];
+
                                 const metricType = metricsConfig[metric_name]
                                   ?.value_type as
                                   | "boolean"
                                   | "float"
                                   | undefined;
-                                const evaluatorConfig =
-                                  evaluationConfig.evaluators[evaluator_name];
 
                                 return (
                                   <TableCell
@@ -602,8 +586,7 @@ export function EvaluationTable({
                                     <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricValue.value &&
-                                      metricType &&
-                                      evaluatorConfig ? (
+                                      metricType ? (
                                         <>
                                           <MetricValue
                                             value={metricValue.value}
@@ -611,16 +594,10 @@ export function EvaluationTable({
                                             isHumanFeedback={
                                               metricValue.is_human_feedback
                                             }
-                                            optimize={
-                                              evaluatorConfig.type ===
-                                              "llm_judge"
-                                                ? evaluatorConfig.optimize
-                                                : "max"
-                                            }
+                                            optimize={metricConfig?.optimize}
                                           />
-                                          {/* Make feedback editor appear on hover */}
-                                          {evaluatorConfig.type ===
-                                            "llm_judge" && (
+                                          {/* Make feedback editor appear on hover for LLM judge metrics */}
+                                          {metricValue.evaluator_inference_id && (
                                             <div
                                               className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                               // Stop click event propagation so the row navigation is not triggered
@@ -646,14 +623,12 @@ export function EvaluationTable({
                                                   "Unknown"
                                                 }
                                               />
-                                              {metricValue.evaluator_inference_id && (
-                                                <InferenceButton
-                                                  inferenceId={
-                                                    metricValue.evaluator_inference_id
-                                                  }
-                                                  tooltipText="View LLM judge inference"
-                                                />
-                                              )}
+                                              <InferenceButton
+                                                inferenceId={
+                                                  metricValue.evaluator_inference_id
+                                                }
+                                                tooltipText="View LLM judge inference"
+                                              />
                                             </div>
                                           )}
                                         </>
@@ -713,6 +688,16 @@ const EvaluatorHeader = ({
       </TooltipTrigger>
       <TooltipContent side="top" className="p-3">
         <div className="space-y-1 text-left text-xs">
+          <div>
+            <span className="font-medium">Metric:</span>
+            <span className="ml-2 font-medium">{metric_name}</span>
+          </div>
+          {evaluator_name !== metric_name && (
+            <div>
+              <span className="font-medium">Evaluator:</span>
+              <span className="ml-2 font-medium">{evaluator_name}</span>
+            </div>
+          )}
           <div>
             <span className="font-medium">Type:</span>
             <span className="ml-2 font-medium">

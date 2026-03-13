@@ -14,6 +14,16 @@ importers:
         specifier: ^6.4.0
         version: 6.27.0
 
+  docs/guides/gateway/call-llms-with-image-and-file-inputs:
+    dependencies:
+      openai:
+        specifier: ^6.4.0
+        version: 6.27.0
+    devDependencies:
+      tsx:
+        specifier: ^4.20.3
+        version: 4.21.0
+
   docs/guides/gateway/call-the-openai-responses-api:
     dependencies:
       openai:
@@ -249,10 +259,6 @@ packages:
       zod:
         optional: true
 
-  process@0.11.10:
-    resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
-    engines: {node: '>= 0.6.0'}
-
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
 
@@ -389,8 +395,6 @@ snapshots:
       resolve-pkg-maps: 1.0.0
 
   openai@6.27.0: {}
-
-  process@0.11.10: {}
 
   resolve-pkg-maps@1.0.0: {}
 

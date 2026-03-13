@@ -1,64 +1,4 @@
 services:
-  clickhouse:
-    image: clickhouse:lts
-    environment:
-      CLICKHOUSE_USER: chuser
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_PASSWORD: chpassword
-    ports:
-      - "8123:8123" # HTTP port
-      - "9000:9000" # Native port
-    volumes:
-      - ./data/clickhouse:/var/lib/clickhouse/backups/mounted:ro # optional fixture data
-      - clickhouse-data:/var/lib/clickhouse
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_DB: tensorzero
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: pg_isready -U postgres
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  # Runs Postgres migrations before the gateway starts
-  gateway-postgres-migrations:
-    image: tensorzero/gateway
-    environment:
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      [
-        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
-      ]
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
-      interval: 5s
-      timeout: 1s
-      retries: 48
-      start_period: 5s
-
   gateway:
     image: tensorzero/gateway
     volumes:
@@ -66,7 +6,6 @@ services:
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
@@ -89,10 +28,10 @@ services:
       start_interval: 1s
       timeout: 1s
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
-      gateway-postgres-migrations:
-        condition: service_healthy
+      gateway-run-postgres-migrations:
+        condition: service_completed_successfully
 
   ui:
     environment:
@@ -107,24 +46,35 @@ services:
     ports:
       - "4000:4000"
     depends_on:
-      gateway-postgres-migrations:
-        condition: service_healthy
       gateway:
         condition: service_healthy
 
-  # Optional: Load fixture data into ClickHouse (`docker compose up load-fixture`)
-  load-fixture:
-    profiles: [load-fixture]
-    image: clickhouse:lts
+  postgres:
+    image: tensorzero/postgres:17
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
     environment:
-      CLICKHOUSE_USER: chuser
-      CLICKHOUSE_PASSWORD: chpassword
-    command: |
-      bash -c "clickhouse-client --host clickhouse --query \"DROP DATABASE IF EXISTS tensorzero; RESTORE DATABASE tensorzero FROM File('mounted/fixture.zip');\" && exit 0"
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # Apply Postgres migrations before the gateway starts
+  gateway-run-postgres-migrations:
+    image: tensorzero/gateway
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
+    command: ["--run-postgres-migrations"]
 
 volumes:
-  clickhouse-data:
   postgres-data:

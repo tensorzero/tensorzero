@@ -14,6 +14,7 @@ use std::time::Duration;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
+use tracing::Level;
 
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use durable_tools::{EmbeddedClient, WorkerOptions};
@@ -21,10 +22,11 @@ use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
-use tensorzero_core::db::postgres::{
-    PostgresConnectionInfo, manual_run_postgres_migrations,
-    postgres_setup::check_pgcron_configured_correctly,
+use tensorzero_core::db::postgres::postgres_setup::{
+    check_pgcron_configured_correctly, check_pgvector_configured_correctly,
+    check_trigram_indexes_configured_correctly,
 };
+use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{self, Error, ErrorDetails};
@@ -96,14 +98,25 @@ async fn run_optimization_postgres_migrations() -> Result<(), Error> {
             message: e.to_string(),
         })
     })?;
-    tensorzero_optimizers::postgres::make_migrator()
+
+    // The migration error is silently swallowed, because we don't want to require pgvector yet.
+    // TODO(#6912): require optimization migrations to run correctly soon.
+    if let Err(e) = tensorzero_optimizers::postgres::make_migrator()
         .run(&pool)
         .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::PostgresMigration {
-                message: format!("Failed to run optimization migrations: {e}"),
-            })
-        })?;
+    {
+        tracing::warn!(
+            "Failed to run Postgres migrations for optimization: {e}. This is non-fatal, but TensorZero will require them soon."
+        );
+    }
+
+    if let Err(e) = check_pgvector_configured_correctly(&pool).await {
+        let msg = e.suppress_logging_of_error_message();
+        tracing::warn!(
+            "pgvector extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pgvector soon.",
+        );
+    }
+
     Ok(())
 }
 
@@ -119,7 +132,7 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-async fn validate_pgcron_setup_for_postgres_primary(
+async fn validate_postgres_extensions_for_postgres_primary(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<(), ExitCode> {
     if gateway_handle.app_state.primary_datastore != PrimaryDatastore::Postgres {
@@ -132,11 +145,31 @@ async fn validate_pgcron_setup_for_postgres_primary(
         return Err(ExitCode::FAILURE);
     };
 
-    check_pgcron_configured_correctly(pgpool).await.map_err(|e| {
-        tracing::error!("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly.");
-        e.log();
-        ExitCode::FAILURE
-    })?;
+    let (pgcron_result, trigram_result, pgvector_result) = tokio::join!(
+        check_pgcron_configured_correctly(pgpool),
+        check_trigram_indexes_configured_correctly(pgpool),
+        check_pgvector_configured_correctly(pgpool),
+    );
+
+    let mut has_fatal_error = false;
+
+    if let Err(e) = pgcron_result {
+        e.log_at_level("Postgres is configured to be the primary observability backend, but pgcron is not configured correctly: ", Level::ERROR);
+        has_fatal_error = true;
+    }
+
+    if let Err(e) = trigram_result {
+        e.log_at_level("Postgres is configured to be the primary observability backend, but trigram indices are not configured correctly: ", Level::ERROR);
+        has_fatal_error = true;
+    }
+
+    if let Err(e) = pgvector_result {
+        e.log_at_level("TensorZero will require pgvector soon for deployments with Postgres, and pgvector is not configured correctly: ", Level::WARN);
+    }
+
+    if has_fatal_error {
+        return Err(ExitCode::FAILURE);
+    }
 
     Ok(())
 }
@@ -188,14 +221,11 @@ async fn run() -> Result<(), ExitCode> {
         manual_run_postgres_migrations()
             .await
             .log_err_pretty("Failed to run Postgres migrations")?;
-        if args
-            .postgres_migration_args
-            .enable_optimization_postgres_migrations
-        {
-            run_optimization_postgres_migrations()
-                .await
-                .log_err_pretty("Failed to run optimization Postgres migrations")?;
-        }
+
+        run_optimization_postgres_migrations()
+            .await
+            .log_err_pretty("Failed to run optimization Postgres migrations.")?;
+
         tracing::info!("Postgres is ready.");
         return Ok(());
     }
@@ -328,7 +358,7 @@ async fn run() -> Result<(), ExitCode> {
             .await
             .log_err_pretty("Failed to initialize AppState")?;
 
-    validate_pgcron_setup_for_postgres_primary(&gateway_handle).await?;
+    validate_postgres_extensions_for_postgres_primary(&gateway_handle).await?;
 
     // Start autopilot worker if configured
     let autopilot_worker_handle = spawn_autopilot_worker_if_configured(&gateway_handle).await?;
