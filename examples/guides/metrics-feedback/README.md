@@ -10,7 +10,7 @@ This directory contains the code for the **[Metrics & Feedback](https://www.tens
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Launch the TensorZero Gateway, the TensorZero UI, and a local ClickHouse database:
+2. Launch the TensorZero Gateway, the TensorZero UI, and a local Postgres database:
 
 ```bash
 docker compose up
