@@ -40,7 +40,7 @@ not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !t
 junit.path = "junit.xml"
 
 [profile.live-batch]
-default-filter = 'test(batch) and not test(mock)'
+default-filter = 'test(batch) and not test(mock) and not test(postgres) and not test(valkey)'
 
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
