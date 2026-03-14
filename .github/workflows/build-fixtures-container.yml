@@ -26,20 +26,34 @@ jobs:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+      - name: Check whether `fixtures` image already exists on Docker Hub
+        id: check-image
+        run: |
+          IMAGE="tensorzero/fixtures:sha-${{ github.sha }}"
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "image_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Image ${IMAGE} already exists on Docker Hub; skipping rebuild."
+          else
+            echo "image_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@f378676225212387f1283f4da878712af2c4cd60
+        if: steps.check-image.outputs.image_exists != 'true'
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        if: steps.check-image.outputs.image_exists != 'true'
         with:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build and push `fixtures` container
+        if: steps.check-image.outputs.image_exists != 'true'
         run: |
           docker buildx build -f ui/fixtures/Dockerfile . -t tensorzero/fixtures:sha-${{ github.sha }} --push
 
