@@ -250,9 +250,15 @@ pub struct ObjectStoreInfo {
 
 impl ObjectStoreInfo {
     pub fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
-        let Some(config) = config else {
+        let Some(mut config) = config else {
             return Ok(None);
         };
+
+        if let StorageKind::S3Compatible { endpoint, .. } = &mut config
+            && let Some(endpoint_value) = endpoint.take()
+        {
+            *endpoint = Some(resolve_object_storage_endpoint(&endpoint_value)?);
+        }
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
             StorageKind::Filesystem { path } => {
@@ -395,6 +401,32 @@ impl ObjectStoreInfo {
 // We are attempting to find this error: `https://github.com/seanmonstar/reqwest/blob/c4a9fb060fb518f0053b98f78c7583071a760cf4/src/error.rs#L340`
 fn contains_bad_scheme_err(e: &impl StdError) -> bool {
     format!("{e:?}").contains("BadScheme")
+}
+
+fn resolve_object_storage_endpoint(endpoint: &str) -> Result<String, Error> {
+    if let Some(env_var) = endpoint.strip_prefix("env::") {
+        return std::env::var(env_var).map_err(|_| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Environment variable `{env_var}` not found. Your configuration for `[object_storage]` requires this variable for `endpoint`."
+                ),
+            })
+        });
+    }
+
+    if endpoint.starts_with("dynamic::")
+        || endpoint.starts_with("path::")
+        || endpoint.starts_with("path_from_env::")
+        || matches!(endpoint, "sdk" | "none")
+    {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "Invalid `[object_storage].endpoint`: `{endpoint}`. Use `env::ENVIRONMENT_VARIABLE` or a literal endpoint value."
+            ),
+        }));
+    }
+
+    Ok(endpoint.to_string())
 }
 
 /// Selects the primary datastore used for observability writes (inferences, feedback).
