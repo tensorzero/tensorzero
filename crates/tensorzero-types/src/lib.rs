@@ -9,6 +9,7 @@ pub mod error;
 pub mod file;
 pub mod message;
 pub mod role;
+pub mod serde_utils;
 pub mod storage;
 pub mod tool;
 pub mod tool_failure;
