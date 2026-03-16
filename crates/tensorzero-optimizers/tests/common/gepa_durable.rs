@@ -254,41 +254,38 @@ async fn poll_until_terminal(client: &Client, base: &str, task_id: &str) -> Valu
     panic!("GEPA task {task_id} did not complete within timeout");
 }
 
-/// Validate GEPA result — both Completed and Error are valid outcomes
+/// Validate GEPA result — require successful completion
 fn validate_gepa_result(result: &Value, variant_prefix: &str, max_iterations: usize) {
     let status = result["status"].as_str().unwrap();
-    match status {
-        "completed" => {
-            let variants = result["variants"].as_object().unwrap();
-            assert!(!variants.is_empty(), "Should produce at least one variant");
-            assert!(
-                variants.len() <= max_iterations,
-                "Should not exceed max_iterations ({max_iterations}), got {}",
-                variants.len()
-            );
+    assert!(
+        status == "completed",
+        "Expected GEPA to complete successfully, got status={status}: {}",
+        serde_json::to_string_pretty(result).unwrap()
+    );
 
-            for name in variants.keys() {
-                assert!(
-                    name.starts_with(variant_prefix),
-                    "Variant name '{name}' should have prefix '{variant_prefix}'"
-                );
-            }
+    let variants = result["variants"].as_object().unwrap();
+    assert!(!variants.is_empty(), "Should produce at least one variant");
+    assert!(
+        variants.len() <= max_iterations,
+        "Should not exceed max_iterations ({max_iterations}), got {}",
+        variants.len()
+    );
 
-            let statistics = result["statistics"].as_object().unwrap();
-            assert!(
-                !statistics.is_empty(),
-                "Should have statistics for variants"
-            );
-
-            println!(
-                "Durable GEPA completed with {} evolved variants",
-                variants.len()
-            );
-        }
-        "error" => {
-            let error = result["error"].as_str().unwrap();
-            println!("Durable GEPA completed with error (valid outcome): {error}");
-        }
-        other => panic!("Unexpected terminal status: {other}"),
+    for name in variants.keys() {
+        assert!(
+            name.starts_with(variant_prefix),
+            "Variant name `{name}` should have prefix `{variant_prefix}`"
+        );
     }
+
+    let statistics = result["statistics"].as_object().unwrap();
+    assert!(
+        !statistics.is_empty(),
+        "Should have statistics for variants"
+    );
+
+    println!(
+        "Durable GEPA completed with {} evolved variants",
+        variants.len()
+    );
 }
