@@ -16,6 +16,7 @@
 ## Rust Testing
 
 - Run tests with `cargo nextest`.
+- Use `googletest` for new Rust tests.
 - Annotate new tests with `#[gtest]` (googletest crate).
 - Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
 - Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.

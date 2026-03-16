@@ -345,22 +345,47 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
+        let evaluation_name_clause = if evaluation_name.is_some() {
+            "AND argMax(evaluation_name, updated_at) = {evaluation_name:String}"
+        } else {
+            ""
+        };
         let function_name_clause = if function_name.is_some() {
             "AND argMax(function_name, updated_at) = {function_name:String}"
         } else {
             ""
+        };
+        let query_clause = if query.is_empty() {
+            ""
+        } else {
+            r"
+                AND (
+                    positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {query:String}) > 0
+                    OR positionCaseInsensitive(argMax(evaluation_name, updated_at), {query:String}) > 0
+                    OR positionCaseInsensitive(argMax(dataset_name, updated_at), {query:String}) > 0
+                    OR positionCaseInsensitive(
+                        if(
+                            length(argMax(variant_names, updated_at)) > 0,
+                            argMax(variant_names, updated_at)[1],
+                            ''
+                        ),
+                        {query:String}
+                    ) > 0
+                )"
         };
 
         let sql_query = format!(
             r"
             SELECT
                 uint_to_uuid(run_id_uint) AS evaluation_run_id,
+                argMax(evaluation_name, updated_at) AS evaluation_name,
+                argMax(dataset_name, updated_at) AS dataset_name,
                 if(
                     length(argMax(variant_names, updated_at)) > 0,
                     argMax(variant_names, updated_at)[1],
@@ -369,19 +394,10 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             FROM InferenceEvaluationRuns
             GROUP BY run_id_uint
             HAVING
-                argMax(evaluation_name, updated_at) = {{evaluation_name:String}}
+                1 = 1
+                {evaluation_name_clause}
                 {function_name_clause}
-                AND (
-                    positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {{query:String}}) > 0
-                    OR positionCaseInsensitive(
-                        if(
-                            length(argMax(variant_names, updated_at)) > 0,
-                            argMax(variant_names, updated_at)[1],
-                            ''
-                        ),
-                        {{query:String}}
-                    ) > 0
-                )
+                {query_clause}
             ORDER BY run_id_uint DESC
             LIMIT {{limit:UInt32}}
             OFFSET {{offset:UInt32}}
@@ -389,17 +405,21 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         "
         );
 
-        let evaluation_name_str = evaluation_name.to_string();
         let query_str = query.to_string();
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
 
         let mut params = HashMap::new();
-        params.insert("evaluation_name", evaluation_name_str.as_str());
+        let evaluation_name_str = evaluation_name.map(ToOwned::to_owned);
+        if let Some(evaluation_name) = evaluation_name_str.as_deref() {
+            params.insert("evaluation_name", evaluation_name);
+        }
         if let Some(function_name) = function_name {
             params.insert("function_name", function_name);
         }
-        params.insert("query", query_str.as_str());
+        if !query.is_empty() {
+            params.insert("query", query_str.as_str());
+        }
         params.insert("limit", limit_str.as_str());
         params.insert("offset", offset_str.as_str());
 
@@ -1082,6 +1102,14 @@ mod tests {
                 assert_query_contains(query, "HAVING");
                 assert_query_contains(query, "argMax(evaluation_name, updated_at) = {evaluation_name:String}");
                 assert_query_contains(query, "argMax(function_name, updated_at) = {function_name:String}");
+                assert_query_contains(
+                    query,
+                    "OR positionCaseInsensitive(argMax(evaluation_name, updated_at), {query:String}) > 0",
+                );
+                assert_query_contains(
+                    query,
+                    "OR positionCaseInsensitive(argMax(dataset_name, updated_at), {query:String}) > 0",
+                );
                 assert_query_contains(query, "positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {query:String}) > 0");
                 assert_query_contains(query, "ORDER BY run_id_uint DESC");
                 assert_query_contains(
@@ -1110,8 +1138,8 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","variant_name":"variant1"}
-{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","variant_name":"variant2"}"#.to_string(),
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"test_eval","dataset_name":"dataset_1","variant_name":"variant1"}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluation_name":"test_eval","dataset_name":"dataset_2","variant_name":"variant2"}"#.to_string(),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
@@ -1121,11 +1149,13 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn
-            .search_evaluation_runs("test_eval", Some("test_func"), "variant", 100, 0)
+            .search_evaluation_runs(Some("test_eval"), Some("test_func"), "variant", 100, 0)
             .await
             .unwrap();
 
         assert_eq!(result.len(), 2);
+        assert_eq!(result[0].evaluation_name, "test_eval");
+        assert_eq!(result[0].dataset_name, "dataset_1");
         assert_eq!(result[0].variant_name, "variant1");
         assert_eq!(result[1].variant_name, "variant2");
     }
@@ -1148,11 +1178,57 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
         let result = conn
-            .search_evaluation_runs("test_eval", Some("test_func"), "nonexistent", 100, 0)
+            .search_evaluation_runs(Some("test_eval"), Some("test_func"), "nonexistent", 100, 0)
             .await
             .unwrap();
 
         assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_evaluation_runs_function_only_empty_query() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "FROM InferenceEvaluationRuns");
+                assert_query_contains(query, "HAVING");
+                assert_query_contains(query, "argMax(function_name, updated_at) = {function_name:String}");
+                assert!(
+                    !query.contains("{evaluation_name:String}"),
+                    "Query should not require evaluation_name when omitted"
+                );
+                assert!(
+                    !query.contains("{query:String}"),
+                    "Empty search should not add text matching clauses"
+                );
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                assert_eq!(params.get("limit"), Some(&"100"));
+                assert_eq!(params.get("offset"), Some(&"0"));
+                assert_eq!(params.get("evaluation_name"), None);
+                assert_eq!(params.get("query"), None);
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_name":"generated_eval","dataset_name":"dataset_1","variant_name":"variant1"}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .search_evaluation_runs(None, Some("test_func"), "", 100, 0)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].evaluation_name, "generated_eval");
+        assert_eq!(result[0].dataset_name, "dataset_1");
     }
 
     #[tokio::test]
