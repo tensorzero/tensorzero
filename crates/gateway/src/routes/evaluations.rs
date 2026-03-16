@@ -11,6 +11,7 @@ use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
@@ -22,6 +23,7 @@ use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
+use tensorzero_core::openapi::TensorZeroErrorResponse;
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 // =============================================================================
@@ -91,19 +93,24 @@ fn default_inference_cache() -> String {
 
 /// SSE event types for evaluation streaming.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationRunEvent {
+    #[schema(title = "EvaluationRunEventStart")]
     Start(EvaluationRunStartEvent),
+    #[schema(title = "EvaluationRunEventSuccess")]
     Success(EvaluationRunSuccessEvent),
+    #[schema(title = "EvaluationRunEventError")]
     Error(EvaluationRunErrorEvent),
+    #[schema(title = "EvaluationRunEventFatalError")]
     FatalError(EvaluationRunFatalErrorEvent),
+    #[schema(title = "EvaluationRunEventComplete")]
     Complete(EvaluationRunCompleteEvent),
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
@@ -116,18 +123,21 @@ pub struct EvaluationRunStartEvent {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunSuccessEvent {
     pub evaluation_run_id: Uuid,
+    #[schema(value_type = Object)]
     pub datapoint: Value,
+    #[schema(value_type = Object)]
     pub response: Value,
+    #[schema(value_type = Object)]
     pub evaluations: HashMap<String, Option<Value>>,
     pub evaluator_errors: HashMap<String, String>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunErrorEvent {
     pub evaluation_run_id: Uuid,
@@ -136,7 +146,7 @@ pub struct EvaluationRunErrorEvent {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunFatalErrorEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,7 +155,7 @@ pub struct EvaluationRunFatalErrorEvent {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct EvaluationRunCompleteEvent {
     pub evaluation_run_id: Uuid,
@@ -358,6 +368,34 @@ fn resolve_evaluators(
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
+#[utoipa::path(
+    post,
+    path = "/internal/evaluations/run",
+    tag = "internal",
+    request_body(
+        content = serde_json::Value,
+        description = "Run evaluation request payload."
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Server-sent event stream of evaluation run updates.",
+            content(
+                (EvaluationRunEvent = "text/event-stream")
+            )
+        ),
+        (
+            status = 400,
+            description = "Invalid request",
+            body = TensorZeroErrorResponse
+        ),
+        (
+            status = 500,
+            description = "Internal server error",
+            body = TensorZeroErrorResponse
+        )
+    )
+)]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn run_evaluation_handler(
     State(app_state): AppState,

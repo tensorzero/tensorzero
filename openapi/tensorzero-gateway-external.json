@@ -1,0 +1,14 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TensorZero Gateway API",
+    "description": "TensorZero Gateway endpoints.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "2026.3.1"
+  },
+  "paths": {},
+  "components": {}
+}

@@ -138,6 +138,7 @@ regex = { workspace = true }
 dashmap = "6.1.0"
 redis = { workspace = true }
 rustls = { workspace = true }
+utoipa.workspace = true
 
 [dev-dependencies]
 googletest = { workspace = true }
