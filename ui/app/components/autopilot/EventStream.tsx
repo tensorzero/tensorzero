@@ -883,6 +883,8 @@ function getStatusLabel(status: AutopilotStatus): {
       return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_user_questions_answers":
       return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
     case "failed":
