@@ -592,12 +592,26 @@ impl AutopilotClient {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Convert pending autoeval example labeling to gateway events (no filtering needed)
+        let pending_auto_eval_example_labeling = body
+            .pending_auto_eval_example_labeling
+            .into_iter()
+            .map(|event| {
+                event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed for pending autoeval example labeling: {e}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(GatewayListEventsResponse {
             events: filtered_events,
             previous_user_message_event_id: body.previous_user_message_event_id,
             status: body.status,
             pending_tool_calls: filtered_pending_tool_calls,
             pending_user_questions,
+            pending_auto_eval_example_labeling,
         })
     }
 

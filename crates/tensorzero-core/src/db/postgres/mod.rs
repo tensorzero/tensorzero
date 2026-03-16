@@ -370,7 +370,7 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
     if let Err(e) = postgres_setup::check_pgcron_configured_correctly(&pool).await {
         let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon.",
+            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon. If Postgres is your observability backend, TensorZero Gateway will not start.",
         );
         has_config_error = true;
     }
@@ -379,7 +379,7 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
     if let Err(e) = postgres_setup::check_trigram_indexes_configured_correctly(&pool).await {
         let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "(Optional) pg_trgm extension is not configured correctly for your Postgres setup: {msg}. If observability is enabled, we require pg_trgm to support searching on inference data.",
+            "pg_trgm extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_trgm soon. If Postgres is your observability backend, TensorZero Gateway will not start.",
         );
         has_config_error = true;
     }

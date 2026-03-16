@@ -39,7 +39,7 @@ docker compose run --rm evaluations \
 
 <Accordion title="Building from Source">
 
-You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/evaluations) for instructions.
+You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/crates/evaluations) for instructions.
 
 </Accordion>
 
@@ -65,9 +65,16 @@ See [Integrations](/integrations/model-providers) for more information.
 #### `TENSORZERO_CLICKHOUSE_URL`
 
 - **Example:** `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/database_name`
-- **Required:** yes
+- **Required:** either ClickHouse or Postgres must be available
 
 This environment variable specifies the URL of your ClickHouse database.
+
+#### `TENSORZERO_POSTGRES_URL`
+
+- **Example:** `TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/mydatabase"`
+- **Required:** either ClickHouse or Postgres must be available
+
+This environment variable specifies the URL of your Postgres database.
 
 ### CLI Flags
 

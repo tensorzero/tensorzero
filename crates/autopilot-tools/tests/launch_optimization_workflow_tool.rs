@@ -120,6 +120,8 @@ async fn test_launch_optimization_workflow_tool_immediate_completion(
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -129,11 +131,6 @@ async fn test_launch_optimization_workflow_tool_immediate_completion(
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
@@ -199,6 +196,8 @@ async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> 
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -208,11 +207,6 @@ async fn test_launch_optimization_workflow_tool_multiple_polls(pool: PgPool) -> 
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
@@ -267,6 +261,8 @@ async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Re
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -276,11 +272,6 @@ async fn test_launch_optimization_workflow_tool_failed(pool: PgPool) -> sqlx::Re
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
@@ -330,6 +321,8 @@ async fn test_launch_optimization_workflow_tool_launch_error(pool: PgPool) -> sq
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -339,11 +332,6 @@ async fn test_launch_optimization_workflow_tool_launch_error(pool: PgPool) -> sq
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(LaunchOptimizationWorkflowTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let _spawn_result = executor
