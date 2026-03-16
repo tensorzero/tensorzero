@@ -29,12 +29,12 @@ jobs:
             test_filter: "test(valkey)"
             cache_backend_env: valkey
             valkey_url: "redis://valkey:6379"
-            services: "clickhouse postgres valkey"
+            services: "clickhouse postgres gateway-postgres-migrations valkey"
           - cache_backend: redis
             test_filter: "test(valkey)"
             cache_backend_env: valkey
             valkey_url: "redis://redis:6379"
-            services: "clickhouse postgres redis"
+            services: "clickhouse postgres gateway-postgres-migrations redis"
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
@@ -63,7 +63,7 @@ jobs:
           ${{ matrix.valkey_url && format('-e TENSORZERO_VALKEY_URL={0}', matrix.valkey_url) || '' }}
           live-tests
           sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst
-          --workspace-remap /app --config-file /app/crates/.config/nextest.toml
+          --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml
           --profile cache -E '${{ matrix.test_filter }}' -j 4"
 
       - name: Print logs
