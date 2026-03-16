@@ -51,12 +51,12 @@ jobs:
 
       - name: Start infrastructure services
         run: >
-          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
           up ${{ matrix.services }} -d --wait
 
       - name: Run cache tests
         run: >
-          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
           run --no-deps --rm
           -e TENSORZERO_CI=1
           -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }}
@@ -68,4 +68,4 @@ jobs:
 
       - name: Print logs
         if: always()
-        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
