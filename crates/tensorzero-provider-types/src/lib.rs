@@ -1003,3 +1003,541 @@ impl<'a> ModelInferenceRequest<'a> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use rust_decimal::Decimal;
+    use serde_json::json;
+    use std::time::Duration;
+    use tensorzero_types::ToolChoice;
+    use uuid::Uuid;
+
+    // =========================================================================
+    // ModelInferenceRequest
+    // =========================================================================
+
+    #[gtest]
+    fn test_model_inference_request_roundtrip_serialization() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: tensorzero_types::Role::User,
+                content: vec!["What is the weather?".to_string().into()],
+            }],
+            system: Some("You are a helpful assistant.".to_string()),
+            temperature: Some(0.5),
+            max_tokens: Some(1024),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: Some(42),
+            stream: true,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            ..Default::default()
+        };
+
+        let json = serde_json::to_value(&request).expect("should serialize");
+        assert_eq!(json["temperature"], json!(0.5));
+        assert_eq!(json["max_tokens"], json!(1024));
+        assert_eq!(json["seed"], json!(42));
+        assert_eq!(json["stream"], json!(true));
+        assert_eq!(json["messages"].as_array().map(|a| a.len()), Some(1));
+    }
+
+    #[gtest]
+    fn test_model_inference_request_default() {
+        let request = ModelInferenceRequest::default();
+        expect_that!(request.temperature, eq(None));
+        expect_that!(request.max_tokens, eq(None));
+        expect_that!(request.stream, eq(false));
+        expect_that!(request.messages.len(), eq(0));
+        assert_eq!(request.system, None);
+    }
+
+    #[gtest]
+    fn test_borrow_stop_sequences_owned() {
+        let request = ModelInferenceRequest {
+            stop_sequences: Some(Cow::Owned(vec!["STOP".to_string(), "END".to_string()])),
+            ..Default::default()
+        };
+        let borrowed = request.borrow_stop_sequences();
+        expect_that!(borrowed.is_some(), eq(true));
+        let seqs = borrowed.unwrap();
+        expect_that!(seqs.len(), eq(2));
+        expect_that!(seqs[0].as_str(), eq("STOP"));
+    }
+
+    #[gtest]
+    fn test_borrow_stop_sequences_none() {
+        let request = ModelInferenceRequest::default();
+        assert!(request.borrow_stop_sequences().is_none());
+    }
+
+    // =========================================================================
+    // Usage
+    // =========================================================================
+
+    #[gtest]
+    fn test_usage_zero() {
+        let usage = Usage::zero();
+        expect_that!(usage.input_tokens, eq(Some(0)));
+        expect_that!(usage.output_tokens, eq(Some(0)));
+        expect_that!(usage.cost, eq(Some(Decimal::ZERO)));
+    }
+
+    #[gtest]
+    fn test_usage_total_tokens() {
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(25),
+            cost: None,
+        };
+        expect_that!(usage.total_tokens(), eq(Some(35)));
+    }
+
+    #[gtest]
+    fn test_usage_total_tokens_partial() {
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: None,
+            cost: None,
+        };
+        expect_that!(usage.total_tokens(), eq(None));
+    }
+
+    #[gtest]
+    fn test_usage_serde_roundtrip() {
+        let usage = Usage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            cost: Some(Decimal::new(15, 4)), // 0.0015
+        };
+        let json = serde_json::to_value(usage).expect("should serialize");
+        assert_eq!(json["input_tokens"], json!(100));
+        assert_eq!(json["output_tokens"], json!(50));
+
+        let deserialized: Usage = serde_json::from_value(json).expect("should deserialize");
+        expect_that!(deserialized.input_tokens, eq(Some(100)));
+        expect_that!(deserialized.output_tokens, eq(Some(50)));
+        expect_that!(deserialized.cost, eq(Some(Decimal::new(15, 4))));
+    }
+
+    // =========================================================================
+    // FinishReason conversions from provider types
+    // =========================================================================
+
+    #[gtest]
+    fn test_finish_reason_from_openai() {
+        expect_that!(
+            FinishReason::from(OpenAIFinishReason::Stop),
+            eq(FinishReason::Stop)
+        );
+        expect_that!(
+            FinishReason::from(OpenAIFinishReason::Length),
+            eq(FinishReason::Length)
+        );
+        expect_that!(
+            FinishReason::from(OpenAIFinishReason::ToolCalls),
+            eq(FinishReason::ToolCall)
+        );
+        expect_that!(
+            FinishReason::from(OpenAIFinishReason::ContentFilter),
+            eq(FinishReason::ContentFilter)
+        );
+    }
+
+    #[gtest]
+    fn test_finish_reason_from_fireworks() {
+        expect_that!(
+            FinishReason::from(FireworksFinishReason::Stop),
+            eq(FinishReason::Stop)
+        );
+        expect_that!(
+            FinishReason::from(FireworksFinishReason::ToolCalls),
+            eq(FinishReason::ToolCall)
+        );
+    }
+
+    #[gtest]
+    fn test_finish_reason_from_together() {
+        expect_that!(
+            FinishReason::from(TogetherFinishReason::Stop),
+            eq(FinishReason::Stop)
+        );
+        expect_that!(
+            FinishReason::from(TogetherFinishReason::Eos),
+            eq(FinishReason::Stop)
+        );
+        expect_that!(
+            FinishReason::from(TogetherFinishReason::ToolCalls),
+            eq(FinishReason::ToolCall)
+        );
+    }
+
+    // =========================================================================
+    // Streaming chunks — construction and usage tracking
+    // =========================================================================
+
+    #[gtest]
+    fn test_response_chunk_construction() {
+        let chunk = ProviderInferenceResponseChunk::new(
+            vec![ContentBlockChunk::Text(TextChunk {
+                id: "0".to_string(),
+                text: "Hello".to_string(),
+            })],
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(1),
+                cost: None,
+            }),
+            r#"{"choices":[...]}"#.to_string(),
+            Duration::from_millis(50),
+            None,
+        );
+
+        expect_that!(chunk.content.len(), eq(1));
+        assert_eq!(chunk.usage.unwrap().input_tokens, Some(10));
+        assert_eq!(chunk.finish_reason, None);
+        assert_eq!(chunk.raw_usage, None);
+    }
+
+    #[gtest]
+    fn test_response_chunk_with_raw_usage() {
+        let raw = json!({"prompt_tokens": 10, "cached_tokens": 3});
+        let model_id = Uuid::now_v7();
+        let raw_entries =
+            raw_usage_entries_from_value(model_id, "openai", ApiType::ChatCompletions, raw.clone());
+
+        let chunk = ProviderInferenceResponseChunk::new_with_raw_usage(
+            vec![],
+            Some(Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(5),
+                cost: None,
+            }),
+            "raw".to_string(),
+            Duration::from_millis(100),
+            Some(FinishReason::Stop),
+            Some(raw_entries),
+        );
+
+        expect_that!(chunk.finish_reason, eq(Some(FinishReason::Stop)));
+        let raw_usage = chunk.raw_usage.expect("should have raw_usage");
+        expect_that!(raw_usage.len(), eq(1));
+        assert_eq!(raw_usage[0].provider_type, "openai");
+        assert_eq!(raw_usage[0].data["cached_tokens"], json!(3));
+    }
+
+    #[gtest]
+    fn test_streaming_usage_accumulation_across_chunks() {
+        // Simulate a streaming response where usage arrives across chunks
+        let chunks = [
+            ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "0".to_string(),
+                    text: "Hello".to_string(),
+                })],
+                None, // no usage in first content chunk
+                "chunk1".to_string(),
+                Duration::from_millis(50),
+                None,
+            ),
+            ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "0".to_string(),
+                    text: " world".to_string(),
+                })],
+                None,
+                "chunk2".to_string(),
+                Duration::from_millis(80),
+                None,
+            ),
+            ProviderInferenceResponseChunk::new(
+                vec![],
+                Some(Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(8),
+                    cost: None,
+                }),
+                "chunk3".to_string(),
+                Duration::from_millis(120),
+                Some(FinishReason::Stop),
+            ),
+        ];
+
+        // Accumulate text across chunks
+        let full_text: String = chunks
+            .iter()
+            .flat_map(|c| c.content.iter())
+            .filter_map(|block| match block {
+                ContentBlockChunk::Text(t) => Some(t.text.as_str()),
+                _ => None,
+            })
+            .collect();
+        expect_that!(full_text.as_str(), eq("Hello world"));
+
+        // Usage arrives in the final chunk
+        let final_usage = chunks
+            .iter()
+            .rev()
+            .find_map(|c| c.usage.as_ref())
+            .expect("should have usage in final chunk");
+        expect_that!(final_usage.input_tokens, eq(Some(15)));
+        expect_that!(final_usage.output_tokens, eq(Some(8)));
+
+        // Finish reason in the last chunk
+        expect_that!(
+            chunks.last().unwrap().finish_reason,
+            eq(Some(FinishReason::Stop))
+        );
+    }
+
+    // =========================================================================
+    // ContentBlockOutput and ContentBlockChunk serde
+    // =========================================================================
+
+    #[gtest]
+    fn test_content_block_output_from_string() {
+        let block: ContentBlockOutput = "test output".to_string().into();
+        let json = serde_json::to_value(&block).expect("should serialize");
+        assert_eq!(json["type"], json!("text"));
+        assert_eq!(json["text"], json!("test output"));
+    }
+
+    #[gtest]
+    fn test_content_block_chunk_serde_roundtrip() {
+        let chunk = ContentBlockChunk::ToolCall(ToolCallChunk {
+            id: "call_123".to_string(),
+            raw_name: Some("get_weather".to_string()),
+            raw_arguments: r#"{"location":"NYC"}"#.to_string(),
+        });
+
+        let json = serde_json::to_value(&chunk).expect("should serialize");
+        assert_eq!(json["type"], json!("tool_call"));
+        assert_eq!(json["id"], json!("call_123"));
+        assert_eq!(json["raw_name"], json!("get_weather"));
+
+        let deserialized: ContentBlockChunk =
+            serde_json::from_value(json).expect("should deserialize");
+        assert_eq!(deserialized, chunk);
+    }
+
+    #[gtest]
+    fn test_tool_call_chunk_serializes_none_name_as_empty() {
+        let chunk = ToolCallChunk {
+            id: "call_456".to_string(),
+            raw_name: None,
+            raw_arguments: "{}".to_string(),
+        };
+        let json = serde_json::to_value(&chunk).expect("should serialize");
+        // None raw_name should serialize as empty string
+        assert_eq!(json["raw_name"], json!(""));
+    }
+
+    // =========================================================================
+    // ProviderToolCallConfig
+    // =========================================================================
+
+    fn sample_tool_config() -> ProviderToolCallConfig {
+        ProviderToolCallConfig {
+            tools: vec![
+                FunctionToolDef {
+                    name: "get_weather".to_string(),
+                    description: "Get weather for a location".to_string(),
+                    parameters: json!({
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"}
+                        },
+                        "required": ["location"]
+                    }),
+                    strict: false,
+                },
+                FunctionToolDef {
+                    name: "search".to_string(),
+                    description: "Search the web".to_string(),
+                    parameters: json!({"type": "object", "properties": {"query": {"type": "string"}}}),
+                    strict: true,
+                },
+            ],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            allowed_tools: AllowedTools {
+                tools: vec!["get_weather".to_string()],
+                choice: AllowedToolsChoice::Explicit,
+            },
+            ..Default::default()
+        }
+    }
+
+    #[gtest]
+    fn test_tool_config_any_tools_available() {
+        let config = sample_tool_config();
+        expect_that!(config.any_tools_available(), eq(true));
+
+        let empty = ProviderToolCallConfig::default();
+        expect_that!(empty.any_tools_available(), eq(false));
+    }
+
+    #[gtest]
+    fn test_tool_config_get_function_tool() {
+        let config = sample_tool_config();
+        let weather = config.get_function_tool("get_weather");
+        expect_that!(weather.is_some(), eq(true));
+        expect_that!(weather.unwrap().strict, eq(false));
+
+        let missing = config.get_function_tool("nonexistent");
+        expect_that!(missing.is_none(), eq(true));
+    }
+
+    #[gtest]
+    fn test_tool_config_tools_available_rejects_openai_custom() {
+        let config = ProviderToolCallConfig {
+            openai_custom_tools: vec![OpenAICustomTool {
+                name: "web_search".to_string(),
+                description: None,
+                format: None,
+            }],
+            ..Default::default()
+        };
+        let result = config.tools_available();
+        expect_that!(result.is_err(), eq(true));
+    }
+
+    #[gtest]
+    fn test_strict_tools_available_filters_by_allowed() {
+        let config = sample_tool_config();
+        // AllowedToolsChoice::Explicit with only "get_weather" allowed
+        let strict_tools: Vec<_> = config
+            .strict_tools_available()
+            .expect("should succeed")
+            .collect();
+        // Only "get_weather" should pass, "search" should be filtered out
+        expect_that!(strict_tools.len(), eq(1));
+        expect_that!(strict_tools[0].name.as_str(), eq("get_weather"));
+    }
+
+    #[gtest]
+    fn test_provider_tool_scope_matching() {
+        let unscoped = ProviderToolScope::Unscoped;
+        expect_that!(unscoped.matches("any_model", "any_provider"), eq(true));
+
+        let scoped = ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: Some("openai".to_string()),
+        });
+        expect_that!(scoped.matches("gpt-4", "openai"), eq(true));
+        expect_that!(scoped.matches("gpt-4", "azure"), eq(false));
+        expect_that!(scoped.matches("claude", "openai"), eq(false));
+
+        let model_only = ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: None,
+        });
+        expect_that!(model_only.matches("gpt-4", "openai"), eq(true));
+        expect_that!(model_only.matches("gpt-4", "azure"), eq(true));
+        expect_that!(model_only.matches("claude", "openai"), eq(false));
+    }
+
+    // =========================================================================
+    // ModelInferenceRequestJsonMode conversion from JsonMode
+    // =========================================================================
+
+    #[gtest]
+    fn test_json_mode_conversion() {
+        expect_that!(
+            ModelInferenceRequestJsonMode::from(JsonMode::On),
+            eq(ModelInferenceRequestJsonMode::On)
+        );
+        expect_that!(
+            ModelInferenceRequestJsonMode::from(JsonMode::Strict),
+            eq(ModelInferenceRequestJsonMode::Strict)
+        );
+        expect_that!(
+            ModelInferenceRequestJsonMode::from(JsonMode::Off),
+            eq(ModelInferenceRequestJsonMode::Off)
+        );
+        // Tool mode maps to Off for providers
+        expect_that!(
+            ModelInferenceRequestJsonMode::from(JsonMode::Tool),
+            eq(ModelInferenceRequestJsonMode::Off)
+        );
+    }
+
+    // =========================================================================
+    // raw_usage_entries_from_value
+    // =========================================================================
+
+    #[gtest]
+    fn test_raw_usage_entries_from_value() {
+        let model_id = Uuid::now_v7();
+        let raw = json!({"prompt_tokens": 100, "completion_tokens": 50, "reasoning_tokens": 10});
+        let entries =
+            raw_usage_entries_from_value(model_id, "openai", ApiType::ChatCompletions, raw.clone());
+
+        expect_that!(entries.len(), eq(1));
+        expect_that!(entries[0].model_inference_id, eq(model_id));
+        assert_eq!(entries[0].provider_type, "openai");
+        assert_eq!(entries[0].api_type, ApiType::ChatCompletions);
+        assert_eq!(entries[0].data, raw);
+    }
+
+    // =========================================================================
+    // Latency serialization
+    // =========================================================================
+
+    #[gtest]
+    fn test_latency_streaming_serialization() {
+        let latency = Latency::Streaming {
+            ttft: Duration::from_millis(150),
+            response_time: Duration::from_millis(2000),
+        };
+        let json = serde_json::to_value(&latency).expect("should serialize");
+        // Streaming variant has ttft and response_time
+        assert!(json["ttft"].is_object(), "ttft should be present");
+        assert!(
+            json["response_time"].is_object(),
+            "response_time should be present"
+        );
+    }
+
+    #[gtest]
+    fn test_latency_non_streaming_serialization() {
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(500),
+        };
+        let json = serde_json::to_value(&latency).expect("should serialize");
+        assert!(
+            json["response_time"].is_object(),
+            "response_time should be present"
+        );
+        // Should NOT have ttft
+        assert!(json.get("ttft").is_none(), "ttft should not be present");
+    }
+
+    // =========================================================================
+    // AllowedTools
+    // =========================================================================
+
+    #[gtest]
+    fn test_allowed_tools_into_dynamic() {
+        let explicit = AllowedTools {
+            tools: vec!["tool_a".to_string(), "tool_b".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+        let dynamic = explicit.into_dynamic_allowed_tools();
+        assert!(dynamic.is_some(), "explicit should produce dynamic tools");
+        assert_eq!(dynamic.unwrap().len(), 2);
+
+        let default_tools = AllowedTools {
+            tools: vec!["tool_a".to_string()],
+            choice: AllowedToolsChoice::FunctionDefault,
+        };
+        assert!(
+            default_tools.into_dynamic_allowed_tools().is_none(),
+            "FunctionDefault should return None"
+        );
+    }
+}
