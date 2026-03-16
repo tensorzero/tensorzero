@@ -41,7 +41,10 @@ jobs:
 
       - name: Build and push `fixtures` container
         run: |
-          docker buildx build -f ui/fixtures/Dockerfile . -t tensorzero/fixtures:sha-${{ github.sha }} --push
+          bash ci/build-or-reuse-docker-image.sh \
+            "tensorzero/fixtures:sha-${{ github.sha }}" \
+            -f ui/fixtures/Dockerfile \
+            .
 
       - name: Wait for image to be available on Docker Hub
         run: |

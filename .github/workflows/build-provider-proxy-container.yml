@@ -41,7 +41,12 @@ jobs:
 
       - name: Build and push `provider-proxy` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/provider-proxy/Dockerfile --target provider-proxy . -t tensorzero/provider-proxy:sha-${{ github.sha }} --push
+          bash ci/build-or-reuse-docker-image.sh \
+            "tensorzero/provider-proxy:sha-${{ github.sha }}" \
+            --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
+            -f crates/provider-proxy/Dockerfile \
+            --target provider-proxy \
+            .
 
       - name: Wait for image to be available on Docker Hub
         run: |
