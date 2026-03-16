@@ -1081,7 +1081,9 @@ pub async fn write_completed_batch_inference<'a>(
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
-                Error::new(ErrorDetails::MissingBatchInferenceResponse {
+                // Construct error for logging but don't return it — skip this inference
+                // and continue processing the rest of the batch.
+                let _ = Error::new(ErrorDetails::MissingBatchInferenceResponse {
                     inference_id: Some(inference_id),
                 });
                 continue;

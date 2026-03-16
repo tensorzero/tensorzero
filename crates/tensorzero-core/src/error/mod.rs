@@ -1094,7 +1094,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
