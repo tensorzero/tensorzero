@@ -3,7 +3,7 @@ use std::time::Duration;
 use futures::{FutureExt, TryFutureExt};
 use sqlx::PgPool;
 use tokio::runtime::{Handle, RuntimeFlavor};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc::{self, Receiver, Sender, error::TrySendError};
 use tokio::task::JoinSet;
 
 use crate::config::BatchWritesConfig;
@@ -83,33 +83,57 @@ impl PostgresBatchSender {
 
     pub fn send_chat_inferences(&self, rows: &[ChatInferenceDatabaseInsert]) {
         for row in rows {
-            if let Err(e) = self.chat_inferences.try_send(row.clone()) {
-                tracing::error!(
-                    "Postgres batch channel full — dropping chat inference record. \
-                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
-                );
+            match self.chat_inferences.try_send(row.clone()) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    tracing::error!(
+                        "Postgres batch channel full — dropping chat inference record. \
+                         Increase `write_queue_capacity` or check Postgres performance."
+                    );
+                }
+                Err(TrySendError::Closed(_)) => {
+                    tracing::error!(
+                        "Postgres batch writer has shut down — dropping chat inference record."
+                    );
+                }
             }
         }
     }
 
     pub fn send_json_inferences(&self, rows: &[JsonInferenceDatabaseInsert]) {
         for row in rows {
-            if let Err(e) = self.json_inferences.try_send(row.clone()) {
-                tracing::error!(
-                    "Postgres batch channel full — dropping json inference record. \
-                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
-                );
+            match self.json_inferences.try_send(row.clone()) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    tracing::error!(
+                        "Postgres batch channel full — dropping json inference record. \
+                         Increase `write_queue_capacity` or check Postgres performance."
+                    );
+                }
+                Err(TrySendError::Closed(_)) => {
+                    tracing::error!(
+                        "Postgres batch writer has shut down — dropping json inference record."
+                    );
+                }
             }
         }
     }
 
     pub fn send_model_inferences(&self, rows: &[StoredModelInference]) {
         for row in rows {
-            if let Err(e) = self.model_inferences.try_send(row.clone()) {
-                tracing::error!(
-                    "Postgres batch channel full — dropping model inference record. \
-                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
-                );
+            match self.model_inferences.try_send(row.clone()) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    tracing::error!(
+                        "Postgres batch channel full — dropping model inference record. \
+                         Increase `write_queue_capacity` or check Postgres performance."
+                    );
+                }
+                Err(TrySendError::Closed(_)) => {
+                    tracing::error!(
+                        "Postgres batch writer has shut down — dropping model inference record."
+                    );
+                }
             }
         }
     }
