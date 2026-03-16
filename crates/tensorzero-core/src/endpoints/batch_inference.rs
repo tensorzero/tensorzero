@@ -886,14 +886,20 @@ pub async fn write_poll_batch_inference(
                         batch_id = %batch_request.batch_id,
                         "Failed to process completed batch inference: {e}. Marking batch as failed."
                     );
-                    write_batch_request_status_update(
+                    if let Err(status_err) = write_batch_request_status_update(
                         database,
                         batch_request,
                         BatchStatus::Failed,
                         raw_request,
                         raw_response,
                     )
-                    .await?;
+                    .await
+                    {
+                        tracing::error!(
+                            batch_id = %batch_request.batch_id,
+                            "Additionally failed to mark batch as failed: {status_err}"
+                        );
+                    }
                     return Err(e);
                 }
             };

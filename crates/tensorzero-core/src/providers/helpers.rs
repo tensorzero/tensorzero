@@ -169,9 +169,10 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             api_type,
         })
     })?;
-    let total_lines = text.lines().count();
-    let mut parse_errors: usize = 0;
+    let mut total_lines = 0;
+    let mut parse_errors = 0;
     for line in text.lines() {
+        total_lines += 1;
         let row = match serde_json::from_str::<T>(line) {
             Ok(row) => row,
             Err(e) => {
@@ -1831,6 +1832,146 @@ mod tests {
             serde_json::json!({
                 "my_array": ["value1", true],
             })
+        );
+    }
+
+    fn make_batch_file_info() -> JsonlBatchFileInfo {
+        JsonlBatchFileInfo {
+            provider_type: "test".to_string(),
+            raw_request: "req".to_string(),
+            raw_response: "resp".to_string(),
+            file_id: "test-file.jsonl".to_string(),
+        }
+    }
+
+    #[expect(clippy::unnecessary_wraps)]
+    fn ok_make_output(
+        value: serde_json::Value,
+    ) -> Result<ProviderBatchInferenceOutput, crate::error::Error> {
+        let id = value
+            .get("custom_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<Uuid>().ok())
+            .unwrap_or_else(Uuid::now_v7);
+        Ok(ProviderBatchInferenceOutput {
+            id,
+            output: vec![],
+            raw_response: value.to_string(),
+            usage: crate::inference::types::Usage::default(),
+            finish_reason: None,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_parse_jsonl_batch_file_all_rows_valid() {
+        let id1 = Uuid::now_v7();
+        let id2 = Uuid::now_v7();
+        let content = format!(
+            "{{\"custom_id\":\"{id1}\",\"data\":1}}\n{{\"custom_id\":\"{id2}\",\"data\":2}}"
+        );
+        let bytes: Result<Bytes, std::io::Error> = Ok(Bytes::from(content));
+
+        let result = parse_jsonl_batch_file(
+            bytes,
+            make_batch_file_info(),
+            ApiType::ChatCompletions,
+            ok_make_output,
+        )
+        .await
+        .expect("should succeed");
+
+        assert_eq!(result.elements.len(), 2);
+        assert!(result.elements.contains_key(&id1));
+        assert!(result.elements.contains_key(&id2));
+    }
+
+    #[tokio::test]
+    async fn test_parse_jsonl_batch_file_partial_failure() {
+        let id1 = Uuid::now_v7();
+        let content = format!("{{\"custom_id\":\"{id1}\",\"data\":1}}\nnot-valid-json");
+        let bytes: Result<Bytes, std::io::Error> = Ok(Bytes::from(content));
+
+        let result = parse_jsonl_batch_file(
+            bytes,
+            make_batch_file_info(),
+            ApiType::ChatCompletions,
+            ok_make_output,
+        )
+        .await
+        .expect("should succeed with partial results");
+
+        assert_eq!(result.elements.len(), 1, "Should contain the one valid row");
+        assert!(result.elements.contains_key(&id1));
+    }
+
+    #[tokio::test]
+    async fn test_parse_jsonl_batch_file_all_rows_fail() {
+        let content = "not-json-1\nnot-json-2\nnot-json-3";
+        let bytes: Result<Bytes, std::io::Error> = Ok(Bytes::from(content));
+
+        let err = parse_jsonl_batch_file(
+            bytes,
+            make_batch_file_info(),
+            ApiType::ChatCompletions,
+            ok_make_output,
+        )
+        .await
+        .expect_err("should fail when all rows are unparseable");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("All 3 rows failed to parse"),
+            "Error should mention total rows: {msg}"
+        );
+        assert!(
+            msg.contains("3 parse errors"),
+            "Error should mention parse error count: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parse_jsonl_batch_file_empty_file() {
+        let bytes: Result<Bytes, std::io::Error> = Ok(Bytes::from(""));
+
+        let result = parse_jsonl_batch_file(
+            bytes,
+            make_batch_file_info(),
+            ApiType::ChatCompletions,
+            ok_make_output,
+        )
+        .await
+        .expect("empty file should succeed with zero elements");
+
+        assert!(
+            result.elements.is_empty(),
+            "Empty file should produce no elements"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_parse_jsonl_batch_file_make_output_fails() {
+        let content = "{\"custom_id\":\"test\",\"data\":1}\n{\"custom_id\":\"test2\",\"data\":2}";
+        let bytes: Result<Bytes, std::io::Error> = Ok(Bytes::from(content));
+
+        let err = parse_jsonl_batch_file(
+            bytes,
+            make_batch_file_info(),
+            ApiType::ChatCompletions,
+            |_value: serde_json::Value| {
+                Err(crate::error::Error::new(
+                    crate::error::ErrorDetails::InternalError {
+                        message: "make_output failed".to_string(),
+                    },
+                ))
+            },
+        )
+        .await
+        .expect_err("should fail when make_output fails for all rows");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("All 2 rows failed to parse"),
+            "Error should report all rows failed: {msg}"
         );
     }
 
