@@ -169,10 +169,13 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
             api_type,
         })
     })?;
+    let total_lines = text.lines().count();
+    let mut parse_errors: usize = 0;
     for line in text.lines() {
         let row = match serde_json::from_str::<T>(line) {
             Ok(row) => row,
             Err(e) => {
+                parse_errors += 1;
                 // Construct error for logging but don't return it
                 let _ = Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -190,11 +193,25 @@ pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
         let output = match make_output(row) {
             Ok(output) => output,
             Err(_) => {
+                parse_errors += 1;
                 // Construct error for logging but don't return it
                 continue;
             }
         };
         elements.insert(output.id, output);
+    }
+
+    if elements.is_empty() && total_lines > 0 {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: format!(
+                "All {total_lines} rows failed to parse in batch results file {file_id} \
+                 ({parse_errors} parse errors)"
+            ),
+            raw_request: Some(raw_request),
+            raw_response: Some(raw_response),
+            provider_type: provider_type.to_string(),
+            api_type,
+        }));
     }
 
     Ok(ProviderBatchInferenceResponse {
