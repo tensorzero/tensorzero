@@ -7036,7 +7036,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-error"
-version = "2026.3.2"
+version = "2026.3.1"
 dependencies = [
  "autopilot-client",
  "axum",
@@ -7111,7 +7111,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-provider-types"
-version = "2026.3.2"
+version = "2026.3.1"
 dependencies = [
  "derive_builder 0.20.2",
  "futures",
