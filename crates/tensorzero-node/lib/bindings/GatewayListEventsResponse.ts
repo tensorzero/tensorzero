@@ -28,8 +28,4 @@ export type GatewayListEventsResponse = {
    * All user_questions events that do not have a matching user_questions_answers event.
    */
   pending_user_questions: Array<GatewayEvent>;
-  /**
-   * All auto_eval_example_labeling events that do not have a matching answers event.
-   */
-  pending_auto_eval_example_labeling: Array<GatewayEvent>;
 };
