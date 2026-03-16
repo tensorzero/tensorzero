@@ -26,7 +26,7 @@ export type InferenceSample = {
    */
   timestamp_secs: number;
   /**
-   * Model name (for min-threshold lookup and pricing).
+   * Model name (for min-threshold lookup).
    */
   model_name: string;
 };

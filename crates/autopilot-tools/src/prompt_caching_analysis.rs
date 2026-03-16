@@ -32,8 +32,56 @@ pub struct InferenceSample {
     pub input_tokens: Option<u32>,
     /// Timestamp as seconds since epoch (for temporal analysis).
     pub timestamp_secs: f64,
-    /// Model name (for min-threshold lookup and pricing).
+    /// Model name (for min-threshold lookup).
     pub model_name: String,
+}
+
+/// Pricing configuration for prompt caching cost estimation.
+///
+/// These values should be derived from the model provider's `cost` config
+/// in `tensorzero.toml`. The caller extracts the base input price from the
+/// existing cost pointers and provides cache-specific multipliers.
+#[cfg_attr(feature = "ts-bindings", derive(TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct CachingPricingConfig {
+    /// Base input token price in dollars per million tokens.
+    /// Derived from the provider's `cost` config (e.g. `cost_per_million` for
+    /// the input token pointer).
+    pub input_price_per_million: f64,
+    /// Multiplier for cached token reads (e.g. 0.1 for Anthropic = 90% savings).
+    /// Default: 0.1
+    #[serde(default = "default_cache_read_multiplier")]
+    pub cache_read_multiplier: f64,
+    /// Multiplier for cache writes with 5-minute TTL (e.g. 1.25 for Anthropic).
+    /// Default: 1.25
+    #[serde(default = "default_cache_write_5min_multiplier")]
+    pub cache_write_5min_multiplier: f64,
+    /// Multiplier for cache writes with 1-hour TTL (e.g. 2.0 for Anthropic).
+    /// Default: 2.0
+    #[serde(default = "default_cache_write_1hr_multiplier")]
+    pub cache_write_1hr_multiplier: f64,
+}
+
+fn default_cache_read_multiplier() -> f64 {
+    0.1
+}
+fn default_cache_write_5min_multiplier() -> f64 {
+    1.25
+}
+fn default_cache_write_1hr_multiplier() -> f64 {
+    2.0
+}
+
+impl Default for CachingPricingConfig {
+    fn default() -> Self {
+        Self {
+            input_price_per_million: 3.0, // Sonnet-class default
+            cache_read_multiplier: default_cache_read_multiplier(),
+            cache_write_5min_multiplier: default_cache_write_5min_multiplier(),
+            cache_write_1hr_multiplier: default_cache_write_1hr_multiplier(),
+        }
+    }
 }
 
 // ── Output types ───────────────────────────────────────────────────────────
@@ -189,32 +237,6 @@ fn min_cache_tokens(model: &str) -> u32 {
         // Conservative default
         2048
     }
-}
-
-/// Base input price per token (dollars). Returns None for unknown models.
-fn base_input_price_per_token(model: &str) -> Option<f64> {
-    let price_per_million = if model.contains("opus-4-6")
-        || model.contains("opus-4-5")
-        || model.contains("opus-4-1")
-        || model.contains("opus-4")
-    {
-        15.0
-    } else if model.contains("sonnet-4-6")
-        || model.contains("sonnet-4-5")
-        || model.contains("sonnet-4")
-        || model.contains("sonnet-3-7")
-    {
-        3.0
-    } else if model.contains("haiku-4-5") {
-        1.0
-    } else if model.contains("haiku-3-5") {
-        0.80
-    } else if model.contains("haiku-3") {
-        0.25
-    } else {
-        return None;
-    };
-    Some(price_per_million / 1_000_000.0)
 }
 
 // ── Core algorithm ─────────────────────────────────────────────────────────
@@ -445,9 +467,9 @@ fn compute_cost_estimate(
     samples: &[InferenceSample],
     prefix_analysis: &PrefixAnalysis,
     temporal: &TemporalAnalysis,
-    model: &str,
+    pricing: &CachingPricingConfig,
 ) -> CostEstimate {
-    let base_price = base_input_price_per_token(model).unwrap_or(3.0 / 1_000_000.0);
+    let base_price = pricing.input_price_per_million / 1_000_000.0;
 
     let mut total_no_cache = 0.0;
     let mut total_5min = 0.0;
@@ -462,13 +484,16 @@ fn compute_cost_estimate(
         let cost_no_cache = input_tokens * base_price;
 
         // Cache hit cost
-        let cost_hit = cacheable * 0.1 * base_price + uncached * base_price;
+        let cost_hit =
+            cacheable * pricing.cache_read_multiplier * base_price + uncached * base_price;
 
         // Cache miss cost (5-min write)
-        let cost_miss_5min = cacheable * 1.25 * base_price + uncached * base_price;
+        let cost_miss_5min =
+            cacheable * pricing.cache_write_5min_multiplier * base_price + uncached * base_price;
 
         // Cache miss cost (1-hr write)
-        let cost_miss_1hr = cacheable * 2.0 * base_price + uncached * base_price;
+        let cost_miss_1hr =
+            cacheable * pricing.cache_write_1hr_multiplier * base_price + uncached * base_price;
 
         // Expected costs
         let hit_rate_5min = temporal.estimated_hit_rate_5min;
@@ -828,7 +853,13 @@ fn generate_summary(score: f64, prefix: &PrefixAnalysis, cost: &CostEstimate) ->
 ///
 /// Samples should be from the same `(function_name, variant_name)` pair,
 /// sorted by timestamp ascending.
-pub fn analyze_prompt_caching(samples: &[InferenceSample]) -> PromptCachingReport {
+///
+/// `pricing` provides the base input token price and cache multipliers,
+/// derived from the model provider's `cost` configuration.
+pub fn analyze_prompt_caching(
+    samples: &[InferenceSample],
+    pricing: &CachingPricingConfig,
+) -> PromptCachingReport {
     let model = samples
         .first()
         .map(|s| s.model_name.clone())
@@ -854,7 +885,7 @@ pub fn analyze_prompt_caching(samples: &[InferenceSample]) -> PromptCachingRepor
     let temporal = compute_temporal_analysis(samples, prefix_analysis.mean_prefix_ratio);
 
     // Phase 6: Cost estimation
-    let cost_estimate = compute_cost_estimate(samples, &prefix_analysis, &temporal, &model);
+    let cost_estimate = compute_cost_estimate(samples, &prefix_analysis, &temporal, pricing);
 
     // Phase 7: Shuffle detection
     let shuffle_detection = compute_shuffle_detection(samples);
@@ -1151,7 +1182,7 @@ mod tests {
             })
             .collect();
 
-        let report = analyze_prompt_caching(&samples);
+        let report = analyze_prompt_caching(&samples, &CachingPricingConfig::default());
 
         assert!(
             report.opportunity_score > 50.0,
@@ -1187,7 +1218,7 @@ mod tests {
             })
             .collect();
 
-        let report = analyze_prompt_caching(&samples);
+        let report = analyze_prompt_caching(&samples, &CachingPricingConfig::default());
 
         assert!(
             report.opportunity_score < 20.0,
@@ -1217,7 +1248,7 @@ mod tests {
     fn test_single_sample() {
         let samples = vec![make_sample("sys", vec!["msg"], "tools", 1000, 0.0)];
 
-        let report = analyze_prompt_caching(&samples);
+        let report = analyze_prompt_caching(&samples, &CachingPricingConfig::default());
         assert_eq!(report.sample_size, 1);
         // Should not panic, just return empty/zero analysis
         assert!(report.time_range_secs.is_none());
@@ -1225,7 +1256,7 @@ mod tests {
 
     #[test]
     fn test_empty_samples() {
-        let report = analyze_prompt_caching(&[]);
+        let report = analyze_prompt_caching(&[], &CachingPricingConfig::default());
         assert_eq!(report.sample_size, 0);
     }
 }

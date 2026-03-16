@@ -33,6 +33,7 @@ export * from "./BooleanMetricFilter";
 export * from "./BreakpointRecommendation";
 export * from "./CacheEnabledMode";
 export * from "./CacheParamsOptions";
+export * from "./CachingPricingConfig";
 export * from "./ChainOfThoughtConfig";
 export * from "./ChatCompletionConfig";
 export * from "./ChatCompletionInferenceParams";
