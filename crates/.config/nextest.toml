@@ -40,7 +40,10 @@ not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !t
 junit.path = "junit.xml"
 
 [profile.live-batch]
-default-filter = 'test(batch) and not test(mock)'
+# The daily live-batch workflow only provisions the live-provider path, not local Postgres fixtures.
+# Keep this scoped to provider batch coverage so backend-specific `db::*_postgres` tests stay in the
+# mocked batch / broader e2e matrices that provision those services.
+default-filter = 'test(providers::) and test(batch) and not test(mock)'
 
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
