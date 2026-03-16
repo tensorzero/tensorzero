@@ -42,6 +42,15 @@ It uses LLMs to analyze inference results and propose prompt improvements, then 
 
 See the [GEPA Guide](/optimization/gepa) to learn more.
 
+## Cost Optimization
+
+### Prompt Caching Analysis
+
+TensorZero can analyze your inference history to detect prompt caching opportunities.
+The analyzer examines consecutive requests for prefix overlap, estimates cost savings, and recommends where to place cache breakpoints.
+
+See the [Prompt Caching Analysis Guide](/optimization/prompt-caching-analysis) to learn more.
+
 ## Inference-Time Optimization
 
 ### Best-of-N & Mixture-of-N Sampling

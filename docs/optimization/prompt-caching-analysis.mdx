@@ -1,0 +1,508 @@
+---
+title: Prompt Caching Analysis
+description: Detect optimization opportunities by analyzing your inference history for prompt caching savings.
+---
+
+TensorZero can analyze your inference history to detect prompt caching opportunities.
+Given a batch of inferences for the same function and variant, the analyzer identifies stable content prefixes, estimates cost savings, and recommends where to place cache breakpoints.
+
+## How Prompt Caching Works
+
+Model providers like Anthropic, OpenAI, and Google cache the **prefix** of your request.
+When consecutive requests share the same beginning (system prompt, tool definitions, few-shot examples), the provider can skip re-processing those tokens.
+
+The cache hierarchy for Anthropic is:
+
+```
+tools → system → messages
+```
+
+A change at any level invalidates that level and everything after it.
+For example, if your tool definitions change between requests, the system prompt and messages caches are also invalidated — even if those sections are identical.
+
+### Provider Comparison
+
+| Provider | Cache type | Savings on cached tokens | Min tokens | TTL |
+|----------|-----------|------------------------|------------|-----|
+| Anthropic | Explicit breakpoints (max 4) + automatic | 90% on reads, 25% premium on writes | 1,024–4,096 | 5 min or 1 hour |
+| OpenAI | Automatic (no opt-in) | 50% on reads | 1,024 | Auto-eviction |
+| Google Gemini | Implicit (auto) or explicit (named caches) | Varies | 1,024–4,096 | Configurable (default 1 hour) |
+
+## When to Use This Analysis
+
+Run the prompt caching analyzer when you have a function variant that:
+
+- Sends **large system prompts** (instructions, persona, context documents)
+- Includes **tool definitions** that don't change between requests
+- Uses **few-shot examples** or static context in early messages
+- Handles **high request volume** (many requests within 5 minutes)
+
+Common patterns that benefit from prompt caching:
+
+- **Customer support agents** with long instructions and company knowledge
+- **Code assistants** with repository context in the system prompt
+- **RAG pipelines** where the retrieved context is prepended before user queries
+- **Agentic workflows** with many tool definitions and multi-turn conversations
+
+## Real-World Examples
+
+### Example 1: Customer Support Agent
+
+A customer support bot has a 4,000-token system prompt with company policies, a 2,000-token FAQ section, and 500 tokens of dynamic user context.
+It handles ~200 requests per hour.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ System prompt (4,000 tokens) — identical across all requests    │ ← CACHEABLE
+│ FAQ section (2,000 tokens) — identical across all requests      │ ← CACHEABLE
+├─────────────────────────────────────────────────────────────────┤
+│ User context (500 tokens) — changes per request                 │ ← NOT CACHED
+│ User message (~100 tokens) — changes per request                │ ← NOT CACHED
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Analysis output:**
+
+```json
+{
+  "segment_stability": {
+    "tools": 1.0,
+    "system": 1.0,
+    "messages_by_position": [0.0]
+  },
+  "prefix_analysis": {
+    "mean_prefix_ratio": 0.91,
+    "mean_cacheable_tokens": 6000,
+    "mean_uncached_tokens": 600,
+    "meets_min_threshold": true
+  },
+  "temporal": {
+    "p50_interval_secs": 18,
+    "pct_within_5min": 1.0,
+    "estimated_hit_rate_5min": 0.91
+  },
+  "cost_estimate": {
+    "savings_pct_5min": 0.74,
+    "recommended_ttl": "FiveMinutes"
+  },
+  "opportunity_score": 87.3,
+  "summary": "High opportunity: 91% of input tokens are cacheable on average, potential savings of 74%."
+}
+```
+
+**Recommended config change:**
+
+```bash
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::function_name::customer_support",
+    "messages": [...],
+    "tensorzero::extra_body": [
+      {
+        "pointer": "/system/0/cache_control",
+        "value": {"type": "ephemeral"}
+      }
+    ]
+  }'
+```
+
+Or in your TensorZero configuration:
+
+```toml title="config/tensorzero.toml"
+[functions.customer_support.variants.claude_variant]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+
+[[functions.customer_support.variants.claude_variant.extra_body]]
+pointer = "/system/0/cache_control"
+value = { type = "ephemeral" }
+```
+
+### Example 2: Multi-Turn Coding Agent
+
+A coding assistant includes 15 tool definitions (~3,000 tokens), a system prompt (~1,500 tokens), and multi-turn conversation history that grows with each turn.
+Conversations average 8 turns, with ~30 seconds between turns.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Tools: 15 tool definitions (3,000 tokens) — stable                   │ ← CACHEABLE
+│ System: coding instructions (1,500 tokens) — stable                  │ ← CACHEABLE
+├──────────────────────────────────────────────────────────────────────┤
+│ Message 1: user question (200 tokens) — stable within conversation   │ ← CACHEABLE (multi-turn)
+│ Message 2: assistant response (800 tokens) — stable                  │ ← CACHEABLE (multi-turn)
+│ Message 3: user follow-up (150 tokens) — stable                      │ ← CACHEABLE (multi-turn)
+│ ...                                                                  │
+│ Message N: new user message (200 tokens) — dynamic                   │ ← NOT CACHED
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Analysis output:**
+
+```json
+{
+  "segment_stability": {
+    "tools": 1.0,
+    "system": 1.0,
+    "messages_by_position": [1.0, 1.0, 1.0, 0.85, 0.7, 0.5, 0.3, 0.0]
+  },
+  "prefix_analysis": {
+    "mean_prefix_ratio": 0.78,
+    "mean_cacheable_tokens": 7800,
+    "mean_uncached_tokens": 2200,
+    "meets_min_threshold": true
+  },
+  "temporal": {
+    "p50_interval_secs": 30,
+    "pct_within_5min": 0.95,
+    "estimated_hit_rate_5min": 0.74
+  },
+  "cost_estimate": {
+    "savings_pct_5min": 0.62
+  },
+  "opportunity_score": 79.1,
+  "breakpoint_recommendations": [
+    {
+      "position": "after system",
+      "extra_body_pointer": "/system/0/cache_control",
+      "extra_body_value": {"type": "ephemeral"},
+      "estimated_cacheable_tokens": 4500,
+      "incremental_savings_pct": 0.41
+    }
+  ]
+}
+```
+
+<Tip>
+
+For multi-turn conversations, consider using Anthropic's **automatic caching** (`cache_control` at the request level) instead of explicit breakpoints.
+The system automatically moves the cache breakpoint forward as the conversation grows.
+
+</Tip>
+
+### Example 3: Map Geocoding Pipeline
+
+A geocoding function processes addresses using an LLM with a 6,000-token system prompt containing formatting rules, geographic reference data, and output schemas.
+It processes batches of 1,000 addresses, with requests spaced ~500ms apart.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ System: geocoding rules + reference data (6,000 tokens) — stable     │ ← CACHEABLE
+├──────────────────────────────────────────────────────────────────────┤
+│ User: "Parse this address: 123 Main St, Springfield, IL" (~30 tok)   │ ← NOT CACHED
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Analysis output:**
+
+```json
+{
+  "segment_stability": {
+    "tools": 1.0,
+    "system": 1.0,
+    "messages_by_position": [0.0]
+  },
+  "prefix_analysis": {
+    "mean_prefix_ratio": 0.99,
+    "mean_cacheable_tokens": 6000,
+    "mean_uncached_tokens": 30,
+    "meets_min_threshold": true
+  },
+  "temporal": {
+    "p50_interval_secs": 0.5,
+    "pct_within_5min": 1.0,
+    "estimated_hit_rate_5min": 0.99,
+    "burst_ratio": 0.85
+  },
+  "cost_estimate": {
+    "savings_pct_5min": 0.88
+  },
+  "invalidation_warnings": [],
+  "opportunity_score": 94.2,
+  "summary": "High opportunity: 99% of input tokens are cacheable on average, potential savings of 88%."
+}
+```
+
+<Warning>
+
+The high `burst_ratio` (0.85) means 85% of requests arrive within 1 second of each other.
+Prompt caching only works after the first response starts streaming.
+If you send many requests in parallel, only the first one creates the cache — the rest may miss.
+Consider adding a small delay after the first request or using sequential processing to maximize cache hits.
+
+</Warning>
+
+### Example 4: Dynamic RAG (Low Opportunity)
+
+A RAG pipeline retrieves different documents per query and injects them into the system prompt.
+The system prompt changes with every request.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ System: "You are a research assistant." (20 tokens) — stable         │
+│ System: retrieved documents (4,000 tokens) — CHANGES EVERY REQUEST   │ ← NOT CACHEABLE
+├──────────────────────────────────────────────────────────────────────┤
+│ User: research question (100 tokens)                                 │ ← NOT CACHED
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Analysis output:**
+
+```json
+{
+  "segment_stability": {
+    "tools": 1.0,
+    "system": 0.02,
+    "messages_by_position": [0.0]
+  },
+  "prefix_analysis": {
+    "mean_prefix_ratio": 0.005,
+    "mean_cacheable_tokens": 20,
+    "meets_min_threshold": false
+  },
+  "opportunity_score": 0.0,
+  "summary": "No significant prompt caching opportunity detected."
+}
+```
+
+**Recommendation:** Restructure your prompt to separate the static instruction from the dynamic context.
+Move the static instruction to the first system message block and the retrieved documents to a separate block:
+
+```toml title="config/tensorzero.toml"
+# Place static instructions in the system template
+[functions.rag_search.variants.claude_variant]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+system_template = "config/prompts/rag_system.minijinja"
+
+# In your request, send dynamic context as a user message
+# instead of injecting it into the system prompt
+```
+
+This way, the stable system instruction can be cached even when the retrieved documents change.
+
+## Understanding the Report
+
+### Segment Stability
+
+Stability measures how often each segment is identical between consecutive requests.
+
+| Stability | Meaning |
+|-----------|---------|
+| 1.0 | Never changes — ideal for caching |
+| 0.9–0.99 | Mostly stable, occasional variation (e.g. date in system prompt) |
+| 0.5–0.9 | Partially stable — some benefit, but cache misses are common |
+| < 0.5 | Highly dynamic — not a good caching candidate |
+
+`messages_by_position` shows stability at each message index.
+Position 0 is the first message, position 1 is the second, and so on.
+In multi-turn conversations, early positions are typically stable (they represent older turns) while later positions change.
+
+### Prefix Analysis
+
+The prefix ratio is the fraction of the request that forms a common prefix with the next request.
+A `mean_prefix_ratio` of 0.9 means 90% of each request's content is shared with the next request.
+
+`meets_min_threshold` checks whether the cacheable prefix exceeds the model's minimum requirement:
+
+| Model | Minimum cacheable tokens |
+|-------|------------------------|
+| Claude Opus 4.6 / 4.5 | 4,096 |
+| Claude Sonnet 4.6 | 2,048 |
+| Claude Sonnet 4.5 / 4 / 3.7 | 1,024 |
+| Claude Haiku 4.5 | 4,096 |
+| Claude Haiku 3.5 / 3 | 2,048 |
+
+If your cacheable prefix is below the threshold, the provider silently ignores the cache breakpoint.
+
+### Temporal Analysis
+
+Cache entries have a time-to-live (TTL).
+If your requests are spaced more than 5 minutes apart, the default Anthropic cache expires and you pay the write cost again.
+
+| `pct_within_5min` | Recommendation |
+|-------------------|---------------|
+| > 0.8 | Use 5-minute TTL (default) — most requests will hit the cache |
+| 0.3–0.8 | Consider 1-hour TTL (2x write cost but covers longer gaps) |
+| < 0.3 | Caching may not be cost-effective — write costs exceed read savings |
+
+`burst_ratio` flags concurrent requests (< 1 second apart).
+Concurrent requests may not benefit from caching because the cache is only available after the first response starts streaming.
+
+### Shuffle Detection
+
+Prompt caching is prefix-based, so **reordering content kills cache hits** even if the content is identical.
+
+The `shuffle_score` measures the gap between content overlap (Jaccard similarity) and sequential overlap (prefix match):
+
+- **shuffle_score < 0.05**: No reordering detected
+- **0.05–0.3**: Mild reordering — some content appears in different positions
+- **> 0.3**: Significant reordering — reordering your messages could unlock substantial caching
+
+Common causes of shuffling:
+- Random sampling of few-shot examples
+- Non-deterministic ordering of retrieved documents
+- Shuffled tool results in agentic loops
+
+**Fix:** Sort your few-shot examples, retrieved documents, or context blocks in a deterministic order.
+Place the most stable content first.
+
+### Invalidation Warnings
+
+The analyzer flags patterns that silently break caching:
+
+- **Dynamic tool definitions**: If tool definitions change between requests, the entire cache hierarchy is invalidated.
+  This commonly happens with dynamic tools injected per-request.
+- **Multiple models**: Each model maintains its own cache.
+  If a variant routes to different models, analyze each model separately.
+- **20-block lookback limit**: Anthropic only checks the last 20 content blocks before each cache breakpoint.
+  For long conversations (> 20 messages), you need intermediate breakpoints.
+- **Wide message count variation**: Mixing single-turn and multi-turn requests reduces cache effectiveness.
+
+### Hidden Cache Invalidators
+
+Some request parameters invalidate the cache even when content is identical:
+
+| Parameter change | Cache level invalidated |
+|-----------------|----------------------|
+| Tool definitions modified | Everything (tools + system + messages) |
+| `tool_choice` changed | System + messages |
+| Images added or removed | System + messages |
+| Thinking parameters changed | System + messages |
+| `speed` setting changed | System + messages |
+
+### Cost Estimate
+
+The cost estimate models three scenarios for each request:
+
+| Scenario | Cached token cost | Uncached token cost |
+|----------|------------------|-------------------|
+| No caching | 1.0x base price | 1.0x base price |
+| Cache write (first request or cache miss) | 1.25x base price (5-min) or 2.0x (1-hr) | 1.0x base price |
+| Cache read (cache hit) | 0.1x base price | 1.0x base price |
+
+The `savings_pct` combines the estimated hit rate with the pricing model to project overall savings.
+
+### Opportunity Score
+
+A composite score from 0 to 100 combining:
+
+- **Cacheable percentage**: How much of each request is a shared prefix
+- **Cache hit rate**: How often requests arrive within the TTL window
+- **Cost savings**: Projected dollar savings
+- **Threshold gate**: Whether the prefix meets the model's minimum token requirement
+
+| Score | Label | Action |
+|-------|-------|--------|
+| 80–100 | High opportunity | Enable caching immediately |
+| 50–79 | Moderate opportunity | Review recommendations, consider tradeoffs |
+| 20–49 | Low opportunity | Caching possible but savings are modest |
+| 0–19 | No opportunity | Prefix overlap too small or requests too infrequent |
+
+## Breakpoint Recommendations
+
+The analyzer recommends up to 4 cache breakpoints (the Anthropic API maximum), expressed as `extra_body` pointers you can add to your TensorZero configuration.
+
+Example recommendation:
+
+```json
+{
+  "position": "after system",
+  "extra_body_pointer": "/system/0/cache_control",
+  "extra_body_value": {"type": "ephemeral"},
+  "estimated_cacheable_tokens": 6000,
+  "incremental_savings_pct": 0.81
+}
+```
+
+You can apply this directly in your variant configuration:
+
+```toml title="config/tensorzero.toml"
+[[functions.my_function.variants.my_variant.extra_body]]
+pointer = "/system/0/cache_control"
+value = { type = "ephemeral" }
+```
+
+Or pass it at inference time:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name::my_function",
+    messages=[...],
+    extra_body={
+        "tensorzero::extra_body": [
+            {
+                "pointer": "/system/0/cache_control",
+                "value": {"type": "ephemeral"}
+            }
+        ]
+    }
+)
+```
+
+### Multiple Breakpoints
+
+For long prompts with distinct stable sections, the analyzer may recommend multiple breakpoints:
+
+```toml title="config/tensorzero.toml"
+# Breakpoint 1: after tool definitions
+[[functions.my_agent.variants.claude.extra_body]]
+pointer = "/tools/-1/cache_control"
+value = { type = "ephemeral" }
+
+# Breakpoint 2: after system prompt
+[[functions.my_agent.variants.claude.extra_body]]
+pointer = "/system/0/cache_control"
+value = { type = "ephemeral" }
+```
+
+### Mixed TTLs
+
+If your system prompt changes infrequently (e.g. daily) but your conversation turns come every few seconds, you can use different TTLs:
+
+```toml title="config/tensorzero.toml"
+# 1-hour TTL for rarely-changing system prompt
+[[functions.my_agent.variants.claude.extra_body]]
+pointer = "/system/0/cache_control"
+value = { type = "ephemeral", ttl = "1h" }
+
+# 5-minute TTL for conversation history (default)
+[[functions.my_agent.variants.claude.extra_body]]
+pointer = "/messages/0/content/0/cache_control"
+value = { type = "ephemeral" }
+```
+
+## Best Practices
+
+1. **Place static content first.** System prompts, tool definitions, and few-shot examples should come before dynamic content.
+   The cache is prefix-based — the earlier content appears, the more likely it is to be cached.
+
+2. **Stabilize your serialization.** Cache matching is byte-level.
+   If your JSON serialization produces different key orderings across requests (common in Go, Swift, and some Python configurations), cache hits fail even though the semantic content is identical.
+   Use deterministic JSON serialization (sorted keys).
+
+3. **Don't shuffle few-shot examples.** If you randomly sample or reorder examples, every request gets a different prefix.
+   Sort examples deterministically — alphabetically, by ID, or by relevance score in a stable order.
+
+4. **Separate static and dynamic system content.** Instead of one large system prompt that mixes instructions with per-request context, split into multiple blocks:
+   - Block 1: Static instructions (cacheable)
+   - Block 2: Dynamic context (not cached)
+
+5. **Monitor cache effectiveness.** After enabling caching, check the raw provider response for `cache_read_input_tokens` and `cache_creation_input_tokens`.
+   If you see high creation and low reads, something is invalidating your cache.
+
+6. **Sequence parallel requests.** If you send many requests simultaneously, add a small delay after the first one.
+   The cache is only populated after the first response starts streaming.
+
+## Limitations
+
+- **Anthropic-specific breakpoints**: The `extra_body` pointer recommendations are specific to the Anthropic API format.
+  OpenAI caching is automatic and doesn't support explicit breakpoints.
+- **Token estimation**: The analyzer estimates tokens from character counts.
+  This is accurate for English text (~4 characters per token) but less accurate for non-Latin scripts, code with many short tokens, or content with embedded base64 data.
+- **Binary content**: Images and documents are compared by their serialized representation.
+  The character-to-token ratio breaks down for base64-encoded content.
+  The analyzer flags this case.
+- **Cross-user analysis**: The analysis compares consecutive requests.
+  If different users send requests with different prefixes interleaved, the consecutive-pair analysis underestimates per-user cache hit rates.
+  Future versions may support grouping by user or episode.

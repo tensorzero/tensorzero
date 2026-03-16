@@ -47,6 +47,7 @@ use std::collections::HashSet;
 
 pub mod error;
 pub mod fix_strict_tool_schema;
+pub mod prompt_caching_analysis;
 pub mod tools;
 mod visitor;
 

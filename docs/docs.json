@@ -86,6 +86,7 @@
               "optimization/index",
               "optimization/dynamic-in-context-learning-dicl",
               "optimization/gepa",
+              "optimization/prompt-caching-analysis",
               "optimization/supervised-fine-tuning-sft"
             ]
           },
