@@ -141,6 +141,7 @@ pub enum AutopilotStatus {
     WaitingForToolCallAuthorization,
     WaitingForToolExecution,
     WaitingForUserQuestionsAnswers,
+    WaitingForAutoEvalExampleLabelingAnswers,
     WaitingForRetry,
     Failed,
 }
