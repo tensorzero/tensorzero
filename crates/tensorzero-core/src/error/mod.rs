@@ -2319,6 +2319,25 @@ mod tests {
     }
 
     #[test]
+    fn test_missing_batch_inference_response_is_500() {
+        let error = Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None });
+        assert_eq!(
+            error.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MissingBatchInferenceResponse should be 500, not 400 — \
+             this is a server-side issue (provider data couldn't be matched to stored inferences)"
+        );
+
+        let error_with_id = Error::new(ErrorDetails::MissingBatchInferenceResponse {
+            inference_id: Some(Uuid::now_v7()),
+        });
+        assert_eq!(
+            error_with_id.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        );
+    }
+
+    #[test]
     fn test_extract_from_fatal_stream_error() {
         let error = Error::new(ErrorDetails::FatalStreamError {
             message: "stream died".to_string(),
