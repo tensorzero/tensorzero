@@ -102,9 +102,16 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
             None
         };
 
-        // Validate arguments as JSON (no schema validation available for ProviderToolCallConfig)
-        let parsed_arguments = if function_tool.is_some() {
-            serde_json::from_str(&tool_call.arguments).ok()
+        // Validate arguments against the JSON schema from FunctionToolDef
+        let parsed_arguments = if let Some(tool) = function_tool {
+            if let Ok(arguments) = serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
+                match jsonschema::validator_for(&tool.parameters) {
+                    Ok(validator) if validator.is_valid(&arguments) => Some(arguments),
+                    _ => None,
+                }
+            } else {
+                None
+            }
         } else {
             None
         };
