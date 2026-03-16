@@ -49,6 +49,8 @@ class RawResponseEntry:
 class Usage:
     input_tokens: int
     output_tokens: int
+    cache_read_input_tokens: Optional[int] = None
+    cache_write_input_tokens: Optional[int] = None
     cost: Optional[float] = None
 
 
