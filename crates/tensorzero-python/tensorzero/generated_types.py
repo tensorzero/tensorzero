@@ -1370,11 +1370,20 @@ StoredInputMessageContent = (
 @dataclass(kw_only=True)
 class OpenAICustomTool:
     """
-    `OpenAICustomTool` represents OpenAI's custom tool format, which allows
-    for text or grammar-based tool definitions beyond standard function calling.
-    Currently, this type is a wire + outbound + storage type so it forces a consistent format.
-    This only applies to the Chat Completions API. The Responses API has a slightly different request
-    shape so we implement a conversion in `responses.rs`.
+    `Tool` is the generic form for all tools that TensorZero itself manages.
+    This includes function tools (the original kind) and OpenAI's custom tools
+    (which support text and grammar formats). Future additions may include MCP and other standards.
+
+    We store this type (serialized) in the Array(String) in the `dynamic_tools` column
+    in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
+
+    For the wire format, we use `DynamicTool` which wraps this enum with a custom deserializer
+    that allows function tools to be specified without type tags for backward compatibility,
+    while other tool types require explicit tagging.
+
+    Notably, provider tools (like OpenAI websearch) are not part of this enum
+    as there's not really anything we can do besides experiment with them.
+    They are a separate type `ProviderTool`.
     """
 
     name: str

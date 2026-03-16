@@ -44,7 +44,9 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
+use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::deprecation_warning;
 use uuid::Uuid;
 
@@ -572,11 +574,11 @@ pub enum AnthropicToolChoice<'a> {
     },
 }
 
-// We map our ToolCallConfig struct to the AnthropicToolChoice that serializes properly
-impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
+// We map our ProviderToolCallConfig struct to the AnthropicToolChoice that serializes properly
+impl<'a> TryFrom<&'a ProviderToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
 
-    fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
+    fn try_from(tool_call_config: &'a ProviderToolCallConfig) -> Result<Self, Error> {
         let disable_parallel_tool_use = Some(tool_call_config.parallel_tool_calls == Some(false));
         let tool_choice = &tool_call_config.tool_choice;
 
@@ -609,13 +611,12 @@ pub(super) struct AnthropicFunctionTool<'a> {
 }
 
 impl<'a> AnthropicFunctionTool<'a> {
-    pub fn new(tool: &'a FunctionToolConfig, supports_strict_mode: bool) -> Self {
-        // In case we add more tool types in the future, the compiler will complain here.
+    pub fn new(tool: &'a FunctionToolDef, supports_strict_mode: bool) -> Self {
         Self {
-            name: tool.name(),
-            description: Some(tool.description()),
-            input_schema: tool.parameters(),
-            strict: supports_strict_mode.then_some(tool.strict()),
+            name: &tool.name,
+            description: Some(&tool.description),
+            input_schema: &tool.parameters,
+            strict: supports_strict_mode.then_some(tool.strict),
         }
     }
 }
@@ -634,7 +635,7 @@ pub(super) enum AnthropicTool<'a> {
 ///
 /// This is shared between Anthropic and GCP Vertex Anthropic providers.
 pub(super) fn build_anthropic_tools<'a>(
-    tool_config: Option<&'a Cow<'a, ToolCallConfig>>,
+    tool_config: Option<&'a Cow<'a, ProviderToolCallConfig>>,
     provider_tools: &'a [Value],
     supports_strict_mode: bool,
 ) -> Result<Option<Vec<AnthropicTool<'a>>>, Error> {
@@ -1832,15 +1833,15 @@ mod tests {
     use crate::inference::types::file::Detail;
     use crate::inference::types::resolved_input::{FileUrl, LazyFile};
     use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
-    use crate::jsonschema_util::JSONSchema;
-    use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolResult};
+    use crate::providers::test_helpers::WEATHER_PROVIDER_TOOL_CONFIG;
+    use crate::tool::ToolResult;
     use crate::utils::testing::capture_logs;
+    use tensorzero_provider_types::FunctionToolDef;
 
     #[test]
     fn test_try_from_tool_call_config() {
         // Need to cover all 4 cases
-        let tool_call_config = ToolCallConfig {
+        let tool_call_config = ProviderToolCallConfig {
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
@@ -1852,7 +1853,7 @@ mod tests {
             }
         ));
 
-        let tool_call_config = ToolCallConfig {
+        let tool_call_config = ProviderToolCallConfig {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
@@ -1865,7 +1866,7 @@ mod tests {
             }
         );
 
-        let tool_call_config = ToolCallConfig {
+        let tool_call_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()
@@ -1879,7 +1880,7 @@ mod tests {
             }
         );
 
-        let tool_call_config = ToolCallConfig {
+        let tool_call_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
             ..Default::default()
@@ -1905,12 +1906,12 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolDef {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: JSONSchema::compile_background(parameters.clone()),
+            parameters: parameters.clone(),
             strict: false,
-        });
+        };
         let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, true);
         assert_eq!(
             anthropic_tool,
@@ -2278,7 +2279,7 @@ mod tests {
             inference_id: Uuid::now_v7(),
             messages,
             system: None,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             temperature: None,
             top_p: None,
             presence_penalty: None,
@@ -3825,7 +3826,8 @@ mod tests {
     #[test]
     fn test_anthropic_respects_allowed_tools() {
         use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
+        use tensorzero_provider_types::ProviderToolCallConfig;
 
         // Create a ToolCallConfig with two tools but only allow one
         let tool_config = ToolCallConfig {
@@ -3840,9 +3842,10 @@ mod tests {
                 choice: AllowedToolsChoice::Explicit,
             },
         };
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
 
         // Convert to Anthropic tools
-        let tools: Vec<AnthropicFunctionTool> = tool_config
+        let tools: Vec<AnthropicFunctionTool> = provider_tool_config
             .strict_tools_available()
             .unwrap()
             .map(|tool| AnthropicFunctionTool::new(tool, true))

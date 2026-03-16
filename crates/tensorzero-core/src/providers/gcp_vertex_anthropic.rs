@@ -918,10 +918,10 @@ mod tests {
     use crate::inference::types::{
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
-    use crate::jsonschema_util::JSONSchema;
     use crate::providers::anthropic::AnthropicFunctionTool;
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
+    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::tool::ToolResult;
+    use tensorzero_provider_types::FunctionToolDef;
 
     fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropicUsage {
         serde_json::from_value(usage_info.clone()).unwrap_or_default()
@@ -937,12 +937,12 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolDef {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: JSONSchema::compile_background(parameters.clone()),
+            parameters: parameters.clone(),
             strict: false,
-        });
+        };
         let anthropic_tool: AnthropicFunctionTool = AnthropicFunctionTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
@@ -1198,7 +1198,7 @@ mod tests {
             inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             temperature: Some(0.5),
             top_p: Some(0.9),
             presence_penalty: Some(0.1),

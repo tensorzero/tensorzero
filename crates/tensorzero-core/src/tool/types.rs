@@ -14,7 +14,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use strum::AsRefStr;
-use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -256,137 +255,11 @@ impl FunctionTool {
     }
 }
 
-/// `OpenAICustomTool` represents OpenAI's custom tool format, which allows
-/// for text or grammar-based tool definitions beyond standard function calling.
-/// Currently, this type is a wire + outbound + storage type so it forces a consistent format.
-/// This only applies to the Chat Completions API. The Responses API has a slightly different request
-/// shape so we implement a conversion in `responses.rs`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct OpenAICustomTool {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<OpenAICustomToolFormat>,
-}
-
-impl fmt::Display for OpenAICustomTool {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAICustomToolFormat {
-    #[schemars(title = "OpenAICustomToolFormatText")]
-    Text,
-    #[schemars(title = "OpenAICustomToolFormatGrammar")]
-    Grammar { grammar: OpenAIGrammarDefinition },
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct OpenAIGrammarDefinition {
-    pub syntax: OpenAIGrammarSyntax,
-    pub definition: String,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-pub enum OpenAIGrammarSyntax {
-    Lark,
-    Regex,
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl OpenAICustomTool {
-    #[getter]
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    #[getter]
-    pub fn get_description(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-
-    #[getter]
-    pub fn get_format<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        match &self.format {
-            Some(format) => serialize_to_dict(py, format.clone()).map(|x| Some(x.into_bound(py))),
-            None => Ok(None),
-        }
-    }
-
-    pub fn __repr__(&self) -> String {
-        format!("OpenAICustomTool(name='{}')", self.name)
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[schemars(title = "ProviderToolScopeModelProvider")]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-pub struct ProviderToolScopeModelProvider {
-    pub model_name: String,
-    #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
-    pub provider_name: Option<String>,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[serde(untagged)]
-#[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
-pub enum ProviderToolScope {
-    #[default]
-    Unscoped,
-    ModelProvider(ProviderToolScopeModelProvider),
-}
-
-impl ProviderToolScope {
-    pub(crate) fn matches(&self, scope_model_name: &str, scope_provider_name: &str) -> bool {
-        match self {
-            ProviderToolScope::Unscoped => true,
-            ProviderToolScope::ModelProvider(mp) => {
-                if scope_model_name != mp.model_name {
-                    return false;
-                }
-                match &mp.provider_name {
-                    Some(pn) => scope_provider_name == pn,
-                    None => true, // If provider_name is None, match any provider for this model
-                }
-            }
-        }
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ProviderTool {
-    #[serde(default)]
-    pub scope: ProviderToolScope,
-    pub tool: Value,
-}
-
-impl fmt::Display for ProviderTool {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
+// `OpenAICustomTool`, `OpenAICustomToolFormat`, `OpenAIGrammarDefinition`,
+// `OpenAIGrammarSyntax`, `ProviderToolScopeModelProvider`, `ProviderToolScope`,
+// and `ProviderTool` are defined in `tensorzero-provider-types` and re-exported
+// via `crate::tool` (tool/mod.rs).
+pub use tensorzero_provider_types::{
+    OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition, OpenAIGrammarSyntax,
+    ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider,
+};

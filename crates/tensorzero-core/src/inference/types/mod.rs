@@ -45,9 +45,8 @@
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
 
-use derive_builder::Builder;
-use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
-use extra_headers::FullExtraHeadersConfig;
+use extra_body::UnfilteredInferenceExtraBody;
+
 pub use file::{
     Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
     ObjectStoragePointer, UrlFile,
@@ -71,12 +70,9 @@ pub use resolved_input::{
 };
 use rust_decimal::Decimal;
 use schemars::JsonSchema;
-use serde::de::Error as _;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::{Map, Value};
-use std::borrow::Borrow;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
-    borrow::Cow,
     collections::HashMap,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -93,7 +89,6 @@ use crate::endpoints::object_storage::get_object;
 use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::resolved_input::{
     LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent, write_file,
 };
@@ -140,11 +135,16 @@ pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
 // Re-export types from tensorzero-provider-types
 pub use tensorzero_provider_types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileFuture, FileUrl, FinishReason,
-    FlattenUnknown, Latency, LazyFile, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, PendingObjectStoreFile, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, ThoughtChunk, UnknownChunk,
+    AllowedTools, AllowedToolsChoice, BatchStatus, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, FileFuture, FileUrl, FinishReason, FlattenUnknown, FunctionToolDef,
+    Latency, LazyFile, ModelInferenceRequest, ModelInferenceRequestBuilder,
+    ModelInferenceRequestJsonMode, OpenAICustomTool, OpenAICustomToolFormat,
+    OpenAIGrammarDefinition, OpenAIGrammarSyntax, PeekableProviderInferenceResponseStream,
+    PendingObjectStoreFile, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
+    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, ProviderTool, ProviderToolCallConfig, ProviderToolScope,
+    ProviderToolScopeModelProvider, RequestMessage, StartBatchProviderInferenceResponse, TextChunk,
+    ThoughtChunk, ToolConfigRef, UnknownChunk,
 };
 
 /*
@@ -1025,50 +1025,7 @@ impl RateLimitedInputContent for RequestMessage {
 }
 
 // Display for RequestMessage is in tensorzero-provider-types
-
-// ModelInferenceRequestJsonMode is re-exported from tensorzero_provider_types
-
-/// Top-level TensorZero type for an inference request to a particular model.
-/// This should contain all the information required to make a valid inference request
-/// for a provider, except for information about what model to actually request,
-/// and to convert it back to the appropriate response format.
-/// An example of the latter is that we might have prepared a request with Tools available
-/// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, Serialize)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[builder(setter(into, strip_option), default)]
-pub struct ModelInferenceRequest<'a> {
-    pub inference_id: Uuid,
-    pub messages: Vec<RequestMessage>,
-    pub system: Option<String>,
-    pub tool_config: Option<Cow<'a, ToolCallConfig>>,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub seed: Option<u32>,
-    pub stop_sequences: Option<Cow<'a, [String]>>,
-    pub stream: bool,
-    pub json_mode: ModelInferenceRequestJsonMode,
-    pub function_type: FunctionType,
-    pub output_schema: Option<&'a Value>,
-    pub extra_body: FullExtraBodyConfig,
-    pub extra_headers: FullExtraHeadersConfig,
-    pub fetch_and_encode_input_files_before_inference: bool,
-    /// Optional arbitrary data, only used when constructing the cache key.
-    /// This is used by best_of_n/mixture_of_n to force different sub-variants
-    /// to have different cache keys.
-    pub extra_cache_key: Option<String>,
-    #[serde(flatten)]
-    pub inference_params_v2: ChatCompletionInferenceParamsV2,
-}
-
-impl<'a> ModelInferenceRequest<'a> {
-    pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
-        self.stop_sequences.as_ref().map(borrow_cow)
-    }
-}
+// ModelInferenceRequest and ModelInferenceRequestJsonMode are re-exported from tensorzero_provider_types
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(
@@ -1989,63 +1946,6 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
             String::new()
         }
     }
-}
-
-/// Turns a reference to a Cow into a `Cow::Borrowed`, without cloning
-fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
-    match cow {
-        Cow::Borrowed(x) => Cow::Borrowed(x),
-        Cow::Owned(x) => Cow::Borrowed(x.borrow()),
-    }
-}
-
-pub(super) fn serialize_delete<S>(s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    true.serialize(s)
-}
-
-pub(super) fn deserialize_delete<'de, D>(d: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let val = bool::deserialize(d)?;
-    if !val {
-        return Err(D::Error::custom(
-            "Error deserializing replacement config: `delete` must be `true`, or not set",
-        ));
-    }
-    Ok(())
-}
-
-// Field-aware versions for struct fields (not enum variants)
-#[expect(clippy::trivially_copy_pass_by_ref)]
-pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    true.serialize(s)
-}
-
-pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let val = bool::deserialize(d)?;
-    if !val {
-        return Err(D::Error::custom(
-            "Error deserializing replacement config: `delete` must be `true`, or not set",
-        ));
-    }
-    Ok(())
-}
-
-pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-    let mut map = Map::new();
-    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
-    map.insert("const".to_owned(), Value::Bool(true));
-    schemars::Schema::from(map)
 }
 
 #[cfg(test)]

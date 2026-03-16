@@ -47,6 +47,7 @@ use crate::{
     model::{Credential, ModelProvider},
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
+use tensorzero_provider_types::FunctionToolDef;
 use uuid::Uuid;
 
 use super::{
@@ -812,6 +813,19 @@ impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
     }
 }
 
+impl<'a> From<&'a FunctionToolDef> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
+        FireworksTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
+            },
+        }
+    }
+}
+
 fn fireworks_tool_call_to_tensorzero(fireworks_tool_call: FireworksResponseToolCall) -> ToolCall {
     ToolCall {
         id: fireworks_tool_call.id,
@@ -1129,7 +1143,7 @@ mod tests {
     use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
     use crate::providers::openai::OpenAIToolType;
     use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
 
     #[tokio::test]
     async fn test_fireworks_response_with_thinking_blocks() {
@@ -1240,7 +1254,7 @@ mod tests {
             frequency_penalty: Some(0.2),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

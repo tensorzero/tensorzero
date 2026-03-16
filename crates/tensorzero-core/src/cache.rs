@@ -19,7 +19,9 @@ use crate::inference::types::{
 };
 use crate::model::StreamResponse;
 use crate::serde_util::{deserialize_json_string, serialize_json_string};
-use crate::tool::{InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCallConfig};
+use tensorzero_provider_types::ProviderToolCallConfig;
+
+use crate::tool::{InferenceResponseToolCall, InferenceResponseToolCallExt};
 use crate::utils::spawn_ignoring_shutdown;
 use blake3::Hash;
 use clap::ValueEnum;
@@ -392,8 +394,8 @@ impl CacheOutput for NonStreamingCacheData {
         for block in &self.blocks {
             if let ContentBlockOutput::ToolCall(tool_call) = block {
                 if cache_validation_info.tool_config.is_some() {
-                    // If we have a tool config, validate against the schema
-                    let output = InferenceResponseToolCall::new_from_tool_call(
+                    // If we have a tool config, validate that the tool name is known and arguments are valid JSON
+                    let output = InferenceResponseToolCall::new_from_provider_tool_call(
                         tool_call.clone(),
                         cache_validation_info.tool_config.as_ref(),
                     )
@@ -494,10 +496,10 @@ fn spawn_maybe_cache_write<
 /// In the future, we may perform additional checks
 /// (e.g. validating against the `output_schema`).
 pub struct CacheValidationInfo {
-    // The `ToolCallConfig` for the top-level inference request, if present
+    // The `ProviderToolCallConfig` for the top-level inference request, if present
     // This is deliberately not part of the cache key - we only use it to
     // skip writing certain cache entries.
-    pub tool_config: Option<ToolCallConfig>,
+    pub tool_config: Option<ProviderToolCallConfig>,
 }
 
 // This doesn't block
@@ -532,7 +534,7 @@ pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
     chunks: Vec<ProviderInferenceResponseChunk>,
     raw_request: &str,
     usage: &Usage,
-    tool_config: Option<ToolCallConfig>,
+    tool_config: Option<ProviderToolCallConfig>,
 ) -> Result<(), Error> {
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
@@ -665,7 +667,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage,
     };
-    use crate::tool::ToolCallConfig;
+    use tensorzero_provider_types::ProviderToolCallConfig;
     use tensorzero_types::Role;
 
     use super::*;
@@ -860,7 +862,7 @@ mod tests {
     #[gtest]
     fn test_cache_key_changes_with_tool_config(fixture: &CacheKeyFixture) {
         let mut req = fixture.request.clone();
-        req.tool_config = Some(Cow::Owned(ToolCallConfig::default()));
+        req.tool_config = Some(Cow::Owned(ProviderToolCallConfig::default()));
         expect_that!(
             cache_key_for(&req, "model", "provider"),
             not(eq(fixture.key))

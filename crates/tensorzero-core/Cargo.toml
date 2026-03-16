@@ -12,7 +12,7 @@ exclude = ["tests/", "fixtures/"]
 # has the `e2e_tests` feature enabled when we run our e2e tests
 e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-provider-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
-pyo3 = ["dep:pyo3", "tensorzero-types/pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-provider-types/pyo3"]
 ts-bindings = [
     "dep:ts-rs",
     "tensorzero-types/ts-bindings",
@@ -51,7 +51,7 @@ backon = { version = "1.6.0", features = ["tokio-sleep"] }
 blake3 = { workspace = true }
 bytes = "1.11.1"
 chrono = { workspace = true }
-derive_builder = "0.20.0"
+derive_builder = { workspace = true }
 durable = { workspace = true }
 futures = { workspace = true }
 futures-core = "0.3.30"

@@ -9,8 +9,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
+
+use tensorzero_provider_types::{
+    FunctionToolDef, OpenAICustomTool, ProviderTool, ProviderToolCallConfig,
+};
 
 use crate::config::UninitializedToolConfig;
 use crate::config::path::ResolvedTomlPathData;
@@ -18,7 +22,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::jsonschema_util::JSONSchema;
 
 use super::IMPLICIT_TOOL_DESCRIPTION;
-use super::types::{FunctionTool, OpenAICustomTool, ProviderTool, Tool};
+use super::types::{FunctionTool, Tool};
 use super::wire::ToolChoice;
 
 #[cfg(test)]
@@ -99,63 +103,8 @@ pub struct DynamicImplicitToolConfig {
     pub parameters: JSONSchema,
 }
 
-/// Records / lists the tools that were allowed in the request
-/// Also lists how they were set (default, dynamically set)
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AllowedTools {
-    pub tools: Vec<String>,
-    pub choice: AllowedToolsChoice,
-}
-
-impl AllowedTools {
-    pub fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
-        #[expect(deprecated)]
-        match self.choice {
-            AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
-                Some(self.tools.into_iter().collect())
-            }
-        }
-    }
-
-    pub fn as_dynamic_allowed_tools(&self) -> Option<Vec<&str>> {
-        #[expect(deprecated)]
-        match self.choice {
-            AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
-                Some(self.tools.iter().map(|s| s.as_str()).collect())
-            }
-        }
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-pub enum AllowedToolsChoice {
-    /// If `allowed_tools` is not explicitly passed, we set the function tools
-    /// by default and add any dynamic tools
-    #[default]
-    FunctionDefault,
-    /// If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
-    /// This is deprecated but we keep it around as it may still be in the database.
-    /// We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
-    #[deprecated]
-    DynamicAllowedTools,
-    /// Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
-    Explicit,
-}
-
-/// Reference to either a function tool config or an OpenAI custom tool.
-/// Used by the OpenAI provider to iterate over all available tools.
-pub enum ToolConfigRef<'a> {
-    Function(&'a FunctionToolConfig),
-    OpenAICustom(&'a OpenAICustomTool),
-}
+// `AllowedTools`, `AllowedToolsChoice` are re-exported from `tensorzero-provider-types`
+pub use tensorzero_provider_types::{AllowedTools, AllowedToolsChoice};
 
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
@@ -430,28 +379,6 @@ impl ToolCallConfig {
         ))
     }
 
-    /// Returns an iterator over all available tools including OpenAI custom tools.
-    /// This method is intended for the OpenAI provider only.
-    pub fn tools_available_with_openai_custom(
-        &self,
-    ) -> Box<dyn Iterator<Item = ToolConfigRef<'_>> + '_> {
-        Box::new(
-            self.static_tools_available
-                .iter()
-                .map(ToolConfigRef::Function)
-                .chain(
-                    self.dynamic_tools_available
-                        .iter()
-                        .map(ToolConfigRef::Function),
-                )
-                .chain(
-                    self.openai_custom_tools
-                        .iter()
-                        .map(ToolConfigRef::OpenAICustom),
-                ),
-        )
-    }
-
     /// Returns tools filtered by allowed_tools list and tool type filter.
     /// Returns an error if OpenAI custom tools are present, as they are not compatible
     /// with standard function tool filtering.
@@ -615,5 +542,29 @@ impl From<FunctionToolConfig> for Tool {
             name: tool_config.name().to_string(),
             strict: tool_config.strict(),
         })
+    }
+}
+
+impl From<&ToolCallConfig> for ProviderToolCallConfig {
+    fn from(config: &ToolCallConfig) -> Self {
+        let tools = config
+            .static_tools_available
+            .iter()
+            .chain(config.dynamic_tools_available.iter())
+            .map(|tc| FunctionToolDef {
+                name: tc.name().to_string(),
+                description: tc.description().to_string(),
+                parameters: tc.parameters().clone(),
+                strict: tc.strict(),
+            })
+            .collect();
+        ProviderToolCallConfig {
+            tools,
+            provider_tools: config.provider_tools.clone(),
+            openai_custom_tools: config.openai_custom_tools.clone(),
+            tool_choice: config.tool_choice.clone(),
+            parallel_tool_calls: config.parallel_tool_calls,
+            allowed_tools: config.allowed_tools.clone(),
+        }
     }
 }

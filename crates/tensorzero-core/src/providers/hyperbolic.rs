@@ -547,7 +547,7 @@ mod tests {
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
-    use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
+    use crate::providers::test_helpers::WEATHER_PROVIDER_TOOL_CONFIG;
     #[tokio::test]
     async fn test_hyperbolic_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -565,7 +565,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

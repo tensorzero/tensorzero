@@ -27,6 +27,8 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
 use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
+use tensorzero_provider_types::ProviderToolCallConfig;
+
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
@@ -810,7 +812,9 @@ impl BestOfNEvaluatorConfig {
             .or_else(|| self.inner.json_mode().copied())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
-            JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),
+            JsonMode::Tool => Some(Cow::Owned(ProviderToolCallConfig::from(
+                &*JSON_MODE_TOOL_CALL_CONFIG,
+            ))),
             JsonMode::Off | JsonMode::On | JsonMode::Strict => None,
         };
         if !inference_config.extra_body.is_empty() {
