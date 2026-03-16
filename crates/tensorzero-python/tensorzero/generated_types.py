@@ -232,6 +232,120 @@ ExtraBody = (
 )
 
 
+@dataclass(kw_only=True)
+class ExtraBodyReplacementKindValue:
+    value: Any
+
+
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKindValue
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeader:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeaderDelete:
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeader:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`).
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeaderDelete:
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeader:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeaderDelete:
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+
+
+ExtraHeader = (
+    VariantExtraHeader
+    | VariantExtraHeaderDelete
+    | ModelProviderExtraHeader
+    | ModelProviderExtraHeaderDelete
+    | AlwaysExtraHeader
+    | AlwaysExtraHeaderDelete
+)
+
+
 FloatComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 
