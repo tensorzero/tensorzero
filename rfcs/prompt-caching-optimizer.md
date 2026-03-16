@@ -20,6 +20,7 @@ tools → system → messages
 The API hashes content sequentially. A cache hit requires that all content from the start up to a breakpoint is **byte-identical** to a previous request. Any change at level N invalidates levels N and beyond.
 
 Key constraints:
+
 - **Min token thresholds**: 1,024–4,096 tokens depending on model
 - **TTL**: 5 minutes (default), 1 hour (2x base cost)
 - **Max 4 breakpoints** per request
@@ -72,12 +73,12 @@ Also compute per-segment **unique values**:
 uniqueness(segment) = |{S_segment(i) : i ∈ [1,N]}| / N
 ```
 
-| Metric | Interpretation |
-|--------|---------------|
-| `stability(tools) = 1.0` | Tools never change (expected — they come from config) |
-| `stability(system) = 0.95` | System prompt is mostly static, minor template variation |
-| `stability(system) = 0.3` | System prompt varies heavily (e.g., date injection, user-specific context) |
-| `uniqueness(messages) = 1.0` | Every request has unique messages (expected for single-turn) |
+| Metric                       | Interpretation                                                             |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `stability(tools) = 1.0`     | Tools never change (expected — they come from config)                      |
+| `stability(system) = 0.95`   | System prompt is mostly static, minor template variation                   |
+| `stability(system) = 0.3`    | System prompt varies heavily (e.g., date injection, user-specific context) |
+| `uniqueness(messages) = 1.0` | Every request has unique messages (expected for single-turn)               |
 
 ### Phase 3: Longest Common Prefix (LCP) Analysis
 
@@ -150,21 +151,21 @@ This is a lower bound — in practice, non-consecutive requests can also hit the
 
 Pricing model (per token):
 
-| Scenario | Cached tokens cost | Uncached tokens cost |
-|----------|-------------------|---------------------|
-| No caching | `base_price` | `base_price` |
-| Cache write (miss) | `1.25 × base_price` | `base_price` |
-| Cache read (hit) | `0.1 × base_price` | `base_price` |
+| Scenario           | Cached tokens cost  | Uncached tokens cost |
+| ------------------ | ------------------- | -------------------- |
+| No caching         | `base_price`        | `base_price`         |
+| Cache write (miss) | `1.25 × base_price` | `base_price`         |
+| Cache read (hit)   | `0.1 × base_price`  | `base_price`         |
 
 Base prices per million input tokens:
 
 ```typescript
 const BASE_INPUT_PRICES: Record<string, number> = {
-  "claude-opus-4-6":   15.00,
-  "claude-opus-4-5":   15.00,
-  "claude-sonnet-4-6":  3.00,
-  "claude-sonnet-4-5":  3.00,
-  "claude-haiku-4-5":   0.80,
+  "claude-opus-4-6": 15.0,
+  "claude-opus-4-5": 15.0,
+  "claude-sonnet-4-6": 3.0,
+  "claude-sonnet-4-5": 3.0,
+  "claude-haiku-4-5": 0.8,
   // ...
 };
 ```
@@ -224,11 +225,11 @@ shuffle_score(i) = jaccard(i) - sequence_match(i)
 mean_shuffle_score = mean(shuffle_score(i))
 ```
 
-| `mean_shuffle_score` | Interpretation |
-|---------------------|---------------|
-| < 0.05 | No shuffling detected |
-| 0.05 – 0.3 | Mild shuffling — some content reordered |
-| > 0.3 | Significant shuffling — reordering would unlock caching |
+| `mean_shuffle_score` | Interpretation                                          |
+| -------------------- | ------------------------------------------------------- |
+| < 0.05               | No shuffling detected                                   |
+| 0.05 – 0.3           | Mild shuffling — some content reordered                 |
+| > 0.3                | Significant shuffling — reordering would unlock caching |
 
 ### Phase 8: Where to Place Breakpoints
 
@@ -275,14 +276,14 @@ interface PromptCachingReport {
 
   // Stability
   segment_stability: {
-    tools: number;      // 0-1
-    system: number;     // 0-1
-    messages: number;   // 0-1 (first message position only)
+    tools: number; // 0-1
+    system: number; // 0-1
+    messages: number; // 0-1 (first message position only)
   };
 
   // Prefix analysis
   prefix_analysis: {
-    mean_prefix_ratio: number;       // 0-1, fraction of request that's a common prefix
+    mean_prefix_ratio: number; // 0-1, fraction of request that's a common prefix
     p25_prefix_ratio: number;
     p75_prefix_ratio: number;
     mean_cacheable_tokens: number;
@@ -313,21 +314,21 @@ interface PromptCachingReport {
   shuffle_detection: {
     mean_shuffle_score: number;
     shuffle_detected: boolean;
-    recommendation: string | null;  // e.g. "Reorder messages to place static content first"
+    recommendation: string | null; // e.g. "Reorder messages to place static content first"
   };
 
   // Breakpoint recommendations
   breakpoint_recommendations: Array<{
-    position: string;             // e.g. "after system[0]", "after messages[2]"
-    extra_body_pointer: string;   // e.g. "/system/0/cache_control"
-    extra_body_value: object;     // e.g. {"type": "ephemeral"}
+    position: string; // e.g. "after system[0]", "after messages[2]"
+    extra_body_pointer: string; // e.g. "/system/0/cache_control"
+    extra_body_value: object; // e.g. {"type": "ephemeral"}
     estimated_cacheable_tokens: number;
     incremental_savings_pct: number;
   }>;
 
   // Overall
-  opportunity_score: number;  // 0-100, composite score
-  summary: string;            // Human-readable one-liner
+  opportunity_score: number; // 0-100, composite score
+  summary: string; // Human-readable one-liner
 }
 ```
 
@@ -347,12 +348,12 @@ where w1=0.3, w2=0.3, w3=0.3, w4=0.1 (tunable)
 
 Scaled to 0–100 and thresholded:
 
-| Score | Label |
-|-------|-------|
-| 80–100 | **High opportunity** — enable caching immediately |
-| 50–79 | **Moderate opportunity** — consider caching, review recommendations |
-| 20–49 | **Low opportunity** — caching possible but savings are small |
-| 0–19 | **No opportunity** — prefix overlap too small or requests too infrequent |
+| Score  | Label                                                                    |
+| ------ | ------------------------------------------------------------------------ |
+| 80–100 | **High opportunity** — enable caching immediately                        |
+| 50–79  | **Moderate opportunity** — consider caching, review recommendations      |
+| 20–49  | **Low opportunity** — caching possible but savings are small             |
+| 0–19   | **No opportunity** — prefix overlap too small or requests too infrequent |
 
 ## Autopilot Cookbook: "Audit Prompt Caching Opportunities"
 
@@ -427,6 +428,7 @@ npx tensorzero-prompt-cache-audit \
 ### OpenAI
 
 OpenAI has **automatic** prefix caching (no opt-in required):
+
 - Activates for prompts >1,024 tokens
 - Cached tokens returned in `usage.prompt_tokens_details.cached_tokens`
 - Cached tokens are **50% cheaper** (not 90% like Anthropic)
@@ -439,6 +441,7 @@ OpenAI has **automatic** prefix caching (no opt-in required):
 ### Google Gemini
 
 Gemini has two mechanisms:
+
 - **Implicit caching** (automatic, like OpenAI) — enabled by default
 - **Explicit caching** — user creates a named cache object with a configurable TTL (default 1 hour, no min/max bounds)
 - Min thresholds: 1,024–4,096 tokens depending on model
@@ -450,11 +453,11 @@ Gemini has two mechanisms:
 
 The core algorithm (prefix stability, temporal analysis, shuffle detection) applies across all providers. The output layer should be provider-specific:
 
-| Provider | Breakpoint control | Savings multiplier | TTL options |
-|----------|-------------------|-------------------|-------------|
-| Anthropic | Explicit (max 4) + automatic | 0.1x read, 1.25x write | 5min, 1hr |
-| OpenAI | Automatic only | 0.5x read | Auto-eviction |
-| Gemini | Explicit named caches | Varies | Configurable |
+| Provider  | Breakpoint control           | Savings multiplier     | TTL options   |
+| --------- | ---------------------------- | ---------------------- | ------------- |
+| Anthropic | Explicit (max 4) + automatic | 0.1x read, 1.25x write | 5min, 1hr     |
+| OpenAI    | Automatic only               | 0.5x read              | Auto-eviction |
+| Gemini    | Explicit named caches        | Varies                 | Configurable  |
 
 ## Insights from Inference Engine Research
 
@@ -493,13 +496,13 @@ The breakpoint recommendation should be "place `cache_control` on `system[1]`" (
 
 From the Anthropic docs, changing certain parameters invalidates the cache at different levels:
 
-| Change | Invalidates from |
-|--------|-----------------|
-| Tool definitions changed | tools level (everything) |
-| `tool_choice` changed | system level onward |
-| Images added/removed | system level onward |
-| Thinking parameters changed | system level onward |
-| `speed` setting changed | system level onward |
+| Change                      | Invalidates from         |
+| --------------------------- | ------------------------ |
+| Tool definitions changed    | tools level (everything) |
+| `tool_choice` changed       | system level onward      |
+| Images added/removed        | system level onward      |
+| Thinking parameters changed | system level onward      |
+| `speed` setting changed     | system level onward      |
 
 Our analysis should check for these **hidden invalidators** across requests, not just content changes. For example, if `tool_choice` flips between `auto` and `required` across requests, that kills the system+message cache even if system content is identical.
 
@@ -532,6 +535,7 @@ This is supported by Anthropic's API (different `cache_control.ttl` per breakpoi
 From the Anthropic docs: the cache checker only looks back **20 blocks** from each breakpoint. If a prompt has >20 content blocks and only one breakpoint at the end, changes to early blocks won't be detected as cache misses (the check stops after 20 blocks).
 
 Our breakpoint recommendation should:
+
 1. Count total content blocks across all segments
 2. If total > 20, **require** intermediate breakpoints every ~15-20 blocks
 3. Place breakpoints strategically before content that changes frequently
@@ -541,6 +545,7 @@ Our breakpoint recommendation should:
 From the Anthropic and OpenAI docs: cache matching is byte-level. If JSON serialization produces different key orderings across requests (common in Go, Swift, and some Python configurations), cache hits fail even though the semantic content is identical.
 
 Our analysis should detect this:
+
 ```
 For each pair (i, i+1) where prefix_ratio is low but Jaccard similarity is high:
   Parse both as JSON and compare with sorted keys

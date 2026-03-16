@@ -22,11 +22,11 @@ For example, if your tool definitions change between requests, the system prompt
 
 ### Provider Comparison
 
-| Provider | Cache type | Savings on cached tokens | Min tokens | TTL |
-|----------|-----------|------------------------|------------|-----|
-| Anthropic | Explicit breakpoints (max 4) + automatic | 90% on reads, 25% premium on writes | 1,024–4,096 | 5 min or 1 hour |
-| OpenAI | Automatic (no opt-in) | 50% on reads | 1,024 | Auto-eviction |
-| Google Gemini | Implicit (auto) or explicit (named caches) | Varies | 1,024–4,096 | Configurable (default 1 hour) |
+| Provider      | Cache type                                 | Savings on cached tokens            | Min tokens  | TTL                           |
+| ------------- | ------------------------------------------ | ----------------------------------- | ----------- | ----------------------------- |
+| Anthropic     | Explicit breakpoints (max 4) + automatic   | 90% on reads, 25% premium on writes | 1,024–4,096 | 5 min or 1 hour               |
+| OpenAI        | Automatic (no opt-in)                      | 50% on reads                        | 1,024       | Auto-eviction                 |
+| Google Gemini | Implicit (auto) or explicit (named caches) | Varies                              | 1,024–4,096 | Configurable (default 1 hour) |
 
 ## When to Use This Analysis
 
@@ -165,7 +165,7 @@ Conversations average 8 turns, with ~30 seconds between turns.
     {
       "position": "after system",
       "extra_body_pointer": "/system/0/cache_control",
-      "extra_body_value": {"type": "ephemeral"},
+      "extra_body_value": { "type": "ephemeral" },
       "estimated_cacheable_tokens": 4500,
       "incremental_savings_pct": 0.41
     }
@@ -287,12 +287,12 @@ This way, the stable system instruction can be cached even when the retrieved do
 
 Stability measures how often each segment is identical between consecutive requests.
 
-| Stability | Meaning |
-|-----------|---------|
-| 1.0 | Never changes — ideal for caching |
-| 0.9–0.99 | Mostly stable, occasional variation (e.g. date in system prompt) |
-| 0.5–0.9 | Partially stable — some benefit, but cache misses are common |
-| < 0.5 | Highly dynamic — not a good caching candidate |
+| Stability | Meaning                                                          |
+| --------- | ---------------------------------------------------------------- |
+| 1.0       | Never changes — ideal for caching                                |
+| 0.9–0.99  | Mostly stable, occasional variation (e.g. date in system prompt) |
+| 0.5–0.9   | Partially stable — some benefit, but cache misses are common     |
+| < 0.5     | Highly dynamic — not a good caching candidate                    |
 
 `messages_by_position` shows stability at each message index.
 Position 0 is the first message, position 1 is the second, and so on.
@@ -305,13 +305,13 @@ A `mean_prefix_ratio` of 0.9 means 90% of each request's content is shared with 
 
 `meets_min_threshold` checks whether the cacheable prefix exceeds the model's minimum requirement:
 
-| Model | Minimum cacheable tokens |
-|-------|------------------------|
-| Claude Opus 4.6 / 4.5 | 4,096 |
-| Claude Sonnet 4.6 | 2,048 |
-| Claude Sonnet 4.5 / 4 / 3.7 | 1,024 |
-| Claude Haiku 4.5 | 4,096 |
-| Claude Haiku 3.5 / 3 | 2,048 |
+| Model                       | Minimum cacheable tokens |
+| --------------------------- | ------------------------ |
+| Claude Opus 4.6 / 4.5       | 4,096                    |
+| Claude Sonnet 4.6           | 2,048                    |
+| Claude Sonnet 4.5 / 4 / 3.7 | 1,024                    |
+| Claude Haiku 4.5            | 4,096                    |
+| Claude Haiku 3.5 / 3        | 2,048                    |
 
 If your cacheable prefix is below the threshold, the provider silently ignores the cache breakpoint.
 
@@ -320,11 +320,11 @@ If your cacheable prefix is below the threshold, the provider silently ignores t
 Cache entries have a time-to-live (TTL).
 If your requests are spaced more than 5 minutes apart, the default Anthropic cache expires and you pay the write cost again.
 
-| `pct_within_5min` | Recommendation |
-|-------------------|---------------|
-| > 0.8 | Use 5-minute TTL (default) — most requests will hit the cache |
-| 0.3–0.8 | Consider 1-hour TTL (2x write cost but covers longer gaps) |
-| < 0.3 | Caching may not be cost-effective — write costs exceed read savings |
+| `pct_within_5min` | Recommendation                                                      |
+| ----------------- | ------------------------------------------------------------------- |
+| > 0.8             | Use 5-minute TTL (default) — most requests will hit the cache       |
+| 0.3–0.8           | Consider 1-hour TTL (2x write cost but covers longer gaps)          |
+| < 0.3             | Caching may not be cost-effective — write costs exceed read savings |
 
 `burst_ratio` flags concurrent requests (< 1 second apart).
 Concurrent requests may not benefit from caching because the cache is only available after the first response starts streaming.
@@ -340,6 +340,7 @@ The `shuffle_score` measures the gap between content overlap (Jaccard similarity
 - **> 0.3**: Significant reordering — reordering your messages could unlock substantial caching
 
 Common causes of shuffling:
+
 - Random sampling of few-shot examples
 - Non-deterministic ordering of retrieved documents
 - Shuffled tool results in agentic loops
@@ -363,23 +364,23 @@ The analyzer flags patterns that silently break caching:
 
 Some request parameters invalidate the cache even when content is identical:
 
-| Parameter change | Cache level invalidated |
-|-----------------|----------------------|
-| Tool definitions modified | Everything (tools + system + messages) |
-| `tool_choice` changed | System + messages |
-| Images added or removed | System + messages |
-| Thinking parameters changed | System + messages |
-| `speed` setting changed | System + messages |
+| Parameter change            | Cache level invalidated                |
+| --------------------------- | -------------------------------------- |
+| Tool definitions modified   | Everything (tools + system + messages) |
+| `tool_choice` changed       | System + messages                      |
+| Images added or removed     | System + messages                      |
+| Thinking parameters changed | System + messages                      |
+| `speed` setting changed     | System + messages                      |
 
 ### Cost Estimate
 
 The cost estimate models three scenarios for each request:
 
-| Scenario | Cached token cost | Uncached token cost |
-|----------|------------------|-------------------|
-| No caching | 1.0x base price | 1.0x base price |
-| Cache write (first request or cache miss) | 1.25x base price (5-min) or 2.0x (1-hr) | 1.0x base price |
-| Cache read (cache hit) | 0.1x base price | 1.0x base price |
+| Scenario                                  | Cached token cost                       | Uncached token cost |
+| ----------------------------------------- | --------------------------------------- | ------------------- |
+| No caching                                | 1.0x base price                         | 1.0x base price     |
+| Cache write (first request or cache miss) | 1.25x base price (5-min) or 2.0x (1-hr) | 1.0x base price     |
+| Cache read (cache hit)                    | 0.1x base price                         | 1.0x base price     |
 
 The `savings_pct` combines the estimated hit rate with the pricing model to project overall savings.
 
@@ -392,12 +393,12 @@ A composite score from 0 to 100 combining:
 - **Cost savings**: Projected dollar savings
 - **Threshold gate**: Whether the prefix meets the model's minimum token requirement
 
-| Score | Label | Action |
-|-------|-------|--------|
-| 80–100 | High opportunity | Enable caching immediately |
-| 50–79 | Moderate opportunity | Review recommendations, consider tradeoffs |
-| 20–49 | Low opportunity | Caching possible but savings are modest |
-| 0–19 | No opportunity | Prefix overlap too small or requests too infrequent |
+| Score  | Label                | Action                                              |
+| ------ | -------------------- | --------------------------------------------------- |
+| 80–100 | High opportunity     | Enable caching immediately                          |
+| 50–79  | Moderate opportunity | Review recommendations, consider tradeoffs          |
+| 20–49  | Low opportunity      | Caching possible but savings are modest             |
+| 0–19   | No opportunity       | Prefix overlap too small or requests too infrequent |
 
 ## Breakpoint Recommendations
 
@@ -409,7 +410,7 @@ Example recommendation:
 {
   "position": "after system",
   "extra_body_pointer": "/system/0/cache_control",
-  "extra_body_value": {"type": "ephemeral"},
+  "extra_body_value": { "type": "ephemeral" },
   "estimated_cacheable_tokens": 6000,
   "incremental_savings_pct": 0.81
 }
