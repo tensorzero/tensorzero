@@ -8,7 +8,8 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
 use serde::de::DeserializeOwned;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::ConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tensorzero_auth::postgres::AuthResult;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
@@ -684,9 +685,19 @@ async fn create_postgres_connection(
     connection_pool_size: u32,
     batch_writes: &BatchWritesConfig,
 ) -> Result<PostgresConnectionInfo, Error> {
+    let connect_options: PgConnectOptions = postgres_url.parse().map_err(|err: sqlx::Error| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: err.to_string(),
+        })
+    })?;
+    // Demote sqlx's built-in statement logging from INFO to TRACE.
+    // This avoids flooding logs with full SQL (including thousands of bind params)
+    // during bulk INSERT operations.
+    let connect_options = connect_options.log_statements(tracing::log::LevelFilter::Trace);
+
     let pool = PgPoolOptions::new()
         .max_connections(connection_pool_size)
-        .connect(postgres_url)
+        .connect_with(connect_options)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -699,6 +710,10 @@ async fn create_postgres_connection(
             pool.clone(),
             batch_writes.clone(),
         )?);
+        tracing::info!(
+            write_queue_capacity = batch_writes.write_queue_capacity,
+            "Postgres batch writer enabled with bounded channels"
+        );
         PostgresConnectionInfo::new_with_pool_and_batcher(pool, batch_sender)
     } else {
         PostgresConnectionInfo::new_with_pool(pool)

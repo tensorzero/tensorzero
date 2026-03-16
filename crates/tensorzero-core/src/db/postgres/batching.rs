@@ -3,13 +3,13 @@ use std::time::Duration;
 use futures::{FutureExt, TryFutureExt};
 use sqlx::PgPool;
 use tokio::runtime::{Handle, RuntimeFlavor};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinSet;
 
 use crate::config::BatchWritesConfig;
 use crate::db::BatchWriterHandle;
-use crate::db::batching::process_channel_with_capacity_and_timeout;
-use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::db::batching::process_bounded_channel_with_capacity_and_timeout;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
 };
@@ -24,19 +24,18 @@ use super::model_inferences::{
 
 /// A `PostgresBatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to Postgres on a schedule defined by a `BatchWritesConfig`.
+///
+/// Uses bounded channels to provide backpressure: when the write queue is full,
+/// new rows are dropped and logged rather than buffering without limit.
+///
 /// When a `PostgresBatchSender` is dropped, the batch writer will finish
 /// processing all outstanding batches once all senders are dropped.
 #[derive(Debug)]
 pub struct PostgresBatchSender {
-    channels: Option<PostgresBatchChannels>,
+    chat_inferences: Sender<ChatInferenceDatabaseInsert>,
+    json_inferences: Sender<JsonInferenceDatabaseInsert>,
+    model_inferences: Sender<StoredModelInference>,
     pub writer_handle: BatchWriterHandle,
-}
-
-#[derive(Debug)]
-struct PostgresBatchChannels {
-    chat_inferences: UnboundedSender<ChatInferenceDatabaseInsert>,
-    json_inferences: UnboundedSender<JsonInferenceDatabaseInsert>,
-    model_inferences: UnboundedSender<StoredModelInference>,
 }
 
 impl PostgresBatchSender {
@@ -44,16 +43,19 @@ impl PostgresBatchSender {
         // We call `tokio::task::block_in_place` during shutdown to wait for outstanding
         // batch writes to finish. This does not work on the CurrentThread runtime,
         // so we fail here rather than panicking at shutdown.
-        if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread {
+        if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread
+            && !config.__force_allow_embedded_batch_writes
+        {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot use Postgres batching with the CurrentThread Tokio runtime"
                     .to_string(),
             }));
         }
 
-        let (chat_tx, chat_rx) = mpsc::unbounded_channel();
-        let (json_tx, json_rx) = mpsc::unbounded_channel();
-        let (model_tx, model_rx) = mpsc::unbounded_channel();
+        let channel_capacity = config.write_queue_capacity;
+        let (chat_tx, chat_rx) = mpsc::channel(channel_capacity);
+        let (json_tx, json_rx) = mpsc::channel(channel_capacity);
+        let (model_tx, model_rx) = mpsc::channel(channel_capacity);
 
         let writer = PostgresBatchWriter {
             chat_inferences_rx: chat_rx,
@@ -72,68 +74,51 @@ impl PostgresBatchSender {
         });
 
         Ok(Self {
-            channels: Some(PostgresBatchChannels {
-                chat_inferences: chat_tx,
-                json_inferences: json_tx,
-                model_inferences: model_tx,
-            }),
+            chat_inferences: chat_tx,
+            json_inferences: json_tx,
+            model_inferences: model_tx,
             writer_handle: writer_handle.map_err(|e| format!("{e:?}")).boxed().shared(),
         })
     }
 
-    pub fn send_chat_inferences(&self, rows: &[ChatInferenceDatabaseInsert]) -> Result<(), Error> {
-        let Some(channels) = &self.channels else {
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!("Postgres batch sender dropped. {IMPOSSIBLE_ERROR_MESSAGE}"),
-            }));
-        };
+    pub fn send_chat_inferences(&self, rows: &[ChatInferenceDatabaseInsert]) {
         for row in rows {
-            if let Err(e) = channels.chat_inferences.send(row.clone()) {
+            if let Err(e) = self.chat_inferences.try_send(row.clone()) {
                 tracing::error!(
-                    "Error sending chat inference to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    "Postgres batch channel full — dropping chat inference record. \
+                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
                 );
             }
         }
-        Ok(())
     }
 
-    pub fn send_json_inferences(&self, rows: &[JsonInferenceDatabaseInsert]) -> Result<(), Error> {
-        let Some(channels) = &self.channels else {
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!("Postgres batch sender dropped. {IMPOSSIBLE_ERROR_MESSAGE}"),
-            }));
-        };
+    pub fn send_json_inferences(&self, rows: &[JsonInferenceDatabaseInsert]) {
         for row in rows {
-            if let Err(e) = channels.json_inferences.send(row.clone()) {
+            if let Err(e) = self.json_inferences.try_send(row.clone()) {
                 tracing::error!(
-                    "Error sending json inference to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    "Postgres batch channel full — dropping json inference record. \
+                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
                 );
             }
         }
-        Ok(())
     }
 
-    pub fn send_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
-        let Some(channels) = &self.channels else {
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!("Postgres batch sender dropped. {IMPOSSIBLE_ERROR_MESSAGE}"),
-            }));
-        };
+    pub fn send_model_inferences(&self, rows: &[StoredModelInference]) {
         for row in rows {
-            if let Err(e) = channels.model_inferences.send(row.clone()) {
+            if let Err(e) = self.model_inferences.try_send(row.clone()) {
                 tracing::error!(
-                    "Error sending model inference to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                    "Postgres batch channel full — dropping model inference record. \
+                     Increase `write_queue_capacity` or check Postgres performance. Error: {e}"
                 );
             }
         }
-        Ok(())
     }
 }
 
 struct PostgresBatchWriter {
-    chat_inferences_rx: UnboundedReceiver<ChatInferenceDatabaseInsert>,
-    json_inferences_rx: UnboundedReceiver<JsonInferenceDatabaseInsert>,
-    model_inferences_rx: UnboundedReceiver<StoredModelInference>,
+    chat_inferences_rx: Receiver<ChatInferenceDatabaseInsert>,
+    json_inferences_rx: Receiver<JsonInferenceDatabaseInsert>,
+    model_inferences_rx: Receiver<StoredModelInference>,
 }
 
 impl PostgresBatchWriter {
@@ -147,7 +132,7 @@ impl PostgresBatchWriter {
             let pool = pool.clone();
             let channel = self.chat_inferences_rx;
             join_set.spawn(async move {
-                process_channel_with_capacity_and_timeout(
+                process_bounded_channel_with_capacity_and_timeout(
                     channel,
                     max_rows,
                     batch_timeout,
@@ -192,7 +177,7 @@ impl PostgresBatchWriter {
             let pool = pool.clone();
             let channel = self.json_inferences_rx;
             join_set.spawn(async move {
-                process_channel_with_capacity_and_timeout(
+                process_bounded_channel_with_capacity_and_timeout(
                     channel,
                     max_rows,
                     batch_timeout,
@@ -236,7 +221,7 @@ impl PostgresBatchWriter {
         {
             let channel = self.model_inferences_rx;
             join_set.spawn(async move {
-                process_channel_with_capacity_and_timeout(
+                process_bounded_channel_with_capacity_and_timeout(
                     channel,
                     max_rows,
                     batch_timeout,
