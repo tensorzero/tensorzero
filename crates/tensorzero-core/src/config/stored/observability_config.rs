@@ -56,26 +56,42 @@ impl Default for StoredBatchWritesConfig {
 
 impl From<BatchWritesConfig> for StoredBatchWritesConfig {
     fn from(config: BatchWritesConfig) -> Self {
+        let BatchWritesConfig {
+            enabled,
+            __force_allow_embedded_batch_writes,
+            flush_interval_ms,
+            max_rows,
+            max_rows_postgres,
+            write_queue_capacity,
+        } = config;
         Self {
-            enabled: config.enabled,
-            __force_allow_embedded_batch_writes: config.__force_allow_embedded_batch_writes,
-            flush_interval_ms: config.flush_interval_ms,
-            max_rows: config.max_rows,
-            max_rows_postgres: config.max_rows_postgres,
-            write_queue_capacity: config.write_queue_capacity,
+            enabled,
+            __force_allow_embedded_batch_writes,
+            flush_interval_ms,
+            max_rows,
+            max_rows_postgres,
+            write_queue_capacity,
         }
     }
 }
 
 impl From<StoredBatchWritesConfig> for BatchWritesConfig {
     fn from(stored: StoredBatchWritesConfig) -> Self {
+        let StoredBatchWritesConfig {
+            enabled,
+            __force_allow_embedded_batch_writes,
+            flush_interval_ms,
+            max_rows,
+            max_rows_postgres,
+            write_queue_capacity,
+        } = stored;
         Self {
-            enabled: stored.enabled,
-            __force_allow_embedded_batch_writes: stored.__force_allow_embedded_batch_writes,
-            flush_interval_ms: stored.flush_interval_ms,
-            max_rows: stored.max_rows,
-            max_rows_postgres: stored.max_rows_postgres,
-            write_queue_capacity: stored.write_queue_capacity,
+            enabled,
+            __force_allow_embedded_batch_writes,
+            flush_interval_ms,
+            max_rows,
+            max_rows_postgres,
+            write_queue_capacity,
         }
     }
 }
