@@ -270,22 +270,23 @@ impl MetricJoinRegistry {
     /// Registers a metric join and returns the alias for the joined value.
     /// Uses LATERAL join to get the latest feedback value per target with filter pushdown.
     ///
-    /// # Panics
-    ///
-    /// Panics if `metric_name` contains characters unsafe for SQL interpolation.
+    /// Returns an error if `metric_name` contains characters unsafe for SQL interpolation.
     /// Metric names should be validated at config load time via [`validate_safe_sql_name`].
     pub(super) fn register_metric_join(
         &mut self,
         metric_name: &str,
         metric_type: MetricConfigType,
         level: MetricConfigLevel,
-    ) -> String {
+    ) -> Result<String, Error> {
         // Defense-in-depth: metric names come from validated config, but verify here
         // to prevent SQL injection if a code path bypasses config validation.
-        assert!(
-            is_safe_sql_name(metric_name),
-            "metric name `{metric_name}` contains characters unsafe for SQL interpolation"
-        );
+        if !is_safe_sql_name(metric_name) {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "Metric name `{metric_name}` contains characters unsafe for SQL interpolation"
+                ),
+            }));
+        }
 
         let alias = format!("metric_{}", self.alias_counter);
         self.alias_counter += 1;
@@ -314,7 +315,7 @@ LEFT JOIN LATERAL (
         );
 
         self.joins.push(join_clause);
-        alias
+        Ok(alias)
     }
 
     /// Returns the JOIN clauses as a single string.
@@ -692,18 +693,22 @@ mod tests {
     fn test_metric_join_registry() {
         let mut registry = MetricJoinRegistry::new();
 
-        let alias1 = registry.register_metric_join(
-            "test_metric",
-            MetricConfigType::Float,
-            MetricConfigLevel::Inference,
-        );
+        let alias1 = registry
+            .register_metric_join(
+                "test_metric",
+                MetricConfigType::Float,
+                MetricConfigLevel::Inference,
+            )
+            .expect("valid metric name should not fail");
         assert_eq!(alias1, "metric_0", "First alias should be metric_0");
 
-        let alias2 = registry.register_metric_join(
-            "another_metric",
-            MetricConfigType::Boolean,
-            MetricConfigLevel::Episode,
-        );
+        let alias2 = registry
+            .register_metric_join(
+                "another_metric",
+                MetricConfigType::Boolean,
+                MetricConfigLevel::Episode,
+            )
+            .expect("valid metric name should not fail");
         assert_eq!(alias2, "metric_1", "Second alias should be metric_1");
 
         let joins_sql = registry.get_joins_sql();
