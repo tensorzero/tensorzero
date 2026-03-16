@@ -42,6 +42,7 @@ pub struct EventPayloadMessage {
     pub role: Role,
     pub content: Vec<EventPayloadMessageContent>,
     #[serde(default)]
+    #[schema(required = true)]
     // EventPayloadMessageMetadata currently has no fields exposed to Typescript,
     // so we need to override the type to satisfy eslint
     #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, never>"))]
@@ -55,6 +56,7 @@ pub struct EventPayloadMessageMetadata {
     // We hide this from the UI, and populate in in the gateway
     // before proxying it to the autopilot server
     #[serde(default)]
+    #[schema(required = true)]
     pub resolved_uuids: Vec<ResolveUuidResponse>,
 }
 
@@ -1083,12 +1085,15 @@ pub struct GatewayListEventsResponse {
     /// These may be duplicates of some of the values in events.
     /// Payloads are always of type `tool_call`.
     #[serde(default)]
+    #[schema(required = true)]
     pub pending_tool_calls: Vec<GatewayToolCallEvent>,
     /// All user_questions events that do not have a matching user_questions_answers event.
     #[serde(default)]
+    #[schema(required = true)]
     pub pending_user_questions: Vec<GatewayEvent>,
     /// All auto_eval_example_labeling events that do not have a matching answers event.
     #[serde(default)]
+    #[schema(required = true)]
     pub pending_auto_eval_example_labeling: Vec<GatewayEvent>,
 }
 

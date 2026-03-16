@@ -117,8 +117,10 @@ pub struct EvaluationRunStartEvent {
     pub num_datapoints: usize,
     pub evaluation_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = String)]
     pub dataset_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = String)]
     pub variant_name: Option<String>,
 }
 
