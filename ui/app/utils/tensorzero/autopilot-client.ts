@@ -1,3 +1,4 @@
+import TensorzeroInternal from "tensorzero-internal";
 import { BaseTensorZeroClient } from "./base-client";
 import type {
   ApproveAllToolCallsGatewayRequest,
@@ -22,10 +23,18 @@ import type {
  */
 export class AutopilotClient extends BaseTensorZeroClient {
   private betaTools: string | null;
+  private stainless: TensorzeroInternal;
 
   constructor(baseUrl: string, apiKey?: string, betaTools?: string) {
     super(baseUrl, apiKey);
     this.betaTools = betaTools ?? null;
+    this.stainless = new TensorzeroInternal({
+      baseURL: baseUrl,
+      apiKey: apiKey ?? null,
+      // When no API key is provided, explicitly opt out of auth
+      // so the SDK's validateHeaders doesn't require one.
+      ...(!apiKey && { defaultHeaders: { Authorization: null } }),
+    });
   }
 
   /**
@@ -67,18 +76,15 @@ export class AutopilotClient extends BaseTensorZeroClient {
     sessionId: string,
     params?: ListEventsParams,
   ): Promise<GatewayListEventsResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set("limit", params.limit.toString());
-    if (params?.before) searchParams.set("before", params.before);
-    const queryString = searchParams.toString();
-    const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events${queryString ? `?${queryString}` : ""}`;
-
-    const response = await this.fetch(endpoint, { method: "GET" });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as GatewayListEventsResponse;
+    const response =
+      await this.stainless.internal.autopilot.v1.sessions.events.list(
+        sessionId,
+        {
+          limit: params?.limit,
+          before: params?.before,
+        },
+      );
+    return response;
   }
 
   /**
@@ -134,54 +140,16 @@ export class AutopilotClient extends BaseTensorZeroClient {
     sessionId: string,
     params?: StreamEventsParams,
   ): AsyncGenerator<GatewayStreamUpdate, void, unknown> {
-    const searchParams = new URLSearchParams();
-    if (params?.last_event_id)
-      searchParams.set("last_event_id", params.last_event_id);
-    const queryString = searchParams.toString();
-    const url = `${this.baseUrl}/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream${queryString ? `?${queryString}` : ""}`;
+    const stream =
+      await this.stainless.internal.autopilot.v1.sessions.events.stream(
+        sessionId,
+        {
+          last_event_id: params?.last_event_id,
+        },
+      );
 
-    const headers: Record<string, string> = {
-      Accept: "text/event-stream",
-    };
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`;
-    }
-
-    const response = await fetch(url, { headers });
-    if (!response.ok) {
-      const message = await response.text();
-      this.handleHttpError({ message, response });
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Response body is not readable");
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data) {
-              const event = JSON.parse(data) as GatewayStreamUpdate;
-              yield event;
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
+    for await (const event of stream) {
+      yield event;
     }
   }
 

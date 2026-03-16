@@ -1,0 +1,3168 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TensorZero Gateway API",
+    "description": "TensorZero Gateway endpoints.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "2026.3.2"
+  },
+  "paths": {
+    "/v1/datasets/{dataset_name}/datapoints": {
+      "patch": {
+        "tags": [
+          "datasets"
+        ],
+        "operationId": "update_datapoints_handler",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "description": "Dataset name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDatapointsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated datapoint IDs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateDatapointsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or datapoint not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets/{dataset_name}/from_inferences": {
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.\nCreates datapoints from inferences based on either specific inference IDs or an inference query.",
+        "operationId": "create_from_inferences_handler",
+        "parameters": [
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "description": "Dataset name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDatapointsFromInferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Created datapoint IDs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateDatapointsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/inferences/get_inferences": {
+      "post": {
+        "tags": [
+          "inferences"
+        ],
+        "summary": "Handler for the POST `/v1/inferences/get_inferences` endpoint.\nRetrieves specific inferences by their IDs.",
+        "operationId": "get_inferences_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetInferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Get stored inferences by ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInferencesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/inferences/list_inferences": {
+      "post": {
+        "tags": [
+          "inferences"
+        ],
+        "summary": "Handler for the POST `/v1/inferences/list_inferences` endpoint.\nLists inferences with optional filtering, pagination, and sorting.",
+        "operationId": "list_inferences_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListInferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "List stored inferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInferencesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Base64File": {
+        "type": "object",
+        "description": "A file already encoded as base64",
+        "required": [
+          "mime_type",
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "detail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Detail"
+              }
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BooleanMetricFilter": {
+        "type": "object",
+        "required": [
+          "metric_name",
+          "value"
+        ],
+        "properties": {
+          "metric_name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChatCompletionInferenceParams": {
+        "type": "object",
+        "properties": {
+          "frequency_penalty": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "json_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonMode"
+              }
+            ]
+          },
+          "max_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "presence_penalty": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "reasoning_effort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "service_tier": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ServiceTier"
+              }
+            ]
+          },
+          "stop_sequences": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "temperature": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "thinking_budget_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "top_p": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "verbosity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContentBlockChatOutput": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "ContentBlockChatOutputText"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InferenceResponseToolCall"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "ContentBlockChatOutputToolCall"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Thought"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "thought"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "ContentBlockChatOutputThought"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Unknown"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "ContentBlockChatOutputUnknown"
+          }
+        ],
+        "description": "Defines the types of content block that can come from a `chat` function"
+      },
+      "CreateDatapointsFromInferenceRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreateDatapointsFromInferenceRequestParams"
+          }
+        ],
+        "description": "Request to create datapoints from inferences."
+      },
+      "CreateDatapointsFromInferenceRequestParams": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "CreateDatapointsFromInferenceRequestParamsInferenceIds",
+            "description": "Create datapoints from specific inference IDs.",
+            "required": [
+              "inference_ids",
+              "type"
+            ],
+            "properties": {
+              "inference_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": "The inference IDs to create datapoints from."
+              },
+              "output_source": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InferenceOutputSource",
+                    "description": "When creating the datapoint, this specifies the source of the output for the datapoint.\nIf not provided, by default we will use the original inference output as the datapoint's output\n(equivalent to `inference`)."
+                  }
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "inference_ids"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ListInferencesRequest",
+                "description": "Flattened inference query parameters."
+              },
+              {
+                "type": "object",
+                "title": "CreateDatapointsFromInferenceRequestParamsInferenceQuery",
+                "description": "Create datapoints from an inference query.",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "inference_query"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Create datapoints from an inference query."
+          }
+        ],
+        "description": "Parameters for creating datapoints from inferences.\nCan specify either a list of inference IDs or a query to find inferences."
+      },
+      "CreateDatapointsResponse": {
+        "type": "object",
+        "description": "Response from creating datapoints.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the newly-generated datapoints."
+          }
+        }
+      },
+      "DatapointMetadataUpdate": {
+        "type": "object",
+        "description": "A request to update the metadata of a datapoint.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
+          }
+        }
+      },
+      "DemonstrationFeedbackFilter": {
+        "type": "object",
+        "description": "Filter by whether an inference has a demonstration.",
+        "required": [
+          "has_demonstration"
+        ],
+        "properties": {
+          "has_demonstration": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Detail": {
+        "type": "string",
+        "description": "Detail level for input images (affects fidelity and token cost)",
+        "enum": [
+          "low",
+          "high",
+          "auto"
+        ]
+      },
+      "DynamicToolParams": {
+        "type": "object",
+        "description": "Wire/API representation of dynamic tool parameters for inference requests.\n\nThis type is the **wire format** for tool configurations used in API requests and responses.\nIt distinguishes between static tools (configured in the function) and dynamic tools\n(provided at runtime), allowing clients to reference pre-configured tools by name or\nprovide new tools on-the-fly.\n\n# Purpose\n- Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)\n- Expose tool configurations in API responses for stored inferences\n- Support Python and TypeScript client bindings\n- Allow runtime customization of tool behavior\n\n# Fields\n- `allowed_tools`: Names of static tools from function config to use (subset selection)\n- `additional_tools`: New tools defined at runtime (not in static config)\n- `tool_choice`: Override the function's default tool choice strategy\n- `parallel_tool_calls`: Override whether parallel tool calls are enabled\n- `provider_tools`: Provider-specific tool configurations (not persisted to database)\n\n# Key Differences from ToolCallConfigDatabaseInsert\n- **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools\n- **By reference**: Static tools referenced by name, not duplicated\n- **Has provider_tools**: Can specify provider-specific tool configurations\n- **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`\n\n# Conversion to Storage Format\nConverting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:\n1. Static tools (from `allowed_tools` names) are resolved from function config\n2. Dynamic tools (from `additional_tools`) are included as-is\n3. Both lists are merged into a single `tools_available` list\n4. The distinction between static and dynamic tools is lost\n5. `provider_tools` are dropped (not stored)\n\nUse `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.\n\n# Conversion from Storage Format\nConverting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:\n1. `dynamic_tools` -> `additional_tools`\n2. `allowed_tools` -> `allowed_tools` (based on choice enum)\n3. Other fields copied directly\n\nUse `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.\n\n# Example\n```rust,ignore\n// API request with dynamic tool params\nlet params = DynamicToolParams {\n    allowed_tools: Some(vec![\"calculator\".to_string()]),  // Use only the calculator tool from config\n    additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool\n    tool_choice: Some(ToolChoice::Required),\n    parallel_tool_calls: Some(true),\n    provider_tools: vec![],\n};\n\n// Convert to storage format\nlet db_insert = function_config\n    .dynamic_tool_params_to_database_insert(params, &static_tools)?\n    .unwrap_or_default();\n\n// db_insert.tools_available now contains both the calculator tool (from config)\n// and the runtime tool (from additional_tools), merged together\n```\n\nSee also: [`ToolCallConfigDatabaseInsert`] for the storage/database format",
+        "properties": {
+          "additional_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "description": "Tools that the user provided at inference time (not in function config), in addition to the function-configured\ntools, that are also allowed."
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "A subset of static tools configured for the function that the inference is allowed to use. Optional.\nIf not provided, all static tools are allowed."
+          },
+          "parallel_tool_calls": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether to use parallel tool calls in the inference. Optional.\nIf provided during inference, it will override the function-configured parallel tool calls."
+          },
+          "provider_tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderTool"
+            },
+            "description": "Provider-specific tool configurations"
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolChoice",
+                "description": "User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.\nOptional."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtraBody": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "variant_name",
+              "pointer",
+              "value"
+            ],
+            "properties": {
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              },
+              "value": {
+                "description": "The value to set the field to"
+              },
+              "variant_name": {
+                "type": "string",
+                "description": "A variant name in your configuration (e.g. `my_variant`)"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "variant_name",
+              "pointer",
+              "delete"
+            ],
+            "properties": {
+              "delete": {
+                "default": null
+              },
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              },
+              "variant_name": {
+                "type": "string",
+                "description": "A variant name in your configuration (e.g. `my_variant`)"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "model_name",
+              "pointer",
+              "value"
+            ],
+            "properties": {
+              "model_name": {
+                "type": "string",
+                "description": "A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)"
+              },
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              },
+              "provider_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A provider name for the model you specified (e.g. `my_openai`)"
+              },
+              "value": {
+                "description": "The value to set the field to"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "model_name",
+              "pointer",
+              "delete"
+            ],
+            "properties": {
+              "delete": {
+                "default": null
+              },
+              "model_name": {
+                "type": "string",
+                "description": "A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)"
+              },
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              },
+              "provider_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "A provider name for the model you specified (e.g. `my_openai`)"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "pointer",
+              "value"
+            ],
+            "properties": {
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              },
+              "value": {
+                "description": "The value to set the field to"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "pointer",
+              "delete"
+            ],
+            "properties": {
+              "delete": {
+                "default": null
+              },
+              "pointer": {
+                "type": "string",
+                "description": "A JSON Pointer to the field to update (e.g. `/enable_agi`)"
+              }
+            }
+          }
+        ]
+      },
+      "File": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UrlFile"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "url"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Base64File"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "base64"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStoragePointer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage_pointer"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStorageFile"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStorageError"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage_error"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "description": "A file for an inference or a datapoint."
+      },
+      "FloatComparisonOperator": {
+        "type": "string",
+        "description": "Comparison operators for float metrics.",
+        "enum": [
+          "<",
+          "<=",
+          "=",
+          ">",
+          ">=",
+          "!="
+        ]
+      },
+      "FloatMetricFilter": {
+        "type": "object",
+        "required": [
+          "metric_name",
+          "value",
+          "comparison_operator"
+        ],
+        "properties": {
+          "comparison_operator": {
+            "$ref": "#/components/schemas/FloatComparisonOperator"
+          },
+          "metric_name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "FunctionTool": {
+        "type": "object",
+        "description": "`FunctionTool` is a particular kind of tool that relies\non the client to execute a function on their side (a ToolCall content block)\nand return the result on the next turn (a ToolCallResult).\nNotably, we assume there is a JSON schema `parameters` that specifies the\nset of arguments that the tool will accept.",
+        "required": [
+          "description",
+          "parameters",
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parameters": {},
+          "strict": {
+            "type": "boolean",
+            "description": "`strict` here specifies that TensorZero should attempt to use any facilities\navailable from the model provider to force the model to generate an accurate tool call,\nnotably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).\nThis imposes additional restrictions on the JSON schema that may vary across providers\nso we allow it to be configurable."
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetInferencesRequest": {
+        "type": "object",
+        "description": "Request to get specific inferences by their IDs.\nUsed by the `POST /v1/inferences/get_inferences` endpoint.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "function_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional function name to filter by.\nIncluding this improves query performance since `function_name` is the first column\nin the ClickHouse primary key."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the inferences to retrieve. Required."
+          },
+          "output_source": {
+            "$ref": "#/components/schemas/InferenceOutputSource",
+            "description": "Source of the inference output.\nDetermines whether to return the original inference output or demonstration feedback\n(manually-curated output) if available.\nDefaults to `Inference` if not specified."
+          }
+        }
+      },
+      "GetInferencesResponse": {
+        "type": "object",
+        "description": "Response containing the requested inferences.",
+        "required": [
+          "inferences"
+        ],
+        "properties": {
+          "inferences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredInference"
+            },
+            "description": "The retrieved inferences."
+          }
+        }
+      },
+      "InferenceFilter": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FloatMetricFilter",
+                "description": "Filter by the value of a float metric"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "float_metric"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InferenceFilterFloatMetric",
+            "description": "Filter by the value of a float metric"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BooleanMetricFilter",
+                "description": "Filter by the value of a boolean metric"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "boolean_metric"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InferenceFilterBooleanMetric",
+            "description": "Filter by the value of a boolean metric"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DemonstrationFeedbackFilter",
+                "description": "Filter by whether an inference has a demonstration."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "demonstration_feedback"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InferenceFilterDemonstrationFeedback",
+            "description": "Filter by whether an inference has a demonstration."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TagFilter",
+                "description": "Filter by tag key-value pair"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tag"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InferenceFilterTag",
+            "description": "Filter by tag key-value pair"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TimeFilter",
+                "description": "Filter by the timestamp of an inference."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "time"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InferenceFilterTime",
+            "description": "Filter by the timestamp of an inference."
+          },
+          {
+            "type": "object",
+            "title": "InferenceFilterAnd",
+            "description": "Logical AND of multiple filters",
+            "required": [
+              "children",
+              "type"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InferenceFilter"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "and"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "InferenceFilterOr",
+            "description": "Logical OR of multiple filters",
+            "required": [
+              "children",
+              "type"
+            ],
+            "properties": {
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InferenceFilter"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "or"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "InferenceFilterNot",
+            "description": "Logical NOT of a filter",
+            "required": [
+              "child",
+              "type"
+            ],
+            "properties": {
+              "child": {
+                "$ref": "#/components/schemas/InferenceFilter"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "not"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Filters for querying inferences."
+      },
+      "InferenceOutputSource": {
+        "type": "string",
+        "description": "Source of an inference output when querying inferences. Users can choose this because there may be\ndemonstration feedback (manually-curated output) for the inference that should be preferred.",
+        "enum": [
+          "none",
+          "inference",
+          "demonstration"
+        ]
+      },
+      "InferenceParams": {
+        "type": "object",
+        "description": "InferenceParams is the top-level struct for inference parameters.\nWe backfill these from the configs given in the variants used and ultimately write them to the database.",
+        "required": [
+          "chat_completion"
+        ],
+        "properties": {
+          "chat_completion": {
+            "$ref": "#/components/schemas/ChatCompletionInferenceParams"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InferenceResponseToolCall": {
+        "type": "object",
+        "description": "An InferenceResponseToolCall is a request by a model to call a Tool\nin the form that we return to the client / ClickHouse\nThis includes some synactic sugar (parsing / validation of the tool arguments)\nin the `arguments` field and the name in the `name` field.\nWe support looping this back through the TensorZero inference API via the ToolCallWrapper",
+        "required": [
+          "id",
+          "raw_name",
+          "raw_arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "description": "The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid."
+          },
+          "id": {
+            "type": "string",
+            "description": "A Tool Call ID to match up with tool call responses. See #4058."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid."
+          },
+          "raw_arguments": {
+            "type": "string",
+            "description": "The raw arguments JSON string of the tool to call, as generated by the model."
+          },
+          "raw_name": {
+            "type": "string",
+            "description": "The name of the tool to call, as generated by the model."
+          }
+        }
+      },
+      "Input": {
+        "type": "object",
+        "description": "API representation of an input to a model.",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputMessage"
+            },
+            "description": "Messages in the input."
+          },
+          "system": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/System",
+                "description": "System prompt of the input."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "InputMessage": {
+        "type": "object",
+        "description": "InputMessage and Role are our representation of the input sent by the client\nprior to any processing into LLM representations below.\n`InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputMessageContent"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "InputMessageContent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentText"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Template"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "template"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentTemplate"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallWrapper"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_result"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentToolResult"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RawText"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "raw_text"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentRawText"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Thought"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "thought"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentThought"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/File"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentFile"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Unknown",
+                "description": "An unknown content block type, used to allow passing provider-specific\ncontent blocks (e.g. Anthropic's `redacted_thinking`) in and out\nof TensorZero.\nThe `data` field holds the original content block from the provider,\nwithout any validation or transformation by TensorZero."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "InputMessageContentUnknown",
+            "description": "An unknown content block type, used to allow passing provider-specific\ncontent blocks (e.g. Anthropic's `redacted_thinking`) in and out\nof TensorZero.\nThe `data` field holds the original content block from the provider,\nwithout any validation or transformation by TensorZero."
+          }
+        ]
+      },
+      "JsonDatapointOutputUpdate": {
+        "type": "object",
+        "description": "A request to update the output of a JSON datapoint.\n\nWe intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.",
+        "properties": {
+          "raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.\n\nThis will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and\ninvalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design."
+          }
+        }
+      },
+      "JsonInferenceOutput": {
+        "type": "object",
+        "properties": {
+          "parsed": {
+            "description": "This is never omitted from the response even if it's None."
+          },
+          "raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "This is never omitted from the response even if it's None. A `null` value indicates no output from the model.\nIt's rare and unexpected from the model, but it's possible."
+          }
+        }
+      },
+      "JsonMode": {
+        "type": "string",
+        "description": "This type is used to determine how to enforce JSON mode for a given variant.\nVariants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as\nwe support coercing tool calls into JSON mode.\nThis is represented as a tool config in the",
+        "enum": [
+          "off",
+          "on",
+          "strict",
+          "tool"
+        ]
+      },
+      "ListInferencesRequest": {
+        "type": "object",
+        "description": "Request to list inferences with pagination and filters.\nUsed by the `POST /v1/inferences/list_inferences` endpoint.",
+        "properties": {
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional inference ID to paginate after (exclusive).\nReturns inferences with IDs after this one (later in time).\nCannot be used together with `before` or `offset`."
+          },
+          "before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional inference ID to paginate before (exclusive).\nReturns inferences with IDs before this one (earlier in time).\nCannot be used together with `after` or `offset`."
+          },
+          "episode_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Optional episode ID to filter inferences by.\nIf provided, only inferences from this episode will be returned."
+          },
+          "filters": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InferenceFilter",
+                "description": "Optional filter to apply when querying inferences.\nSupports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT)."
+              }
+            ]
+          },
+          "function_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional function name to filter inferences by.\nIf provided, only inferences from this function will be returned."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The maximum number of inferences to return.\nDefaults to 20.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The number of inferences to skip before starting to return results.\nDefaults to 0.",
+            "minimum": 0
+          },
+          "order_by": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OrderBy"
+            },
+            "description": "Optional ordering criteria for the results.\nSupports multiple sort criteria (e.g., sort by timestamp then by metric)."
+          },
+          "output_source": {
+            "$ref": "#/components/schemas/InferenceOutputSource",
+            "description": "Source of the inference output. Determines whether to return the original\ninference output or demonstration feedback (manually-curated output) if available.\nDefaults to `Inference` if not specified."
+          },
+          "search_query_experimental": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Text query to filter. Case-insensitive substring search over the inferences' input and output.\n\nTHIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.\nWe recommend against depending on this feature for critical use cases.\n\nImportant limitations:\n- This requires an exact substring match; we do not tokenize this query string.\n- This doesn't search for any content in the template itself.\n- Quality is based on term frequency > 0, without any relevance scoring.\n- There are no performance guarantees (it's best effort only). Today, with no other\n  filters, it will perform a full table scan, which may be extremely slow depending\n  on the data volume."
+          },
+          "variant_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional variant name to filter inferences by.\nIf provided, only inferences from this variant will be returned."
+          }
+        }
+      },
+      "ObjectStorageError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ObjectStoragePointer"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A file that we failed to read from object storage.\nThis struct can NOT be stored in the database."
+      },
+      "ObjectStorageFile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ObjectStoragePointer"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`."
+      },
+      "ObjectStoragePointer": {
+        "type": "object",
+        "description": "A file stored in an object storage backend, without data.\nThis struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+        "required": [
+          "mime_type",
+          "storage_path"
+        ],
+        "properties": {
+          "detail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Detail"
+              }
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage_path": {
+            "$ref": "#/components/schemas/StoragePath"
+          }
+        }
+      },
+      "OpenAICustomTool": {
+        "type": "object",
+        "description": "`OpenAICustomTool` represents OpenAI's custom tool format, which allows\nfor text or grammar-based tool definitions beyond standard function calling.\nCurrently, this type is a wire + outbound + storage type so it forces a consistent format.\nThis only applies to the Chat Completions API. The Responses API has a slightly different request\nshape so we implement a conversion in `responses.rs`.",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OpenAICustomToolFormat"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OpenAICustomToolFormat": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "grammar",
+              "type"
+            ],
+            "properties": {
+              "grammar": {
+                "$ref": "#/components/schemas/OpenAIGrammarDefinition"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "grammar"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "OpenAIGrammarDefinition": {
+        "type": "object",
+        "required": [
+          "syntax",
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "type": "string"
+          },
+          "syntax": {
+            "$ref": "#/components/schemas/OpenAIGrammarSyntax"
+          }
+        }
+      },
+      "OpenAIGrammarSyntax": {
+        "type": "string",
+        "enum": [
+          "lark",
+          "regex"
+        ]
+      },
+      "OrderBy": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OrderByTerm",
+            "description": "The property to order by."
+          },
+          {
+            "type": "object",
+            "required": [
+              "direction"
+            ],
+            "properties": {
+              "direction": {
+                "$ref": "#/components/schemas/OrderDirection",
+                "description": "The ordering direction."
+              }
+            }
+          }
+        ],
+        "description": "Order by clauses for querying inferences."
+      },
+      "OrderByTerm": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Creation timestamp of the item.",
+            "required": [
+              "by"
+            ],
+            "properties": {
+              "by": {
+                "type": "string",
+                "enum": [
+                  "timestamp"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Value of a metric.",
+            "required": [
+              "name",
+              "by"
+            ],
+            "properties": {
+              "by": {
+                "type": "string",
+                "enum": [
+                  "metric"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "description": "The name of the metric to order by."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Relevance score of the search query in the input and output of the item.\nRequires a search query (experimental). If it's not provided, we return an error.\n\nNOTE: Relevance ordering is not yet implemented for Postgres and currently\nfalls back to id ordering. See TODO(#6441).",
+            "required": [
+              "by"
+            ],
+            "properties": {
+              "by": {
+                "type": "string",
+                "enum": [
+                  "search_relevance"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The property to order by.\nThis is flattened in the public API inside the `OrderBy` struct."
+      },
+      "OrderDirection": {
+        "type": "string",
+        "description": "The ordering direction.",
+        "enum": [
+          "ascending",
+          "descending"
+        ]
+      },
+      "ProviderTool": {
+        "type": "object",
+        "required": [
+          "tool"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ProviderToolScope"
+          },
+          "tool": {}
+        },
+        "additionalProperties": false
+      },
+      "ProviderToolScope": {
+        "oneOf": [
+          {
+            "type": "null",
+            "default": null
+          },
+          {
+            "$ref": "#/components/schemas/ProviderToolScopeModelProvider"
+          }
+        ]
+      },
+      "ProviderToolScopeModelProvider": {
+        "type": "object",
+        "required": [
+          "model_name"
+        ],
+        "properties": {
+          "model_name": {
+            "type": "string"
+          },
+          "provider_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RawText": {
+        "type": "object",
+        "description": "Struct that represents raw text content that should be passed directly to the model\nwithout any template processing or validation",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ]
+      },
+      "ServiceTier": {
+        "type": "string",
+        "description": "Service tier for inference requests.\n\nControls the priority and latency characteristics of the request.\nDifferent providers map these values differently to their own service tiers.",
+        "enum": [
+          "auto",
+          "default",
+          "priority",
+          "flex"
+        ]
+      },
+      "StorageKind": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "allow_http": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "bucket_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "endpoint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "region": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "s3_compatible"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "path",
+              "type"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "filesystem"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "disabled"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Configuration for the object storage backend\nCurrently, we only support S3-compatible object storage and local filesystem storage\nWe test against Amazon S3, GCS, Cloudflare R2, and Minio"
+      },
+      "StoragePath": {
+        "type": "object",
+        "description": "Path to a file in an object storage backend.\nThis is part of the public API for `File`s. In particular, this is useful for roundtripping\nunresolved inputs from stored inferences or datapoints, without requiring clients to fetch\nfile data first.",
+        "required": [
+          "kind",
+          "path"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/StorageKind"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "StoredChatInference": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DynamicToolParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "function_name",
+              "variant_name",
+              "timestamp",
+              "episode_id",
+              "inference_id"
+            ],
+            "properties": {
+              "dispreferred_outputs": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContentBlockChatOutput"
+                  }
+                }
+              },
+              "episode_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "extra_body": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnfilteredInferenceExtraBody"
+                  }
+                ]
+              },
+              "function_name": {
+                "type": "string"
+              },
+              "inference_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "inference_params": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InferenceParams"
+                  }
+                ]
+              },
+              "input": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StoredInput"
+                  }
+                ]
+              },
+              "output": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/components/schemas/ContentBlockChatOutput"
+                }
+              },
+              "processing_time_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64",
+                "minimum": 0
+              },
+              "snapshot_hash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "ttft_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64",
+                "minimum": 0
+              },
+              "variant_name": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Wire variant of StoredChatInference for API responses with Python/TypeScript bindings"
+      },
+      "StoredFile": {
+        "$ref": "#/components/schemas/ObjectStoragePointer",
+        "description": "A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.\nSee the deserializer implementation below for details on the legacy formats it supports."
+      },
+      "StoredInference": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoredChatInference"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "chat"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "StoredInferenceChat"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoredJsonInference"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "StoredInferenceJson"
+          }
+        ],
+        "description": "Wire variant of StoredInference for API responses with Python/TypeScript bindings\nThis one should be used in all public interfaces"
+      },
+      "StoredInput": {
+        "type": "object",
+        "description": "The input type that we directly store in ClickHouse.\nThis is almost identical to `ResolvedInput`, but without `File` data.\nOnly the object-storage path is actually stored in clickhouse\n(which can be used to re-fetch the file and produce a `ResolvedInput`).\n\n`StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredInputMessage"
+            }
+          },
+          "system": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/System"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "StoredInputMessage": {
+        "type": "object",
+        "description": "`StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredInputMessageContent"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "StoredInputMessageContent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Template"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "template"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolCall"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_result"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RawText"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "raw_text"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Thought"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "thought"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StoredFile"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Unknown"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "StoredJsonInference": {
+        "type": "object",
+        "required": [
+          "function_name",
+          "variant_name",
+          "timestamp",
+          "episode_id",
+          "inference_id"
+        ],
+        "properties": {
+          "dispreferred_outputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonInferenceOutput"
+            }
+          },
+          "episode_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "extra_body": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UnfilteredInferenceExtraBody"
+              }
+            ]
+          },
+          "function_name": {
+            "type": "string"
+          },
+          "inference_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inference_params": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/InferenceParams"
+              }
+            ]
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StoredInput"
+              }
+            ]
+          },
+          "output": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonInferenceOutput"
+              }
+            ]
+          },
+          "output_schema": {},
+          "processing_time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "snapshot_hash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ttft_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "variant_name": {
+            "type": "string"
+          }
+        }
+      },
+      "System": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object"
+          }
+        ]
+      },
+      "TagComparisonOperator": {
+        "type": "string",
+        "description": "Comparison operators for tag filters.",
+        "enum": [
+          "=",
+          "!="
+        ]
+      },
+      "TagFilter": {
+        "type": "object",
+        "description": "Filter by tag key-value pair.",
+        "required": [
+          "key",
+          "value",
+          "comparison_operator"
+        ],
+        "properties": {
+          "comparison_operator": {
+            "$ref": "#/components/schemas/TagComparisonOperator"
+          },
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Template": {
+        "type": "object",
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TensorZeroErrorResponse": {
+        "type": "object",
+        "description": "Stable baseline error envelope for generated SDKs.\n\nWe intentionally document only the top-level `error` string for now.\nInternal structured error payloads remain an implementation detail.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Text": {
+        "type": "object",
+        "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Thought": {
+        "type": "object",
+        "description": "Struct that represents a model's reasoning",
+        "properties": {
+          "extra_data": {
+            "description": "Provider-specific opaque data for multi-turn reasoning support.\nFor example, OpenRouter stores encrypted reasoning blocks with `{\"format\": \"...\", \"encrypted\": true}` structure.\nNote: Not exposed to Python because `Value` doesn't implement `IntoPyObject`."
+          },
+          "provider_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When set, this `Thought` block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block."
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An optional signature - used with Anthropic and OpenRouter for multi-turn\nreasoning conversations. Other providers will ignore this field."
+          },
+          "summary": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ThoughtSummaryBlock"
+            }
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ThoughtSummaryBlock": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "summary_text"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "TimeComparisonOperator": {
+        "type": "string",
+        "description": "Comparison operators for timestamps.",
+        "enum": [
+          "<",
+          "<=",
+          "=",
+          ">",
+          ">=",
+          "!="
+        ]
+      },
+      "TimeFilter": {
+        "type": "object",
+        "description": "Filter by timestamp.",
+        "required": [
+          "time",
+          "comparison_operator"
+        ],
+        "properties": {
+          "comparison_operator": {
+            "$ref": "#/components/schemas/TimeComparisonOperator"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Tool": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FunctionTool"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "function"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OpenAICustomTool"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "openai_custom"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "description": "`Tool` is the generic form for all tools that TensorZero itself manages.\nThis includes function tools (the original kind) and OpenAI's custom tools\n(which support text and grammar formats). Future additions may include MCP and other standards.\n\nWe store this type (serialized) in the Array(String) in the `dynamic_tools` column\nin the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.\n\nFor the wire format, we use `DynamicTool` which wraps this enum with a custom deserializer\nthat allows function tools to be specified without type tags for backward compatibility,\nwhile other tool types require explicit tagging.\n\nNotably, provider tools (like OpenAI websearch) are not part of this enum\nas there's not really anything we can do besides experiment with them.\nThey are a separate type `ProviderTool`."
+      },
+      "ToolCall": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ToolCallWrapper": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ToolCall"
+          },
+          {
+            "$ref": "#/components/schemas/InferenceResponseToolCall"
+          }
+        ],
+        "description": "`ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).\nTypically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)\nbut they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper."
+      },
+      "ToolChoice": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "none"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "auto"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "required"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Forces the LLM to call a specific tool. The String is the name of the tool.",
+            "required": [
+              "specific"
+            ],
+            "properties": {
+              "specific": {
+                "type": "string",
+                "description": "Forces the LLM to call a specific tool. The String is the name of the tool."
+              }
+            }
+          }
+        ],
+        "description": "Most inference providers allow the user to force a tool to be used\nand even specify which tool to be used.\n\nThis enum is used to denote this tool choice."
+      },
+      "ToolResult": {
+        "type": "object",
+        "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+        "required": [
+          "name",
+          "result",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UnfilteredInferenceExtraBody": {
+        "type": "object",
+        "description": "The 'InferenceExtraBody' options provided directly in an inference request.\nThese have not yet been filtered by variant name",
+        "required": [
+          "extra_body"
+        ],
+        "properties": {
+          "extra_body": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtraBody"
+            }
+          }
+        }
+      },
+      "Unknown": {
+        "type": "object",
+        "description": "Struct that represents an unknown provider-specific content block.\nWe pass this along as-is without any validation or transformation.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "description": "The underlying content block to be passed to the model provider."
+          },
+          "model_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)"
+          },
+          "provider_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A provider name for the model you specified (e.g. `my_openai`)"
+          }
+        }
+      },
+      "UpdateChatDatapointRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/UpdateDynamicToolParamsRequest",
+            "description": "Datapoint tool parameters."
+          },
+          {
+            "$ref": "#/components/schemas/DatapointMetadataUpdate",
+            "description": "Metadata fields to update."
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "The ID of the datapoint to update. Required."
+              },
+              "input": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Input",
+                    "description": "Datapoint input. If omitted, it will be left unchanged."
+                  }
+                ]
+              },
+              "output": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/components/schemas/ContentBlockChatOutput"
+                },
+                "description": "Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to\n`null`. Otherwise, it will overwrite the existing output (and can be an empty array)."
+              },
+              "tags": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "description": "An update request for a chat datapoint."
+      },
+      "UpdateDatapointRequest": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateChatDatapointRequest",
+                "description": "Request to update a chat datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "chat"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "UpdateDatapointRequestChat",
+            "description": "Request to update a chat datapoint."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateJsonDatapointRequest",
+                "description": "Request to update a JSON datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "UpdateDatapointRequestJson",
+            "description": "Request to update a JSON datapoint."
+          }
+        ],
+        "description": "A tagged request to update a single datapoint in a dataset."
+      },
+      "UpdateDatapointsRequest": {
+        "type": "object",
+        "description": "Request to update one or more datapoints in a dataset.",
+        "required": [
+          "datapoints"
+        ],
+        "properties": {
+          "datapoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateDatapointRequest"
+            },
+            "description": "The datapoints to update."
+          }
+        }
+      },
+      "UpdateDatapointsResponse": {
+        "type": "object",
+        "description": "A response to a request to update one or more datapoints in a dataset.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the datapoints that were updated.\nThese are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests."
+          }
+        }
+      },
+      "UpdateDynamicToolParamsRequest": {
+        "type": "object",
+        "description": "A request to update the dynamic tool parameters of a datapoint.",
+        "properties": {
+          "additional_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "description": "Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.\nModifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include\nnew tools or exclude removed tools.\nIf omitted, it will be left unchanged. If specified as a value, it will be set to the provided value."
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "A subset of static tools configured for the function that the inference is explicitly allowed to use.\nIf omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools\nprovided at inference time). If specified as a value, it will be set to the provided value."
+          },
+          "parallel_tool_calls": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether to use parallel tool calls in the inference.\nIf omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
+          },
+          "provider_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProviderTool"
+            },
+            "description": "Provider-specific tool configurations\nIf omitted, it will be left unchanged. If specified as a value, it will be set to the provided value."
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolChoice",
+                "description": "User-specified tool choice strategy.\nIf omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice."
+              }
+            ]
+          }
+        }
+      },
+      "UpdateJsonDatapointRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DatapointMetadataUpdate",
+            "description": "Metadata fields to update."
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "The ID of the datapoint to update. Required."
+              },
+              "input": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Input",
+                    "description": "Datapoint input. If omitted, it will be left unchanged."
+                  }
+                ]
+              },
+              "output": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JsonDatapointOutputUpdate",
+                    "description": "JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
+                  }
+                ]
+              },
+              "output_schema": {
+                "description": "The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nIf not provided, the function's output schema will be used."
+              },
+              "tags": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "description": "An update request for a JSON datapoint."
+      },
+      "UrlFile": {
+        "type": "object",
+        "description": "A file that can be located at a URL",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "detail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Detail"
+              }
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

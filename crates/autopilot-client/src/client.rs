@@ -24,9 +24,9 @@ use crate::types::{
     CreateEventPayloadToolCallAuthorization, CreateEventRequest, CreateEventResponse,
     ErrorResponse, Event, EventPayload, EventPayloadToolCall, GatewayEvent, GatewayEventPayload,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
+    GatewayToolCallEvent, ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams,
+    ListEventsResponse, ListSessionsParams, ListSessionsResponse, S3UploadRequest,
+    S3UploadResponse, StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -570,12 +570,11 @@ impl AutopilotClient {
                 continue;
             }
             // Conversion should succeed since we filtered out NotAvailable events
-            let mut gateway_event: GatewayEvent = event.try_into().map_err(|e| {
+            let mut gateway_event: GatewayToolCallEvent = event.try_into().map_err(|e| {
                 AutopilotError::Internal(format!("Event conversion failed after filtering: {e}"))
             })?;
-            if let GatewayEventPayload::ToolCall(ref mut tc) = gateway_event.payload {
-                tc.requires_approval = !self.tool_whitelist.contains(&tc.name);
-            }
+            gateway_event.payload.requires_approval =
+                !self.tool_whitelist.contains(&gateway_event.payload.name);
             filtered_pending_tool_calls.push(gateway_event);
         }
 

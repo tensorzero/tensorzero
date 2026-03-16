@@ -13,7 +13,7 @@ use pyo3::prelude::*;
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[export_schema]
@@ -45,7 +45,7 @@ pub enum StorageKind {
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -57,6 +57,7 @@ pub struct StoragePath {
     )]
     #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
     #[schemars(with = "String")]
+    #[schema(value_type = String)]
     pub path: object_store::path::Path,
 }
 

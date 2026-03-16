@@ -1,0 +1,2698 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TensorZero Gateway Internal API",
+    "description": "Internal and unstable TensorZero Gateway endpoints.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "2026.3.2"
+  },
+  "paths": {
+    "/internal/autopilot/v1/sessions/{session_id}/events": {
+      "get": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events`",
+        "description": "Lists events for a session from the Autopilot API.",
+        "operationId": "list_events_handler",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Autopilot session ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of events to return.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Return events with IDs less than this cursor.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Events for the session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayListEventsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/autopilot/v1/sessions/{session_id}/events/stream": {
+      "get": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events/stream`",
+        "description": "Streams events for a session via SSE from the Autopilot API.\nNote: The #[instrument] macro is not used here due to lifetime issues with the SSE stream.",
+        "operationId": "stream_events_handler",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "Autopilot session ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "last_event_id",
+            "in": "query",
+            "description": "Resume streaming after this event ID.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-sent event stream of autopilot session updates.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayStreamUpdate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/evaluations/run": {
+      "post": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Handler for `POST /internal/evaluations/run`",
+        "description": "Runs an evaluation and streams results via SSE.",
+        "operationId": "run_evaluation_handler",
+        "requestBody": {
+          "description": "Run evaluation request payload.",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Server-sent event stream of evaluation run updates.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRunEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TensorZeroErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AutoEvalContentBlock": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Rendered as formatted markdown.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "markdown"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Rendered as a formatted JSON viewer.",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {},
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "json"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A block of rich content displayed alongside an autoeval example."
+      },
+      "AutoEvalExampleLabeling": {
+        "type": "object",
+        "description": "A single example to label, with context and a structured labeling question.",
+        "required": [
+          "context",
+          "label_question"
+        ],
+        "properties": {
+          "context": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutoEvalContentBlock"
+            },
+            "description": "Rich content blocks providing context (e.g. the prompt and response)."
+          },
+          "explanation_question": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AutoEvalExplanationQuestion",
+                "description": "An optional free-response explanation question."
+              }
+            ]
+          },
+          "label_question": {
+            "$ref": "#/components/schemas/AutoEvalLabelQuestion",
+            "description": "The multiple-choice labeling question for this example."
+          }
+        }
+      },
+      "AutoEvalExplanationQuestion": {
+        "type": "object",
+        "description": "A free-response explanation question within an autoeval example.",
+        "required": [
+          "id",
+          "header",
+          "question"
+        ],
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      },
+      "AutoEvalLabelQuestion": {
+        "type": "object",
+        "description": "A multiple-choice labeling question within an autoeval example.",
+        "required": [
+          "id",
+          "header",
+          "question",
+          "options"
+        ],
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultipleChoiceOption"
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        }
+      },
+      "AutoEvalLabeledExample": {
+        "type": "object",
+        "description": "A labeled example with its full context and submitted answers.",
+        "required": [
+          "context",
+          "label_question",
+          "label_answer"
+        ],
+        "properties": {
+          "context": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutoEvalContentBlock"
+            },
+            "description": "Rich content blocks providing context (e.g. the prompt and response)."
+          },
+          "explanation_answer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserQuestionAnswer",
+                "description": "The user's answer to the explanation question, if one was present."
+              }
+            ]
+          },
+          "explanation_question": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AutoEvalExplanationQuestion",
+                "description": "An optional free-response explanation question."
+              }
+            ]
+          },
+          "label_answer": {
+            "$ref": "#/components/schemas/UserQuestionAnswer",
+            "description": "The user's answer to the label question."
+          },
+          "label_question": {
+            "$ref": "#/components/schemas/AutoEvalLabelQuestion",
+            "description": "The multiple-choice labeling question for this example."
+          }
+        }
+      },
+      "AutopilotSideInfo": {
+        "type": "object",
+        "description": "Side information required for autopilot client tools.\n\nThis should contain all IDs that might be needed as input to a tool\nthat do not need to be generated by LLMs (like the session id or a config hash).\nWe should implement this as a type that has optional or mandatory fields as needed\nfor each kind of tool",
+        "required": [
+          "tool_call_event_id",
+          "session_id",
+          "config_snapshot_hash",
+          "optimization"
+        ],
+        "properties": {
+          "config_snapshot_hash": {
+            "type": "string",
+            "description": "A hash of the current configuration."
+          },
+          "optimization": {
+            "$ref": "#/components/schemas/OptimizationWorkflowSideInfo",
+            "description": "Settings for optimization workflows run on the gateway by autopilot."
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The session ID for this autopilot session."
+          },
+          "tool_call_event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The event ID of the ToolCall event (for correlating ToolResult)."
+          }
+        }
+      },
+      "AutopilotStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "idle"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "server_side_processing"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "waiting_for_tool_call_authorization"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "waiting_for_tool_execution"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "waiting_for_user_questions_answers"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "waiting_for_retry"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The UX-relevant status of the Autopilot."
+      },
+      "AutopilotToolResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "result_value"
+            ],
+            "properties": {
+              "result_value": {
+                "$ref": "#/components/schemas/Value"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "result"
+            ],
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "deprecated": true
+          }
+        ],
+        "description": "Tool result that can carry either a structured JSON value or a legacy serialized string.\n\nNew producers should use `AutopilotToolResult::typed`. Consumers should use\n`AutopilotToolResult::value()` which returns the structured value directly\nor parses the legacy string as a fallback."
+      },
+      "EvaluationRunCompleteEvent": {
+        "type": "object",
+        "required": [
+          "evaluation_run_id"
+        ],
+        "properties": {
+          "evaluation_run_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EvaluationRunErrorEvent": {
+        "type": "object",
+        "required": [
+          "evaluation_run_id",
+          "datapoint_id",
+          "message"
+        ],
+        "properties": {
+          "datapoint_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evaluation_run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationRunEvent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationRunStartEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "start"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "EvaluationRunEventStart"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationRunSuccessEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "success"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "EvaluationRunEventSuccess"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationRunErrorEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "EvaluationRunEventError"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationRunFatalErrorEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "fatal_error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "EvaluationRunEventFatalError"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationRunCompleteEvent"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "complete"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "EvaluationRunEventComplete"
+          }
+        ],
+        "description": "SSE event types for evaluation streaming."
+      },
+      "EvaluationRunFatalErrorEvent": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "evaluation_run_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "EvaluationRunStartEvent": {
+        "type": "object",
+        "required": [
+          "evaluation_run_id",
+          "num_datapoints",
+          "evaluation_name"
+        ],
+        "properties": {
+          "dataset_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evaluation_name": {
+            "type": "string"
+          },
+          "evaluation_run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "num_datapoints": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "variant_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "EvaluationRunSuccessEvent": {
+        "type": "object",
+        "required": [
+          "evaluation_run_id",
+          "datapoint",
+          "response",
+          "evaluations",
+          "evaluator_errors"
+        ],
+        "properties": {
+          "datapoint": {
+            "type": "object"
+          },
+          "evaluation_run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evaluations": {
+            "type": "object"
+          },
+          "evaluator_errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "response": {
+            "type": "object"
+          }
+        }
+      },
+      "EventPayloadAutoEvalExampleLabeling": {
+        "type": "object",
+        "description": "Payload for an autoeval example labeling event.\n\nGroups labeled examples together, each with rich context blocks\n(e.g. prompt/response) and associated labeling questions.",
+        "required": [
+          "examples"
+        ],
+        "properties": {
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutoEvalExampleLabeling"
+            }
+          }
+        }
+      },
+      "EventPayloadAutoEvalExampleLabelingAnswers": {
+        "type": "object",
+        "description": "Self-contained read-only payload for labeled autoeval examples.\nIncludes the full context blocks so the UI can render everything\nwithout looking up the original labeling event.",
+        "required": [
+          "examples",
+          "auto_eval_example_labeling_event_id"
+        ],
+        "properties": {
+          "auto_eval_example_labeling_event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to."
+          },
+          "examples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AutoEvalLabeledExample"
+            }
+          }
+        }
+      },
+      "EventPayloadError": {
+        "type": "object",
+        "description": "Error payload for an event.",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "EventPayloadMessage": {
+        "type": "object",
+        "description": "A message payload specific to autopilot events.\nContent is restricted to Text blocks only.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventPayloadMessageContent"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/EventPayloadMessageMetadata"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "EventPayloadMessageContent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "description": "Content block types allowed in autopilot event messages.\nRestricted to only Text blocks (no ToolCall, File, Template, etc.)."
+      },
+      "EventPayloadMessageMetadata": {
+        "type": "object",
+        "properties": {
+          "resolved_uuids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolveUuidResponse"
+            },
+            "description": "Attempted lookups for anything that matched a UUID regex\nin the parent `EventPayloadMessage`"
+          }
+        }
+      },
+      "EventPayloadStatusUpdate": {
+        "type": "object",
+        "description": "Status update payload for an event.",
+        "required": [
+          "status_update"
+        ],
+        "properties": {
+          "status_update": {
+            "$ref": "#/components/schemas/StatusUpdate"
+          }
+        }
+      },
+      "EventPayloadToolResult": {
+        "type": "object",
+        "description": "Tool result payload for an event.",
+        "required": [
+          "tool_call_event_id",
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ToolOutcome"
+          },
+          "tool_call_arguments": {
+            "description": "Populated by the server from the originating tool call event.\nOptional for backwards compatibility until the API is deployed with enrichment."
+          },
+          "tool_call_authorization_source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolCallDecisionSource",
+                "description": "Authorization source (Ui/Automatic/Whitelist). Optional because interrupted\ntool results may not have a corresponding authorization event."
+              }
+            ]
+          },
+          "tool_call_authorization_status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolCallAuthorizationStatus",
+                "description": "Authorization status (Approved/Rejected/NotAvailable). Optional for same reason."
+              }
+            ]
+          },
+          "tool_call_event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tool_call_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Populated by the server from the originating tool call event.\nOptional for backwards compatibility until the API is deployed with enrichment."
+          }
+        }
+      },
+      "EventPayloadUserQuestion": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EventPayloadUserQuestionInner"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "header",
+              "question"
+            ],
+            "properties": {
+              "header": {
+                "type": "string",
+                "description": "Very short label displayed as a chip/tag (max 12 chars). Examples: \"Auth method\", \"Library\", \"Approach\"."
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "question": {
+                "type": "string",
+                "description": "The complete question to ask the user. Should be clear, specific, and end with a question mark."
+              }
+            }
+          }
+        ],
+        "description": "A single question to display to the user."
+      },
+      "EventPayloadUserQuestionInner": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultipleChoiceQuestion"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "multiple_choice"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "free_response"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "The format of a user question."
+      },
+      "EventPayloadUserQuestions": {
+        "type": "object",
+        "description": "Questions payload for an event.",
+        "required": [
+          "questions"
+        ],
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventPayloadUserQuestion"
+            }
+          }
+        }
+      },
+      "EventPayloadUserQuestionsAnswers": {
+        "type": "object",
+        "description": "User responses payload for an event.",
+        "required": [
+          "responses",
+          "user_questions_event_id"
+        ],
+        "properties": {
+          "responses": {
+            "type": "object",
+            "description": "Map from question UUID to response.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/UserQuestionAnswer"
+            },
+            "propertyNames": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "user_questions_event_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "EventPayloadVisualization": {
+        "type": "object",
+        "description": "Visualization payload for an event.",
+        "required": [
+          "tool_execution_id",
+          "visualization"
+        ],
+        "properties": {
+          "tool_execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the tool execution that generated this visualization.\nFor client-side tools, this is the ToolCall event ID.\nFor server-side tools, this is the task ID."
+          },
+          "visualization": {
+            "$ref": "#/components/schemas/VisualizationType",
+            "description": "The visualization data."
+          }
+        }
+      },
+      "FreeResponseAnswer": {
+        "type": "object",
+        "description": "A user's free-form text answer.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "FunctionType": {
+        "type": "string",
+        "enum": [
+          "chat",
+          "json"
+        ]
+      },
+      "GatewayEvent": {
+        "type": "object",
+        "description": "An event as seen by gateway consumers.\n\nUses `GatewayEventPayload` which excludes `NotAvailable` authorization status.",
+        "required": [
+          "id",
+          "payload",
+          "session_id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/GatewayEventPayload"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "GatewayEventPayload": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadMessage"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadMessage"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadError"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "error"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadError"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadStatusUpdate"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "status_update"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadStatusUpdate"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GatewayEventPayloadToolCall"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadToolCall"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GatewayEventPayloadToolCallAuthorization"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call_authorization"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadToolCallAuthorization"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadToolResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_result"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadToolResult"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadVisualization"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "visualization"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadVisualization"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadUserQuestions"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "user_questions"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadUserQuestions"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadUserQuestionsAnswers"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "user_questions_answers"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadUserQuestionsAnswers"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadAutoEvalExampleLabeling"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "auto_eval_example_labeling"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "GatewayEventPayloadAutoEvalExampleLabeling"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EventPayloadAutoEvalExampleLabelingAnswers"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "auto_eval_example_labeling_answers"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "title": "GatewayEventPayloadUnknown",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "unknown"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Event payload as seen by gateway consumers.\n\nUses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status."
+      },
+      "GatewayEventPayloadToolCall": {
+        "type": "object",
+        "description": "Tool call payload as seen by gateway consumers.\nIncludes `requires_approval` which is set by the gateway based on tool whitelist config.",
+        "required": [
+          "name",
+          "arguments",
+          "side_info",
+          "requires_approval"
+        ],
+        "properties": {
+          "arguments": {},
+          "name": {
+            "type": "string"
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "description": "Whether this tool call requires manual user approval.\n`false` for whitelisted tools (auto-approved by gateway)."
+          },
+          "side_info": {
+            "$ref": "#/components/schemas/AutopilotSideInfo"
+          }
+        }
+      },
+      "GatewayEventPayloadToolCallAuthorization": {
+        "type": "object",
+        "description": "Tool call authorization payload as seen by gateway consumers.\n\nUses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.",
+        "required": [
+          "source",
+          "tool_call_event_id",
+          "status"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/ToolCallDecisionSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GatewayToolCallAuthorizationStatus"
+          },
+          "tool_call_arguments": {
+            "description": "Populated by the server from the originating tool call event.\nOptional for backwards compatibility until the API is deployed with enrichment."
+          },
+          "tool_call_event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tool_call_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Populated by the server from the originating tool call event.\nOptional for backwards compatibility until the API is deployed with enrichment."
+          }
+        }
+      },
+      "GatewayListEventsResponse": {
+        "type": "object",
+        "description": "Response from listing events as seen by gateway consumers.\n\nUses `GatewayEvent` which excludes `NotAvailable` authorization status.",
+        "required": [
+          "events",
+          "previous_user_message_event_id",
+          "status"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayEvent"
+            }
+          },
+          "pending_auto_eval_example_labeling": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayEvent"
+            },
+            "description": "All auto_eval_example_labeling events that do not have a matching answers event."
+          },
+          "pending_tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayToolCallEvent"
+            },
+            "description": "All tool calls in Event history that do not have responses.\nThese may be duplicates of some of the values in events.\nPayloads are always of type `tool_call`."
+          },
+          "pending_user_questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GatewayEvent"
+            },
+            "description": "All user_questions events that do not have a matching user_questions_answers event."
+          },
+          "previous_user_message_event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The most recent `message` event with role `user` in this session."
+          },
+          "status": {
+            "$ref": "#/components/schemas/AutopilotStatus",
+            "description": "The current status of the Autopilot in this session.\nIgnores pagination parameters."
+          }
+        }
+      },
+      "GatewayStreamUpdate": {
+        "type": "object",
+        "description": "Stream update as seen by gateway consumers.\n\nUses `GatewayEvent` which excludes `NotAvailable` authorization status.",
+        "required": [
+          "event",
+          "status"
+        ],
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/GatewayEvent"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AutopilotStatus"
+          }
+        }
+      },
+      "GatewayToolCallAuthorizationStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "approved"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rejected"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Authorization status for tool calls as seen by gateway consumers.\n\nThis is a narrower type than `ToolCallAuthorizationStatus` that excludes\n`NotAvailable` since that status is filtered out before reaching consumers."
+      },
+      "GatewayToolCallEvent": {
+        "type": "object",
+        "description": "A tool call event as seen by gateway consumers.\n\nUnlike [`GatewayEvent`], this payload is narrowed to `tool_call`.",
+        "required": [
+          "id",
+          "payload",
+          "session_id",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/GatewayEventPayloadToolCall"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "MultipleChoiceAnswer": {
+        "type": "object",
+        "description": "A user's answer to a multiple choice question.",
+        "required": [
+          "selected"
+        ],
+        "properties": {
+          "selected": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "IDs of the selected options."
+          }
+        }
+      },
+      "MultipleChoiceOption": {
+        "type": "object",
+        "description": "An option in a multiple choice question.",
+        "required": [
+          "id",
+          "label",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Explanation of what this option means or what will happen if chosen."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "description": "The display text for this option that the user will see and select. Should be concise (1-5 words)."
+          }
+        }
+      },
+      "MultipleChoiceQuestion": {
+        "type": "object",
+        "description": "A multiple choice question with options.",
+        "required": [
+          "options",
+          "multi_select"
+        ],
+        "properties": {
+          "multi_select": {
+            "type": "boolean",
+            "description": "Set to true to allow the user to select multiple options instead of just one."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultipleChoiceOption"
+            },
+            "description": "Should be 2-4 options."
+          }
+        }
+      },
+      "NonControlToolError": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Step error.",
+            "required": [
+              "base_name",
+              "error",
+              "kind"
+            ],
+            "properties": {
+              "base_name": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "step"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Serialization error.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "serialization"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Task panic error.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "task_panicked"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Tool was not found in the registry.",
+            "required": [
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "tool_not_found"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Tool with this name is already registered.",
+            "required": [
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "duplicate_tool_name"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Parameter validation or parsing failed.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invalid_params"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Schema generation failed.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "schema_generation"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Operation timed out.",
+            "required": [
+              "step_name",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "timeout"
+                ]
+              },
+              "step_name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Validation error.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "validation"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Internal task error.",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "internal"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Child task failed.",
+            "required": [
+              "step_name",
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "child_failed"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "step_name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Child task was cancelled.",
+            "required": [
+              "step_name",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "child_cancelled"
+                ]
+              },
+              "step_name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Invalid durable configuration.",
+            "required": [
+              "reason",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invalid_configuration"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Reserved header prefix used.",
+            "required": [
+              "key",
+              "kind"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "reserved_header_prefix"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Invalid event name.",
+            "required": [
+              "reason",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invalid_event_name"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "User-defined error from tool implementation.\n\nTool implementations should define their own error types and convert\nthem to this variant. The `error_data` field stores structured JSON\nthat can be deserialized back to the original error type.",
+            "required": [
+              "message",
+              "error_data",
+              "kind"
+            ],
+            "properties": {
+              "error_data": {
+                "$ref": "#/components/schemas/Value",
+                "description": "Structured error data for persistence and later retrieval."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "user"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "error",
+              "kind"
+            ],
+            "properties": {
+              "error": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "subtask_spawn_failed"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Error occurred while trying to emit an event.",
+            "required": [
+              "event_name",
+              "error",
+              "kind"
+            ],
+            "properties": {
+              "error": {
+                "type": "string"
+              },
+              "event_name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "emit_event_failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Serializable error type for tool execution.\n\nThis enum contains framework-level errors generated by durable-tools itself,\nplus a `User` variant for tool-specific errors. Tool implementations should\ndefine their own error types and convert them to `NonControlToolError::User`."
+      },
+      "OptimizationWorkflowSideInfo": {
+        "type": "object",
+        "description": "Side info for optimization workflow tool (hidden from LLM).",
+        "properties": {
+          "max_wait_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum time to wait for completion in seconds (default: 86400 = 24 hours).",
+            "minimum": 0
+          },
+          "poll_interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Polling interval in seconds (default: 60).",
+            "minimum": 0
+          }
+        }
+      },
+      "ResolveUuidResponse": {
+        "type": "object",
+        "description": "Response type for the resolve_uuid endpoint.",
+        "required": [
+          "id",
+          "object_types"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "object_types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedObject"
+            }
+          }
+        }
+      },
+      "ResolvedObject": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "function_name",
+              "function_type",
+              "variant_name",
+              "episode_id",
+              "type"
+            ],
+            "properties": {
+              "episode_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "function_name": {
+                "type": "string"
+              },
+              "function_type": {
+                "$ref": "#/components/schemas/FunctionType"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "inference"
+                ]
+              },
+              "variant_name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "episode"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "boolean_feedback"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "float_feedback"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "comment_feedback"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "demonstration_feedback"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset_name",
+              "function_name",
+              "type"
+            ],
+            "properties": {
+              "dataset_name": {
+                "type": "string"
+              },
+              "function_name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "chat_datapoint"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "dataset_name",
+              "function_name",
+              "type"
+            ],
+            "properties": {
+              "dataset_name": {
+                "type": "string"
+              },
+              "function_name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "json_datapoint"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "inference_id",
+              "model_name",
+              "model_provider_name",
+              "type"
+            ],
+            "properties": {
+              "inference_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "model_name": {
+                "type": "string"
+              },
+              "model_provider_name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "model_inference"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A single resolved object type for a given UUID."
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ]
+      },
+      "StatusUpdate": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A status update within a session."
+      },
+      "TensorZeroErrorResponse": {
+        "type": "object",
+        "description": "Stable baseline error envelope for generated SDKs.\n\nWe intentionally document only the top-level `error` string for now.\nInternal structured error payloads remain an implementation detail.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Text": {
+        "type": "object",
+        "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ToolCallAuthorizationStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "approved"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rejected"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "not_available"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ToolCallDecisionSource": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ui"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "automatic"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "whitelist"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ToolFailure": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "control"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "error",
+              "kind"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/NonControlToolError"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "tool"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "database"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "The type written in `ToolOutcome::Failure` for tool errors."
+      },
+      "ToolOutcome": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AutopilotToolResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "success"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "ToolOutcomeSuccess"
+          },
+          {
+            "type": "object",
+            "title": "ToolOutcomeRejected",
+            "description": "The user rejected the tool call request\nNote that this is currently never directly sent by the client - instead,\n`ToolCallAuthorizationStatus::Rejected` is sent to the server.\nThe rejected tool will show in in the events list as `EventPayload::ToolResult`\nwith `ToolOutcome::Rejected`",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rejected"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "ToolOutcomeFailure",
+            "required": [
+              "error",
+              "type"
+            ],
+            "properties": {
+              "error": {
+                "$ref": "#/components/schemas/ToolFailure",
+                "description": "Structured error data from the tool."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "failure"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "missing"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "unknown"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "TopKEvaluationVisualization": {
+        "type": "object",
+        "description": "Visualization data for a top-k evaluation.",
+        "required": [
+          "variant_summaries"
+        ],
+        "properties": {
+          "confident_top_k_sizes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Sizes k where we can confidently identify a top-k set.\nFor example, [2, 5] means there's statistical separation after the 2nd\nand 5th ranked variants (sorted by lower confidence bound descending)."
+          },
+          "summary_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Explanation of the results for the user."
+          },
+          "variant_summaries": {
+            "type": "object",
+            "description": "Map of variant names to their summary statistics.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/VariantSummary"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserQuestionAnswer": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MultipleChoiceAnswer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "multiple_choice"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "UserQuestionAnswerMultipleChoice"
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FreeResponseAnswer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "free_response"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "UserQuestionAnswerFreeResponse"
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "skipped"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A user's response to a question."
+      },
+      "Value": {},
+      "VariantSummary": {
+        "type": "object",
+        "description": "Summary statistics for a variant's performance.",
+        "required": [
+          "mean_est",
+          "cs_lower",
+          "cs_upper",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of observations.",
+            "minimum": 0
+          },
+          "cs_lower": {
+            "type": "number",
+            "format": "double",
+            "description": "Lower confidence bound."
+          },
+          "cs_upper": {
+            "type": "number",
+            "format": "double",
+            "description": "Upper confidence bound."
+          },
+          "failed": {
+            "type": "boolean",
+            "description": "Whether this variant failed during evaluation."
+          },
+          "mean_est": {
+            "type": "number",
+            "format": "double",
+            "description": "Estimated mean performance."
+          }
+        }
+      },
+      "VisualizationType": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TopKEvaluationVisualization",
+                "description": "Top-k evaluation results showing variant performance comparisons."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "top_k_evaluation"
+                    ]
+                  }
+                }
+              }
+            ],
+            "title": "VisualizationTypeTopKEvaluation",
+            "description": "Top-k evaluation results showing variant performance comparisons."
+          },
+          {
+            "type": "object",
+            "title": "VisualizationTypeUnknown",
+            "description": "Unknown visualization type for forward compatibility.\nOld clients can gracefully handle new visualization types they don't recognize.",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "unknown"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Types of visualizations that can be displayed."
+      }
+    }
+  }
+}

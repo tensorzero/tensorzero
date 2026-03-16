@@ -37,7 +37,7 @@ use super::config::DynamicToolConfig;
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
+#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[strum(serialize_all = "snake_case")]
@@ -193,7 +193,7 @@ impl Tool {
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -262,7 +262,7 @@ impl FunctionTool {
 /// This only applies to the Chat Completions API. The Responses API has a slightly different request
 /// shape so we implement a conversion in `responses.rs`.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -282,7 +282,7 @@ impl fmt::Display for OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
@@ -293,7 +293,7 @@ pub enum OpenAICustomToolFormat {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct OpenAIGrammarDefinition {
     pub syntax: OpenAIGrammarSyntax,
@@ -301,7 +301,7 @@ pub struct OpenAIGrammarDefinition {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrammarSyntax {
@@ -336,7 +336,7 @@ impl OpenAICustomTool {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
 pub struct ProviderToolScopeModelProvider {
@@ -346,7 +346,9 @@ pub struct ProviderToolScopeModelProvider {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema,
+)]
 #[serde(untagged)]
 #[export_schema]
 #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
@@ -374,7 +376,7 @@ impl ProviderToolScope {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

@@ -20,7 +20,7 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum DatapointOrderByTerm {
@@ -39,7 +39,7 @@ pub enum DatapointOrderByTerm {
 
 /// Order by clauses for querying datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct DatapointOrderBy {
@@ -53,7 +53,7 @@ pub struct DatapointOrderBy {
 
 /// Request to update one or more datapoints in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct UpdateDatapointsRequest {
@@ -63,7 +63,7 @@ pub struct UpdateDatapointsRequest {
 
 /// A tagged request to update a single datapoint in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize, utoipa::ToSchema)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(
@@ -74,15 +74,17 @@ pub struct UpdateDatapointsRequest {
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     #[schemars(title = "UpdateChatDatapointRequest")]
+    #[schema(title = "UpdateDatapointRequestChat")]
     Chat(UpdateChatDatapointRequest),
     /// Request to update a JSON datapoint.
     #[schemars(title = "UpdateJsonDatapointRequest")]
+    #[schema(title = "UpdateDatapointRequestJson")]
     Json(UpdateJsonDatapointRequest),
 }
 
 /// An update request for a chat datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 #[schemars(title = "UpdateChatDatapointRequestInternal")]
@@ -97,6 +99,7 @@ pub struct UpdateChatDatapointRequest {
     /// Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
     /// `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<Vec<ContentBlockChatOutput>>)]
     #[schemars(extend("x-double-option" = true), description = "Chat datapoint output.
 
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared.
@@ -123,7 +126,9 @@ Otherwise, it will overwrite the existing tags.")]
 
 /// A request to update the dynamic tool parameters of a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, JsonSchema)]
+#[derive(
+    Debug, Serialize, Deserialize, Default, Clone, PartialEq, JsonSchema, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct UpdateDynamicToolParamsRequest {
@@ -131,6 +136,7 @@ pub struct UpdateDynamicToolParamsRequest {
     /// If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
     /// provided at inference time). If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<Vec<String>>)]
     #[schemars(extend("x-double-option" = true), description = "A subset of static tools configured for the function that the inference is explicitly allowed to use.
 
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
@@ -146,6 +152,7 @@ plus additional tools provided at inference time). If specified as a value, it w
     /// User-specified tool choice strategy.
     /// If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<ToolChoice>)]
     #[schemars(extend("x-double-option" = true), description = "User-specified tool choice strategy.
 
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
@@ -155,6 +162,7 @@ tool choice). If specified as a value, it will be set to the provided value.")]
     /// Whether to use parallel tool calls in the inference.
     /// If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<bool>)]
     #[schemars(extend("x-double-option" = true), description = "Whether to use parallel tool calls in the inference.
 
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
@@ -168,7 +176,7 @@ parallel tool calls). If specified as a value, it will be set to the provided va
 
 /// An update request for a JSON datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 #[schemars(title = "UpdateJsonDatapointRequestInternal")]
@@ -182,6 +190,7 @@ pub struct UpdateJsonDatapointRequest {
 
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<JsonDatapointOutputUpdate>)]
     #[schemars(extend("x-double-option" = true), description = "JSON datapoint output.
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
 inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.")]
@@ -206,7 +215,7 @@ inference succeeded but model didn't output relevant content blocks). Otherwise,
 ///
 /// We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct JsonDatapointOutputUpdate {
@@ -219,12 +228,15 @@ pub struct JsonDatapointOutputUpdate {
 
 /// A request to update the metadata of a datapoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Default, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(
+    Debug, Serialize, Default, Deserialize, Clone, PartialEq, JsonSchema, utoipa::ToSchema,
+)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[export_schema]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schema(value_type = Option<String>)]
     #[schemars(extend("x-double-option" = true), description = "Datapoint name.
 
 If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
@@ -234,7 +246,7 @@ be set to the provided value.")]
 
 /// A response to a request to update one or more datapoints in a dataset.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct UpdateDatapointsResponse {
@@ -338,7 +350,7 @@ pub struct GetDatapointsResponse {
 
 /// Request to create datapoints from inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct CreateDatapointsFromInferenceRequest {
     #[serde(flatten)]
@@ -348,7 +360,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -356,6 +368,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from specific inference IDs.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceIds")]
+    #[schema(title = "CreateDatapointsFromInferenceRequestParamsInferenceIds")]
     InferenceIds {
         /// The inference IDs to create datapoints from.
         inference_ids: Vec<Uuid>,
@@ -369,6 +382,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 
     /// Create datapoints from an inference query.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
+    #[schema(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
     InferenceQuery {
         /// Flattened inference query parameters.
         #[serde(flatten)]
@@ -378,7 +392,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 
 /// Response from creating datapoints.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, utoipa::ToSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[export_schema]
 pub struct CreateDatapointsResponse {

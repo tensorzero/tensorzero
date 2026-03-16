@@ -21,6 +21,7 @@ tracing.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 ts-rs = { workspace = true, optional = true }
+utoipa.workspace = true
 url = { workspace = true, features = ["serde"] }
 
 [features]

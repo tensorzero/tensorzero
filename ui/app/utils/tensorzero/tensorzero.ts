@@ -5,6 +5,7 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 */
 
 import { z } from "zod";
+import TensorzeroInternal from "tensorzero-internal";
 import { BaseTensorZeroClient } from "./base-client";
 import {
   ZodJsonValueSchema,
@@ -133,6 +134,19 @@ export interface GetCumulativeFeedbackTimeseriesResponse {
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient extends BaseTensorZeroClient {
+  private stainless: TensorzeroInternal;
+
+  constructor(baseUrl: string, apiKey?: string) {
+    super(baseUrl, apiKey);
+    this.stainless = new TensorzeroInternal({
+      baseURL: baseUrl,
+      apiKey: apiKey ?? null,
+      // When no API key is provided, explicitly opt out of auth
+      // so the SDK's validateHeaders doesn't require one.
+      ...(!apiKey && { defaultHeaders: { Authorization: null } }),
+    });
+  }
+
   /**
    * Performs an inference request.
    * @param request - The inference request payload.
@@ -1727,82 +1741,13 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       precision_targets: precisionTargets,
     };
 
-    const response = await this.fetch("/internal/evaluations/run", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify(requestBody),
-      signal,
-    });
+    const stream = await this.stainless.internal.evaluations.run(
+      { body: requestBody },
+      { signal },
+    );
 
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-
-    if (!response.body) {
-      throw new Error("Response body is null");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events in the buffer
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            const data = line.slice(5).trim();
-            if (data) {
-              try {
-                const event = JSON.parse(data) as EvaluationRunEvent;
-                onEvent(event);
-              } catch (e) {
-                logger.error(
-                  "Failed to parse SSE event for runEvaluationStreaming:",
-                  e,
-                  "Data:",
-                  data,
-                );
-              }
-            }
-          }
-        }
-      }
-
-      // Process any remaining data in buffer
-      if (buffer.startsWith("data:")) {
-        const data = buffer.slice(5).trim();
-        if (data) {
-          try {
-            const event = JSON.parse(data) as EvaluationRunEvent;
-            onEvent(event);
-          } catch (e) {
-            logger.error(
-              "Failed to parse final SSE event for runEvaluationStreaming:",
-              e,
-              "Data:",
-              data,
-            );
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
+    for await (const event of stream) {
+      onEvent(event);
     }
   }
 

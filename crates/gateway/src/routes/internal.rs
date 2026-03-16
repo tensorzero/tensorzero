@@ -3,15 +3,29 @@
 //! These routes are for internal use. They are unstable and might change without notice,
 //! and do not export any OpenTelemetry spans.
 
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::routing::{get, post};
 use tensorzero_core::endpoints;
 use tensorzero_core::utils::gateway::AppStateData;
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
-    Router::new()
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "TensorZero Gateway Internal API",
+        description = "Internal and unstable TensorZero Gateway endpoints.",
+        version = env!("CARGO_PKG_VERSION")
+    )
+)]
+struct InternalApiDoc;
+
+fn new_internal_openapi_router() -> OpenApiRouter<AppStateData> {
+    OpenApiRouter::with_openapi(InternalApiDoc::openapi())
+}
+
+pub fn build_internal_non_otel_enabled_routes() -> OpenApiRouter<AppStateData> {
+    new_internal_openapi_router()
+        .merge(build_documented_internal_routes())
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
@@ -155,10 +169,6 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback",
             post(endpoints::internal::evaluations::get_human_feedback_handler),
         )
-        .route(
-            "/internal/evaluations/run",
-            post(super::evaluations::run_evaluation_handler),
-        )
         // Workflow evaluation endpoints
         .route(
             "/internal/workflow_evaluations/projects",
@@ -241,12 +251,7 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         )
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/events",
-            get(endpoints::internal::autopilot::list_events_handler)
-                .post(endpoints::internal::autopilot::create_event_handler),
-        )
-        .route(
-            "/internal/autopilot/v1/sessions/{session_id}/events/stream",
-            get(endpoints::internal::autopilot::stream_events_handler),
+            post(endpoints::internal::autopilot::create_event_handler),
         )
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
@@ -274,4 +279,13 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/autopilot/status",
             get(endpoints::internal::autopilot::autopilot_status_handler),
         )
+}
+
+fn build_documented_internal_routes() -> OpenApiRouter<AppStateData> {
+    new_internal_openapi_router()
+        .routes(routes!(super::evaluations::run_evaluation_handler))
+        .routes(routes!(endpoints::internal::autopilot::list_events_handler))
+        .routes(routes!(
+            endpoints::internal::autopilot::stream_events_handler
+        ))
 }

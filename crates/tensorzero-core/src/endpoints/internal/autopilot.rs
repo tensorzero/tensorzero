@@ -29,6 +29,7 @@ use tensorzero_types::ResolveUuidResponse;
 use crate::db::resolve_uuid::ResolveUuidQueries;
 use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::openapi::TensorZeroErrorResponse;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 // UUID regex: 8-4-4-4-12 hex pattern
@@ -298,6 +299,33 @@ pub async fn list_sessions_handler(
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/events`
 ///
 /// Lists events for a session from the Autopilot API.
+#[utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions/{session_id}/events",
+    tag = "internal",
+    params(
+        ("session_id" = Uuid, Path, description = "Autopilot session ID"),
+        ("limit" = Option<u32>, Query, description = "Maximum number of events to return."),
+        ("before" = Option<Uuid>, Query, description = "Return events with IDs less than this cursor.")
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Events for the session.",
+            body = GatewayListEventsResponse
+        ),
+        (
+            status = 400,
+            description = "Invalid request",
+            body = TensorZeroErrorResponse
+        ),
+        (
+            status = 500,
+            description = "Internal server error",
+            body = TensorZeroErrorResponse
+        )
+    )
+)]
 #[axum::debug_handler(state = AppStateData)]
 #[instrument(name = "autopilot.list_events", skip_all, fields(session_id = %session_id))]
 pub async fn list_events_handler(
@@ -462,6 +490,34 @@ pub async fn autopilot_status_handler(State(app_state): AppState) -> Json<Autopi
 ///
 /// Streams events for a session via SSE from the Autopilot API.
 /// Note: The #[instrument] macro is not used here due to lifetime issues with the SSE stream.
+#[utoipa::path(
+    get,
+    path = "/internal/autopilot/v1/sessions/{session_id}/events/stream",
+    tag = "internal",
+    params(
+        ("session_id" = Uuid, Path, description = "Autopilot session ID"),
+        ("last_event_id" = Option<Uuid>, Query, description = "Resume streaming after this event ID.")
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Server-sent event stream of autopilot session updates.",
+            content(
+                (GatewayStreamUpdate = "text/event-stream")
+            )
+        ),
+        (
+            status = 400,
+            description = "Invalid request",
+            body = TensorZeroErrorResponse
+        ),
+        (
+            status = 500,
+            description = "Internal server error",
+            body = TensorZeroErrorResponse
+        )
+    )
+)]
 #[axum::debug_handler(state = AppStateData)]
 pub async fn stream_events_handler(
     State(app_state): AppState,
