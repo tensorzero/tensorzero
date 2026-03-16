@@ -5,6 +5,7 @@ mod get_run_metadata;
 use std::time::Duration;
 
 use futures::StreamExt;
+use googletest::prelude::*;
 use reqwest::{Client, StatusCode};
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use serde_json::{Map, Value, json};
@@ -15,7 +16,9 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
     CreateDatapointsResponse,
 };
-use tensorzero_core::endpoints::internal::evaluations::types::GetEvaluationStatisticsResponse;
+use tensorzero_core::endpoints::internal::evaluations::types::{
+    GetEvaluationStatisticsResponse, SearchEvaluationRunResult, SearchEvaluationRunsResponse,
+};
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
 };
@@ -28,6 +31,9 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+
+const ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI: &str = "0196368f-19bd-7082-a677-1c0bf346ff24";
+const ENTITY_EXTRACTION_RUN_ID_GPT4O: &str = "0196368e-53a8-7e82-a88d-db7086926d81";
 
 /// Test the count evaluation runs endpoint.
 /// This tests GET /internal/evaluations/runs/count
@@ -57,6 +63,137 @@ async fn test_count_evaluation_runs() {
     assert!(
         count > 0,
         "Expected at least one evaluation run in the test database"
+    );
+}
+
+#[gtest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_evaluation_runs_function_name_only() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/evaluations/runs/search?function_name=extract_entities&query=",
+    );
+
+    let resp = http_client
+        .get(url)
+        .send()
+        .await
+        .expect("search_evaluation_runs function-only request failed");
+    expect_that!(resp.status(), eq(StatusCode::OK));
+
+    let response: SearchEvaluationRunsResponse = resp
+        .json()
+        .await
+        .expect("Failed to parse function-only search response");
+
+    expect_that!(
+        response.results.len(),
+        ge(2),
+        "Expected at least 2 evaluation runs for function-only search"
+    );
+    expect_that!(
+        &response.results,
+        contains_each![
+            matches_pattern!(SearchEvaluationRunResult {
+                evaluation_run_id: eq(
+                    &Uuid::parse_str(ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI).expect("Valid UUID")
+                ),
+                evaluation_name: eq("entity_extraction"),
+                ..
+            }),
+            matches_pattern!(SearchEvaluationRunResult {
+                evaluation_run_id: eq(
+                    &Uuid::parse_str(ENTITY_EXTRACTION_RUN_ID_GPT4O).expect("Valid UUID")
+                ),
+                evaluation_name: eq("entity_extraction"),
+                ..
+            })
+        ]
+    );
+}
+
+#[gtest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_evaluation_runs_evaluation_name_only() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/evaluations/runs/search?evaluation_name=entity_extraction&query=",
+    );
+
+    let resp = http_client
+        .get(url)
+        .send()
+        .await
+        .expect("search_evaluation_runs evaluation-only request failed");
+    let status = resp.status();
+    let body = resp
+        .text()
+        .await
+        .expect("Failed to read evaluation-only search response body");
+    expect_that!(status, eq(StatusCode::OK), "response body: {body}");
+
+    let response: SearchEvaluationRunsResponse =
+        serde_json::from_str(&body).expect("Failed to parse evaluation-only search response");
+
+    expect_that!(
+        response.results,
+        len(ge(2)),
+        "Expected at least 2 evaluation runs for evaluation-only search"
+    );
+    expect_that!(
+        response.results,
+        each(matches_pattern!(SearchEvaluationRunResult {
+            evaluation_name: eq("entity_extraction"),
+            ..
+        }))
+    );
+}
+
+#[gtest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_evaluation_runs_missing_scope_returns_error() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint("/internal/evaluations/runs/search?query=");
+
+    let resp = http_client
+        .get(url)
+        .send()
+        .await
+        .expect("search_evaluation_runs missing-scope request failed");
+    expect_that!(resp.status(), eq(StatusCode::BAD_REQUEST));
+}
+
+#[gtest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_evaluation_runs_query_returns_correct_runs() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/evaluations/runs/search?evaluation_name=entity_extraction&query=mini",
+    );
+
+    let resp = http_client
+        .get(url)
+        .send()
+        .await
+        .expect("search_evaluation_runs query request failed");
+    expect_that!(resp.status(), eq(StatusCode::OK));
+
+    let response: SearchEvaluationRunsResponse = resp
+        .json()
+        .await
+        .expect("Failed to parse query search response");
+
+    expect_that!(
+        &response.results,
+        contains(matches_pattern!(SearchEvaluationRunResult {
+            evaluation_run_id: eq(
+                &Uuid::parse_str(ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI).expect("Valid UUID")
+            ),
+            evaluation_name: eq("entity_extraction"),
+            variant_name: eq("gpt4o_mini_initial_prompt"),
+            ..
+        })),
+        "Expected search results for query `mini` to include the fixture run"
     );
 }
 
