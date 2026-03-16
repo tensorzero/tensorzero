@@ -350,7 +350,6 @@ export * from "./RateLimitingConfigScopes";
 export * from "./RawResponseEntry";
 export * from "./RawText";
 export * from "./RawUsageEntry";
-export * from "./RecommendedTtl";
 export * from "./RegexConfig";
 export * from "./RenderedSample";
 export * from "./ResolveUuidResponse";

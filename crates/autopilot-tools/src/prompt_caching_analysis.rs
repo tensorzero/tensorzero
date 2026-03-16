@@ -38,48 +38,41 @@ pub struct InferenceSample {
 
 /// Pricing configuration for prompt caching cost estimation.
 ///
-/// These values should be derived from the model provider's `cost` config
-/// in `tensorzero.toml`. The caller extracts the base input price from the
-/// existing cost pointers and provides cache-specific multipliers.
+/// All prices are in dollars per million tokens. Derive these from the model
+/// provider's `cost` config in `tensorzero.toml`:
+///
+/// ```toml
+/// cost = [
+///   { pointer = "/usage/input_tokens", cost_per_million = 3.00 },
+///   { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+///   { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
+/// ]
+/// ```
+///
+/// The base input price maps to the `input_tokens` / `prompt_tokens` pointer,
+/// cache read to `cache_read_input_tokens`, and cache write to
+/// `cache_creation_input_tokens`.
 #[cfg_attr(feature = "ts-bindings", derive(TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CachingPricingConfig {
-    /// Base input token price in dollars per million tokens.
-    /// Derived from the provider's `cost` config (e.g. `cost_per_million` for
-    /// the input token pointer).
+    /// Base input token price (dollars per million tokens).
     pub input_price_per_million: f64,
-    /// Multiplier for cached token reads (e.g. 0.1 for Anthropic = 90% savings).
-    /// Default: 0.1
-    #[serde(default = "default_cache_read_multiplier")]
-    pub cache_read_multiplier: f64,
-    /// Multiplier for cache writes with 5-minute TTL (e.g. 1.25 for Anthropic).
-    /// Default: 1.25
-    #[serde(default = "default_cache_write_5min_multiplier")]
-    pub cache_write_5min_multiplier: f64,
-    /// Multiplier for cache writes with 1-hour TTL (e.g. 2.0 for Anthropic).
-    /// Default: 2.0
-    #[serde(default = "default_cache_write_1hr_multiplier")]
-    pub cache_write_1hr_multiplier: f64,
-}
-
-fn default_cache_read_multiplier() -> f64 {
-    0.1
-}
-fn default_cache_write_5min_multiplier() -> f64 {
-    1.25
-}
-fn default_cache_write_1hr_multiplier() -> f64 {
-    2.0
+    /// Cache read token price (dollars per million tokens).
+    /// For Anthropic this is typically 0.1x the input price.
+    pub cache_read_price_per_million: f64,
+    /// Cache write token price (dollars per million tokens).
+    /// For Anthropic 5-min TTL this is typically 1.25x the input price.
+    pub cache_write_price_per_million: f64,
 }
 
 impl Default for CachingPricingConfig {
     fn default() -> Self {
+        // Anthropic Sonnet-class defaults
         Self {
-            input_price_per_million: 3.0, // Sonnet-class default
-            cache_read_multiplier: default_cache_read_multiplier(),
-            cache_write_5min_multiplier: default_cache_write_5min_multiplier(),
-            cache_write_1hr_multiplier: default_cache_write_1hr_multiplier(),
+            input_price_per_million: 3.0,
+            cache_read_price_per_million: 0.3,
+            cache_write_price_per_million: 3.75,
         }
     }
 }
@@ -166,25 +159,10 @@ pub struct TemporalAnalysis {
 pub struct CostEstimate {
     /// Total estimated cost of all samples without caching (dollars).
     pub total_cost_no_caching: f64,
-    /// Total estimated cost with 5-min TTL caching (dollars).
-    pub total_cost_5min_ttl: f64,
-    /// Total estimated cost with 1-hr TTL caching (dollars).
-    pub total_cost_1hr_ttl: f64,
-    /// Savings percentage with 5-min TTL.
-    pub savings_pct_5min: f64,
-    /// Savings percentage with 1-hr TTL.
-    pub savings_pct_1hr: f64,
-    /// Recommended TTL based on request patterns.
-    pub recommended_ttl: RecommendedTtl,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum RecommendedTtl {
-    FiveMinutes,
-    OneHour,
-    NotRecommended,
+    /// Total estimated cost with caching enabled (dollars).
+    pub total_cost_with_caching: f64,
+    /// Projected savings percentage.
+    pub savings_pct: f64,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(TS))]
@@ -469,71 +447,46 @@ fn compute_cost_estimate(
     temporal: &TemporalAnalysis,
     pricing: &CachingPricingConfig,
 ) -> CostEstimate {
-    let base_price = pricing.input_price_per_million / 1_000_000.0;
+    let base_per_token = pricing.input_price_per_million / 1_000_000.0;
+    let cache_read_per_token = pricing.cache_read_price_per_million / 1_000_000.0;
+    let cache_write_per_token = pricing.cache_write_price_per_million / 1_000_000.0;
 
     let mut total_no_cache = 0.0;
-    let mut total_5min = 0.0;
-    let mut total_1hr = 0.0;
+    let mut total_with_cache = 0.0;
 
     for sample in samples {
         let input_tokens = sample.input_tokens.unwrap_or(0) as f64;
         let cacheable = prefix_analysis.mean_prefix_ratio * input_tokens;
         let uncached = input_tokens - cacheable;
 
-        // No caching
-        let cost_no_cache = input_tokens * base_price;
+        // No caching: all tokens at base price
+        let cost_no_cache = input_tokens * base_per_token;
 
-        // Cache hit cost
-        let cost_hit =
-            cacheable * pricing.cache_read_multiplier * base_price + uncached * base_price;
+        // Cache hit: cacheable tokens at read price, rest at base
+        let cost_hit = cacheable * cache_read_per_token + uncached * base_per_token;
 
-        // Cache miss cost (5-min write)
-        let cost_miss_5min =
-            cacheable * pricing.cache_write_5min_multiplier * base_price + uncached * base_price;
+        // Cache miss: cacheable tokens at write price, rest at base
+        let cost_miss = cacheable * cache_write_per_token + uncached * base_per_token;
 
-        // Cache miss cost (1-hr write)
-        let cost_miss_1hr =
-            cacheable * pricing.cache_write_1hr_multiplier * base_price + uncached * base_price;
-
-        // Expected costs
-        let hit_rate_5min = temporal.estimated_hit_rate_5min;
-        let hit_rate_1hr = temporal.estimated_hit_rate_1hr;
+        // Use the best available hit rate estimate
+        let hit_rate = temporal
+            .estimated_hit_rate_5min
+            .max(temporal.estimated_hit_rate_1hr);
 
         total_no_cache += cost_no_cache;
-        total_5min += hit_rate_5min * cost_hit + (1.0 - hit_rate_5min) * cost_miss_5min;
-        total_1hr += hit_rate_1hr * cost_hit + (1.0 - hit_rate_1hr) * cost_miss_1hr;
+        total_with_cache += hit_rate * cost_hit + (1.0 - hit_rate) * cost_miss;
     }
 
-    let savings_5min = if total_no_cache > 0.0 {
-        1.0 - total_5min / total_no_cache
+    let savings_pct = if total_no_cache > 0.0 {
+        1.0 - total_with_cache / total_no_cache
     } else {
         0.0
-    };
-
-    let savings_1hr = if total_no_cache > 0.0 {
-        1.0 - total_1hr / total_no_cache
-    } else {
-        0.0
-    };
-
-    // Recommend TTL based on which saves more and temporal patterns
-    let recommended_ttl = if savings_5min <= 0.05 && savings_1hr <= 0.05 {
-        RecommendedTtl::NotRecommended
-    } else if temporal.pct_within_5min > 0.5 {
-        RecommendedTtl::FiveMinutes
-    } else if temporal.pct_within_1hr > 0.5 {
-        RecommendedTtl::OneHour
-    } else {
-        RecommendedTtl::NotRecommended
     };
 
     CostEstimate {
         total_cost_no_caching: total_no_cache,
-        total_cost_5min_ttl: total_5min,
-        total_cost_1hr_ttl: total_1hr,
-        savings_pct_5min: savings_5min,
-        savings_pct_1hr: savings_1hr,
-        recommended_ttl,
+        total_cost_with_caching: total_with_cache,
+        savings_pct,
     }
 }
 
@@ -810,7 +763,7 @@ fn compute_opportunity_score(
     let hit_rate = temporal
         .estimated_hit_rate_5min
         .max(temporal.estimated_hit_rate_1hr);
-    let savings = cost.savings_pct_5min.max(cost.savings_pct_1hr).max(0.0);
+    let savings = cost.savings_pct.max(0.0);
     let threshold_gate = if prefix.meets_min_threshold { 1.0 } else { 0.0 };
 
     // Weighted product scaled to 0-100
@@ -828,7 +781,7 @@ fn generate_summary(score: f64, prefix: &PrefixAnalysis, cost: &CostEstimate) ->
             "High opportunity: {:.0}% of input tokens are cacheable on average, \
              potential savings of {:.0}%.",
             prefix.mean_prefix_ratio * 100.0,
-            cost.savings_pct_5min.max(cost.savings_pct_1hr) * 100.0
+            cost.savings_pct * 100.0
         )
     } else if score >= 50.0 {
         format!(
@@ -840,7 +793,7 @@ fn generate_summary(score: f64, prefix: &PrefixAnalysis, cost: &CostEstimate) ->
         format!(
             "Low opportunity: {:.0}% prefix overlap detected, but savings are modest ({:.0}%).",
             prefix.mean_prefix_ratio * 100.0,
-            cost.savings_pct_5min.max(cost.savings_pct_1hr) * 100.0
+            cost.savings_pct * 100.0
         )
     } else {
         "No significant prompt caching opportunity detected.".to_string()
@@ -1194,7 +1147,7 @@ mod tests {
             "high prefix overlap expected"
         );
         assert!(
-            report.cost_estimate.savings_pct_5min > 0.3,
+            report.cost_estimate.savings_pct > 0.3,
             "should have significant savings"
         );
         assert!(

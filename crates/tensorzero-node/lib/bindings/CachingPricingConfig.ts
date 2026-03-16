@@ -3,30 +3,34 @@
 /**
  * Pricing configuration for prompt caching cost estimation.
  *
- * These values should be derived from the model provider's `cost` config
- * in `tensorzero.toml`. The caller extracts the base input price from the
- * existing cost pointers and provides cache-specific multipliers.
+ * All prices are in dollars per million tokens. Derive these from the model
+ * provider's `cost` config in `tensorzero.toml`:
+ *
+ * ```toml
+ * cost = [
+ *   { pointer = "/usage/input_tokens", cost_per_million = 3.00 },
+ *   { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+ *   { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
+ * ]
+ * ```
+ *
+ * The base input price maps to the `input_tokens` / `prompt_tokens` pointer,
+ * cache read to `cache_read_input_tokens`, and cache write to
+ * `cache_creation_input_tokens`.
  */
 export type CachingPricingConfig = {
   /**
-   * Base input token price in dollars per million tokens.
-   * Derived from the provider's `cost` config (e.g. `cost_per_million` for
-   * the input token pointer).
+   * Base input token price (dollars per million tokens).
    */
   input_price_per_million: number;
   /**
-   * Multiplier for cached token reads (e.g. 0.1 for Anthropic = 90% savings).
-   * Default: 0.1
+   * Cache read token price (dollars per million tokens).
+   * For Anthropic this is typically 0.1x the input price.
    */
-  cache_read_multiplier: number;
+  cache_read_price_per_million: number;
   /**
-   * Multiplier for cache writes with 5-minute TTL (e.g. 1.25 for Anthropic).
-   * Default: 1.25
+   * Cache write token price (dollars per million tokens).
+   * For Anthropic 5-min TTL this is typically 1.25x the input price.
    */
-  cache_write_5min_multiplier: number;
-  /**
-   * Multiplier for cache writes with 1-hour TTL (e.g. 2.0 for Anthropic).
-   * Default: 2.0
-   */
-  cache_write_1hr_multiplier: number;
+  cache_write_price_per_million: number;
 };

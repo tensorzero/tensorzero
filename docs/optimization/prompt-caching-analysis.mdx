@@ -82,8 +82,7 @@ It handles ~200 requests per hour.
     "estimated_hit_rate_5min": 0.91
   },
   "cost_estimate": {
-    "savings_pct_5min": 0.74,
-    "recommended_ttl": "FiveMinutes"
+    "savings_pct": 0.74
   },
   "opportunity_score": 87.3,
   "summary": "High opportunity: 91% of input tokens are cacheable on average, potential savings of 74%."
@@ -158,7 +157,7 @@ Conversations average 8 turns, with ~30 seconds between turns.
     "estimated_hit_rate_5min": 0.74
   },
   "cost_estimate": {
-    "savings_pct_5min": 0.62
+    "savings_pct": 0.62
   },
   "opportunity_score": 79.1,
   "breakpoint_recommendations": [
@@ -215,7 +214,7 @@ It processes batches of 1,000 addresses, with requests spaced ~500ms apart.
     "burst_ratio": 0.85
   },
   "cost_estimate": {
-    "savings_pct_5min": 0.88
+    "savings_pct": 0.88
   },
   "invalidation_warnings": [],
   "opportunity_score": 94.2,
@@ -374,15 +373,27 @@ Some request parameters invalidate the cache even when content is identical:
 
 ### Cost Estimate
 
-The cost estimate models three scenarios for each request:
+The cost estimate uses the pricing from your provider's `cost` configuration in `tensorzero.toml`.
+It models two scenarios per request:
 
-| Scenario                                  | Cached token cost                       | Uncached token cost |
-| ----------------------------------------- | --------------------------------------- | ------------------- |
-| No caching                                | 1.0x base price                         | 1.0x base price     |
-| Cache write (first request or cache miss) | 1.25x base price (5-min) or 2.0x (1-hr) | 1.0x base price     |
-| Cache read (cache hit)                    | 0.1x base price                         | 1.0x base price     |
+| Scenario                                  | Cached token cost      | Uncached token cost |
+| ----------------------------------------- | ---------------------- | ------------------- |
+| No caching                                | Base input price       | Base input price    |
+| Cache write (first request or cache miss) | `cache_creation` price | Base input price    |
+| Cache read (cache hit)                    | `cache_read` price     | Base input price    |
 
-The `savings_pct` combines the estimated hit rate with the pricing model to project overall savings.
+For Anthropic, typical prices are: base = $3.00/M, cache read = $0.30/M (90% savings), cache write = $3.75/M (25% premium).
+Configure these in your provider's `cost` entries:
+
+```toml
+cost = [
+  { pointer = "/usage/input_tokens", cost_per_million = 3.00 },
+  { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+  { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
+]
+```
+
+The `savings_pct` combines the estimated hit rate with these prices to project overall savings.
 
 ### Opportunity Score
 
