@@ -5869,6 +5869,80 @@ mod tests {
         let usage: Usage = openai_usage.into();
         assert_eq!(usage.input_tokens, Some(10), "input_tokens should be 10");
         assert_eq!(usage.output_tokens, Some(20), "output_tokens should be 20");
+        assert_eq!(
+            usage.cache_read_input_tokens, None,
+            "cache_read should be None without prompt_tokens_details"
+        );
+        assert_eq!(
+            usage.cache_write_input_tokens, None,
+            "OpenAI doesn't report cache_write"
+        );
+    }
+
+    #[test]
+    fn test_usage_from_openai_usage_with_cached_tokens() {
+        use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
+
+        // OpenAI reports cached tokens in prompt_tokens_details.cached_tokens
+        let openai_usage = Some(OpenAIUsage {
+            prompt_tokens: Some(5000),
+            completion_tokens: Some(100),
+            prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                cached_tokens: Some(4500),
+            }),
+        });
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(5000));
+        assert_eq!(usage.output_tokens, Some(100));
+        assert_eq!(
+            usage.cache_read_input_tokens,
+            Some(4500),
+            "cache_read should come from prompt_tokens_details.cached_tokens"
+        );
+        assert_eq!(
+            usage.cache_write_input_tokens, None,
+            "OpenAI doesn't report cache_write"
+        );
+    }
+
+    #[test]
+    fn test_openai_usage_deserialization_with_cached_tokens() {
+        // Simulate a real OpenAI API response usage block with caching
+        let json = r#"{
+            "prompt_tokens": 5000,
+            "completion_tokens": 100,
+            "prompt_tokens_details": {
+                "cached_tokens": 4500
+            }
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize OpenAI usage with cached_tokens");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(5000));
+        assert_eq!(usage.cache_read_input_tokens, Some(4500));
+        assert_eq!(usage.cache_write_input_tokens, None);
+
+        // Without prompt_tokens_details
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 50
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize without cached_tokens");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.cache_read_input_tokens, None);
+        assert_eq!(usage.cache_write_input_tokens, None);
+
+        // With prompt_tokens_details but no cached_tokens
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "prompt_tokens_details": {}
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize with empty details");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.cache_read_input_tokens, None);
     }
 
     #[test]
