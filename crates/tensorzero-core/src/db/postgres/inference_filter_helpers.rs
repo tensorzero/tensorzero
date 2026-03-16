@@ -6,6 +6,7 @@ use crate::{
         BooleanMetricFilter, DemonstrationFeedbackFilter, FloatMetricFilter, InferenceFilter,
         TagFilter, TimeFilter,
     },
+    db::postgres::is_safe_sql_name,
     endpoints::stored_inferences::v1::types::TagComparisonOperator,
     error::{Error, ErrorDetails},
 };
@@ -268,12 +269,24 @@ impl MetricJoinRegistry {
 
     /// Registers a metric join and returns the alias for the joined value.
     /// Uses LATERAL join to get the latest feedback value per target with filter pushdown.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `metric_name` contains characters unsafe for SQL interpolation.
+    /// Metric names should be validated at config load time via [`validate_safe_sql_name`].
     pub(super) fn register_metric_join(
         &mut self,
         metric_name: &str,
         metric_type: MetricConfigType,
         level: MetricConfigLevel,
     ) -> String {
+        // Defense-in-depth: metric names come from validated config, but verify here
+        // to prevent SQL injection if a code path bypasses config validation.
+        assert!(
+            is_safe_sql_name(metric_name),
+            "metric name `{metric_name}` contains characters unsafe for SQL interpolation"
+        );
+
         let alias = format!("metric_{}", self.alias_counter);
         self.alias_counter += 1;
 
@@ -284,10 +297,10 @@ impl MetricJoinRegistry {
         // This pushes down the filter on target_id, allowing Postgres to use indexes
         // efficiently instead of scanning the entire feedback table.
         //
-        // TODO(#5691): there's a small risk of SQL injection here because metric_name is
-        // user configurable and is not escaped. In practice, metric names are in the config
-        // so it's unlikely to be a problem. Still, we may want to revisit and refactor the
-        // join clauses to enable parameterized joins.
+        // Note: metric_name is validated above. We use string interpolation here because
+        // the join clause is built as a raw string appended to the query, not via QueryBuilder.
+        // A proper fix would refactor to use QueryBuilder with push_bind for the metric_name,
+        // but that requires restructuring how MetricJoinRegistry integrates with the query.
         let join_clause = format!(
             r"
 LEFT JOIN LATERAL (
