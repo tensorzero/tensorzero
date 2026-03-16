@@ -4,4 +4,8 @@
  * Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
  * See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
  */
-export type GoogleAIStudioGeminiProvider = { model_name: string, request_url: string, streaming_request_url: string, };
+export type GoogleAIStudioGeminiProvider = {
+  model_name: string;
+  request_url: string;
+  streaming_request_url: string;
+};

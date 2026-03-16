@@ -3,8 +3,9 @@
 /**
  * Response from writing a config snapshot.
  */
-export type WriteConfigResponse = { 
-/**
- * The hash identifying this config version.
- */
-hash: string, };
+export type WriteConfigResponse = {
+  /**
+   * The hash identifying this config version.
+   */
+  hash: string;
+};

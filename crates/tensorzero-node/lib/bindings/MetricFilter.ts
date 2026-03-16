@@ -3,4 +3,10 @@ import type { FloatComparisonOperator } from "./FloatComparisonOperator";
 import type { MetricConfigLevel } from "./MetricConfigLevel";
 import type { MetricConfigType } from "./MetricConfigType";
 
-export type MetricFilter = { metric: string, metric_type: MetricConfigType, operator: FloatComparisonOperator, threshold: number, join_on: MetricConfigLevel, };
+export type MetricFilter = {
+  metric: string;
+  metric_type: MetricConfigType;
+  operator: FloatComparisonOperator;
+  threshold: number;
+  join_on: MetricConfigLevel;
+};

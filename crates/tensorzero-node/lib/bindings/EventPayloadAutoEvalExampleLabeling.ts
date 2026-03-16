@@ -7,4 +7,6 @@ import type { AutoEvalExampleLabeling } from "./AutoEvalExampleLabeling";
  * Groups labeled examples together, each with rich context blocks
  * (e.g. prompt/response) and associated labeling questions.
  */
-export type EventPayloadAutoEvalExampleLabeling = { examples: Array<AutoEvalExampleLabeling>, };
+export type EventPayloadAutoEvalExampleLabeling = {
+  examples: Array<AutoEvalExampleLabeling>;
+};

@@ -3,12 +3,13 @@
 /**
  * Parameters for the upload_dataset tool (visible to LLM).
  */
-export type UploadDatasetToolParams = { 
-/**
- * The name of the dataset to upload.
- */
-dataset_name: string, 
-/**
- * Optional maximum number of rows to upload.
- */
-row_limit: number | null, };
+export type UploadDatasetToolParams = {
+  /**
+   * The name of the dataset to upload.
+   */
+  dataset_name: string;
+  /**
+   * Optional maximum number of rows to upload.
+   */
+  row_limit: number | null;
+};

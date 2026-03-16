@@ -7,4 +7,8 @@ import type { VariantConfig } from "./VariantConfig";
  * Holds a particular variant implementation, plus additional top-level configuration
  * that is applicable to any variant type.
  */
-export type VariantInfo = { inner: VariantConfig, timeouts: TimeoutsConfig, namespace?: Namespace, };
+export type VariantInfo = {
+  inner: VariantConfig;
+  timeouts: TimeoutsConfig;
+  namespace?: Namespace;
+};

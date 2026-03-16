@@ -3,4 +3,7 @@
 /**
  * Legacy `type = "static_weights"` config. Converts to `StaticExperimentationConfig` directly.
  */
-export type LegacyStaticWeightsExperimentationConfig = { candidate_variants: { [key in string]: number }, fallback_variants: Array<string>, };
+export type LegacyStaticWeightsExperimentationConfig = {
+  candidate_variants: { [key in string]: number };
+  fallback_variants: Array<string>;
+};

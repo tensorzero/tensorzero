@@ -5,4 +5,6 @@ import type { JsonEvaluationResultRow } from "./JsonEvaluationResultRow";
 /**
  * Evaluation result row that can represent either chat or JSON function output.
  */
-export type EvaluationResultRow = { "type": "chat" } & ChatEvaluationResultRow | { "type": "json" } & JsonEvaluationResultRow;
+export type EvaluationResultRow =
+  | ({ type: "chat" } & ChatEvaluationResultRow)
+  | ({ type: "json" } & JsonEvaluationResultRow);

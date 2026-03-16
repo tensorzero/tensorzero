@@ -4,4 +4,6 @@ import type { WorkflowEvaluationRunStatistics } from "./WorkflowEvaluationRunSta
 /**
  * Response containing statistics for a workflow evaluation run grouped by metric.
  */
-export type GetWorkflowEvaluationRunStatisticsResponse = { statistics: Array<WorkflowEvaluationRunStatistics>, };
+export type GetWorkflowEvaluationRunStatisticsResponse = {
+  statistics: Array<WorkflowEvaluationRunStatistics>;
+};

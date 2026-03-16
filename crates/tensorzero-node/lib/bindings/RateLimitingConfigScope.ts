@@ -2,4 +2,6 @@
 import type { ApiKeyPublicIdConfigScope } from "./ApiKeyPublicIdConfigScope";
 import type { TagRateLimitingConfigScope } from "./TagRateLimitingConfigScope";
 
-export type RateLimitingConfigScope = TagRateLimitingConfigScope | ApiKeyPublicIdConfigScope;
+export type RateLimitingConfigScope =
+  | TagRateLimitingConfigScope
+  | ApiKeyPublicIdConfigScope;

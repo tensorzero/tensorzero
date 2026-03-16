@@ -4,4 +4,9 @@ import type { Detail } from "./Detail";
 /**
  * A file that can be located at a URL
  */
-export type UrlFile = { url: string, mime_type: string | null, detail?: Detail, filename?: string, };
+export type UrlFile = {
+  url: string;
+  mime_type: string | null;
+  detail?: Detail;
+  filename?: string;
+};

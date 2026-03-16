@@ -9,4 +9,7 @@ import type { StoredContentBlock } from "./StoredContentBlock";
  * The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
  * of `ResolvedInput/StoredInput`
  */
-export type StoredRequestMessage = { role: Role, content: Array<StoredContentBlock>, };
+export type StoredRequestMessage = {
+  role: Role;
+  content: Array<StoredContentBlock>;
+};

@@ -7,4 +7,6 @@ import type { GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow } from "./Group
  * Each inner Vec contains all episodes that share the same task_name (or NULL task_name).
  * Episodes with NULL task_name are grouped individually.
  */
-export type ListWorkflowEvaluationRunEpisodesByTaskNameResponse = { episodes: Array<Array<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>>, };
+export type ListWorkflowEvaluationRunEpisodesByTaskNameResponse = {
+  episodes: Array<Array<GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow>>;
+};

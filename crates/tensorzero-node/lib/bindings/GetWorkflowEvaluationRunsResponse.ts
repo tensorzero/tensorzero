@@ -4,4 +4,6 @@ import type { WorkflowEvaluationRun } from "./WorkflowEvaluationRun";
 /**
  * Response containing a list of workflow evaluation runs by IDs.
  */
-export type GetWorkflowEvaluationRunsResponse = { runs: Array<WorkflowEvaluationRun>, };
+export type GetWorkflowEvaluationRunsResponse = {
+  runs: Array<WorkflowEvaluationRun>;
+};

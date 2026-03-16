@@ -20,4 +20,24 @@ import type { TogetherProvider } from "./TogetherProvider";
 import type { VLLMProvider } from "./VLLMProvider";
 import type { XAIProvider } from "./XAIProvider";
 
-export type ProviderConfig = { "type": "anthropic" } & AnthropicProvider | { "type": "aws_bedrock" } & AWSBedrockProvider | { "type": "aws_sagemaker" } & AWSSagemakerProvider | { "type": "azure" } & AzureProvider | { "type": "deepseek" } & DeepSeekProvider | { "type": "fireworks" } & FireworksProvider | { "type": "gcp_vertex_anthropic" } & GCPVertexAnthropicProvider | { "type": "gcp_vertex_gemini" } & GCPVertexGeminiProvider | { "type": "google_ai_studio_gemini" } & GoogleAIStudioGeminiProvider | { "type": "groq" } & GroqProvider | { "type": "hyperbolic" } & HyperbolicProvider | { "type": "mistral" } & MistralProvider | { "type": "openai" } & OpenAIProvider | { "type": "openrouter" } & OpenRouterProvider | { "type": "sglang" } & SGLangProvider | { "type": "tgi" } & TGIProvider | { "type": "together" } & TogetherProvider | { "type": "vllm" } & VLLMProvider | { "type": "xai" } & XAIProvider | { "type": "dummy" } & DummyProvider;
+export type ProviderConfig =
+  | ({ type: "anthropic" } & AnthropicProvider)
+  | ({ type: "aws_bedrock" } & AWSBedrockProvider)
+  | ({ type: "aws_sagemaker" } & AWSSagemakerProvider)
+  | ({ type: "azure" } & AzureProvider)
+  | ({ type: "deepseek" } & DeepSeekProvider)
+  | ({ type: "fireworks" } & FireworksProvider)
+  | ({ type: "gcp_vertex_anthropic" } & GCPVertexAnthropicProvider)
+  | ({ type: "gcp_vertex_gemini" } & GCPVertexGeminiProvider)
+  | ({ type: "google_ai_studio_gemini" } & GoogleAIStudioGeminiProvider)
+  | ({ type: "groq" } & GroqProvider)
+  | ({ type: "hyperbolic" } & HyperbolicProvider)
+  | ({ type: "mistral" } & MistralProvider)
+  | ({ type: "openai" } & OpenAIProvider)
+  | ({ type: "openrouter" } & OpenRouterProvider)
+  | ({ type: "sglang" } & SGLangProvider)
+  | ({ type: "tgi" } & TGIProvider)
+  | ({ type: "together" } & TogetherProvider)
+  | ({ type: "vllm" } & VLLMProvider)
+  | ({ type: "xai" } & XAIProvider)
+  | ({ type: "dummy" } & DummyProvider);

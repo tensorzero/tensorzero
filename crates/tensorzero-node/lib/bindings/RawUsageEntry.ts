@@ -7,4 +7,9 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * This preserves the original provider-specific usage object for fields that TensorZero
  * normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
  */
-export type RawUsageEntry = { model_inference_id: string, provider_type: string, api_type: ApiType, data: JsonValue, };
+export type RawUsageEntry = {
+  model_inference_id: string;
+  provider_type: string;
+  api_type: ApiType;
+  data: JsonValue;
+};

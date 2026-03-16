@@ -3,4 +3,8 @@
 /**
  * A free-response explanation question within an autoeval example.
  */
-export type AutoEvalExplanationQuestion = { id: string, header: string, question: string, };
+export type AutoEvalExplanationQuestion = {
+  id: string;
+  header: string;
+  question: string;
+};
