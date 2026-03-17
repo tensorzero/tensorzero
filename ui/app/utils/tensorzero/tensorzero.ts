@@ -1398,26 +1398,26 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
-   * Searches evaluation runs by ID or variant name.
-   * @param evaluationName - The name of the evaluation
+   * Searches evaluation runs by run ID, evaluation name, dataset name, or variant name.
    * @param query - The search query (case-insensitive)
-   * @param functionName - Optional function name filter
+   * @param functionName - Function name filter
+   * @param evaluationName - Optional evaluation name filter
    * @param limit - Maximum number of results to return (default: 100)
    * @param offset - Number of results to skip (default: 0)
    * @returns A promise that resolves with the search results
    * @throws Error if the request fails
    */
   async searchEvaluationRuns(
-    evaluationName: string,
     query: string,
-    functionName?: string,
+    functionName: string,
+    evaluationName?: string,
     limit: number = 100,
     offset: number = 0,
   ): Promise<SearchEvaluationRunsResponse> {
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
-    if (functionName) {
-      searchParams.append("function_name", functionName);
+    searchParams.append("function_name", functionName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
     }
     searchParams.append("query", query);
     searchParams.append("limit", limit.toString());
