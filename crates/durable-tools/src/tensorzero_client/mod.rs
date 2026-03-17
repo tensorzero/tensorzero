@@ -87,6 +87,15 @@ pub enum TensorZeroClientError {
     Evaluation(String),
 }
 
+impl TensorZeroClientError {
+    pub fn is_payload_too_large(&self) -> bool {
+        match self {
+            Self::TensorZero(TensorZeroError::Http { status_code, .. }) => *status_code == 413,
+            _ => false,
+        }
+    }
+}
+
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
 ///
 /// This trait abstracts over the TensorZero client, allowing tools to
