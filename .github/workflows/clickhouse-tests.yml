@@ -35,17 +35,16 @@ jobs:
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
-    # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.11","prefix":"25.11","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
           - replicated: true
             clickhouse_version:
-              { "tag": "25.11", "prefix": "25.11", "allow_failure": false }
-        include: ${{ inputs.is_merge_group && fromJSON('[{"clickhouse_version":{"tag":"25.11","prefix":"25.11","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "latest", "prefix": "latest", "allow_failure": false }
+        include: ${{ inputs.is_merge_group && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     env:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
