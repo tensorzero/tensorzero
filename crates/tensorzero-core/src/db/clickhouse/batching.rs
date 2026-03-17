@@ -6,25 +6,29 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use enum_map::EnumMap;
 use futures::{FutureExt, TryFutureExt};
 use tokio::runtime::{Handle, RuntimeFlavor};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{self, Sender, error::TrySendError};
 use tokio::task::JoinSet;
 
-use crate::db::batching::process_channel_with_capacity_and_timeout;
+use crate::db::batching::process_bounded_channel_with_capacity_and_timeout;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};
 
 /// A `BatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to ClickHouse on a schedule defined by a `BatchWritesConfig`.
+///
+/// Uses bounded channels to provide backpressure: when the write queue is full,
+/// new rows are dropped and logged rather than buffering without limit.
+///
 /// When a `BatchSender` is dropped, it blocks until the batch writer finishes
 /// processing all outstanding batches.
 #[derive(Debug)]
 pub struct BatchSender {
     // This needs to be an `Option`, so that we can drop it
-    // (in particular, the `UnboundedSender`) from our `Drop` impl.
+    // (in particular, the `Sender`) from our `Drop` impl.
     // This signals to the writer tasks that the channel is closed,
     // and that they should exit after they finish processing all messages
-    // currently in the channell.
-    channels: Option<EnumMap<TableName, UnboundedSender<String>>>,
+    // currently in the channel.
+    channels: Option<EnumMap<TableName, Sender<String>>>,
     pub writer_handle: BatchWriterHandle,
 }
 
@@ -42,9 +46,10 @@ impl BatchSender {
                     .to_string(),
             }));
         }
+        let channel_capacity = config.write_queue_capacity;
         let mut channels: EnumMap<TableName, _> = enum_map::enum_map! {
             _ => {
-                let (tx, rx) = mpsc::unbounded_channel();
+                let (tx, rx) = mpsc::channel(channel_capacity);
                 (Some(tx), Some(rx))
             }
         };
@@ -92,10 +97,21 @@ impl BatchSender {
         };
         let channel = &channels[table_name];
         for row in rows {
-            if let Err(e) = channel.send(row) {
-                tracing::error!(
-                    "Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
-                );
+            match channel.try_send(row) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    tracing::error!(
+                        table = ?table_name,
+                        "ClickHouse batch channel full — dropping row. \
+                         Increase `write_queue_capacity` or check ClickHouse performance."
+                    );
+                }
+                Err(TrySendError::Closed(_)) => {
+                    tracing::error!(
+                        table = ?table_name,
+                        "ClickHouse batch writer has shut down — dropping row."
+                    );
+                }
             }
         }
         Ok(())
@@ -103,7 +119,7 @@ impl BatchSender {
 }
 
 pub struct BatchWriter {
-    channels: EnumMap<TableName, UnboundedReceiver<String>>,
+    channels: EnumMap<TableName, tokio::sync::mpsc::Receiver<String>>,
 }
 
 impl BatchWriter {
@@ -113,7 +129,7 @@ impl BatchWriter {
         for (table_name, channel) in self.channels {
             let clickhouse = clickhouse.clone();
             join_set.spawn(async move {
-                process_channel_with_capacity_and_timeout(
+                process_bounded_channel_with_capacity_and_timeout(
                     channel,
                     config.max_rows,
                     batch_timeout,
