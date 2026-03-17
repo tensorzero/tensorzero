@@ -2214,6 +2214,7 @@ dependencies = [
  "durable-tools",
  "durable-tools-spawn",
  "evaluations",
+ "http 1.4.0",
  "indexmap 2.13.0",
  "mockall",
  "schemars 1.2.1",
