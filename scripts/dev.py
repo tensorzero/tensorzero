@@ -69,7 +69,7 @@ def wait_for(url, name, timeout=60):
     t0 = time.time()
     while time.time() - t0 < timeout:
         if url_ok(url):
-            print(f" ready ({time.time()-t0:.0f}s)")
+            print(f" ready ({time.time() - t0:.0f}s)")
             return True
         print(".", end="", flush=True)
         time.sleep(2)
@@ -81,9 +81,10 @@ def proxy_container_healthy():
     """Check if the provider-proxy container is running and healthy via docker."""
     try:
         result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Health.Status}}",
-             "e2e-provider-proxy-1"],
-            capture_output=True, text=True, timeout=5,
+            ["docker", "inspect", "--format", "{{.State.Health.Status}}", "e2e-provider-proxy-1"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return result.returncode == 0 and "healthy" in result.stdout
     except Exception:
@@ -100,10 +101,21 @@ def cmd_up(use_proxy=False):
             print("Starting provider-proxy...")
             env = {**os.environ, "PROVIDER_PROXY_CACHE_MODE": "read-write"}
             subprocess.run(
-                ["docker", "compose", "-f", str(DOCKER_COMPOSE),
-                 "--profile", "provider-proxy",
-                 "up", "-d", "--wait", "provider-proxy"],
-                cwd=ROOT, check=True, env=env,
+                [
+                    "docker",
+                    "compose",
+                    "-f",
+                    str(DOCKER_COMPOSE),
+                    "--profile",
+                    "provider-proxy",
+                    "up",
+                    "-d",
+                    "--wait",
+                    "provider-proxy",
+                ],
+                cwd=ROOT,
+                check=True,
+                env=env,
             )
     else:
         print("Starting docker...")
@@ -136,9 +148,17 @@ def cmd_up(use_proxy=False):
     print("=" * 60)
     try:
         subprocess.run(
-            ["cargo", "run", "--bin", "gateway", "--features", "e2e_tests",
-             "--", "--config-file",
-             "tensorzero-core/tests/e2e/config/tensorzero.*.toml"],
+            [
+                "cargo",
+                "run",
+                "--bin",
+                "gateway",
+                "--features",
+                "e2e_tests",
+                "--",
+                "--config-file",
+                "tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+            ],
             cwd=CRATES,
             check=True,
         )
@@ -149,9 +169,9 @@ def cmd_up(use_proxy=False):
 def cmd_down():
     print("Stopping docker...")
     subprocess.run(
-        ["docker", "compose", "-f", str(DOCKER_COMPOSE),
-         "--profile", "provider-proxy", "down"],
-        cwd=ROOT, check=True,
+        ["docker", "compose", "-f", str(DOCKER_COMPOSE), "--profile", "provider-proxy", "down"],
+        cwd=ROOT,
+        check=True,
     )
 
 
