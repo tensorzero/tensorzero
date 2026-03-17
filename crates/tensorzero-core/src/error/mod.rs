@@ -1094,7 +1094,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
@@ -2315,6 +2315,25 @@ mod tests {
         assert!(
             body.get("raw_response").is_none(),
             "should not have `raw_response` field when entries is None"
+        );
+    }
+
+    #[test]
+    fn test_missing_batch_inference_response_is_500() {
+        let error = Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None });
+        assert_eq!(
+            error.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MissingBatchInferenceResponse should be 500, not 400 — \
+             this is a server-side issue (provider data couldn't be matched to stored inferences)"
+        );
+
+        let error_with_id = Error::new(ErrorDetails::MissingBatchInferenceResponse {
+            inference_id: Some(Uuid::now_v7()),
+        });
+        assert_eq!(
+            error_with_id.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR,
         );
     }
 
