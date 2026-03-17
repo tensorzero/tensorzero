@@ -60,7 +60,7 @@ jobs:
           run --no-deps --rm
           -e TENSORZERO_CI=1
           -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }}
-          ${{ matrix.valkey_url && format('-e TENSORZERO_VALKEY_URL={0}', matrix.valkey_url) || '' }}
+          ${{ matrix.valkey_url && format('-e TENSORZERO_VALKEY_URL={0}', matrix.valkey_url) || '-e TENSORZERO_VALKEY_URL=""' }}
           live-tests
           sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst
           --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml
