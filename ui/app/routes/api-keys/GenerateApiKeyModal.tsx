@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import { DateTimePicker } from "~/components/ui/date-time-picker";
@@ -63,16 +63,6 @@ export function GenerateApiKeyModal({
   >(undefined);
   const [customDateEditedSinceSubmit, setCustomDateEditedSinceSubmit] =
     useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      setDescription("");
-      setExpirationPreset("none");
-      setCustomExpiresAt(undefined);
-      setSubmittedExpiresAt(undefined);
-      setCustomDateEditedSinceSubmit(false);
-    }
-  }, [isOpen]);
 
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;

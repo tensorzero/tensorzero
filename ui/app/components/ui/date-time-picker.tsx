@@ -137,7 +137,7 @@ export function DateTimePicker({
           disabled={
             minCalendarDate ? (day) => day < minCalendarDate : undefined
           }
-          initialFocus
+          autoFocus
         />
         <div className="border-t p-3 flex flex-col gap-3 items-center">
           <div className="flex items-center gap-2">
