@@ -729,8 +729,8 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             InferenceResponse::Json(j) => serde_json::to_string(&j.output),
         }
         .map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Failed to serialize inference response: {e:?}"),
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize inference output for feedback lookup: {e}"),
             })
         })
     }

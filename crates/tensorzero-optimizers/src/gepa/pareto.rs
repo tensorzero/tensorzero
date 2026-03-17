@@ -288,7 +288,7 @@ impl ParetoFrontier {
             .collect();
         // Sort by name so weighted sampling is deterministic across process restarts
         // (HashMap iteration order varies due to random hash seeds).
-        items.sort_by(|(a, _), (b, _)| a.cmp(b));
+        items.sort_by_key(|(a, _)| *a);
 
         if items.is_empty() {
             return Err(Error::new(ErrorDetails::InternalError {

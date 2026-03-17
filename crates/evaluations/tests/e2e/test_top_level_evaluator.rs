@@ -107,7 +107,7 @@ async fn test_top_level_exact_match_evaluator() {
         match update {
             EvaluationUpdate::Success(info) => successes.push(info),
             EvaluationUpdate::Error(err) => panic!("Evaluation error: {}", err.message),
-            EvaluationUpdate::RunInfo(_) => continue,
+            EvaluationUpdate::RunInfo(_) | EvaluationUpdate::FatalError(_) => continue,
         }
     }
 
