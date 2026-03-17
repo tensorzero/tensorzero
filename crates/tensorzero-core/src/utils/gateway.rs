@@ -710,7 +710,7 @@ async fn create_postgres_connection(
             pool.clone(),
             batch_writes.clone(),
         )?);
-        tracing::info!(
+        tracing::debug!(
             write_queue_capacity = batch_writes.write_queue_capacity,
             "Postgres batch writer enabled with bounded channels"
         );

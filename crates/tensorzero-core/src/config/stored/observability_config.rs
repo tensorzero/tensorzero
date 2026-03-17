@@ -30,9 +30,7 @@ pub struct StoredBatchWritesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub __force_allow_embedded_batch_writes: bool,
-    #[serde(default = "crate::config::default_flush_interval_ms")]
     pub flush_interval_ms: u64,
-    #[serde(default = "crate::config::default_max_rows")]
     pub max_rows: usize,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
