@@ -880,8 +880,20 @@ pub async fn write_poll_batch_inference(
             {
                 Ok(inferences) => inferences,
                 Err(e) => {
-                    // If we fail to process a completed batch (e.g. all JSONL rows failed
-                    // to parse), mark the batch as Failed so we don't retry indefinitely.
+                    // Transient errors (e.g. DB replication lag — provider returned valid
+                    // results but BatchModelInference rows aren't visible yet) should keep
+                    // the batch as Pending so the next poll can retry.
+                    if e.is_retryable_batch_error() {
+                        tracing::warn!(
+                            batch_id = %batch_request.batch_id,
+                            "Transient error processing completed batch: {e}. \
+                             Keeping batch as Pending for retry on next poll."
+                        );
+                        // No status write needed — the batch is already Pending.
+                        return Ok(PollInferenceResponse::Pending);
+                    }
+                    // Permanent errors (e.g. all JSONL rows failed to parse) should mark
+                    // the batch as Failed so we don't retry indefinitely.
                     tracing::error!(
                         batch_id = %batch_request.batch_id,
                         "Failed to process completed batch inference: {e}. Marking batch as failed."
@@ -1040,7 +1052,17 @@ pub async fn write_completed_batch_inference<'a>(
     let function_name = &batch_model_inferences
         .first()
         .ok_or_else(|| {
-            Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None })
+            if inference_ids.is_empty() {
+                // Provider returned no elements — permanent failure (e.g. all JSONL rows skipped)
+                Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None })
+            } else {
+                // Provider returned valid elements but DB has no matching rows —
+                // likely a transient issue (e.g. replication lag)
+                Error::new(ErrorDetails::BatchInferenceNotYetVisible {
+                    batch_id: batch_request.batch_id,
+                    expected_count: inference_ids.len(),
+                })
+            }
         })?
         .function_name
         .clone();

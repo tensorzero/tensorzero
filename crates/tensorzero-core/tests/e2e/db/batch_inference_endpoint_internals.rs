@@ -30,8 +30,8 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ContentBlockOutput, FinishReason, JsonInferenceOutput, StoredInput,
     Usage,
 };
-use tensorzero_types::Text;
 use tensorzero_core::jsonschema_util::JSONSchema;
+use tensorzero_types::Text;
 use uuid::Uuid;
 
 use crate::db::get_test_postgres;
@@ -1212,11 +1212,8 @@ make_db_test!(test_write_poll_completed_batch_with_empty_elements_marks_failed);
 /// Tests the DB replication lag scenario:
 /// Provider reports Completed with valid elements (non-empty), but the
 /// `BatchModelInference` rows are not yet visible in the database (simulated
-/// by not writing them at all). Current behavior marks the batch as Failed
-/// permanently — but this is a transient issue that should allow retry.
-///
-/// This test documents the current (broken) behavior: the batch is permanently
-/// marked as Failed even though the data will eventually be available.
+/// by not writing them at all). The batch should stay Pending so the next
+/// poll can retry once the rows become visible.
 async fn test_replication_lag_completed_batch_stays_pending_for_retry(
     database: impl BatchInferenceQueries
     + ConfigQueries
@@ -1310,16 +1307,12 @@ async fn test_replication_lag_completed_batch_stays_pending_for_retry(
             // This is the desired behavior after the fix
         }
         Ok(other) => {
-            panic!(
-                "Expected Pending response for replication lag scenario, got: {other:?}"
-            );
+            panic!("Expected Pending response for replication lag scenario, got: {other:?}");
         }
         Err(e) => {
             // Current (broken) behavior: returns an error and marks batch as Failed.
             // After the fix, this path should not be taken.
-            panic!(
-                "Replication lag scenario should return Pending, not error: {e}"
-            );
+            panic!("Replication lag scenario should return Pending, not error: {e}");
         }
     }
 
