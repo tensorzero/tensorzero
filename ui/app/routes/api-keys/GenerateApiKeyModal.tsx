@@ -24,6 +24,13 @@ import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/hooks/use-copy";
 import { useReadOnly } from "~/context/read-only";
 import { Check, Copy } from "lucide-react";
+import {
+  computeExpiresAt,
+  EXPIRATION_PRESET_OPTIONS,
+  getCustomExpirationError,
+  isExpirationPreset,
+  type ExpirationPreset,
+} from "./expiration";
 
 interface GenerateApiKeyModalProps {
   isOpen: boolean;
@@ -33,25 +40,9 @@ interface GenerateApiKeyModalProps {
 interface ActionData {
   apiKey?: string;
   error?: string;
-}
-
-type ExpirationPreset = "none" | "7d" | "30d" | "90d" | "1y" | "custom";
-
-function computeExpiresAt(preset: ExpirationPreset): Date | undefined {
-  const now = new Date();
-  switch (preset) {
-    case "7d":
-      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    case "30d":
-      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    case "90d":
-      return new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
-    case "1y":
-      return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    case "none":
-    case "custom":
-      return undefined;
-  }
+  fieldErrors?: {
+    expiresAt?: string;
+  };
 }
 
 export function GenerateApiKeyModal({
@@ -76,6 +67,15 @@ export function GenerateApiKeyModal({
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
   const error = fetcher.data?.error;
+  const isCustomExpiresAtMissing =
+    expirationPreset === "custom" && customExpiresAt === undefined;
+  const customExpiresAtError =
+    expirationPreset === "custom"
+      ? (getCustomExpirationError(customExpiresAt) ??
+        fetcher.data?.fieldErrors?.expiresAt ??
+        null)
+      : null;
+  const hasCustomExpiresAtError = customExpiresAtError !== null;
 
   const handleCopy = async () => {
     if (apiKey) {
@@ -84,7 +84,32 @@ export function GenerateApiKeyModal({
   };
 
   const handlePresetChange = (value: string) => {
-    setExpirationPreset(value as ExpirationPreset);
+    if (!isExpirationPreset(value)) {
+      return;
+    }
+
+    setExpirationPreset(value);
+  };
+
+  const handleCustomExpiresAtChange = (nextExpiresAt: Date | undefined) => {
+    setCustomExpiresAt(nextExpiresAt);
+  };
+
+  const handleSubmit = () => {
+    if (isCustomExpiresAtMissing || customExpiresAtError) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("action", "generate");
+    formData.append("expiration_preset", expirationPreset);
+    if (description) {
+      formData.append("description", description);
+    }
+    if (expiresAt) {
+      formData.append("expires_at", expiresAt.toISOString());
+    }
+    fetcher.submit(formData, { method: "post" });
   };
 
   return (
@@ -186,22 +211,36 @@ export function GenerateApiKeyModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No expiration</SelectItem>
-                    <SelectItem value="7d">7 days</SelectItem>
-                    <SelectItem value="30d">30 days</SelectItem>
-                    <SelectItem value="90d">90 days</SelectItem>
-                    <SelectItem value="1y">1 year</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    {EXPIRATION_PRESET_OPTIONS.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 {expirationPreset === "custom" && (
-                  <DateTimePicker
-                    id="expires_at"
-                    value={customExpiresAt}
-                    onChange={setCustomExpiresAt}
-                    minDate={new Date()}
-                    placeholder="Pick a date and time"
-                  />
+                  <div className="space-y-2">
+                    <DateTimePicker
+                      id="expires_at"
+                      value={customExpiresAt}
+                      onChange={handleCustomExpiresAtChange}
+                      minDate={new Date()}
+                      placeholder="Pick a date and time"
+                      disabled={isSubmitting}
+                      aria-invalid={hasCustomExpiresAtError}
+                      aria-describedby={
+                        hasCustomExpiresAtError ? "expires_at-error" : undefined
+                      }
+                    />
+                    {hasCustomExpiresAtError && (
+                      <p
+                        id="expires_at-error"
+                        className="text-destructive text-xs font-medium"
+                      >
+                        {customExpiresAtError}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
               {error && (
@@ -231,19 +270,14 @@ export function GenerateApiKeyModal({
                 Cancel
               </Button>
               <Button
-                type="submit"
-                disabled={isReadOnly || isSubmitting}
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("action", "generate");
-                  if (description) {
-                    formData.append("description", description);
-                  }
-                  if (expiresAt) {
-                    formData.append("expires_at", expiresAt.toISOString());
-                  }
-                  fetcher.submit(formData, { method: "post" });
-                }}
+                type="button"
+                disabled={
+                  isReadOnly ||
+                  isSubmitting ||
+                  isCustomExpiresAtMissing ||
+                  customExpiresAtError !== null
+                }
+                onClick={handleSubmit}
               >
                 {isSubmitting ? "Generating..." : "Generate Key"}
               </Button>
