@@ -745,6 +745,7 @@ pub enum EventPayloadUserQuestionInner {
 pub struct FreeResponseQuestion {
     /// Pre-filled text shown in the input. The user can edit or submit as-is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub default_value: Option<String>,
 }
 
