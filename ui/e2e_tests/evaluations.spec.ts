@@ -8,7 +8,7 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("push the new run button, launch an evaluation", async ({ page }) => {
+test("push the new run button, launch a named evaluation", async ({ page }) => {
   test.setTimeout(600_000);
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
@@ -25,6 +25,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.getByPlaceholder("Select variant").click();
   await page.waitForTimeout(500);
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+  await page.locator("#max_datapoints").fill("1");
   await page.getByRole("button", { name: "Launch" }).click();
 
   await expect(
@@ -44,6 +45,61 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
   // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});
+
+test("push the new run button, launch a custom evaluation", async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  await page.goto("/evaluations");
+  await page.waitForTimeout(500);
+  await page.getByText("New Run").click();
+  await page.waitForTimeout(500);
+
+  await page.getByRole("tab", { name: "Custom evaluators" }).click();
+  await page.waitForTimeout(500);
+
+  await page.getByPlaceholder("Select function").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "extract_entities" }).click();
+  await page.waitForTimeout(500);
+
+  await page.getByRole("combobox", { name: "Select evaluators" }).click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "exact_match" }).click();
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
+  await page.getByPlaceholder("Select dataset").click();
+  await page.waitForTimeout(500);
+  await page.locator('[data-dataset-name="foo"]').click();
+  await page.waitForTimeout(500);
+
+  await page.getByPlaceholder("Select variant").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
+
+  // Fill in max_datapoints parameter
+  await page.locator("#max_datapoints").fill("5");
+
+  await page.getByRole("button", { name: "Launch" }).click();
+
+  await expect(
+    page.getByText("Select evaluation runs to compare..."),
+  ).toBeVisible();
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "true",
+  );
+  await expect(page.getByTestId("auto-refresh-wrapper")).toHaveAttribute(
+    "data-running",
+    "false",
+    { timeout: 500_000 },
+  );
+  await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+  await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
