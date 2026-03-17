@@ -1565,12 +1565,14 @@ impl Config {
     /// Validate the config
     #[instrument(skip_all)]
     async fn validate(&mut self) -> Result<(), Error> {
-        // When async_writes is enabled, auto-enable batch writes for Postgres efficiency.
-        if self.gateway.observability.async_writes
-            && !self.gateway.observability.batch_writes.enabled
+        if self.gateway.observability.batch_writes.enabled
+            && self.gateway.observability.async_writes
         {
-            self.gateway.observability.batch_writes.enabled = true;
-            tracing::info!("Auto-enabling batch writes because `async_writes` is true");
+            return Err(ErrorDetails::Config {
+                message: "Batch writes and async writes cannot be enabled at the same time"
+                    .to_string(),
+            }
+            .into());
         }
         if self.gateway.observability.batch_writes.write_queue_capacity == 0 {
             return Err(ErrorDetails::Config {
