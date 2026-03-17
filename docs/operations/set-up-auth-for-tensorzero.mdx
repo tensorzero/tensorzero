@@ -60,33 +60,6 @@ You can deploy all the requirements using the Docker Compose file below:
 # For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
-  postgres:
-    image: tensorzero/postgres:17
-    command: ["postgres", "-c", "cron.database_name=tensorzero"]
-    environment:
-      POSTGRES_DB: tensorzero
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  # Apply Postgres migrations before the gateway starts
-  gateway-run-postgres-migrations:
-    image: tensorzero/gateway
-    environment:
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["--run-postgres-migrations"]
-
   gateway:
     image: tensorzero/gateway
     volumes:
@@ -121,6 +94,7 @@ services:
   ui:
     image: tensorzero/ui
     environment:
+      TENSORZERO_API_KEY: $TENSORZERO_API_KEY
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:
@@ -128,6 +102,33 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+
+  postgres:
+    image: tensorzero/postgres:17
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # Apply Postgres migrations before the gateway starts
+  gateway-run-postgres-migrations:
+    image: tensorzero/gateway
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["--run-postgres-migrations"]
 
 volumes:
   postgres-data:
