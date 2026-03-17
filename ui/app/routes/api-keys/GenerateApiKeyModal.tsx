@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import { DateTimePicker } from "~/components/ui/date-time-picker";
@@ -58,11 +58,21 @@ export function GenerateApiKeyModal({
   const [customExpiresAt, setCustomExpiresAt] = useState<Date | undefined>(
     undefined,
   );
+  const [submittedExpiresAt, setSubmittedExpiresAt] = useState<
+    Date | undefined
+  >(undefined);
+  const [customDateEditedSinceSubmit, setCustomDateEditedSinceSubmit] =
+    useState(false);
 
-  const expiresAt =
-    expirationPreset === "custom"
-      ? customExpiresAt
-      : computeExpiresAt(expirationPreset);
+  useEffect(() => {
+    if (isOpen) {
+      setDescription("");
+      setExpirationPreset("none");
+      setCustomExpiresAt(undefined);
+      setSubmittedExpiresAt(undefined);
+      setCustomDateEditedSinceSubmit(false);
+    }
+  }, [isOpen]);
 
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
@@ -72,8 +82,9 @@ export function GenerateApiKeyModal({
   const customExpiresAtError =
     expirationPreset === "custom"
       ? (getCustomExpirationError(customExpiresAt) ??
-        fetcher.data?.fieldErrors?.expiresAt ??
-        null)
+        (!customDateEditedSinceSubmit
+          ? (fetcher.data?.fieldErrors?.expiresAt ?? null)
+          : null))
       : null;
   const hasCustomExpiresAtError = customExpiresAtError !== null;
 
@@ -93,6 +104,7 @@ export function GenerateApiKeyModal({
 
   const handleCustomExpiresAtChange = (nextExpiresAt: Date | undefined) => {
     setCustomExpiresAt(nextExpiresAt);
+    setCustomDateEditedSinceSubmit(true);
   };
 
   const handleSubmit = () => {
@@ -100,15 +112,22 @@ export function GenerateApiKeyModal({
       return;
     }
 
+    const submittingExpiresAt =
+      expirationPreset === "custom"
+        ? customExpiresAt
+        : computeExpiresAt(expirationPreset);
+
     const formData = new FormData();
     formData.append("action", "generate");
     formData.append("expiration_preset", expirationPreset);
     if (description) {
       formData.append("description", description);
     }
-    if (expiresAt) {
-      formData.append("expires_at", expiresAt.toISOString());
+    if (submittingExpiresAt) {
+      formData.append("expires_at", submittingExpiresAt.toISOString());
     }
+    setSubmittedExpiresAt(submittingExpiresAt);
+    setCustomDateEditedSinceSubmit(false);
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -160,11 +179,11 @@ export function GenerateApiKeyModal({
                   <p className="text-muted-foreground text-sm">{description}</p>
                 </div>
               )}
-              {expiresAt && (
+              {submittedExpiresAt && (
                 <div className="space-y-2">
                   <Label>Expires</Label>
                   <p className="text-muted-foreground text-sm">
-                    {formatDate(expiresAt)}
+                    {formatDate(submittedExpiresAt)}
                   </p>
                 </div>
               )}

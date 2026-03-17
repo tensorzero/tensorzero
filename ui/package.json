@@ -43,7 +43,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
     "http-status-codes": "^2.3.0",
     "isbot": "^5.1.25",

@@ -446,7 +446,6 @@ test("should create API key with custom expiration date and show it in the table
   const generateButton = page.getByRole("button", { name: "Generate Key" });
   await expect(generateButton).toBeVisible();
   await expect(generateButton).toBeEnabled();
-  await page.waitForTimeout(300);
   await generateButton.click();
 
   await expect(
@@ -516,7 +515,6 @@ test("should create API keys with preset expirations and show correct dates in t
     const generateButton = page.getByRole("button", { name: "Generate Key" });
     await expect(generateButton).toBeVisible();
     await expect(generateButton).toBeEnabled();
-    await page.waitForTimeout(300);
     await generateButton.click();
 
     await expect(
