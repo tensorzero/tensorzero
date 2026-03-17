@@ -142,6 +142,7 @@ pub enum AutopilotStatus {
     WaitingForToolExecution,
     WaitingForUserQuestionsAnswers,
     WaitingForAutoEvalExampleLabelingAnswers,
+    WaitingForAutoEvalBehaviorSpecAnswers,
     WaitingForRetry,
     Failed,
 }
@@ -238,6 +239,8 @@ pub enum EventPayload {
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpec(EventPayloadAutoEvalBehaviorSpec),
+    AutoEvalBehaviorSpecAnswers(EventPayloadAutoEvalBehaviorSpecAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -267,6 +270,7 @@ pub enum CreateEventPayload {
     ToolResult(CreateEventPayloadToolResult),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabelingAnswers(CreateEventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpecAnswers(CreateEventPayloadAutoEvalBehaviorSpecAnswers),
 }
 
 /// Event payload as seen by gateway consumers.
@@ -291,6 +295,8 @@ pub enum GatewayEventPayload {
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpec(EventPayloadAutoEvalBehaviorSpec),
+    AutoEvalBehaviorSpecAnswers(EventPayloadAutoEvalBehaviorSpecAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -319,6 +325,12 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             }
             EventPayload::AutoEvalExampleLabelingAnswers(a) => {
                 Ok(GatewayEventPayload::AutoEvalExampleLabelingAnswers(a))
+            }
+            EventPayload::AutoEvalBehaviorSpec(s) => {
+                Ok(GatewayEventPayload::AutoEvalBehaviorSpec(s))
+            }
+            EventPayload::AutoEvalBehaviorSpecAnswers(a) => {
+                Ok(GatewayEventPayload::AutoEvalBehaviorSpecAnswers(a))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -733,6 +745,7 @@ pub enum EventPayloadUserQuestionInner {
 pub struct FreeResponseQuestion {
     /// Pre-filled text shown in the input. The user can edit or submit as-is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub default_value: Option<String>,
 }
 
@@ -916,6 +929,69 @@ pub struct AutoEvalLabeledExample {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub explanation_answer: Option<UserQuestionAnswer>,
+}
+
+// =============================================================================
+// AutoEval Behavior Spec Types
+// =============================================================================
+
+/// Payload for an autoeval behavior spec event.
+///
+/// Contains two required free-response fields: a target behavior description
+/// and additional context, both with optional pre-filled defaults.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoEvalBehaviorSpec {
+    /// The target behavior question.
+    pub target_behavior: AutoEvalBehaviorSpecQuestion,
+    /// The additional context question.
+    pub additional_context: AutoEvalBehaviorSpecQuestion,
+}
+
+/// A free-response question within an autoeval behavior spec.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalBehaviorSpecQuestion {
+    pub id: Uuid,
+    pub header: String,
+    pub question: String,
+    /// Pre-filled text shown in the input. The user can edit or submit as-is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub default_value: Option<String>,
+}
+
+/// Minimal input payload for submitting autoeval behavior spec answers.
+/// The server enriches this with context from the original event before storing.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
+    /// Map from question UUID to response.
+    pub responses: HashMap<Uuid, UserQuestionAnswer>,
+    /// The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
+    pub auto_eval_behavior_spec_event_id: Uuid,
+}
+
+/// Self-contained read-only payload for answered autoeval behavior spec.
+/// Includes the full questions so the UI can render everything
+/// without looking up the original event.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct EventPayloadAutoEvalBehaviorSpecAnswers {
+    /// The target behavior question.
+    pub target_behavior: AutoEvalBehaviorSpecQuestion,
+    /// The user's answer to the target behavior question.
+    pub target_behavior_answer: UserQuestionAnswer,
+    /// The additional context question.
+    pub additional_context: AutoEvalBehaviorSpecQuestion,
+    /// The user's answer to the additional context question.
+    pub additional_context_answer: UserQuestionAnswer,
+    /// The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
+    pub auto_eval_behavior_spec_event_id: Uuid,
 }
 
 // =============================================================================
