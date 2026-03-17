@@ -8,6 +8,9 @@
 //! (cache_write_input_tokens, cache_read_input_tokens) are properly included
 //! in the input_tokens count.
 //!
+//! Also verifies that `cache_read_input_tokens` and `cache_write_input_tokens`
+//! fields are present in the usage response for providers that support them.
+//!
 //! This addresses issue #5688 where some providers (e.g., AWS Bedrock) report
 //! inputTokens separately from cacheReadInputTokens/cacheWriteInputTokens.
 
@@ -126,11 +129,25 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
 
     println!("First response JSON: {response1_json:?}");
 
-    let input_tokens1 = response1_json
+    let usage1 = response1_json
         .get("usage")
-        .and_then(|u| u.get("input_tokens"))
+        .expect("first response should have usage");
+    let input_tokens1 = usage1
+        .get("input_tokens")
         .and_then(|t| t.as_u64())
         .expect("first response should have input_tokens");
+
+    // Check cache token fields on first request (cache write)
+    let cache_write1 = usage1
+        .get("cache_write_input_tokens")
+        .and_then(|t| t.as_u64());
+    let cache_read1 = usage1
+        .get("cache_read_input_tokens")
+        .and_then(|t| t.as_u64());
+    println!(
+        "Provider {} (request 1): input_tokens={}, cache_write={:?}, cache_read={:?}",
+        provider.variant_name, input_tokens1, cache_write1, cache_read1
+    );
 
     // Second request - triggers cache read
     let response2 = client
@@ -153,15 +170,24 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
 
     println!("Second response JSON: {response2_json:?}");
 
-    let input_tokens2 = response2_json
+    let usage2 = response2_json
         .get("usage")
-        .and_then(|u| u.get("input_tokens"))
+        .expect("second response should have usage");
+    let input_tokens2 = usage2
+        .get("input_tokens")
         .and_then(|t| t.as_u64())
         .expect("second response should have input_tokens");
 
+    // Check cache token fields on second request (cache read)
+    let cache_write2 = usage2
+        .get("cache_write_input_tokens")
+        .and_then(|t| t.as_u64());
+    let cache_read2 = usage2
+        .get("cache_read_input_tokens")
+        .and_then(|t| t.as_u64());
     println!(
-        "Provider {}: input_tokens1={}, input_tokens2={}",
-        provider.variant_name, input_tokens1, input_tokens2
+        "Provider {} (request 2): input_tokens={}, cache_write={:?}, cache_read={:?}",
+        provider.variant_name, input_tokens2, cache_write2, cache_read2
     );
 
     // Assert input_tokens > 4000 (proves cache tokens are included)
@@ -182,6 +208,22 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         input_tokens1, input_tokens2,
         "input_tokens should be consistent between cache write ({input_tokens1}) and cache read ({input_tokens2})"
     );
+
+    // For providers that support cache tokens, verify the fields are populated.
+    // The second request should have cache_read_input_tokens > 0 since
+    // the identical prompt should be cached from the first request.
+    if cache_read2.is_some() || cache_write1.is_some() {
+        // If the provider reports any cache tokens, the second request
+        // should show cache_read > 0
+        if let Some(cr) = cache_read2 {
+            assert!(
+                cr > 0,
+                "Provider {} reported cache_read_input_tokens={} on second request, expected > 0",
+                provider.variant_name,
+                cr
+            );
+        }
+    }
 }
 
 /// Test that providers correctly include cache tokens in input_tokens (streaming).
@@ -221,18 +263,41 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     let client = Client::new();
 
     // First request - triggers cache write
-    let input_tokens1 = get_streaming_input_tokens(&client, &payload, &provider.variant_name)
+    let usage1 = get_streaming_usage(&client, &payload, &provider.variant_name)
         .await
-        .expect("first streaming request should return input_tokens");
+        .expect("first streaming request should return usage");
+    let input_tokens1 = usage1
+        .get("input_tokens")
+        .and_then(|t| t.as_u64())
+        .expect("first streaming response should have input_tokens");
+    let cache_write1 = usage1
+        .get("cache_write_input_tokens")
+        .and_then(|t| t.as_u64());
+    let cache_read1 = usage1
+        .get("cache_read_input_tokens")
+        .and_then(|t| t.as_u64());
+    println!(
+        "Provider {} (streaming request 1): input_tokens={}, cache_write={:?}, cache_read={:?}",
+        provider.variant_name, input_tokens1, cache_write1, cache_read1
+    );
 
     // Second request - triggers cache read
-    let input_tokens2 = get_streaming_input_tokens(&client, &payload, &provider.variant_name)
+    let usage2 = get_streaming_usage(&client, &payload, &provider.variant_name)
         .await
-        .expect("second streaming request should return input_tokens");
-
+        .expect("second streaming request should return usage");
+    let input_tokens2 = usage2
+        .get("input_tokens")
+        .and_then(|t| t.as_u64())
+        .expect("second streaming response should have input_tokens");
+    let cache_write2 = usage2
+        .get("cache_write_input_tokens")
+        .and_then(|t| t.as_u64());
+    let cache_read2 = usage2
+        .get("cache_read_input_tokens")
+        .and_then(|t| t.as_u64());
     println!(
-        "Provider {} (streaming): input_tokens1={}, input_tokens2={}",
-        provider.variant_name, input_tokens1, input_tokens2
+        "Provider {} (streaming request 2): input_tokens={}, cache_write={:?}, cache_read={:?}",
+        provider.variant_name, input_tokens2, cache_write2, cache_read2
     );
 
     // Assert input_tokens > 4000 (proves cache tokens are included)
@@ -253,25 +318,38 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         input_tokens1, input_tokens2,
         "input_tokens should be consistent between cache write ({input_tokens1}) and cache read ({input_tokens2}) for streaming"
     );
+
+    // For providers that support cache tokens, verify the fields are populated.
+    if cache_read2.is_some() || cache_write1.is_some() {
+        if let Some(cr) = cache_read2 {
+            assert!(
+                cr > 0,
+                "Provider {} reported cache_read_input_tokens={} on second streaming request, expected > 0",
+                provider.variant_name,
+                cr
+            );
+        }
+    }
 }
 
-/// Helper to get input_tokens from a streaming response.
-async fn get_streaming_input_tokens(
+/// Helper to get the usage object from a streaming response.
+async fn get_streaming_usage(
     client: &Client,
     payload: &Value,
     variant_name: &str,
-) -> Option<u64> {
+) -> Option<Value> {
     let mut chunks = client
         .post(get_gateway_endpoint("/inference"))
         .json(payload)
-        .eventsource().await
+        .eventsource()
+        .await
         .unwrap_or_else(|e| {
             panic!(
                 "Failed to create eventsource for streaming request for provider {variant_name}: {e}",
             )
         });
 
-    let mut input_tokens: Option<u64> = None;
+    let mut usage: Option<Value> = None;
     let mut all_chunks: Vec<Value> = Vec::new();
 
     while let Some(chunk) = chunks.next().await {
@@ -295,14 +373,14 @@ async fn get_streaming_input_tokens(
         all_chunks.push(chunk_json.clone());
 
         // Check if this chunk has usage (comes in the final chunk)
-        if let Some(usage) = chunk_json.get("usage")
-            && let Some(tokens) = usage.get("input_tokens").and_then(|t| t.as_u64())
+        if let Some(u) = chunk_json.get("usage")
+            && u.get("input_tokens").and_then(|t| t.as_u64()).is_some()
         {
-            input_tokens = Some(tokens);
+            usage = Some(u.clone());
         }
     }
 
-    if input_tokens.is_none() {
+    if usage.is_none() {
         println!(
             "Warning: Streaming response did not include usage with input_tokens for provider {}.\n\
             Total chunks received: {}\n\
@@ -313,5 +391,5 @@ async fn get_streaming_input_tokens(
         );
     }
 
-    input_tokens
+    usage
 }

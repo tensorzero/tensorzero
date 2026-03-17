@@ -1742,15 +1742,10 @@ impl StoredModelInference {
             Some(tokens) if tokens > 0 => Some(tokens),
             _ => None,
         };
-        // Cache tokens use zero-to-None normalization: a value of 0 is stored as NULL.
-        let cache_read_input_tokens = match result.usage.cache_read_input_tokens {
-            Some(tokens) if tokens > 0 => Some(tokens),
-            _ => None,
-        };
-        let cache_write_input_tokens = match result.usage.cache_write_input_tokens {
-            Some(tokens) if tokens > 0 => Some(tokens),
-            _ => None,
-        };
+        // None = provider doesn't support cache token reporting.
+        // Some(0) = provider supports caching but no tokens were cached for this request.
+        let cache_read_input_tokens = result.usage.cache_read_input_tokens;
+        let cache_write_input_tokens = result.usage.cache_write_input_tokens;
 
         let cost = if result.cached {
             Some(Decimal::ZERO)
