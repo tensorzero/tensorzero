@@ -20,9 +20,9 @@ use crate::StreamUpdate;
 use crate::error::AutopilotError;
 use crate::reject_missing_tool::reject_missing_tool;
 use crate::types::{
-    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventRequest,
-    CreateEventResponse, ErrorResponse, Event, EventPayload, EventPayloadToolCall,
-    EventPayloadToolCallAuthorization, GatewayEvent, GatewayEventPayload,
+    ApproveAllToolCallsRequest, ApproveAllToolCallsResponse, CreateEventPayload,
+    CreateEventPayloadToolCallAuthorization, CreateEventRequest, CreateEventResponse,
+    ErrorResponse, Event, EventPayload, EventPayloadToolCall, GatewayEvent, GatewayEventPayload,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
     ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
@@ -592,12 +592,26 @@ impl AutopilotClient {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Convert pending autoeval example labeling to gateway events (no filtering needed)
+        let pending_auto_eval_example_labeling = body
+            .pending_auto_eval_example_labeling
+            .into_iter()
+            .map(|event| {
+                event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed for pending autoeval example labeling: {e}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(GatewayListEventsResponse {
             events: filtered_events,
             previous_user_message_event_id: body.previous_user_message_event_id,
             status: body.status,
             pending_tool_calls: filtered_pending_tool_calls,
             pending_user_questions,
+            pending_auto_eval_example_labeling,
         })
     }
 
@@ -670,7 +684,7 @@ impl AutopilotClient {
         extra_headers: HeaderMap,
     ) -> Result<CreateEventResponse, AutopilotError> {
         let tool_call_event_id = match &request.payload {
-            EventPayload::ToolCallAuthorization(auth) => match auth.status {
+            CreateEventPayload::ToolCallAuthorization(auth) => match auth.status {
                 ToolCallAuthorizationStatus::Approved => Some(auth.tool_call_event_id),
                 // Don't start the tool if rejected or not available
                 ToolCallAuthorizationStatus::Rejected { .. }
@@ -859,6 +873,8 @@ impl AutopilotClient {
                         if sse.event.as_str() == "event" {
                             match serde_json::from_str::<StreamUpdate>(&sse.data) {
                                 Ok(update) => {
+                                    // Reduce peak memory usage by dropping the SSE event as soon as possible
+                                    drop(sse);
                                     // Cache tool calls for later lookup
                                     if let EventPayload::ToolCall(tool_call) = &update.event.payload
                                     {
@@ -1103,11 +1119,13 @@ impl AutopilotClient {
         let request = CreateEventRequest {
             deployment_id: self.deployment_id.clone(),
             tensorzero_version: self.tensorzero_version.clone(),
-            payload: EventPayload::ToolCallAuthorization(EventPayloadToolCallAuthorization {
-                source: ToolCallDecisionSource::Whitelist,
-                tool_call_event_id,
-                status: ToolCallAuthorizationStatus::Approved,
-            }),
+            payload: CreateEventPayload::ToolCallAuthorization(
+                CreateEventPayloadToolCallAuthorization {
+                    source: ToolCallDecisionSource::Whitelist,
+                    tool_call_event_id,
+                    status: ToolCallAuthorizationStatus::Approved,
+                },
+            ),
             previous_user_message_event_id: None,
             config_snapshot_hash: None,
         };

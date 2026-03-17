@@ -169,17 +169,19 @@ impl SpawnClient {
     pub async fn get_task_result(&self, task_id: Uuid) -> Result<TaskPollResult, SpawnError> {
         let queue_name = self.queue_name();
 
-        // Query the task table for state and completed_payload
+        // Query the task table for state, completed_payload, and params
         let query = format!(
-            "SELECT state, completed_payload FROM durable.t_{queue_name} WHERE task_id = $1"
+            "SELECT state, completed_payload, params FROM durable.t_{queue_name} WHERE task_id = $1"
         );
 
-        let row: Option<(String, Option<JsonValue>)> = sqlx::query_as(sqlx::AssertSqlSafe(query))
-            .bind(task_id)
-            .fetch_optional(self.pool())
-            .await?;
+        let row: Option<(String, Option<JsonValue>, Option<JsonValue>)> =
+            sqlx::query_as(sqlx::AssertSqlSafe(query))
+                .bind(task_id)
+                .fetch_optional(self.pool())
+                .await?;
 
-        let (state_str, completed_payload) = row.ok_or(SpawnError::TaskNotFound(task_id))?;
+        let (state_str, completed_payload, params) =
+            row.ok_or(SpawnError::TaskNotFound(task_id))?;
 
         let status: TaskStatus = state_str
             .parse()
@@ -206,7 +208,25 @@ impl SpawnClient {
             status,
             result: completed_payload,
             error,
+            params,
         })
+    }
+
+    /// Get the latest checkpoint name for a running task.
+    /// Returns `None` if no checkpoints exist yet.
+    pub async fn get_task_progress(&self, task_id: Uuid) -> Result<Option<String>, SpawnError> {
+        let queue_name = self.queue_name();
+        let query = format!(
+            "SELECT checkpoint_name FROM durable.c_{queue_name} \
+             WHERE task_id = $1 \
+             ORDER BY updated_at DESC \
+             LIMIT 1"
+        );
+        let row: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(query))
+            .bind(task_id)
+            .fetch_optional(self.pool())
+            .await?;
+        Ok(row.map(|(name,)| name))
     }
 
     /// Interrupt all durable tasks associated with a session ID.

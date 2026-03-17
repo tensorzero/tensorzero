@@ -20,7 +20,7 @@ use tensorzero_core::db::evaluation_queries::{
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::batching::PostgresBatchSender;
-pub use tensorzero_core::evaluations::{EvaluationFunctionConfig, EvaluationFunctionConfigTable};
+pub use tensorzero_core::evaluations::EvaluationFunctionConfig;
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
 use tensorzero_core::utils::gateway::AppStateData;
 pub use types::*;
@@ -56,6 +56,7 @@ use uuid::Uuid;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
+pub mod sse_events;
 pub mod stats;
 pub mod stopping;
 pub mod types;
@@ -87,6 +88,13 @@ pub(crate) fn merge_tags(
 pub struct Clients {
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub db: Arc<dyn DelegatingDatabaseQueries>,
+}
+
+/// Generates a default evaluation name when one is not explicitly provided.
+/// Format: `{function_name}__{dataset_name}__{YYYYMMDDHHMMSS}`.
+fn generate_default_evaluation_name(function_name: &str, dataset_name: &str) -> String {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    format!("{function_name}__{dataset_name}__{timestamp}")
 }
 
 fn evaluator_value_type(evaluator_config: &EvaluatorConfig) -> &'static str {
@@ -154,7 +162,7 @@ fn build_run_metrics_metadata(
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = ?args.evaluation_name, function_name = ?args.function_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -166,17 +174,17 @@ pub async fn run_evaluation(
     // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
         bail!(
-            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+            "Cannot provide both `dataset_name` and `datapoint_ids`. Please specify one or the other."
         );
     }
     if args.dataset_name.is_none() && datapoint_ids.is_empty() {
-        bail!("Must provide either dataset_name or datapoint_ids.");
+        bail!("Must provide either `dataset_name` or `datapoint_ids`.");
     }
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && args.max_datapoints.is_some() {
         bail!(
-            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+            "Cannot provide both `datapoint_ids` and `max_datapoints`. `max_datapoints` can only be used with `dataset_name`."
         );
     }
 
@@ -203,8 +211,7 @@ pub async fn run_evaluation(
     )
     .await?;
 
-    let clickhouse_client =
-        setup_clickhouse(&unwritten_config, clickhouse_url.clone(), false).await?;
+    let clickhouse_client = setup_clickhouse(&unwritten_config, clickhouse_url.clone()).await?;
     let postgres_connection = setup_postgres(&unwritten_config, postgres_url.as_deref()).await?;
     let primary_datastore = PrimaryDatastore::resolve(
         &unwritten_config.gateway.observability,
@@ -226,20 +233,54 @@ pub async fn run_evaluation(
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
 
-    // Look up evaluation config from the loaded config
-    let evaluation_config = config
-        .evaluations
-        .get(&args.evaluation_name)
-        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
-        .clone();
-
-    // Build function configs table from all functions in config
-    let function_configs: EvaluationFunctionConfigTable = config
-        .functions
-        .iter()
-        .map(|(name, func)| (name.clone(), EvaluationFunctionConfig::from(func.as_ref())))
-        .collect();
-    let function_configs = Arc::new(function_configs);
+    // Resolve evaluation config from CLI args
+    let (function_name, evaluators, function_config, evaluation_name) = match (
+        args.evaluation_name,
+        args.function_name,
+        args.evaluator_names,
+    ) {
+        (Some(evaluation_name), None, None) => {
+            // Legacy mode: look up named evaluation from config
+            let evaluation_config = config
+                .evaluations
+                .get(&evaluation_name)
+                .ok_or_else(|| anyhow!("evaluation `{evaluation_name}` not found"))?;
+            let EvaluationConfig::Inference(ref inference_eval_config) = **evaluation_config;
+            let function_name = inference_eval_config.function_name.clone();
+            let evaluators = inference_eval_config.evaluators.clone();
+            let function_config = config
+                .functions
+                .get(&function_name)
+                .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+            (
+                function_name,
+                evaluators,
+                function_config,
+                Some(evaluation_name),
+            )
+        }
+        (None, Some(function_name), Some(evaluator_names)) => {
+            // New mode: resolve top-level evaluators by name
+            let function_config = config
+                .functions
+                .get(&function_name)
+                .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
+                .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+            let mut evaluators = HashMap::new();
+            for name in &evaluator_names {
+                let evaluator = config
+                    .evaluators
+                    .get(name)
+                    .ok_or_else(|| anyhow!("top-level evaluator `{name}` not found in config"))?;
+                evaluators.insert(name.clone(), (**evaluator).clone());
+            }
+            (function_name, evaluators, function_config, None)
+        }
+        _ => bail!(
+            "Exactly one of --evaluation-name or --function-name/--evaluator-names must be provided"
+        ),
+    };
 
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -267,12 +308,13 @@ pub async fn run_evaluation(
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(database),
-        evaluation_config,
-        function_configs,
+        function_name,
+        function_config,
+        evaluators,
         dataset_name: args.dataset_name,
         datapoint_ids: Some(datapoint_ids),
         variant: EvaluationVariant::Name(args.variant_name),
-        evaluation_name: args.evaluation_name,
+        evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
@@ -312,8 +354,7 @@ pub async fn run_evaluation(
         progress_bar.finish_with_message("Done");
     }
 
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*result.evaluation_config;
-    let stats = evaluation_stats.compute_stats(&inference_evaluation_config.evaluators);
+    let stats = evaluation_stats.compute_stats(&result.evaluators);
 
     if evaluation_stats.output_format == OutputFormat::Pretty {
         // Print all stats
@@ -323,13 +364,8 @@ pub async fn run_evaluation(
     }
 
     // Check cutoffs and handle failures
-    let effective_cutoffs =
-        resolve_effective_cutoffs(&inference_evaluation_config.evaluators, &cli_cutoffs)?;
-    let failures = check_evaluator_cutoffs(
-        &stats,
-        &inference_evaluation_config.evaluators,
-        &effective_cutoffs,
-    )?;
+    let effective_cutoffs = resolve_effective_cutoffs(&result.evaluators, &cli_cutoffs)?;
+    let failures = check_evaluator_cutoffs(&stats, &result.evaluators, &effective_cutoffs)?;
 
     if !failures.is_empty() {
         for (name, cutoff, actual) in &failures {
@@ -384,7 +420,7 @@ pub async fn run_evaluation(
 /// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
 /// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
 /// - `evaluation_config`: The evaluation configuration
-#[instrument(skip_all, fields(evaluation_name = %params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
+#[instrument(skip_all, fields(evaluation_name = ?params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
 pub async fn run_evaluation_with_app_state(
     app_state: AppStateData,
     params: RunEvaluationWithAppStateParams,
@@ -419,15 +455,6 @@ pub async fn run_evaluation_with_app_state(
     // Create AppStateInferenceExecutor to call handlers directly without HTTP overhead
     let inference_executor = Arc::new(AppStateInferenceExecutor::new(app_state));
 
-    // Extract function name from evaluation config
-    let EvaluationConfig::Inference(ref inference_eval_config) = params.evaluation_config;
-    let function_name = inference_eval_config.function_name.clone();
-
-    // Build function configs table
-    let mut function_configs = EvaluationFunctionConfigTable::new();
-    function_configs.insert(function_name, params.function_config);
-    let function_configs = Arc::new(function_configs);
-
     // Generate a new evaluation run ID
     let evaluation_run_id = Uuid::now_v7();
 
@@ -435,13 +462,14 @@ pub async fn run_evaluation_with_app_state(
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db,
-        evaluation_config: Arc::new(params.evaluation_config),
-        function_configs,
+        function_name: params.function_name,
+        function_config: params.function_config,
+        evaluators: params.evaluators,
+        evaluation_name: params.evaluation_name,
+        evaluation_run_id,
         dataset_name: params.dataset_name,
         datapoint_ids: params.datapoint_ids,
         variant: params.variant,
-        evaluation_name: params.evaluation_name,
-        evaluation_run_id,
         inference_cache: params.cache_mode,
         concurrency: params.concurrency,
         tags: params.tags,
@@ -516,7 +544,7 @@ pub async fn run_evaluation_with_app_state(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant = ?args.variant, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = ?args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<u32>,
@@ -537,22 +565,9 @@ pub async fn run_evaluation_core_streaming(
         db: args.db,
     });
 
-    // Use the pre-resolved evaluation configuration
-    let evaluation_config = args.evaluation_config.clone();
+    debug!(evaluation_name = ?args.evaluation_name, "Evaluation config found");
 
-    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
-
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
-    let Some(function_config) = args
-        .function_configs
-        .get(&inference_evaluation_config.function_name)
-    else {
-        bail!(
-            "Function config for `{}` not found",
-            inference_evaluation_config.function_name
-        );
-    };
-    let function_type = match function_config {
+    let function_type = match &args.function_config {
         EvaluationFunctionConfig::Chat => FunctionConfigType::Chat,
         EvaluationFunctionConfig::Json { .. } => FunctionConfigType::Json,
     };
@@ -567,25 +582,25 @@ pub async fn run_evaluation_core_streaming(
     };
 
     info!(
-        function_name = %inference_evaluation_config.function_name,
-        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        function_name = %args.function_name,
+        evaluators = ?args.evaluators.keys().collect::<Vec<_>>(),
         "Function and evaluators configured"
     );
 
     // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
         bail!(
-            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+            "Cannot provide both `dataset_name` and `datapoint_ids`. Please specify one or the other."
         );
     }
     if args.dataset_name.is_none() && datapoint_ids.is_empty() {
-        bail!("Must provide either dataset_name or datapoint_ids.");
+        bail!("Must provide either `dataset_name` or `datapoint_ids`.");
     }
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && max_datapoints.is_some() {
         bail!(
-            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+            "Cannot provide both `datapoint_ids` and `max_datapoints`. `max_datapoints` can only be used with `dataset_name`."
         );
     }
 
@@ -593,7 +608,7 @@ pub async fn run_evaluation_core_streaming(
     let dataset = if let Some(dataset_name) = &args.dataset_name {
         // Load from dataset
         let request = ListDatapointsRequest {
-            function_name: Some(inference_evaluation_config.function_name.clone()),
+            function_name: Some(args.function_name.clone()),
             limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
             offset: Some(0),
             ..Default::default()
@@ -632,19 +647,23 @@ pub async fn run_evaluation_core_streaming(
             first.to_string()
         }
     });
+    // For the evaluation run stored in the database, auto-generate a name if not provided
+    // This serves as a human-readable evaluation name.
+    let human_readable_evaluation_name = args
+        .evaluation_name
+        .clone()
+        .unwrap_or_else(|| generate_default_evaluation_name(&args.function_name, &dataset_name));
+
     clients
         .db
         .insert_inference_evaluation_run(&InferenceEvaluationRunInsert {
             run_id: args.evaluation_run_id,
-            evaluation_name: args.evaluation_name.clone(),
-            function_name: inference_evaluation_config.function_name.clone(),
+            evaluation_name: human_readable_evaluation_name.clone(),
+            function_name: args.function_name.clone(),
             function_type,
             dataset_name: dataset_name.to_string(),
             variant_names,
-            metrics: build_run_metrics_metadata(
-                Some(&args.evaluation_name),
-                &inference_evaluation_config.evaluators,
-            ),
+            metrics: build_run_metrics_metadata(args.evaluation_name.as_deref(), &args.evaluators),
             source,
             snapshot_hash: None,
         })
@@ -652,15 +671,15 @@ pub async fn run_evaluation_core_streaming(
 
     let variant = Arc::new(args.variant);
     let variants = [variant]; // Single-element array for process_batch
-    let evaluation_name = Arc::new(args.evaluation_name);
+    let evaluation_name = args.evaluation_name.map(Arc::new);
     let dataset_len = dataset.len();
 
     // Setup stopping manager for adaptive stopping
-    let mut stopping_manager =
-        stopping::StoppingManager::new(&inference_evaluation_config.evaluators, precision_targets);
+    let mut stopping_manager = stopping::StoppingManager::new(&args.evaluators, precision_targets);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
+        evaluation_name: human_readable_evaluation_name,
         num_datapoints: dataset_len,
     };
 
@@ -679,8 +698,9 @@ pub async fn run_evaluation_core_streaming(
     // Build batch processing params
     let batch_params = ProcessBatchParams {
         clients,
-        function_configs: args.function_configs,
-        evaluation_config: evaluation_config.clone(),
+        function_name: args.function_name,
+        function_config: args.function_config,
+        evaluators: Arc::new(args.evaluators.clone()),
         evaluation_name,
         evaluation_run_id: args.evaluation_run_id,
         dataset_name,
@@ -692,9 +712,6 @@ pub async fn run_evaluation_core_streaming(
 
     // Process all datapoints across all variants
     let (mut join_set, task_id_map) = process_batch(&batch_params, dataset, &variants).await?;
-
-    // Get a shared reference to the evaluation config (which includes evaluators)
-    let evaluators = evaluation_config.clone();
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
@@ -747,7 +764,7 @@ pub async fn run_evaluation_core_streaming(
     Ok(EvaluationStreamResult {
         receiver,
         run_info,
-        evaluation_config: evaluators,
+        evaluators: args.evaluators,
         batcher_join_handles,
     })
 }
@@ -944,6 +961,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
             dataset_name.to_string(),
         ),
     ]);
+    // TODO(#6676): now that we have human-readable evaluation names, stop writing it
+    // (it will get out of sync).
     if let Some(eval_name) = evaluation_name {
         internal_tags.insert(
             "tensorzero::evaluation_name".to_string(),
@@ -1004,12 +1023,14 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
 pub struct ProcessBatchParams {
     /// Shared clients for inference and database access
     pub clients: Arc<Clients>,
-    /// Function configs table for looking up function definitions
-    pub function_configs: Arc<EvaluationFunctionConfigTable>,
-    /// Evaluation configuration
-    pub evaluation_config: Arc<EvaluationConfig>,
-    /// Name of the evaluation being run
-    pub evaluation_name: Arc<String>,
+    /// Name of the function being evaluated
+    pub function_name: String,
+    /// Function configuration for output schema validation
+    pub function_config: EvaluationFunctionConfig,
+    /// Evaluator configurations
+    pub evaluators: Arc<HashMap<String, EvaluatorConfig>>,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    pub evaluation_name: Option<Arc<String>>,
     /// Unique ID for this evaluation run
     pub evaluation_run_id: Uuid,
     /// Name of the dataset (for tagging)
@@ -1095,8 +1116,7 @@ pub async fn process_batch(
     let mut join_set = JoinSet::new();
     let mut task_id_map = HashMap::new();
 
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*params.evaluation_config;
-    let function_name = inference_evaluation_config.function_name.clone();
+    let function_name = params.function_name.clone();
 
     // Pre-resolve all datapoint inputs before spawning tasks (avoids redundant work per variant)
     let mut datapoints_with_inputs: Vec<(Arc<Datapoint>, Arc<Input>)> =
@@ -1117,8 +1137,8 @@ pub async fn process_batch(
 
         for variant in variants {
             let clients = params.clients.clone();
-            let function_configs = params.function_configs.clone();
-            let evaluation_config = params.evaluation_config.clone();
+            let function_config = params.function_config.clone();
+            let evaluators = params.evaluators.clone();
             let evaluation_name = params.evaluation_name.clone();
             let evaluation_run_id = params.evaluation_run_id;
             let dataset_name = params.dataset_name.clone();
@@ -1139,11 +1159,6 @@ pub async fn process_batch(
                 // Acquire semaphore permit for the entire task
                 let _permit = semaphore.acquire().await?;
 
-                // Look up function config
-                let function_config = function_configs.get(&function_name).ok_or_else(|| {
-                    anyhow!("Function '{function_name}' not found in function configs table")
-                })?;
-
                 // Run inference
                 let inference_response = Arc::new(
                     infer_datapoint(InferDatapointParams {
@@ -1153,8 +1168,8 @@ pub async fn process_batch(
                         evaluation_run_id,
                         dataset_name: &dataset_name,
                         datapoint: &datapoint,
-                        evaluation_name: Some(&evaluation_name),
-                        function_config,
+                        evaluation_name: evaluation_name.as_deref().map(String::as_str),
+                        function_config: &function_config,
                         input: &input,
                         inference_cache,
                         external_tags: &external_tags,
@@ -1171,8 +1186,8 @@ pub async fn process_batch(
                         inference_response: inference_response.clone(),
                         datapoint: datapoint.clone(),
                         input,
-                        evaluation_config,
-                        evaluation_name: Some(evaluation_name),
+                        evaluators,
+                        evaluation_name,
                         clients: clients.clone(),
                         evaluation_run_id,
                         inference_cache,
@@ -1270,9 +1285,17 @@ fn write_run_info(
 
 #[cfg(test)]
 mod tests {
+    use googletest::prelude::*;
     use tensorzero_core::evaluations::ExactMatchConfig;
 
     use super::*;
+
+    #[gtest]
+    fn test_generate_default_evaluation_name() {
+        let name = generate_default_evaluation_name("my_func", "my_dataset");
+        // Should follow the format: {function_name}__{dataset_name}__{YYYYMMDDHHMMSS}
+        expect_that!(name, matches_regex("my_func__my_dataset__[0-9]{14}"));
+    }
 
     #[test]
     fn test_format_cutoff_failures() {

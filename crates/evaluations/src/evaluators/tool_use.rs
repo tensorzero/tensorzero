@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use anyhow::{Result, bail};
 use serde_json::Value;
@@ -18,23 +18,33 @@ pub(super) fn run_tool_use_evaluator(
         )
     };
 
-    let called_tools: HashSet<&str> = response
-        .content
-        .iter()
-        .filter_map(|block| match block {
-            ContentBlockChatOutput::ToolCall(tc) => Some(tc.raw_name.as_str()),
-            _ => None,
-        })
-        .collect();
+    let mut called_tool_counts: HashMap<&str, usize> = HashMap::new();
+    for block in &response.content {
+        if let ContentBlockChatOutput::ToolCall(tc) = block {
+            *called_tool_counts.entry(tc.raw_name.as_str()).or_default() += 1;
+        }
+    }
 
-    debug!(called_tools = ?called_tools, behavior = %config, "Evaluating tool use");
+    debug!(called_tool_counts = ?called_tool_counts, behavior = %config, "Evaluating tool use");
 
     let result = match config {
-        ToolUseConfig::None => called_tools.is_empty(),
-        ToolUseConfig::Any => !called_tools.is_empty(),
-        ToolUseConfig::NoneOf { tools } => tools.iter().all(|t| !called_tools.contains(t.as_str())),
-        ToolUseConfig::AnyOf { tools } => tools.iter().any(|t| called_tools.contains(t.as_str())),
-        ToolUseConfig::AllOf { tools } => tools.iter().all(|t| called_tools.contains(t.as_str())),
+        ToolUseConfig::None => called_tool_counts.is_empty(),
+        ToolUseConfig::Any => !called_tool_counts.is_empty(),
+        ToolUseConfig::NoneOf { tools } => tools
+            .iter()
+            .all(|t| !called_tool_counts.contains_key(t.as_str())),
+        ToolUseConfig::AnyOf { tools } => tools
+            .iter()
+            .any(|t| called_tool_counts.contains_key(t.as_str())),
+        ToolUseConfig::AllOf { tools } => {
+            let mut required_counts: HashMap<&str, usize> = HashMap::new();
+            for t in tools {
+                *required_counts.entry(t.as_str()).or_default() += 1;
+            }
+            required_counts.iter().all(|(tool, &required)| {
+                called_tool_counts.get(tool).copied().unwrap_or(0) >= required
+            })
+        }
     };
 
     debug!(result = %result, "Tool use evaluation completed");
@@ -256,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_tool_calls() {
+    fn test_duplicate_tool_calls_sufficient() {
         let response = make_chat_response(&["search", "search", "search"]);
         let config = ToolUseConfig::AllOf {
             tools: vec!["search".to_string()],
@@ -266,7 +276,37 @@ mod tests {
         assert_eq!(
             result,
             Some(Value::Bool(true)),
-            "should deduplicate tool calls via HashSet"
+            "should pass when tool is called more times than required"
+        );
+    }
+
+    #[test]
+    fn test_all_of_duplicate_required_tools_satisfied() {
+        let response = make_chat_response(&["bash", "bash", "search"]);
+        let config = ToolUseConfig::AllOf {
+            tools: vec!["bash".to_string(), "bash".to_string()],
+        };
+        let result = run_tool_use_evaluator(&response, &config)
+            .expect("evaluator should succeed for all_of with duplicate required tools");
+        assert_eq!(
+            result,
+            Some(Value::Bool(true)),
+            "should pass when tool is called at least as many times as required"
+        );
+    }
+
+    #[test]
+    fn test_all_of_duplicate_required_tools_insufficient() {
+        let response = make_chat_response(&["bash", "search"]);
+        let config = ToolUseConfig::AllOf {
+            tools: vec!["bash".to_string(), "bash".to_string()],
+        };
+        let result = run_tool_use_evaluator(&response, &config)
+            .expect("evaluator should succeed for all_of with insufficient duplicate calls");
+        assert_eq!(
+            result,
+            Some(Value::Bool(false)),
+            "should fail when tool is called fewer times than required"
         );
     }
 }

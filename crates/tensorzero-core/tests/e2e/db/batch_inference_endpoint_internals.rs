@@ -1118,3 +1118,91 @@ async fn test_write_read_completed_batch_inference_json(
     );
 }
 make_db_test!(test_write_read_completed_batch_inference_json);
+
+/// Tests the fix for the GCP Vertex batch inference bug:
+/// When a provider reports Completed but we fail to process the response
+/// (e.g. empty elements from all JSONL rows failing to parse),
+/// `write_poll_batch_inference` should mark the batch as Failed
+/// so it doesn't stay stuck in Pending forever.
+async fn test_write_poll_completed_batch_with_empty_elements_marks_failed(
+    database: impl BatchInferenceQueries
+    + ConfigQueries
+    + InferenceQueries
+    + ModelInferenceQueries
+    + TestDatabaseHelpers,
+) {
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"test": "empty_elements"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+
+    // Write a Pending batch request
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+
+    // Write some batch model inferences so there's data in the DB
+    write_2_batch_model_inference_rows(&database, batch_id).await;
+    database.sleep_for_writes_to_be_visible().await;
+
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    // Simulate: provider says Completed but with an empty elements map
+    // (this is what happens when all JSONL rows fail to parse)
+    let completed_response = ProviderBatchInferenceResponse {
+        elements: HashMap::new(),
+        raw_request: raw_request.clone(),
+        raw_response: raw_response.clone(),
+    };
+    let result = write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Completed(completed_response),
+        Arc::from("test_provider"),
+        &config,
+    )
+    .await;
+
+    // Should return an error (MissingBatchInferenceResponse)
+    assert!(
+        result.is_err(),
+        "write_poll_batch_inference should fail when elements is empty"
+    );
+
+    // The batch should now be marked as Failed in the database
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    let batch_request_result = poll_for_result_with_interval_and_timeout(
+        || get_batch_request(&database, &query),
+        |r| r.status == BatchStatus::Failed,
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(30),
+        "Timed out waiting for batch status to become Failed after processing error",
+    )
+    .await;
+    assert_eq!(
+        batch_request_result.status,
+        BatchStatus::Failed,
+        "Batch should be marked as Failed when processing a completed batch fails"
+    );
+}
+make_db_test!(test_write_poll_completed_batch_with_empty_elements_marks_failed);

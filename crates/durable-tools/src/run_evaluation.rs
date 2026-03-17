@@ -15,9 +15,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use evaluations::run_evaluation_with_app_state;
-use evaluations::stats::{EvaluationStats, EvaluationUpdate};
+use evaluations::stats::{EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
 use tensorzero_core::utils::gateway::AppStateData;
 
@@ -96,6 +97,18 @@ pub struct RunEvaluationParams {
     /// taking precedence in case of conflicts.
     #[serde(default)]
     pub tags: HashMap<String, String>,
+    /// Internal: dynamic variant config for GEPA.
+    /// When set, uses `EvaluationVariant::Info` instead of `EvaluationVariant::Name`.
+    /// Not exposed to the LLM-facing tool.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    /// Internal: whether to include full `EvaluationInfo` objects in the response.
+    /// Used by the durable GEPA path for analysis. Not exposed to the LLM-facing tool.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(default)]
+    pub include_evaluation_infos: bool,
 }
 
 /// Result for a single datapoint evaluation.
@@ -136,6 +149,11 @@ pub struct RunEvaluationResponse {
     /// Per-datapoint results (only populated if `include_datapoint_results` was true).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub datapoint_results: Option<Vec<DatapointResult>>,
+    /// Full evaluation info objects (only populated if `include_evaluation_infos` was true).
+    /// Used internally by the durable GEPA path for analysis.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation_infos: Option<Vec<EvaluationInfo>>,
 }
 
 // ============================================================================
@@ -179,19 +197,19 @@ pub async fn run_evaluation(
         .is_some_and(|ids| !ids.is_empty());
     if has_dataset && has_datapoints {
         return Err(RunEvaluationError::Validation(
-            "Cannot provide both dataset_name and datapoint_ids".to_string(),
+            "Cannot provide both `dataset_name` and `datapoint_ids`".to_string(),
         ));
     }
     if !has_dataset && !has_datapoints {
         return Err(RunEvaluationError::Validation(
-            "Must provide either dataset_name or datapoint_ids".to_string(),
+            "Must provide either `dataset_name` or `datapoint_ids`".to_string(),
         ));
     }
 
     // Validate max_datapoints cannot be used with datapoint_ids
     if has_datapoints && params.max_datapoints.is_some() {
         return Err(RunEvaluationError::Validation(
-            "Cannot use max_datapoints with datapoint_ids".to_string(),
+            "Cannot use `max_datapoints` with `datapoint_ids`".to_string(),
         ));
     }
 
@@ -220,13 +238,20 @@ pub async fn run_evaluation(
             ))
         })?;
 
+    let variant = if let Some(config) = params.internal_dynamic_variant_config.clone() {
+        EvaluationVariant::Info(Box::new(config))
+    } else {
+        EvaluationVariant::Name(params.variant_name.clone())
+    };
+
     let run_params = RunEvaluationWithAppStateParams {
-        evaluation_config: (*evaluation_config).clone(),
+        function_name: inference_config.function_name.clone(),
         function_config,
-        evaluation_name: params.evaluation_name.clone(),
+        evaluators: inference_config.evaluators.clone(),
+        evaluation_name: Some(params.evaluation_name.clone()),
         dataset_name: params.dataset_name.clone(),
         datapoint_ids: params.datapoint_ids.clone(),
-        variant: EvaluationVariant::Name(params.variant_name.clone()),
+        variant,
         concurrency: params.concurrency,
         cache_mode: params.inference_cache,
         max_datapoints: params.max_datapoints,
@@ -238,19 +263,24 @@ pub async fn run_evaluation(
         .await
         .map_err(|e| RunEvaluationError::Runtime(format!("Evaluation failed: {e}")))?;
 
-    collect_results(result, params.include_datapoint_results, heartbeater).await
+    collect_results(
+        result,
+        params.include_datapoint_results,
+        params.include_evaluation_infos,
+        heartbeater,
+    )
+    .await
 }
 
 /// Collects evaluation results from the stream and computes statistics.
 async fn collect_results(
     result: evaluations::EvaluationStreamResult,
     include_datapoint_results: bool,
+    include_evaluation_infos: bool,
     heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {
     let evaluation_run_id = result.run_info.evaluation_run_id;
     let num_datapoints = result.run_info.num_datapoints;
-
-    let EvaluationConfig::Inference(ref inference_config) = *result.evaluation_config;
 
     // Collect updates from the stream (OutputFormat::Jsonl skips progress bar rendering)
     let mut stats_collector =
@@ -271,10 +301,19 @@ async fn collect_results(
         }
     }
 
-    let stats = stats_collector.compute_stats(&inference_config.evaluators);
+    let stats = stats_collector.compute_stats(&result.evaluators);
 
     let datapoint_results = if include_datapoint_results {
         Some(build_datapoint_results(&stats_collector))
+    } else {
+        None
+    };
+
+    let num_successes = stats_collector.evaluation_infos.len();
+    let num_errors = stats_collector.evaluation_errors.len();
+
+    let evaluation_infos = if include_evaluation_infos {
+        Some(std::mem::take(&mut stats_collector.evaluation_infos))
     } else {
         None
     };
@@ -289,10 +328,11 @@ async fn collect_results(
     Ok(RunEvaluationResponse {
         evaluation_run_id,
         num_datapoints,
-        num_successes: stats_collector.evaluation_infos.len(),
-        num_errors: stats_collector.evaluation_errors.len(),
+        num_successes,
+        num_errors,
         stats,
         datapoint_results,
+        evaluation_infos,
     })
 }
 

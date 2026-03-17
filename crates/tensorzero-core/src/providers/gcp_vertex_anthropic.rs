@@ -45,12 +45,11 @@ use crate::tool::ToolCall;
 use uuid::Uuid;
 
 use super::anthropic::{
-    AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole,
-    AnthropicStopReason, AnthropicSystemBlock, AnthropicTool, build_anthropic_tools,
-    collect_all_provider_tools, prefill_json_chunk_response, prefill_json_response,
+    AnthropicMessage, AnthropicMessagesConfig, AnthropicStopReason, AnthropicSystemBlock,
+    AnthropicTool, build_anthropic_tools, collect_all_provider_tools,
 };
 use super::gcp_vertex_gemini::{GCPVertexCredentials, ShorthandUrl, parse_shorthand_url};
-use super::helpers::{convert_stream_error, peek_first_chunk};
+use super::helpers::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -279,8 +278,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 raw_response,
                 latency,
                 raw_request,
-                function_type: &request.function_type,
-                json_mode: &request.json_mode,
                 generic_request: request,
                 model_name,
                 provider_name,
@@ -347,7 +344,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(
+        let stream = stream_anthropic(
             event_source,
             start_time,
             model_provider,
@@ -357,21 +354,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_inference_id,
         )
         .peekable();
-        let chunk = peek_first_chunk(
-            &mut stream,
-            &raw_request,
-            PROVIDER_TYPE,
-            ApiType::ChatCompletions,
-        )
-        .await?;
-        // Handle JSON prefill for streaming.
-        if matches!(
-            request.json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(request.function_type, FunctionType::Json)
-        {
-            prefill_json_chunk_response(chunk);
-        }
         Ok((stream, raw_request))
     }
 
@@ -578,22 +560,15 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .system
             .as_deref()
             .map(|text| vec![AnthropicSystemBlock::Text { text }]);
-        let mut messages: Vec<AnthropicMessage> =
+        let messages: Vec<AnthropicMessage> =
             try_join_all(request.messages.iter().map(|m| {
                 AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
             }))
             .await?
             .into_iter()
             .collect::<Vec<_>>();
-        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
-        if matches!(
-            request.json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(request.function_type, FunctionType::Json)
-        {
-            warn_gcp_vertex_anthropic_strict_json_mode(request.json_mode);
-            prefill_json_message(&mut messages);
-        }
+        // GCP Vertex Anthropic doesn't support structured outputs or JSON mode
+        warn_gcp_vertex_anthropic_json_mode(request.json_mode, &request.function_type);
 
         // GCP Vertex Anthropic doesn't support strict mode for tools
         let tools = build_anthropic_tools(request.tool_config.as_ref(), provider_tools, false)?;
@@ -676,24 +651,30 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     }
 }
 
-fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
-    // Add a JSON-prefill message for Anthropic's JSON mode
-    messages.push(AnthropicMessage {
-        role: AnthropicRole::Assistant,
-        content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-            text: "Here is the JSON requested:\n{",
-        })],
-    });
-}
-
-/// Warn if json_mode=strict is used since GCP Vertex Anthropic doesn't support structured outputs
-fn warn_gcp_vertex_anthropic_strict_json_mode(json_mode: ModelInferenceRequestJsonMode) {
-    if matches!(json_mode, ModelInferenceRequestJsonMode::Strict) {
-        tracing::warn!(
-            "GCP Vertex Anthropic does not support Anthropic's structured outputs feature. \
-            `json_mode = \"strict\"` will use prefill fallback instead of guaranteed schema compliance. \
-            For strict JSON schema enforcement, use direct Anthropic."
-        );
+/// Warn if json_mode is on or strict since GCP Vertex Anthropic doesn't support JSON mode or structured outputs
+fn warn_gcp_vertex_anthropic_json_mode(
+    json_mode: ModelInferenceRequestJsonMode,
+    function_type: &FunctionType,
+) {
+    if !matches!(function_type, FunctionType::Json) {
+        return;
+    }
+    match json_mode {
+        ModelInferenceRequestJsonMode::On => {
+            tracing::warn!(
+                "GCP Vertex Anthropic does not support JSON mode. \
+                The model will be asked to produce JSON but output is not guaranteed to be valid JSON. \
+                For guaranteed JSON output, use direct Anthropic."
+            );
+        }
+        ModelInferenceRequestJsonMode::Strict => {
+            tracing::warn!(
+                "GCP Vertex Anthropic does not support Anthropic's structured outputs feature. \
+                The model will be asked to produce JSON but output is not guaranteed to comply with the schema. \
+                For strict JSON schema enforcement, use direct Anthropic."
+            );
+        }
+        ModelInferenceRequestJsonMode::Off => {}
     }
 }
 
@@ -826,8 +807,6 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     raw_response: String,
     latency: Latency,
     raw_request: String,
-    function_type: &'a FunctionType,
-    json_mode: &'a ModelInferenceRequestJsonMode,
     generic_request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
     provider_name: &'a str,
@@ -842,8 +821,6 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             raw_response,
             latency,
             raw_request,
-            function_type,
-            json_mode,
             generic_request,
             model_name,
             provider_name,
@@ -855,17 +832,6 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-
-        // GCP Vertex Anthropic doesn't support structured outputs yet, so use prefill for both on and strict
-        let content = if matches!(
-            json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(function_type, FunctionType::Json)
-        {
-            prefill_json_response(content)?
-        } else {
-            content
-        };
 
         let raw_usage = gcp_vertex_anthropic_usage_from_raw_response(&raw_response).map(|usage| {
             raw_usage_entries_from_value(
@@ -917,7 +883,7 @@ mod tests {
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::jsonschema_util::JSONSchema;
-    use crate::providers::anthropic::AnthropicFunctionTool;
+    use crate::providers::anthropic::{AnthropicFunctionTool, AnthropicMessageContent};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
 
@@ -1478,8 +1444,6 @@ mod tests {
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
             model_name: "my-model",
             provider_name: "my-provider",
@@ -1566,8 +1530,6 @@ mod tests {
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
             model_name: "model-name",
             provider_name: "provider-name",
@@ -1655,8 +1617,6 @@ mod tests {
             raw_response: raw_response.clone(),
             latency: latency.clone(),
             raw_request: raw_request.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
             model_name: "model-name",
             provider_name: "provider-name",
@@ -1764,37 +1724,6 @@ mod tests {
             result,
             GCPVertexAnthropicUsage::default(),
             "non-numeric values should fall back to default"
-        );
-    }
-
-    #[test]
-    fn test_prefill_json_message() {
-        let input_messages = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Generate some JSON",
-            })],
-        }];
-
-        let mut result = input_messages.clone();
-        prefill_json_message(&mut result);
-
-        assert_eq!(result.len(), 2);
-
-        assert_eq!(result[0].role, AnthropicRole::User);
-        assert_eq!(
-            result[0].content,
-            vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Generate some JSON",
-            })]
-        );
-
-        assert_eq!(result[1].role, AnthropicRole::Assistant);
-        assert_eq!(
-            result[1].content,
-            vec![FlattenUnknown::Normal(AnthropicMessageContent::Text {
-                text: "Here is the JSON requested:\n{",
-            })]
         );
     }
 

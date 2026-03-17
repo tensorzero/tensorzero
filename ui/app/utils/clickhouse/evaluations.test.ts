@@ -11,12 +11,7 @@ import { fail } from "assert";
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {
     const evaluation_run_id = "01963691-9d3c-7793-a8be-3937ebb849c1";
-    const results = await getEvaluationResults(
-      "haiku",
-      [evaluation_run_id],
-      5,
-      0,
-    );
+    const results = await getEvaluationResults([evaluation_run_id], 5, 0);
     // Verify we get the expected number of results (10 = 5 datapoints * 2 metrics)
     expect(results.length).toBe(10);
 
@@ -58,12 +53,7 @@ describe("getEvaluationResults", () => {
     // We test here that it is not included and the data is ragged due to the datapoint at the top of the
     // table only having one evaluation run.
     const evaluation_run_id = "0196368f-19bd-7082-a677-1c0bf346ff24";
-    const results = await getEvaluationResults(
-      "entity_extraction",
-      [evaluation_run_id],
-      2,
-      0,
-    );
+    const results = await getEvaluationResults([evaluation_run_id], 2, 0);
     expect(results.length).toBe(4); // 1 datapoints * 1 evaluation runs * 2 metrics + 1 ragged datapoint * 1 evaluation run * 2 metrics
     // Verify that we have both metrics in the results
     const metricNames = new Set(results.map((r) => r.metric_name));
@@ -86,7 +76,6 @@ describe("getEvaluationResults", () => {
     const evaluation_run_id1 = "0196374b-04a3-7013-9049-e59ed5fe3f74";
     const evaluation_run_id2 = "01963691-9d3c-7793-a8be-3937ebb849c1";
     const results = await getEvaluationResults(
-      "haiku",
       [evaluation_run_id1, evaluation_run_id2],
       5,
       0,
@@ -140,7 +129,7 @@ describe("getEvaluationsForDatapoint", () => {
     const evaluations = await getEvaluationsForDatapoint(
       "haiku",
       "0195d806-e43d-7f7e-bb05-f6dd0d95846f", // Nonexistent datapoint
-      ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
+      ["0196374b-04a3-7013-9049-e59ed5fe3f74"],
     );
     expect(evaluations).toEqual([]);
   });

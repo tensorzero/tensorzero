@@ -28,12 +28,12 @@ import {
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
+  AutoEvalLabeledExample,
   AutopilotStatus,
   EventPayloadMessageContent,
   EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
-  TopKEvaluationVisualization,
   UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
@@ -41,7 +41,10 @@ import { formatResponse } from "~/components/autopilot/question-cards/formatResp
 import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
-import TopKEvaluationViz from "./TopKEvaluationViz";
+import EventVisualization, {
+  detectEventVisualization,
+  type EventVisualizationData,
+} from "./EventVisualization";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -189,45 +192,6 @@ function getVisualizationTitle(visualization: VisualizationType): string {
 }
 
 /**
- * Renders the appropriate visualization component based on the type.
- */
-function VisualizationRenderer({
-  visualization,
-}: {
-  visualization: VisualizationType;
-}) {
-  // Check for known visualization types
-  if (
-    typeof visualization === "object" &&
-    visualization !== null &&
-    "type" in visualization &&
-    visualization.type === "top_k_evaluation"
-  ) {
-    // Type assertion needed because TypeScript can't narrow through the untagged union
-    return (
-      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
-    );
-  }
-
-  // Unknown or malformed visualization - show raw JSON with a warning
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-fg-muted flex items-center gap-2 text-sm">
-        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-        <span>
-          Unknown visualization type. Your TensorZero deployment may be
-          outdated.
-        </span>
-      </div>
-      <ReadOnlyCodeBlock
-        code={JSON.stringify(visualization, null, 2)}
-        language="json"
-      />
-    </div>
-  );
-}
-
-/**
  * Format a tool error for display.
  * Extracts a human-readable message from the structured error JSON.
  */
@@ -285,6 +249,10 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       };
     case "user_questions":
     case "user_questions_answers":
+    case "auto_eval_example_labeling":
+    case "auto_eval_example_labeling_answers":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "visualization":
     case "unknown":
       return {};
@@ -465,6 +433,28 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
+    case "auto_eval_example_labeling":
+      return "Example Labeling";
+    case "auto_eval_example_labeling_answers": {
+      const exampleCount = payload.examples.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {exampleCount === 1 ? "Example Label" : "Example Labels"}
+          <DotSeparator />
+          Submitted
+        </span>
+      );
+    }
+    case "auto_eval_behavior_spec":
+      return "Behavior Spec";
+    case "auto_eval_behavior_spec_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Behavior Spec
+          <DotSeparator />
+          Submitted
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -587,8 +577,161 @@ function UserQuestionsAnswersContent({
   );
 }
 
+function formatLabelAnswer(
+  answer: UserQuestionAnswer,
+  example: AutoEvalLabeledExample,
+): string {
+  return formatResponse(answer, {
+    id: example.label_question.id,
+    header: example.label_question.header,
+    question: example.label_question.question,
+    type: "multiple_choice",
+    options: example.label_question.options,
+    multi_select: false,
+  });
+}
+
+function AutoEvalLabelingAnswersContent({
+  examples,
+}: {
+  examples: AutoEvalLabeledExample[];
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {examples.map((example, idx) => (
+        <div key={idx} className="flex flex-col gap-2">
+          {/* Context blocks */}
+          {example.context.map((block, blockIdx) => (
+            <div key={blockIdx} className="flex flex-col gap-0.5">
+              {block.label && (
+                <span className="text-fg-muted text-xs font-medium">
+                  {block.label}
+                </span>
+              )}
+              {block.type === "markdown" ? (
+                <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+                  {block.text}
+                </p>
+              ) : (
+                <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
+                  {JSON.stringify(block.data, null, 2)}
+                </pre>
+              )}
+            </div>
+          ))}
+          {/* Label answer */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {example.label_question.header}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {formatLabelAnswer(example.label_answer, example)}
+            </span>
+          </div>
+          {/* Explanation answer */}
+          {example.explanation_question && example.explanation_answer && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-fg-muted text-xs font-medium">
+                {example.explanation_question.header}
+              </span>
+              <span className="text-fg-primary text-sm">
+                {formatResponse(example.explanation_answer, {
+                  id: example.explanation_question.id,
+                  header: example.explanation_question.header,
+                  question: example.explanation_question.question,
+                  type: "free_response",
+                })}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
+
+interface EventItemContentProps {
+  event: GatewayEvent;
+  description?: string;
+  visualizationData: EventVisualizationData | null;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+}
+
+function EventItemContent({
+  event,
+  description,
+  visualizationData,
+  questionsMap,
+}: EventItemContentProps) {
+  if (visualizationData) {
+    return <EventVisualization data={visualizationData} />;
+  }
+
+  if (event.payload.type === "user_questions") {
+    return <UserQuestionsContent questions={event.payload.questions} />;
+  }
+
+  if (event.payload.type === "user_questions_answers") {
+    return (
+      <UserQuestionsAnswersContent
+        responses={event.payload.responses}
+        questions={
+          questionsMap?.get(event.payload.user_questions_event_id) ?? []
+        }
+      />
+    );
+  }
+
+  if (event.payload.type === "auto_eval_example_labeling_answers") {
+    return <AutoEvalLabelingAnswersContent examples={event.payload.examples} />;
+  }
+
+  if (!description) return null;
+
+  switch (event.payload.type) {
+    case "message":
+      return (
+        <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
+          {description}
+        </Markdown>
+      );
+
+    case "tool_call":
+      return <ReadOnlyCodeBlock code={description} language="json" />;
+
+    case "tool_result":
+    case "error":
+      return (
+        <p
+          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
+          {description}
+        </p>
+      );
+
+    case "status_update":
+    case "tool_call_authorization":
+    case "visualization":
+    case "auto_eval_example_labeling":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
+    case "unknown":
+      return (
+        <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+          {description}
+        </p>
+      );
+
+    default: {
+      const _exhaustiveCheck: never = event.payload;
+      return _exhaustiveCheck;
+    }
+  }
+}
 
 type EventItemProps = {
   event: GatewayEvent;
@@ -608,6 +751,12 @@ function EventItem({
   sessionId,
 }: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
+
+  const visualizationData = useMemo(
+    () => detectEventVisualization(event),
+    [event],
+  );
+
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
@@ -618,12 +767,13 @@ function EventItem({
     event.payload.type === "visualization" ||
     event.payload.type === "user_questions" ||
     event.payload.type === "user_questions_answers" ||
+    event.payload.type === "auto_eval_example_labeling_answers" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
   const label = <span className="text-sm font-medium">{title}</span>;
 
@@ -671,49 +821,12 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && summary.description && (
-        <>
-          {event.payload.type === "message" ? (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              components={uuidComponents}
-            >
-              {summary.description}
-            </Markdown>
-          ) : event.payload.type === "tool_call" ? (
-            <ReadOnlyCodeBlock code={summary.description} language="json" />
-          ) : (
-            <p
-              className={cn(
-                "text-fg-secondary text-sm whitespace-pre-wrap",
-                (event.payload.type === "tool_result" ||
-                  event.payload.type === "error") &&
-                  "overflow-y-auto font-mono",
-              )}
-              style={
-                event.payload.type === "tool_result" ||
-                event.payload.type === "error"
-                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                  : undefined
-              }
-            >
-              {summary.description}
-            </p>
-          )}
-        </>
-      )}
-      {shouldShowDetails && event.payload.type === "visualization" && (
-        <VisualizationRenderer visualization={event.payload.visualization} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions" && (
-        <UserQuestionsContent questions={event.payload.questions} />
-      )}
-      {shouldShowDetails && event.payload.type === "user_questions_answers" && (
-        <UserQuestionsAnswersContent
-          responses={event.payload.responses}
-          questions={
-            questionsMap?.get(event.payload.user_questions_event_id) ?? []
-          }
+      {shouldShowDetails && (
+        <EventItemContent
+          event={event}
+          description={summary.description}
+          visualizationData={visualizationData}
+          questionsMap={questionsMap}
         />
       )}
     </div>
@@ -783,6 +896,10 @@ function getStatusLabel(status: AutopilotStatus): {
     case "waiting_for_tool_execution":
       return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_user_questions_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_behavior_spec_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };

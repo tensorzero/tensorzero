@@ -143,12 +143,10 @@
 //!         .database_url(std::env::var("DATABASE_URL")?.into())
 //!         .queue_name("tools")
 //!         .inference_client(inference_client)
+//!         .register_simple_tool_instance(SearchTool)?
+//!         .register_task_tool_instance(ResearchTool)?
 //!         .build()
 //!         .await?;
-//!
-//!     // Register tools (pass instances)
-//!     executor.register_simple_tool_instance(SearchTool).await?;
-//!     executor.register_task_tool_instance(ResearchTool).await?;
 //!
 //!     // Spawn a tool execution by name
 //!     let episode_id = Uuid::now_v7();
@@ -211,9 +209,9 @@ pub use tensorzero_client::MockTensorZeroClient;
 
 // Re-export autopilot types for use by tools
 pub use tensorzero_client::{
-    CreateEventGatewayRequest, CreateEventResponse, EventPayload, EventPayloadToolResult,
-    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
-    S3UploadRequest, S3UploadResponse, ToolOutcome,
+    CreateEventGatewayRequest, CreateEventPayload, CreateEventPayloadToolResult,
+    CreateEventResponse, GatewayListEventsResponse, ListEventsParams, ListSessionsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, ToolOutcome,
 };
 
 // Re-export datapoint types for CRUD operations

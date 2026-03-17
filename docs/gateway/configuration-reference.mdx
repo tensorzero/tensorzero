@@ -223,7 +223,7 @@ See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more 
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 Each database insert is handled immediately in separate background tasks.
 
 See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
@@ -242,7 +242,7 @@ This can be problematic in serverless environments that terminate the gateway in
 - **Type:** object
 - **Required:** no (default: disabled)
 
-Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
 
 The `batch_writes` object supports the following fields:
@@ -276,9 +276,9 @@ This can be problematic in serverless environments that terminate the gateway in
 - **Required:** no (default: `null`)
 
 Enable the observability features of the TensorZero Gateway.
-If `true`, the gateway will throw an error on startup if it fails to validate the ClickHouse connection.
-If `null`, the gateway will log a warning but continue if ClickHouse is not available, and it will use ClickHouse if available.
-If `false`, the gateway will not use ClickHouse.
+If `true`, the gateway will throw an error on startup if it fails to validate the database connection.
+If `null`, the gateway will log a warning but continue if a database is not available, and it will use the database if available (if both Postgres and ClickHouse are available, the gateway will use ClickHouse as the observability backend).
+If `false`, the gateway will not enable observability.
 
 ```toml title="tensorzero.toml"
 [gateway]
@@ -4585,7 +4585,7 @@ The frequency, in seconds, with which sampling probabilities are updated.
 
 Lower values will lead to faster experiment convergence but will consume more computational resources.
 
-Updating the sampling probabilities requires reading the latest feedback data from ClickHouse.
+Updating the sampling probabilities requires reading the latest feedback data from your database.
 This is accomplished by a background task that interacts with the gateway instance.
 More frequent updates (smaller values of `update_period_s`) relative to the feedback throughput enable the algorithm to more quickly guide the sampling probabilities toward their theoretical optimum, which allows it to more quickly label the "winner" variant.
 For example, updating the sampling probabilities every ~100 inferences should lead to faster convergence than updating them every ~500 inferences.

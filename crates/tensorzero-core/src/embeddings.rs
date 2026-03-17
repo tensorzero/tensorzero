@@ -19,7 +19,7 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
-use crate::model_table::{OpenAIKind, ShorthandModelConfig};
+use crate::model_table::{OpenAIKind, OpenRouterKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
@@ -51,7 +51,7 @@ use crate::providers::dummy::DummyProvider;
 pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 
 impl ShorthandModelConfig for EmbeddingModelConfig {
-    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::", "openrouter::"];
     const MODEL_TYPE: &str = "Embedding model";
     async fn from_shorthand(
         provider_type: &str,
@@ -71,6 +71,12 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 false,
                 Vec::new(),
             )?),
+            "openrouter" => EmbeddingProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                OpenRouterKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {

@@ -8,11 +8,14 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Deserialize;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use evaluations::sse_events::{
+    EvaluationRunCompleteEvent, EvaluationRunErrorEvent, EvaluationRunEvent,
+    EvaluationRunFatalErrorEvent, EvaluationRunStartEvent, EvaluationRunSuccessEvent,
+};
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
 use evaluations::{
     EvaluationVariant, RunEvaluationWithAppStateParams, run_evaluation_with_app_state,
@@ -21,24 +24,43 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
+use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 // =============================================================================
 // Request/Response Types
 // =============================================================================
 
+/// Identifies the evaluation to run.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(untagged)]
+pub enum EvaluationIdentifier {
+    /// Legacy evaluation config, with evaluators configured as part of a named evaluation.
+    LegacyNamedEvaluation {
+        evaluation_config: EvaluationConfig,
+        evaluation_name: String,
+        function_config: EvaluationFunctionConfig,
+    },
+    /// Named evaluators resolved from gateway config.
+    Evaluators {
+        function_name: String,
+        evaluator_names: Vec<String>,
+    },
+    /// Named evaluation resolved from gateway config.
+    /// The gateway looks up the evaluation by name and resolves its function and evaluators.
+    NamedEvaluation { evaluation_name: String },
+}
+
 /// Request body for running an evaluation.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RunEvaluationRequest {
-    /// The evaluation configuration (serialized)
-    pub evaluation_config: EvaluationConfig,
-    /// The function configuration for output schema validation
-    pub function_config: EvaluationFunctionConfig,
-    /// Name of the evaluation
-    pub evaluation_name: String,
+    /// How the evaluation is configured: either explicit config or named evaluators.
+    #[serde(flatten)]
+    pub source: EvaluationIdentifier,
     /// Name of the dataset to evaluate (optional, either this or datapoint_ids must be provided)
     #[serde(default)]
     pub dataset_name: Option<String>,
@@ -62,7 +84,7 @@ pub struct RunEvaluationRequest {
     pub max_datapoints: Option<u32>,
     /// Per-evaluator precision targets for adaptive stopping
     #[serde(default)]
-    pub precision_targets: Option<HashMap<String, f64>>,
+    pub precision_targets: Option<HashMap<String, f32>>,
 }
 
 fn default_concurrency() -> u32 {
@@ -73,89 +95,28 @@ fn default_inference_cache() -> String {
     "on".to_string()
 }
 
-/// SSE event types for evaluation streaming.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum EvaluationRunEvent {
-    Start(EvaluationRunStartEvent),
-    Success(EvaluationRunSuccessEvent),
-    Error(EvaluationRunErrorEvent),
-    FatalError(EvaluationRunFatalErrorEvent),
-    Complete(EvaluationRunCompleteEvent),
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct EvaluationRunStartEvent {
-    pub evaluation_run_id: Uuid,
-    pub num_datapoints: usize,
-    pub evaluation_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dataset_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variant_name: Option<String>,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunSuccessEvent {
-    pub evaluation_run_id: Uuid,
-    pub datapoint: Value,
-    pub response: Value,
-    pub evaluations: HashMap<String, Option<Value>>,
-    pub evaluator_errors: HashMap<String, String>,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunErrorEvent {
-    pub evaluation_run_id: Uuid,
-    pub datapoint_id: Uuid,
-    pub message: String,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct EvaluationRunFatalErrorEvent {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub evaluation_run_id: Option<Uuid>,
-    pub message: String,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EvaluationRunCompleteEvent {
-    pub evaluation_run_id: Uuid,
-}
-
-impl EvaluationRunSuccessEvent {
-    fn try_from_info(evaluation_run_id: Uuid, info: EvaluationInfo) -> Result<Self, Error> {
-        let datapoint = serde_json::to_value(info.datapoint).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize datapoint: {e}"),
-            })
-        })?;
-        let response = serde_json::to_value(info.response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize inference response: {e}"),
-            })
-        })?;
-
-        Ok(Self {
-            evaluation_run_id,
-            datapoint,
-            response,
-            evaluations: info.evaluations,
-            evaluator_errors: info.evaluator_errors,
+fn success_event_from_info(
+    evaluation_run_id: Uuid,
+    info: EvaluationInfo,
+) -> Result<EvaluationRunSuccessEvent, Error> {
+    let datapoint = serde_json::to_value(info.datapoint).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize datapoint: {e}"),
         })
-    }
+    })?;
+    let response = serde_json::to_value(info.response).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize inference response: {e}"),
+        })
+    })?;
+
+    Ok(EvaluationRunSuccessEvent {
+        evaluation_run_id,
+        datapoint,
+        response,
+        evaluations: info.evaluations,
+        evaluator_errors: info.evaluator_errors,
+    })
 }
 
 // =============================================================================
@@ -168,6 +129,7 @@ struct EvaluationStreamParams {
     evaluation_name: String,
     dataset_name: Option<String>,
     variant_name: Option<String>,
+    evaluation_config: Option<EvaluationConfig>,
     receiver: mpsc::Receiver<EvaluationUpdate>,
     batcher_join_handles: Vec<BatchWriterHandle>,
 }
@@ -181,6 +143,7 @@ fn create_evaluation_stream(
         evaluation_name,
         dataset_name,
         variant_name,
+        evaluation_config,
         mut receiver,
         batcher_join_handles,
     } = params;
@@ -193,6 +156,7 @@ fn create_evaluation_stream(
             evaluation_name,
             dataset_name,
             variant_name,
+            evaluation_config,
         });
 
         match serde_json::to_string(&start_event) {
@@ -214,7 +178,7 @@ fn create_evaluation_stream(
             let event = match update {
                 EvaluationUpdate::RunInfo(_) => continue, // Already sent start event
                 EvaluationUpdate::Success(info) => {
-                    match EvaluationRunSuccessEvent::try_from_info(evaluation_run_id, info) {
+                    match success_event_from_info(evaluation_run_id, info) {
                         Ok(success_event) => EvaluationRunEvent::Success(success_event),
                         Err(e) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                             evaluation_run_id,
@@ -227,6 +191,12 @@ fn create_evaluation_stream(
                     EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                         evaluation_run_id,
                         datapoint_id,
+                        message,
+                    })
+                }
+                EvaluationUpdate::FatalError(message) => {
+                    EvaluationRunEvent::FatalError(EvaluationRunFatalErrorEvent {
+                        evaluation_run_id: Some(evaluation_run_id),
                         message,
                     })
                 }
@@ -269,6 +239,107 @@ fn create_evaluation_stream(
 // HTTP Handler
 // =============================================================================
 
+/// Resolved evaluation configuration from either the old or new request path.
+struct ResolvedEvaluationConfig {
+    function_name: String,
+    evaluators: HashMap<String, EvaluatorConfig>,
+    function_config: EvaluationFunctionConfig,
+    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    evaluation_name: Option<String>,
+}
+
+/// Resolves evaluation and function configs from the request.
+fn resolve_evaluation_config(
+    request: &RunEvaluationRequest,
+    app_state: &AppStateData,
+) -> Result<ResolvedEvaluationConfig, Error> {
+    match &request.source {
+        EvaluationIdentifier::LegacyNamedEvaluation {
+            evaluation_config,
+            evaluation_name,
+            function_config,
+        } => {
+            let EvaluationConfig::Inference(ref inference_config) = *evaluation_config;
+            Ok(ResolvedEvaluationConfig {
+                function_name: inference_config.function_name.clone(),
+                function_config: function_config.clone(),
+                evaluators: inference_config.evaluators.clone(),
+                evaluation_name: Some(evaluation_name.clone()),
+            })
+        }
+        EvaluationIdentifier::Evaluators {
+            function_name,
+            evaluator_names,
+        } => {
+            let function_config =
+                app_state
+                    .config
+                    .functions
+                    .get(function_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Function `{function_name}` not found in config"),
+                        })
+                    })?;
+            let evaluators = resolve_evaluators(evaluator_names, app_state)?;
+            Ok(ResolvedEvaluationConfig {
+                function_name: function_name.clone(),
+                function_config: EvaluationFunctionConfig::from(function_config.as_ref()),
+                evaluators,
+                evaluation_name: None,
+            })
+        }
+        EvaluationIdentifier::NamedEvaluation { evaluation_name } => {
+            let evaluation_config = app_state
+                .config
+                .evaluations
+                .get(evaluation_name)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Evaluation `{evaluation_name}` not found in config"),
+                    })
+                })?;
+            let EvaluationConfig::Inference(ref inference_config) = **evaluation_config;
+            let function_name = &inference_config.function_name;
+            let function_config =
+                app_state
+                    .config
+                    .functions
+                    .get(function_name)
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Function `{function_name}` (referenced by evaluation `{evaluation_name}`) not found in config"
+                            ),
+                        })
+                    })?;
+            Ok(ResolvedEvaluationConfig {
+                function_name: function_name.clone(),
+                function_config: EvaluationFunctionConfig::from(function_config.as_ref()),
+                evaluators: inference_config.evaluators.clone(),
+                evaluation_name: Some(evaluation_name.clone()),
+            })
+        }
+    }
+}
+
+/// Resolves evaluator configs by name from the top-level `[evaluators]` config.
+fn resolve_evaluators(
+    evaluator_names: &[String],
+    app_state: &AppStateData,
+) -> Result<HashMap<String, EvaluatorConfig>, Error> {
+    let mut evaluators = HashMap::new();
+    for name in evaluator_names {
+        let evaluator = app_state.config.evaluators.get(name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Top-level evaluator `{name}` not found in config"),
+            })
+        })?;
+        evaluators.insert(name.clone(), (**evaluator).clone());
+    }
+    Ok(evaluators)
+}
+
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
@@ -277,8 +348,11 @@ pub async fn run_evaluation_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<RunEvaluationRequest>,
 ) -> Result<impl IntoResponse, Error> {
+    // Resolve evaluation config from either old or new request path
+    let resolved = resolve_evaluation_config(&request, &app_state)?;
+
     tracing::info!(
-        evaluation_name = %request.evaluation_name,
+        evaluation_name = ?resolved.evaluation_name,
         dataset_name = ?request.dataset_name,
         variant_name = ?request.variant_name,
         concurrency = %request.concurrency,
@@ -330,13 +404,7 @@ pub async fn run_evaluation_handler(
         }
     };
 
-    // Parse precision_targets
-    let precision_targets: HashMap<String, f32> = request
-        .precision_targets
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(k, v)| (k, v as f32))
-        .collect();
+    let precision_targets: HashMap<String, f32> = request.precision_targets.unwrap_or_default();
 
     // Get variant name for the start event
     let variant_name_for_event = match &variant {
@@ -345,13 +413,23 @@ pub async fn run_evaluation_handler(
     };
 
     let dataset_name_for_event = request.dataset_name.clone();
-    let evaluation_name_for_event = request.evaluation_name.clone();
+
+    // Always include evaluation_config in the start event so HTTP clients
+    // can compute summary_stats without having the config locally.
+    let evaluation_config_for_event = Some(EvaluationConfig::Inference(
+        tensorzero_core::evaluations::InferenceEvaluationConfig {
+            evaluators: resolved.evaluators.clone(),
+            function_name: resolved.function_name.clone(),
+            description: None,
+        },
+    ));
 
     // Build the params for run_evaluation_with_app_state
     let params = RunEvaluationWithAppStateParams {
-        evaluation_config: request.evaluation_config,
-        function_config: request.function_config,
-        evaluation_name: request.evaluation_name,
+        function_name: resolved.function_name,
+        function_config: resolved.function_config,
+        evaluators: resolved.evaluators,
+        evaluation_name: resolved.evaluation_name,
         dataset_name: request.dataset_name,
         datapoint_ids: request.datapoint_ids,
         variant,
@@ -372,18 +450,82 @@ pub async fn run_evaluation_handler(
         })?;
 
     let evaluation_run_id = result.run_info.evaluation_run_id;
+    let evaluation_name = result.run_info.evaluation_name;
     let num_datapoints = result.run_info.num_datapoints;
 
     // Create the SSE stream
     let sse_stream = create_evaluation_stream(EvaluationStreamParams {
         evaluation_run_id,
         num_datapoints,
-        evaluation_name: evaluation_name_for_event,
+        evaluation_name,
         dataset_name: dataset_name_for_event,
         variant_name: variant_name_for_event,
+        evaluation_config: evaluation_config_for_event,
         receiver: result.receiver,
         batcher_join_handles: result.batcher_join_handles,
     });
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_explicit_format_deserialization() {
+        let json = serde_json::json!({
+            "evaluation_config": {
+                "type": "inference",
+                "evaluators": {
+                    "em": {
+                        "type": "exact_match"
+                    }
+                },
+                "function_name": "my_func"
+            },
+            "function_config": {
+                "type": "chat"
+            },
+            "evaluation_name": "my_eval",
+            "variant_name": "v1"
+        });
+        let request: RunEvaluationRequest =
+            serde_json::from_value(json).expect("explicit format should deserialize");
+        assert!(
+            matches!(&request.source, EvaluationIdentifier::LegacyNamedEvaluation { evaluation_name, .. } if evaluation_name == "my_eval"),
+            "should deserialize as Explicit with evaluation_name"
+        );
+    }
+
+    #[test]
+    fn test_named_format_deserialization() {
+        let json = serde_json::json!({
+            "function_name": "my_func",
+            "evaluator_names": ["em_evaluator", "judge"],
+            "dataset_name": "test_ds",
+            "variant_name": "v1"
+        });
+        let request: RunEvaluationRequest =
+            serde_json::from_value(json).expect("named format should deserialize");
+        assert!(
+            matches!(&request.source, EvaluationIdentifier::Evaluators { function_name, evaluator_names } if function_name == "my_func" && evaluator_names == &["em_evaluator", "judge"]),
+            "should deserialize as Named with function_name and evaluator_names"
+        );
+    }
+
+    #[test]
+    fn test_named_evaluation_deserialization() {
+        let json = serde_json::json!({
+            "evaluation_name": "my_eval",
+            "dataset_name": "test_ds",
+            "variant_name": "v1"
+        });
+        let request: RunEvaluationRequest =
+            serde_json::from_value(json).expect("named evaluation format should deserialize");
+        assert!(
+            matches!(&request.source, EvaluationIdentifier::NamedEvaluation { evaluation_name } if evaluation_name == "my_eval"),
+            "should deserialize as NamedEvaluation with evaluation_name"
+        );
+    }
 }

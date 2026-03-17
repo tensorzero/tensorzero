@@ -8,6 +8,7 @@ mod create_datapoints;
 mod create_datapoints_from_inferences;
 mod delete_datapoints;
 mod feedback;
+mod gepa;
 mod get_config;
 mod get_datapoints;
 mod get_feedback_by_target_id;
@@ -32,6 +33,7 @@ pub use create_datapoints_from_inferences::{
 };
 pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use feedback::{FeedbackTool, FeedbackToolParams};
+pub use gepa::{GepaTool, StandaloneGepaTool};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
 pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
 pub use get_feedback_by_target_id::{GetFeedbackByTargetIdTool, GetFeedbackByTargetIdToolParams};

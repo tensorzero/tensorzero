@@ -1,48 +1,8 @@
-import { z } from "zod";
-
-import type { EvaluationResultRow } from "~/types/tensorzero";
-
-export const EvaluationRunInfoSchema = z.object({
-  evaluation_run_id: z.string(),
-  variant_name: z.string(),
-  created_at: z.string().datetime(),
-});
-
-export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
-
-export const EvaluationStatisticsSchema = z.object({
-  evaluation_run_id: z.string(),
-  metric_name: z.string(),
-  datapoint_count: z.number(),
-  mean_metric: z.number(),
-  ci_lower: z.number().nullable(),
-  ci_upper: z.number().nullable(),
-});
-
-export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
-
-export function getEvaluatorMetricName(
-  evaluationName: string,
-  evaluatorName: string,
-): string {
-  return `tensorzero::evaluation_name::${evaluationName}::evaluator_name::${evaluatorName}`;
-}
-
-function getEvaluatorNameFromMetricName(metricName: string): string {
-  const parts = metricName.split("::");
-  return parts[parts.length - 1];
-}
-
-export const evaluationInfoResultSchema = z.object({
-  evaluation_run_id: z.string().uuid(),
-  evaluation_name: z.string(),
-  dataset_name: z.string(),
-  function_name: z.string(),
-  variant_name: z.string(),
-  created_at: z.string().datetime(),
-});
-
-export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;
+import type {
+  EvaluationResultRow,
+  EvaluationRunMetadata,
+  RunMetricMetadata,
+} from "~/types/tensorzero";
 
 // Define a type for consolidated metrics
 export type ConsolidatedMetric = {
@@ -68,11 +28,10 @@ export type ConsolidatedEvaluationResult = Omit<
  */
 export function consolidateEvaluationResults(
   evaluationResults: EvaluationResultRow[],
+  metricsConfig: Record<string, RunMetricMetadata>,
 ): ConsolidatedEvaluationResult[] {
-  // Create a map to store results by datapoint_id and evaluation_run_id
   const resultMap = new Map<string, ConsolidatedEvaluationResult>();
 
-  // Process each evaluation result
   for (const result of evaluationResults) {
     // This shouldn't happen in practice, but given the frontend type seemed incorrect, we add this
     // guard to be safe.
@@ -80,34 +39,79 @@ export function consolidateEvaluationResults(
       continue;
     }
 
+    const evaluator_name =
+      metricsConfig[result.metric_name]?.evaluator_name ?? result.metric_name;
+
+    const metric: ConsolidatedMetric = {
+      metric_name: result.metric_name,
+      metric_value: result.metric_value,
+      evaluator_name,
+      evaluator_inference_id: result.evaluator_inference_id ?? undefined,
+      is_human_feedback: result.is_human_feedback,
+    };
+
     const key = `${result.datapoint_id}:${result.evaluation_run_id}:${result.variant_name}`;
-    if (!resultMap.has(key)) {
-      // Create a new consolidated result without metric_name and metric_value
+    const existing = resultMap.get(key);
+    if (existing) {
+      existing.metrics.push(metric);
+    } else {
       const { metric_name, metric_value, ...baseResult } = result;
       resultMap.set(key, {
         ...baseResult,
-        metrics: [
-          {
-            metric_name,
-            metric_value,
-            evaluator_name: getEvaluatorNameFromMetricName(metric_name),
-            evaluator_inference_id: result.evaluator_inference_id ?? undefined,
-            is_human_feedback: result.is_human_feedback,
-          },
-        ],
-      });
-    } else {
-      // Add this metric to the existing result
-      const existingResult = resultMap.get(key)!;
-      existingResult.metrics.push({
-        metric_name: result.metric_name,
-        metric_value: result.metric_value,
-        evaluator_name: getEvaluatorNameFromMetricName(result.metric_name),
-        evaluator_inference_id: result.evaluator_inference_id ?? undefined,
-        is_human_feedback: result.is_human_feedback,
+        metrics: [metric],
       });
     }
   }
-  // Convert the map values to an array and return
+
   return Array.from(resultMap.values());
+}
+
+export interface MergedRunMetrics {
+  metrics: RunMetricMetadata[];
+  metricsConfig: Record<string, RunMetricMetadata>;
+  // Maps full metric_name → short evaluator_name. Keyed by full metric name
+  // so that the same evaluator appearing in different contexts (e.g. nested in
+  // a named evaluation vs. top-level) gets separate entries.
+  evaluatorMetricNames: Record<string, string>;
+}
+
+/**
+ * Merge metrics from multiple evaluation runs, taking the union keyed by metric name.
+ */
+export function mergeRunMetrics(
+  allMetadata: EvaluationRunMetadata[],
+): MergedRunMetrics {
+  const mergedMetricsMap = new Map<string, RunMetricMetadata>();
+  for (const runMeta of allMetadata) {
+    for (const metric of runMeta.metrics) {
+      const existing = mergedMetricsMap.get(metric.name);
+      if (!existing) {
+        mergedMetricsMap.set(metric.name, metric);
+      } else {
+        // Fill in missing optional fields from later entries
+        mergedMetricsMap.set(metric.name, {
+          ...metric,
+          evaluator_name: existing.evaluator_name ?? metric.evaluator_name,
+          optimize: existing.optimize ?? metric.optimize,
+        });
+      }
+    }
+  }
+  const metrics = [...mergedMetricsMap.values()].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
+  const metricsConfig: Record<string, RunMetricMetadata> = {};
+  for (const metric of metrics) {
+    metricsConfig[metric.name] = metric;
+  }
+
+  const evaluatorMetricNames: Record<string, string> = {};
+  for (const metric of metrics) {
+    if (metric.evaluator_name) {
+      evaluatorMetricNames[metric.name] = metric.evaluator_name;
+    }
+  }
+
+  return { metrics, metricsConfig, evaluatorMetricNames };
 }

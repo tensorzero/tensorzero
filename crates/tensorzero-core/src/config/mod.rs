@@ -1371,6 +1371,26 @@ impl Config {
         .into_iter()
         .collect::<HashMap<_, _>>();
 
+        if relay_mode && !is_config_snapshot {
+            let models_without_skip_relay: Vec<&Arc<str>> = loaded_models
+                .iter()
+                .filter(|(_, config)| !config.skip_relay)
+                .map(|(name, _)| name)
+                .collect();
+            if !models_without_skip_relay.is_empty() {
+                let names = models_without_skip_relay
+                    .iter()
+                    .map(|n| format!("`{n}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                tracing::warn!(
+                    "Relay mode is enabled but the following models do not have `skip_relay` set: {names}. \
+                     Their configured providers will not be used for inference — requests will be relayed instead. \
+                     Set `skip_relay = true` on models that should use their own providers directly."
+                );
+            }
+        }
+
         let loaded_embedding_models =
             try_join_all(embedding_models.into_iter().map(|(name, config)| async {
                 config
@@ -1630,6 +1650,7 @@ impl Config {
         }
 
         namespace::validate_namespaced_model_usage(&self.functions, &self.models)?;
+        namespace::validate_namespaced_variant_usage(&self.functions)?;
 
         for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
@@ -2441,6 +2462,9 @@ pub struct UninitializedVariantInfo {
     pub inner: UninitializedVariantConfig,
     #[serde(default)]
     pub timeouts: Option<TimeoutsConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub namespace: Option<Namespace>,
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
@@ -2518,6 +2542,7 @@ impl UninitializedVariantInfo {
         Ok(VariantInfo {
             inner,
             timeouts: self.timeouts.unwrap_or_default(),
+            namespace: self.namespace,
         })
     }
 }

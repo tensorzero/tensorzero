@@ -16,21 +16,23 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useSearchParams, useNavigate, useFetcher } from "react-router";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
-import type { SearchEvaluationRunResult } from "~/types/tensorzero";
+import type {
+  EvaluationRunInfoById as EvaluationRunInfo,
+  SearchEvaluationRunResult,
+} from "~/types/tensorzero";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
 interface EvalRunSelectorProps {
-  evaluationName: string;
+  functionName: string;
   selectedRunIdInfos: EvaluationRunInfo[];
   allowedRunInfos?: EvaluationRunInfo[]; // To be used if only a subset of runs are available,
   // for example if we're filtering by datapoint_id
 }
 
 export function EvalRunSelector({
-  evaluationName,
+  functionName,
   selectedRunIdInfos,
   allowedRunInfos,
 }: EvalRunSelectorProps) {
@@ -72,12 +74,9 @@ export function EvalRunSelector({
     : []; // If data itself is null/undefined, use an empty array
 
   // Update the URL with the selected run IDs
-  const updateSelectedRunIds = (runIdInfos: SearchEvaluationRunResult[]) => {
+  const updateSelectedRunIds = (runIds: string[]) => {
     const newParams = new URLSearchParams(searchParams);
-    newParams.set(
-      "evaluation_run_ids",
-      runIdInfos.map((info) => info.evaluation_run_id).join(","),
-    );
+    newParams.set("evaluation_run_ids", runIds.join(","));
     navigate(`?${newParams.toString()}`, { replace: true });
   };
 
@@ -90,13 +89,13 @@ export function EvalRunSelector({
 
     if (selectedRunIds.includes(runId)) {
       // Remove the run
-      const newSelectedRunIdInfos = selectedRunIdInfos.filter(
-        (info) => info.evaluation_run_id !== runId,
+      const newSelectedRunIds = selectedRunIds.filter(
+        (selectedRunId) => selectedRunId !== runId,
       );
-      updateSelectedRunIds(newSelectedRunIdInfos);
+      updateSelectedRunIds(newSelectedRunIds);
     } else if (canAddMore) {
       // Add the run only if we haven't reached the limit
-      updateSelectedRunIds([...selectedRunIdInfos, runInfo]);
+      updateSelectedRunIds([...selectedRunIds, runInfo.evaluation_run_id]);
     }
   };
 
@@ -111,7 +110,9 @@ export function EvalRunSelector({
       updateSelectedRunIds([]);
     } else {
       // Select all, but respect the maximum limit
-      const runsToSelect = availableRunInfos.slice(0, MAX_SELECTIONS);
+      const runsToSelect = availableRunInfos
+        .slice(0, MAX_SELECTIONS)
+        .map((info) => info.evaluation_run_id);
       updateSelectedRunIds(runsToSelect);
     }
   };
@@ -121,27 +122,25 @@ export function EvalRunSelector({
     // Stop the tooltip from triggering
     e.stopPropagation();
 
-    const newSelectedRunIdInfos = selectedRunIdInfos.filter(
-      (info) => info.evaluation_run_id !== runId,
+    const newSelectedRunIds = selectedRunIds.filter(
+      (selectedRunId) => selectedRunId !== runId,
     );
-    updateSelectedRunIds(newSelectedRunIdInfos);
+    updateSelectedRunIds(newSelectedRunIds);
   };
 
   const hasInitializedRuns = useRef(false);
   function loadRuns(query: string | null, args?: { debounce?: boolean }) {
-    if (evaluationName) {
-      const searchParams = new URLSearchParams();
-      searchParams.set("evaluation_name", evaluationName);
+    if (functionName) {
+      const nextSearchParams = new URLSearchParams();
+      nextSearchParams.set("function_name", functionName);
       if (query) {
-        searchParams.set("q", query);
+        nextSearchParams.set("q", query);
       }
       if (args?.debounce) {
-        searchParams.set("debounce", "");
+        nextSearchParams.set("debounce", "");
       }
       hasInitializedRuns.current = true;
-      loadRunsFetcher(
-        `/api/evaluations/search_runs/${evaluationName}?${searchParams}`,
-      );
+      loadRunsFetcher(`/api/evaluations/search_runs?${nextSearchParams}`);
     }
   }
 
@@ -172,7 +171,7 @@ export function EvalRunSelector({
           <PopoverContent className="w-96 p-0">
             <Command>
               <CommandInput
-                placeholder="Search by variant name or evaluation run ID..."
+                placeholder="Search by evaluation, variant, dataset, or run ID..."
                 value={searchValue}
                 onValueChange={(value) => {
                   setSearchValue(value);
@@ -204,13 +203,14 @@ export function EvalRunSelector({
                         const runIdSegment = getLastUuidSegment(
                           info.evaluation_run_id,
                         );
+                        const runLabel = `${info.variant_name} (${info.evaluation_name})`;
                         const isDisabled =
                           (!isSelected && !canAddMore) || isLoading;
 
                         return (
                           <CommandItem
                             key={info.evaluation_run_id}
-                            value={`${info.variant_name} ${info.evaluation_run_id}`}
+                            value={`${info.evaluation_name} ${info.variant_name} ${info.dataset_name} ${info.evaluation_run_id}`}
                             onSelect={() => toggleRun(info.evaluation_run_id)}
                             className={`flex items-center gap-2 ${
                               isDisabled ? "cursor-not-allowed opacity-50" : ""
@@ -220,9 +220,7 @@ export function EvalRunSelector({
                             <div
                               className={`${variantColor} h-3 w-3 rounded-full`}
                             />
-                            <span className="flex-1 truncate">
-                              {info.variant_name}
-                            </span>
+                            <span className="flex-1 truncate">{runLabel}</span>
                             <span className="text-muted-foreground text-xs">
                               {runIdSegment}
                             </span>

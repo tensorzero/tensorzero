@@ -7,11 +7,12 @@ license.workspace = true
 
 [[test]]
 name = "e2e"
-path = "tests/tests.rs"
+path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-derive = { path = "../tensorzero-derive" }
 async-trait = { workspace = true }
 clap = { workspace = true }
 url = { workspace = true }
@@ -22,7 +23,9 @@ tokio = { workspace = true }
 tokio-util = "0.7"
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error.workspace = true
 uuid = { workspace = true }
+chrono = { workspace = true }
 futures = { workspace = true }
 regex = { workspace = true }
 indicatif = "0.18.4"
@@ -30,6 +33,8 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+tensorzero = { path = "../tensorzero-client", features = ["e2e_tests"] }
+googletest = { workspace = true }
 
 [lints]
 workspace = true

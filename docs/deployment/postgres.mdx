@@ -1,16 +1,13 @@
 ---
 title: Deploy Postgres (optional)
-description: Learn how to deploy Postgres for advanced TensorZero features.
+description: Learn how to deploy Postgres for observability and other advanced features.
 ---
 
-<Note>
+The TensorZero Gateway can optionally collect inference and feedback data for observability, optimization, evaluation, and experimentation.
+Postgres is the simplest way to get started.
 
-**Most TensorZero deployments will not require Postgres.**
-
-</Note>
-
-TensorZero only requires Postgres for certain advanced features.
-Most notably, you need to deploy Postgres to [run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [set up auth for TensorZero](/operations/set-up-auth-for-tensorzero).
+If you're handling >100 inferences per second, consider [deploying ClickHouse](/deployment/clickhouse) instead.
+For such deployments, Postgres is only necessary for advanced features like [running adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [setting up auth for TensorZero](/operations/set-up-auth-for-tensorzero).
 
 ## Set up
 
@@ -29,9 +26,13 @@ If you find any compatibility issues, please open a detailed [GitHub Discussion]
 
 </Step>
 
-<Step title="Set up pg_cron">
+<Step title="Set up Postgres extensions">
 
-TensorZero requires the [`pg_cron`](https://github.com/citusdata/pg_cron) extension.
+TensorZero requires the following Postgres extensions:
+
+- [`pg_cron`](https://github.com/citusdata/pg_cron)
+- [`pg_trgm`](https://www.postgresql.org/docs/current/pgtrgm.html)
+- [`pgvector`](https://github.com/pgvector/pgvector)
 
 <Warning>
 
@@ -45,17 +46,11 @@ Here are example setup instructions for some popular Postgres providers.
 
 <Accordion title="Self-Hosted Postgres">
 
-<Steps>
+For convenience, we publish [`tensorzero/postgres`](https://hub.docker.com/r/tensorzero/postgres) Docker images that bundle all required extensions on top of the official Postgres image.
 
-<Step title="Install pg_cron">
+If you prefer to set up extensions yourself, install [`pg_cron`](https://github.com/citusdata/pg_cron#installing-pg_cron), [`pgvector`](https://github.com/pgvector/pgvector#installation), and [`pg_trgm`](https://www.postgresql.org/docs/current/pgtrgm.html).
 
-Follow the [official instructions](https://github.com/citusdata/pg_cron#installing-pg_cron) to install `pg_cron`.
-
-</Step>
-
-<Step title="Configure postgresql.conf">
-
-Add `pg_cron` to `shared_preload_libraries` and configure it to use your TensorZero database by setting `cron.database_name`:
+Regardless of how you install the extensions, you must set `cron.database_name` to the database used by TensorZero. You can do this via a CLI flag (`postgres -c cron.database_name=tensorzero`) or in `postgresql.conf`:
 
 ```ini title="postgresql.conf"
 shared_preload_libraries = 'pg_cron'
@@ -65,24 +60,11 @@ shared_preload_libraries = 'pg_cron'
 cron.database_name = 'tensorzero'
 ```
 
-</Step>
-
-<Step title="Create the extension and grant permissions (optional)">
-
 If you use a non-default Postgres user for TensorZero, connect to your database and run:
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
--- Replace `your_username` with TensorZero's Postgres user
 GRANT USAGE ON SCHEMA cron TO your_username;
 ```
-
-</Step>
-
-<Step title="Restart Postgres"></Step>
-
-</Steps>
 
 </Accordion>
 
@@ -98,12 +80,14 @@ Create a custom parameter group if you haven't already. Add `pg_cron` to the `sh
 
 <Step title="Reboot the RDS instance"></Step>
 
-<Step title="Create the extension and grant permissions">
+<Step title="Create the extensions and grant permissions">
 
 Connect to your database and run:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Replace `your_username` with TensorZero's Postgres user
 GRANT USAGE ON SCHEMA cron TO your_username;
@@ -127,12 +111,14 @@ Set the `cloudsql.enable_pg_cron` [database flag](https://docs.cloud.google.com/
 
 </Step>
 
-<Step title="Create the extension and grant permissions">
+<Step title="Create the extensions and grant permissions">
 
 Connect to your database and run:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 If TensorZero uses a non-default user, grant permissions:
@@ -152,10 +138,12 @@ See the [Cloud SQL documentation](https://docs.cloud.google.com/sql/docs/postgre
 
 <Accordion title="Supabase">
 
-Enable `pg_cron` from the Database Extensions page in your Supabase dashboard, or run:
+Enable `pg_cron`, `vector`, and `pg_trgm` from the Database Extensions page in your Supabase dashboard, or run:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 See the [Supabase documentation](https://supabase.com/docs/guides/cron) for more details.
@@ -166,18 +154,20 @@ See the [Supabase documentation](https://supabase.com/docs/guides/cron) for more
 
 <Steps>
 
-<Step title="Enable pg_cron in the dashboard">
+<Step title="Enable extensions in the dashboard">
 
-In the PlanetScale dashboard, select your database and navigate to **Clusters**. Select the branch to configure, then go to the **Extensions** tab. Enable `pg_cron` and set `cron.database_name` to your TensorZero database name, then click **Queue extension changes** and **Apply changes**.
+In the PlanetScale dashboard, select your database and navigate to **Clusters**. Select the branch to configure, then go to the **Extensions** tab. Enable `pg_cron`, `vector`, and `pg_trgm`, set `cron.database_name` to your TensorZero database name, then click **Queue extension changes** and **Apply changes**.
 
 </Step>
 
-<Step title="Create the extension">
+<Step title="Create the extensions">
 
 Connect to your database and run:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 </Step>
@@ -209,7 +199,7 @@ TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
 
 <Warning>
 
-**Unlike with ClickHouse, TensorZero does not automatically apply Postgres migrations.**
+**TensorZero does not automatically apply Postgres migrations.**
 
 </Warning>
 
@@ -251,17 +241,3 @@ You should re-run this command when upgrading TensorZero from an earlier version
 </Step>
 
 </Steps>
-
-## Configure Postgres for dynamic in-context learning (optional)
-
-When Postgres is configured as the primary data store for TensorZero, `experimental_dynamic_in_context_learning` variants (see [Dynamic In-Context Learning (DICL)](/optimization/dynamic-in-context-learning-dicl)) require the [`pgvector`](https://github.com/pgvector/pgvector) extension.
-If you plan to use DICL, you must install `pgvector` in your Postgres instance.
-
-Most managed Postgres providers include `pgvector` out of the box.
-For self-hosted Postgres, follow the [pgvector installation instructions](https://github.com/pgvector/pgvector#installation).
-
-When applying Postgres migrations, pass the `--enable-optimization-postgres-migrations` flag to apply the additional schema:
-
-```bash
-docker compose run --rm gateway --run-postgres-migrations --enable-optimization-postgres-migrations
-```

@@ -25,7 +25,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
+      clickhouse-tests-pr: ${{ steps.filter.outputs.clickhouse-tests-pr || 'true' }}
       client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
       docs: ${{ steps.filter.outputs.docs || 'true' }}
@@ -39,13 +40,10 @@ jobs:
         with:
           predicate-quantifier: "every"
           filters: |
-            clickhouse-tests:
-              - '**'
-              - '!**/README.md'
-              - '!docs/**'
-              - '!examples/**'
-              - '!recipes/**'
-              - '!ui/**'
+            clickhouse-tests-merge-queue:
+              - 'crates/**'
+            clickhouse-tests-pr:
+              - 'crates/tensorzero-core/src/db/**'
             client-tests:
               - '**'
               - '!**/README.md'
@@ -852,7 +850,14 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: >-
+      ${{
+        (
+          (github.event_name == 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-merge-queue == 'true') ||
+          (github.event_name != 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-pr == 'true')
+        ) &&
+        (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
+      }}
     permissions:
       contents: read
       actions: read
@@ -1166,7 +1171,7 @@ jobs:
 
   build-gateway-e2e-container:
     needs: [detect-changes]
-    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    if: ${{ github.event_name == 'merge_group' || (needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))) }}
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1214,7 +1219,7 @@ jobs:
 
   build-ui-container:
     needs: [detect-changes]
-    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    if: ${{ github.event_name == 'merge_group' || (needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))) }}
     uses: ./.github/workflows/build-ui-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1319,24 +1324,24 @@ jobs:
 
       - name: Set up .env file for production deployment tests
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> ci/check-production-deployment-docker-compose/.env
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+        run: ci/check-production-deployment-docker-compose/run.sh
 
       - name: Print Docker compose logs
         if: always()
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml logs -t
 
       - name: Take down docker compose for production deployment tests
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml down
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
@@ -1393,28 +1398,12 @@ jobs:
   autopilot-e2e:
     permissions:
       contents: read
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container, publish-dev-docker-hub-images]
+    if: needs.detect-changes.outputs.code == 'true' && github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [detect-changes, build-gateway-e2e-container, build-ui-container]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
-
-  publish-dev-docker-hub-images:
-    needs: [detect-changes]
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
-    permissions:
-      contents: read
-      actions: read
-      attestations: write
-      id-token: write
-      packages: write
-    uses: ./.github/workflows/docker-hub-publish.yml
-    with:
-      is_dev: true
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   check-docs-broken-links:
     needs: [detect-changes]
@@ -1462,8 +1451,15 @@ jobs:
         run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
+  # This job queries the GitHub API for all jobs in this workflow run and asserts
+  # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
+  # lists defined in ci/check-all-general-jobs-passed.sh.
+  # The `needs` list below is for scheduling only (so this job waits for others
+  # to finish). The actual pass/fail logic is in the script.
   check-all-general-jobs-passed:
-    permissions: {}
+    permissions:
+      actions: read
+      contents: read
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -1493,7 +1489,6 @@ jobs:
         mock-optimization-tests,
         mocked-batch-tests,
         postgres-tests,
-        publish-dev-docker-hub-images,
         rust-build,
         rust-test,
         ui-tests,
@@ -1504,11 +1499,11 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - name: Print all job results
-        run: |
-          echo "'needs': ${{ toJson(needs) }}"
-          echo "github.event_name: ${{ github.event_name }}"
-      # Jobs may be intentionally skipped by the detect-changes path filter (e.g. docs-only or code-only changes).
-      # We only fail on actual failures or cancellations.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          sparse-checkout: ci/check-all-general-jobs-passed.sh
+          sparse-checkout-cone-mode: false
+      - name: Check all jobs passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/check-all-general-jobs-passed.sh
