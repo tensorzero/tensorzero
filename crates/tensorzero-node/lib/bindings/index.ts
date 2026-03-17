@@ -155,6 +155,7 @@ export * from "./FloatComparisonOperator";
 export * from "./FloatMetricFeedbackRow";
 export * from "./FloatMetricFilter";
 export * from "./FreeResponseAnswer";
+export * from "./FreeResponseQuestion";
 export * from "./FunctionConfig";
 export * from "./FunctionConfigChat";
 export * from "./FunctionConfigJson";

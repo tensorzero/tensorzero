@@ -723,7 +723,17 @@ pub struct EventPayloadUserQuestion {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EventPayloadUserQuestionInner {
     MultipleChoice(MultipleChoiceQuestion),
-    FreeResponse,
+    FreeResponse(FreeResponseQuestion),
+}
+
+/// A free-response question with an optional pre-filled value.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct FreeResponseQuestion {
+    /// Pre-filled text shown in the input. The user can edit or submit as-is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_value: Option<String>,
 }
 
 /// A multiple choice question with options.
