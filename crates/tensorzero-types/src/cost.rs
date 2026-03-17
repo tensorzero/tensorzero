@@ -18,9 +18,9 @@ pub struct UninitializedCostConfigEntry<P = CostPointerConfig> {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UninitializedCostRate {
-    #[serde(default, with = "rust_decimal::serde::float_option")]
+    #[serde(default, with = "crate::serde_utils::decimal_float_option")]
     pub cost_per_million: Option<Decimal>,
-    #[serde(default, with = "rust_decimal::serde::float_option")]
+    #[serde(default, with = "crate::serde_utils::decimal_float_option")]
     pub cost_per_unit: Option<Decimal>,
 }
 

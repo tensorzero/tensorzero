@@ -434,7 +434,7 @@ impl GepaLaunchRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct GepaLaunchResponse {
     pub task_id: String,
 }
@@ -460,7 +460,7 @@ pub enum GepaGetResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct GepaProgress {
     pub current_iteration: u32,
     pub max_iterations: u32,
@@ -468,7 +468,7 @@ pub struct GepaProgress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "pyo3", pyclass)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GepaEvaluatorStats {

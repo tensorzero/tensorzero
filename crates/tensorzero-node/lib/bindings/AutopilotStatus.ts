@@ -9,5 +9,7 @@ export type AutopilotStatus =
   | { status: "waiting_for_tool_call_authorization" }
   | { status: "waiting_for_tool_execution" }
   | { status: "waiting_for_user_questions_answers" }
+  | { status: "waiting_for_auto_eval_example_labeling_answers" }
+  | { status: "waiting_for_auto_eval_behavior_spec_answers" }
   | { status: "waiting_for_retry" }
   | { status: "failed" };

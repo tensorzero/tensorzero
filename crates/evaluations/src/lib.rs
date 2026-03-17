@@ -56,6 +56,7 @@ use uuid::Uuid;
 pub mod cli;
 pub mod evaluators;
 pub mod helpers;
+pub mod sse_events;
 pub mod stats;
 pub mod stopping;
 pub mod types;
@@ -173,17 +174,17 @@ pub async fn run_evaluation(
     // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
         bail!(
-            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+            "Cannot provide both `dataset_name` and `datapoint_ids`. Please specify one or the other."
         );
     }
     if args.dataset_name.is_none() && datapoint_ids.is_empty() {
-        bail!("Must provide either dataset_name or datapoint_ids.");
+        bail!("Must provide either `dataset_name` or `datapoint_ids`.");
     }
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && args.max_datapoints.is_some() {
         bail!(
-            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+            "Cannot provide both `datapoint_ids` and `max_datapoints`. `max_datapoints` can only be used with `dataset_name`."
         );
     }
 
@@ -589,17 +590,17 @@ pub async fn run_evaluation_core_streaming(
     // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
         bail!(
-            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+            "Cannot provide both `dataset_name` and `datapoint_ids`. Please specify one or the other."
         );
     }
     if args.dataset_name.is_none() && datapoint_ids.is_empty() {
-        bail!("Must provide either dataset_name or datapoint_ids.");
+        bail!("Must provide either `dataset_name` or `datapoint_ids`.");
     }
 
     // Validate that max_datapoints is not used with datapoint_ids
     if !datapoint_ids.is_empty() && max_datapoints.is_some() {
         bail!(
-            "Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name."
+            "Cannot provide both `datapoint_ids` and `max_datapoints`. `max_datapoints` can only be used with `dataset_name`."
         );
     }
 

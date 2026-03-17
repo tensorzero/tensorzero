@@ -64,10 +64,11 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams,
-    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, Input, LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-    OptimizationDataSource, OptimizationJobHandle, OrderBy, PostgresConfig, RenderedSample,
-    TensorZeroError, Tool, WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
+    ClientSecretString, DynamicToolParams, FeedbackParams, GepaLaunchRequest, GepaLaunchResponse,
+    InferenceOutput, InferenceParams, InferenceStream, Input, LaunchOptimizationParams,
+    LaunchOptimizationWorkflowParams, OptimizationDataSource, OptimizationJobHandle, OrderBy,
+    PostgresConfig, RenderedSample, RunEvaluationHttpParams, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams, err_to_http, observability::LogFormat,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -126,6 +127,9 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;
+    m.add_class::<GepaLaunchResponse>()?;
+    m.add_class::<tensorzero_core::optimization::gepa::GepaProgress>()?;
+    m.add_class::<tensorzero_core::optimization::gepa::GepaEvaluatorStats>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -196,6 +200,171 @@ fn _start_http_gateway(
         Ok(tokio_block_on_without_gil(py, gateway_fut)
             .map_err(|e| convert_error(py, TensorZeroError::Other { source: e }))?
             .into_bound_py_any(py)?)
+    }
+}
+
+// ================================================================
+// GEPA namespace classes
+// ================================================================
+
+#[pyclass(frozen)]
+struct GepaNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl GepaNamespace {
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
+    fn launch(
+        &self,
+        py: Python<'_>,
+        function_name: String,
+        analysis_model: String,
+        mutation_model: String,
+        max_iterations: u32,
+        dataset_name: Option<String>,
+        train_dataset_name: Option<String>,
+        val_dataset_name: Option<String>,
+        evaluation_name: Option<String>,
+        evaluators: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        seed: Option<u32>,
+        include_inference_for_mutation: Option<bool>,
+        max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
+    ) -> PyResult<GepaLaunchResponse> {
+        let request = GepaLaunchRequest {
+            function_name,
+            dataset_name,
+            train_dataset_name,
+            val_dataset_name,
+            evaluation_name,
+            evaluators,
+            analysis_model,
+            mutation_model,
+            initial_variants,
+            max_iterations,
+            variant_prefix,
+            batch_size,
+            seed,
+            include_inference_for_mutation,
+            max_concurrency,
+            max_datapoints,
+        };
+        let client = self.client.clone();
+        let fut = client.gepa_launch(request);
+        tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))
+    }
+
+    #[pyo3(signature = (*, task_id))]
+    fn get(&self, py: Python<'_>, task_id: String) -> PyResult<Py<PyAny>> {
+        let client = self.client.clone();
+        let fut = client.gepa_get(&task_id);
+        let response = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
+        serialize_to_dict(py, &response)
+    }
+}
+
+#[pyclass(frozen)]
+struct AsyncGepaNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl AsyncGepaNamespace {
+    #[expect(clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, analysis_model, mutation_model, max_iterations, dataset_name=None, train_dataset_name=None, val_dataset_name=None, evaluation_name=None, evaluators=None, initial_variants=None, variant_prefix=None, batch_size=None, seed=None, include_inference_for_mutation=None, max_concurrency=None, max_datapoints=None))]
+    fn launch<'py>(
+        &self,
+        py: Python<'py>,
+        function_name: String,
+        analysis_model: String,
+        mutation_model: String,
+        max_iterations: u32,
+        dataset_name: Option<String>,
+        train_dataset_name: Option<String>,
+        val_dataset_name: Option<String>,
+        evaluation_name: Option<String>,
+        evaluators: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        seed: Option<u32>,
+        include_inference_for_mutation: Option<bool>,
+        max_concurrency: Option<u32>,
+        max_datapoints: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let request = GepaLaunchRequest {
+            function_name,
+            dataset_name,
+            train_dataset_name,
+            val_dataset_name,
+            evaluation_name,
+            evaluators,
+            analysis_model,
+            mutation_model,
+            initial_variants,
+            max_iterations,
+            variant_prefix,
+            batch_size,
+            seed,
+            include_inference_for_mutation,
+            max_concurrency,
+            max_datapoints,
+        };
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let res = client.gepa_launch(request).await;
+            match res {
+                Ok(response) => Ok(response),
+                Err(e) => Python::attach(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+
+    #[pyo3(signature = (*, task_id))]
+    fn get<'py>(&self, py: Python<'py>, task_id: String) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let res = client.gepa_get(&task_id).await;
+            match res {
+                Ok(response) => Python::attach(|py| serialize_to_dict(py, &response)),
+                Err(e) => Python::attach(|py| Err(convert_error(py, e))),
+            }
+        })
+    }
+}
+
+#[pyclass(frozen)]
+struct OptimizationNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl OptimizationNamespace {
+    #[getter]
+    fn gepa(&self) -> GepaNamespace {
+        GepaNamespace {
+            client: self.client.clone(),
+        }
+    }
+}
+
+#[pyclass(frozen)]
+struct AsyncOptimizationNamespace {
+    client: Client,
+}
+
+#[pymethods]
+impl AsyncOptimizationNamespace {
+    #[getter]
+    fn gepa(&self) -> AsyncGepaNamespace {
+        AsyncGepaNamespace {
+            client: self.client.clone(),
+        }
     }
 }
 
@@ -574,6 +743,47 @@ impl BaseTensorZeroGateway {
     }
 }
 
+/// Parses the adaptive_stopping Python dict into a HashMap of precision targets.
+fn parse_adaptive_stopping(
+    adaptive_stopping: Option<&Bound<'_, PyDict>>,
+) -> PyResult<HashMap<String, f32>> {
+    let Some(adaptive_stopping_dict) = adaptive_stopping else {
+        return Ok(HashMap::new());
+    };
+    let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") else {
+        return Ok(HashMap::new());
+    };
+    let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+            "`adaptive_stopping[\"precision\"]` must be a dictionary",
+        )
+    })?;
+    let mut map = HashMap::new();
+    for (key, value) in precision_dict_bound.iter() {
+        let key_str: String = key.extract()?;
+        let value_f64: f64 = value.extract()?;
+        map.insert(key_str, value_f64 as f32);
+    }
+    Ok(map)
+}
+
+/// Parses datapoint IDs from strings to UUIDs.
+fn parse_datapoint_ids(datapoint_ids: Option<Vec<String>>) -> PyResult<Option<Vec<Uuid>>> {
+    datapoint_ids
+        .map(|ids| {
+            ids.iter()
+                .map(|s| {
+                    Uuid::parse_str(s).map_err(|e| {
+                        pyo3::exceptions::PyValueError::new_err(format!(
+                            "Invalid UUID in datapoint_ids: {e}"
+                        ))
+                    })
+                })
+                .collect::<PyResult<Vec<Uuid>>>()
+        })
+        .transpose()
+}
+
 /// Resolved evaluation configuration from either the old or new request path.
 struct ResolvedEvaluationConfig {
     function_name: String,
@@ -581,6 +791,120 @@ struct ResolvedEvaluationConfig {
     function_config: EvaluationFunctionConfig,
     /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
     evaluation_name: Option<String>,
+}
+
+/// Builds `EvaluationCoreArgs` for running an evaluation in embedded mode.
+#[expect(clippy::too_many_arguments)]
+fn build_embedded_evaluation_args(
+    client: &Client,
+    app_state: &tensorzero_core::utils::gateway::AppStateData,
+    resolved: ResolvedEvaluationConfig,
+    dataset_name: Option<String>,
+    datapoint_ids: Option<Vec<Uuid>>,
+    variant: EvaluationVariant,
+    concurrency: usize,
+    inference_cache: tensorzero_core::cache::CacheEnabledMode,
+) -> EvaluationCoreArgs {
+    let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+
+    EvaluationCoreArgs {
+        inference_executor,
+        db: Arc::new(app_state.get_delegating_database()),
+        function_name: resolved.function_name,
+        function_config: resolved.function_config,
+        evaluators: resolved.evaluators,
+        evaluation_name: resolved.evaluation_name,
+        evaluation_run_id: uuid::Uuid::now_v7(),
+        dataset_name,
+        datapoint_ids,
+        variant,
+        concurrency,
+        inference_cache,
+        tags: HashMap::new(),
+    }
+}
+
+/// Builds `RunEvaluationHttpParams` for running an evaluation over HTTP.
+///
+/// Accepts either `evaluation_name` or `function_name` + `evaluator_names` to identify the evaluation,
+/// matching the gateway's `EvaluationIdentifier` untagged enum.
+#[expect(clippy::too_many_arguments)]
+fn build_http_evaluation_params(
+    evaluation_name: Option<String>,
+    function_name: Option<String>,
+    evaluator_names: Option<Vec<String>>,
+    dataset_name: Option<String>,
+    datapoint_ids: Option<Vec<Uuid>>,
+    variant: EvaluationVariant,
+    concurrency: usize,
+    inference_cache: String,
+    max_datapoints: Option<u32>,
+    precision_targets_map: HashMap<String, f32>,
+) -> PyResult<RunEvaluationHttpParams> {
+    let identifier = match (evaluation_name, function_name, evaluator_names) {
+        (Some(evaluation_name), None, None) => {
+            tensorzero_rust::HttpEvaluationIdentifier::NamedEvaluation { evaluation_name }
+        }
+        (None, Some(function_name), Some(evaluator_names)) => {
+            tensorzero_rust::HttpEvaluationIdentifier::Evaluators {
+                function_name,
+                evaluator_names,
+            }
+        }
+        _ => {
+            return Err(PyValueError::new_err(
+                "Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+            ));
+        }
+    };
+
+    let concurrency: u32 = concurrency.try_into().map_err(|_| {
+        PyValueError::new_err(format!(
+            "`concurrency` must fit in a u32 (max {}), got {concurrency}",
+            u32::MAX
+        ))
+    })?;
+
+    // Client-side validation matching the server-side checks in evaluations::run_evaluation_core_streaming
+    let has_datapoint_ids = datapoint_ids.as_ref().is_some_and(|ids| !ids.is_empty());
+    if dataset_name.is_some() && has_datapoint_ids {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Cannot provide both `dataset_name` and `datapoint_ids`. Please specify one or the other.",
+        ));
+    }
+    if dataset_name.is_none() && !has_datapoint_ids {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Must provide either `dataset_name` or `datapoint_ids`.",
+        ));
+    }
+    if has_datapoint_ids && max_datapoints.is_some() {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Cannot provide both `datapoint_ids` and `max_datapoints`. `max_datapoints` can only be used with `dataset_name`.",
+        ));
+    }
+
+    let (variant_name, internal_dynamic_variant_config) = match variant {
+        EvaluationVariant::Name(name) => (Some(name), None),
+        EvaluationVariant::Info(info) => (None, Some(*info)),
+    };
+
+    let precision_targets = if precision_targets_map.is_empty() {
+        None
+    } else {
+        Some(precision_targets_map)
+    };
+
+    Ok(RunEvaluationHttpParams {
+        identifier,
+        dataset_name,
+        datapoint_ids,
+        variant_name,
+        concurrency,
+        inference_cache,
+        internal_dynamic_variant_config,
+        max_datapoints,
+        precision_targets,
+    })
 }
 
 /// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
@@ -657,13 +981,10 @@ fn construct_evaluation_variant(
     internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     variant_name: Option<String>,
 ) -> PyResult<EvaluationVariant> {
-    // Deserialize internal_dynamic_variant_config if provided
     let internal_dynamic_variant_config: Option<UninitializedVariantInfo> =
-        if let Some(config) = internal_dynamic_variant_config {
-            Some(deserialize_from_pyobj(py, config)?)
-        } else {
-            None
-        };
+        internal_dynamic_variant_config
+            .map(|config| deserialize_from_pyobj(py, config))
+            .transpose()?;
 
     match (internal_dynamic_variant_config, variant_name) {
         (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
@@ -1273,8 +1594,6 @@ impl TensorZeroGateway {
 
     /// Run a tensorzero Evaluation
     ///
-    /// This function is only available in EmbeddedGateway mode.
-    ///
     /// # Arguments
     ///
     /// * `evaluation_name` - Name of a configured evaluation (mutually exclusive with `function_name`/`evaluator_names`).
@@ -1325,94 +1644,72 @@ impl TensorZeroGateway {
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
-        // Get app state data
-        let app_state = client.get_app_state_data().ok_or_else(|| {
-            pyo3::exceptions::PyRuntimeError::new_err("Client is not in EmbeddedGateway mode")
-        })?;
-
-        let ResolvedEvaluationConfig {
-            function_name: resolved_function_name,
-            evaluators,
-            function_config,
-            evaluation_name: resolved_evaluation_name,
-        } = resolve_evaluation_config(app_state, evaluation_name, function_name, evaluator_names)?;
-
-        let evaluation_run_id = uuid::Uuid::now_v7();
-
-        let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
-            deserialize_from_pyobj(
-                this.py(),
-                &inference_cache.into_pyobject(this.py())?.into_any(),
-            )?;
-
         let variant =
             construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
 
         // Parse adaptive_stopping config from Python dict
-        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
-            // Extract the "precision" field from adaptive_stopping dict
-            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
-                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                        "adaptive_stopping['precision'] must be a dictionary",
-                    )
-                })?;
-
-                let mut map = std::collections::HashMap::new();
-                for (key, value) in precision_dict_bound.iter() {
-                    let key_str: String = key.extract()?;
-                    let value_f64: f64 = value.extract()?;
-                    map.insert(key_str, value_f64 as f32);
-                }
-                map
-            } else {
-                HashMap::new()
-            }
-        } else {
-            HashMap::new()
-        };
+        let precision_targets_map = parse_adaptive_stopping(adaptive_stopping)?;
 
         // Parse datapoint_ids from strings to UUIDs (keeping as Option)
-        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
-            .map(|ids| {
-                ids.iter()
-                    .map(|s| {
-                        Uuid::parse_str(s).map_err(|e| {
-                            pyo3::exceptions::PyValueError::new_err(format!(
-                                "Invalid UUID in datapoint_ids: {e}"
-                            ))
-                        })
-                    })
-                    .collect::<PyResult<Vec<Uuid>>>()
-            })
-            .transpose()?;
+        let datapoint_ids: Option<Vec<Uuid>> = parse_datapoint_ids(datapoint_ids)?;
 
-        // Wrap the client in ClientInferenceExecutor for use with evaluations
-        let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
+        let result = if let Some(app_state) = client.get_app_state_data() {
+            // Embedded mode: run evaluation directly
+            let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
+                deserialize_from_pyobj(
+                    this.py(),
+                    &inference_cache.into_pyobject(this.py())?.into_any(),
+                )?;
 
-        let core_args = EvaluationCoreArgs {
-            inference_executor,
-            db: Arc::new(app_state.get_delegating_database()),
-            function_name: resolved_function_name,
-            function_config,
-            evaluators: evaluators.clone(),
-            evaluation_name: resolved_evaluation_name,
-            evaluation_run_id,
-            dataset_name,
-            datapoint_ids,
-            variant,
-            concurrency,
-            inference_cache: inference_cache_enum,
-            tags: HashMap::new(),
+            let resolved = resolve_evaluation_config(
+                app_state,
+                evaluation_name,
+                function_name,
+                evaluator_names,
+            )?;
+
+            let core_args = build_embedded_evaluation_args(
+                &client,
+                app_state,
+                resolved,
+                dataset_name,
+                datapoint_ids,
+                variant,
+                concurrency,
+                inference_cache_enum,
+            );
+
+            let stream_result = tokio_block_on_without_gil(
+                this.py(),
+                run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map),
+            )
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+            })?;
+
+            tensorzero_rust::ClientEvaluationStreamResult {
+                receiver: stream_result.receiver,
+                run_info: stream_result.run_info,
+                evaluators: stream_result.evaluators,
+            }
+        } else {
+            // HTTP mode: use SSE endpoint
+            let params = build_http_evaluation_params(
+                evaluation_name,
+                function_name,
+                evaluator_names,
+                dataset_name,
+                datapoint_ids,
+                variant,
+                concurrency,
+                inference_cache,
+                max_datapoints,
+                precision_targets_map,
+            )?;
+
+            tokio_block_on_without_gil(this.py(), client.run_evaluation_sse(params))
+                .map_err(|e| convert_error(this.py(), e))?
         };
-
-        let result = tokio_block_on_without_gil(
-            this.py(),
-            run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map),
-        )
-        .map_err(|e| {
-            pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-        })?;
 
         Ok(EvaluationJobHandler {
             receiver: Mutex::new(result.receiver),
@@ -1648,6 +1945,13 @@ impl TensorZeroGateway {
         match tokio_block_on_without_gil(this.py(), fut) {
             Ok(status) => Ok(OptimizationJobInfoPyClass::new(status)),
             Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
+
+    #[getter]
+    fn optimization(this: PyRef<'_, Self>) -> OptimizationNamespace {
+        OptimizationNamespace {
+            client: this.as_super().client.clone(),
         }
     }
 }
@@ -2320,8 +2624,6 @@ impl AsyncTensorZeroGateway {
 
     /// Run a tensorzero Evaluation
     ///
-    /// This function is only available in EmbeddedGateway mode.
-    ///
     /// # Arguments
     ///
     /// * `evaluation_name` - Name of a configured evaluation (mutually exclusive with `function_name`/`evaluator_names`).
@@ -2372,99 +2674,96 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
-        let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
-            deserialize_from_pyobj(
-                this.py(),
-                &inference_cache.into_pyobject(this.py())?.into_any(),
-            )?;
-
         let variant =
             construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
 
         // Parse adaptive_stopping config from Python dict
-        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
-            // Extract the "precision" field from adaptive_stopping dict
-            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
-                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                        "adaptive_stopping['precision'] must be a dictionary",
+        let precision_targets_map = parse_adaptive_stopping(adaptive_stopping)?;
+
+        // Parse datapoint_ids from strings to UUIDs
+        let datapoint_ids: Option<Vec<Uuid>> = parse_datapoint_ids(datapoint_ids)?;
+
+        // Determine mode before entering the async block
+        let is_embedded = client.get_app_state_data().is_some();
+
+        // Parse inference_cache for embedded mode only (server-side validates for HTTP)
+        let inference_cache_enum: Option<tensorzero_core::cache::CacheEnabledMode> = if is_embedded
+        {
+            Some(deserialize_from_pyobj(
+                this.py(),
+                &inference_cache.clone().into_pyobject(this.py())?.into_any(),
+            )?)
+        } else {
+            None
+        };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let result = if is_embedded {
+                // Embedded mode: run evaluation directly
+                let app_state = client.get_app_state_data().ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err(
+                        "Client is not in EmbeddedGateway mode",
                     )
                 })?;
 
-                let mut map = std::collections::HashMap::new();
-                for (key, value) in precision_dict_bound.iter() {
-                    let key_str: String = key.extract()?;
-                    let value_f64: f64 = value.extract()?;
-                    map.insert(key_str, value_f64 as f32);
-                }
-                map
-            } else {
-                HashMap::new()
-            }
-        } else {
-            HashMap::new()
-        };
+                let inference_cache_enum = inference_cache_enum.ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err(
+                        "inference_cache_enum should be Some in embedded mode",
+                    )
+                })?;
 
-        // Parse datapoint_ids from strings to UUIDs
-        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
-            .map(|ids| {
-                ids.iter()
-                    .map(|s| {
-                        Uuid::parse_str(s).map_err(|e| {
-                            pyo3::exceptions::PyValueError::new_err(format!(
-                                "Invalid UUID in datapoint_ids: {e}"
+                let resolved = resolve_evaluation_config(
+                    app_state,
+                    evaluation_name,
+                    function_name,
+                    evaluator_names,
+                )?;
+
+                let core_args = build_embedded_evaluation_args(
+                    &client,
+                    app_state,
+                    resolved,
+                    dataset_name,
+                    datapoint_ids,
+                    variant,
+                    concurrency,
+                    inference_cache_enum,
+                );
+
+                let stream_result =
+                    run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
+                        .await
+                        .map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Evaluation failed: {e}"
                             ))
-                        })
-                    })
-                    .collect::<PyResult<Vec<Uuid>>>()
-            })
-            .transpose()?;
+                        })?;
 
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            // Get app state data
-            let app_state = client.get_app_state_data().ok_or_else(|| {
-                pyo3::exceptions::PyRuntimeError::new_err("Client is not in EmbeddedGateway mode")
-            })?;
+                tensorzero_rust::ClientEvaluationStreamResult {
+                    receiver: stream_result.receiver,
+                    run_info: stream_result.run_info,
+                    evaluators: stream_result.evaluators,
+                }
+            } else {
+                // HTTP mode: use SSE endpoint
+                let params = build_http_evaluation_params(
+                    evaluation_name,
+                    function_name,
+                    evaluator_names,
+                    dataset_name,
+                    datapoint_ids,
+                    variant,
+                    concurrency,
+                    inference_cache,
+                    max_datapoints,
+                    precision_targets_map,
+                )?;
 
-            let ResolvedEvaluationConfig {
-                function_name: resolved_function_name,
-                evaluators,
-                function_config,
-                evaluation_name: resolved_evaluation_name,
-            } = resolve_evaluation_config(
-                app_state,
-                evaluation_name,
-                function_name,
-                evaluator_names,
-            )?;
-
-            let evaluation_run_id = uuid::Uuid::now_v7();
-
-            // Wrap the client in ClientInferenceExecutor for use with evaluations
-            let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
-
-            let core_args = EvaluationCoreArgs {
-                inference_executor,
-                db: Arc::new(app_state.get_delegating_database()),
-                function_name: resolved_function_name,
-                function_config,
-                evaluators: evaluators.clone(),
-                evaluation_name: resolved_evaluation_name,
-                evaluation_run_id,
-                dataset_name,
-                datapoint_ids,
-                variant,
-                concurrency,
-                inference_cache: inference_cache_enum,
-                tags: HashMap::new(),
-            };
-
-            let result =
-                run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
+                client
+                    .run_evaluation_sse(params)
                     .await
-                    .map_err(|e| {
-                        pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                    })?;
+                    .map_err(|e| Python::attach(|py| convert_error(py, e)))?
+            };
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let handler = AsyncEvaluationJobHandler {
@@ -2763,6 +3062,13 @@ impl AsyncTensorZeroGateway {
                 Err(e) => Python::attach(|py| Err(convert_error(py, e))),
             }
         })
+    }
+
+    #[getter]
+    fn optimization(this: PyRef<'_, Self>) -> AsyncOptimizationNamespace {
+        AsyncOptimizationNamespace {
+            client: this.as_super().client.clone(),
+        }
     }
 }
 

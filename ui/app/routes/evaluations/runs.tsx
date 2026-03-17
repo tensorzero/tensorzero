@@ -353,6 +353,7 @@ function ResultsError() {
 
 function ResultsContent({
   evaluation_name,
+  function_name,
   metricsConfig,
   evaluatorMetricNames,
   data,
@@ -367,6 +368,7 @@ function ResultsContent({
   isCancelling,
 }: {
   evaluation_name: string;
+  function_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
   evaluatorMetricNames: Record<string, string>;
   data: EvaluationData;
@@ -433,6 +435,7 @@ function ResultsContent({
       </div>
       <EvaluationTable
         evaluation_name={evaluation_name}
+        function_name={function_name}
         metricsConfig={metricsConfig}
         evaluatorMetricNames={evaluatorMetricNames}
         selected_evaluation_run_infos={selected_evaluation_run_infos}
@@ -579,6 +582,7 @@ export default function EvaluationRunsPage({
                 return (
                   <ResultsContent
                     evaluation_name={evaluation_name}
+                    function_name={function_name}
                     metricsConfig={metricsConfig}
                     evaluatorMetricNames={evaluatorMetricNames}
                     data={resolvedData}

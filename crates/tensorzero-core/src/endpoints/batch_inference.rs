@@ -869,14 +869,40 @@ pub async fn write_poll_batch_inference(
         PollBatchInferenceResponse::Completed(response) => {
             let raw_request = response.raw_request.clone();
             let raw_response = response.raw_response.clone();
-            let inferences = write_completed_batch_inference(
+            let inferences = match write_completed_batch_inference(
                 database,
                 batch_request,
                 response,
                 provider_type,
                 config,
             )
-            .await?;
+            .await
+            {
+                Ok(inferences) => inferences,
+                Err(e) => {
+                    // If we fail to process a completed batch (e.g. all JSONL rows failed
+                    // to parse), mark the batch as Failed so we don't retry indefinitely.
+                    tracing::error!(
+                        batch_id = %batch_request.batch_id,
+                        "Failed to process completed batch inference: {e}. Marking batch as failed."
+                    );
+                    if let Err(status_err) = write_batch_request_status_update(
+                        database,
+                        batch_request,
+                        BatchStatus::Failed,
+                        raw_request,
+                        raw_response,
+                    )
+                    .await
+                    {
+                        tracing::error!(
+                            batch_id = %batch_request.batch_id,
+                            "Additionally failed to mark batch as failed: {status_err}"
+                        );
+                    }
+                    return Err(e);
+                }
+            };
             // NOTE - in older versions of TensorZero, we were missing this call.
             // As a result, some customers may have databases with duplicate inferences.
             write_batch_request_status_update(
@@ -1055,7 +1081,9 @@ pub async fn write_completed_batch_inference<'a>(
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
-                Error::new(ErrorDetails::MissingBatchInferenceResponse {
+                // Construct error for logging but don't return it — skip this inference
+                // and continue processing the rest of the batch.
+                let _ = Error::new(ErrorDetails::MissingBatchInferenceResponse {
                     inference_id: Some(inference_id),
                 });
                 continue;

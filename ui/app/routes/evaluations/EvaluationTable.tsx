@@ -212,6 +212,7 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   metric_names: string[];
   evaluation_name: string;
+  function_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
   /** Maps full metric_name → short evaluator_name. */
   evaluatorMetricNames: Record<string, string>;
@@ -243,6 +244,7 @@ export function EvaluationTable({
   evaluation_statistics,
   metric_names,
   evaluation_name,
+  function_name,
   metricsConfig,
   evaluatorMetricNames,
   selectedRows,
@@ -376,7 +378,7 @@ export function EvaluationTable({
       <div>
         {/* Eval run selector */}
         <EvalRunSelector
-          evaluationName={evaluation_name}
+          functionName={function_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
         />
 

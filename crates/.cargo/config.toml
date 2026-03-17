@@ -143,6 +143,8 @@ tsbuild = [
     "autopilot-tools",
     "-p",
     "durable-tools",
+    "-p",
+    "evaluations",
     # TODO(shuyangli): Remove `gateway` when we redesign evaluations crate.
     "-p",
     "gateway",
