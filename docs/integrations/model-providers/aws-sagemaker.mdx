@@ -73,7 +73,7 @@ The relevant fields will depend on the `hosted_provider`.
 ### Credentials
 
 You must make sure that the gateway has the necessary permissions to access AWS SageMaker.
-The TensorZero Gateway will use the AWS SDK to retrieve the relevant credentials.
+By default, the TensorZero Gateway will use the AWS SDK to retrieve the relevant credentials.
 
 The simplest way is to set the following environment variables before running the gateway:
 
@@ -83,7 +83,8 @@ AWS_REGION=us-east-1
 AWS_SECRET_ACCESS_KEY=...
 ```
 
-Alternatively, you can use other authentication methods supported by the AWS SDK.
+You can also provide credentials dynamically at inference time using the `dynamic::` prefix (e.g. `access_key_id = "dynamic::aws_access_key_id"`).
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
 
 ### Deployment (Docker Compose)
 
@@ -100,9 +101,9 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
-      - AWS_REGION=${AWS_REGION:?Environment variable AWS_REGION must be set.}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY must be set.}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
+      AWS_REGION: ${AWS_REGION:?Environment variable AWS_REGION must be set.}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -116,17 +117,15 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```

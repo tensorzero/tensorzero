@@ -3,19 +3,27 @@
  * Always use these instead of string interpolation to handle names with special characters.
  */
 
+import type { ResolvedObject } from "~/types/tensorzero";
+
 // ============================================================================
 // Observability - Functions
 // ============================================================================
 
-export function toFunctionUrl(functionName: string): string {
-  return `/observability/functions/${encodeURIComponent(functionName)}`;
+export function toFunctionUrl(
+  functionName: string,
+  snapshotHash?: string,
+): string {
+  const base = `/observability/functions/${encodeURIComponent(functionName)}`;
+  return appendSnapshotHash(base, snapshotHash);
 }
 
 export function toVariantUrl(
   functionName: string,
   variantName: string,
+  snapshotHash?: string,
 ): string {
-  return `/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`;
+  const base = `/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variantName)}`;
+  return appendSnapshotHash(base, snapshotHash);
 }
 
 // ============================================================================
@@ -24,6 +32,10 @@ export function toVariantUrl(
 
 export function toInferenceUrl(inferenceId: string): string {
   return `/observability/inferences/${encodeURIComponent(inferenceId)}`;
+}
+
+export function toInferenceApiUrl(inferenceId: string): string {
+  return `/api/inference/${encodeURIComponent(inferenceId)}`;
 }
 
 // ============================================================================
@@ -53,27 +65,16 @@ export function toDatapointUrl(
 // Evaluations
 // ============================================================================
 
-export function toEvaluationUrl(
-  evaluationName: string,
-  queryParams?: { evaluation_run_ids?: string },
-): string {
-  const baseUrl = `/evaluations/${encodeURIComponent(evaluationName)}`;
-  if (queryParams?.evaluation_run_ids) {
-    return `${baseUrl}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
-  }
-  return baseUrl;
+export function toEvaluationRunsUrl(runIds: string | string[]): string {
+  const ids = Array.isArray(runIds) ? runIds.join(",") : runIds;
+  return `/evaluations/runs?evaluation_run_ids=${encodeURIComponent(ids)}`;
 }
 
 export function toEvaluationDatapointUrl(
-  evaluationName: string,
   datapointId: string,
-  queryParams?: { evaluation_run_ids?: string },
+  queryParams: { evaluation_run_ids: string },
 ): string {
-  const baseUrl = `/evaluations/${encodeURIComponent(evaluationName)}/${encodeURIComponent(datapointId)}`;
-  if (queryParams?.evaluation_run_ids) {
-    return `${baseUrl}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
-  }
-  return baseUrl;
+  return `/evaluations/results/${encodeURIComponent(datapointId)}?evaluation_run_ids=${encodeURIComponent(queryParams.evaluation_run_ids)}`;
 }
 
 // ============================================================================
@@ -94,4 +95,59 @@ export function toWorkflowEvaluationProjectUrl(projectName: string): string {
 
 export function toSupervisedFineTuningJobUrl(jobId: string): string {
   return `/optimization/supervised-fine-tuning/${encodeURIComponent(jobId)}`;
+}
+
+// ============================================================================
+// Resolved Object URLs
+// ============================================================================
+
+export function toResolvedObjectUrl(
+  uuid: string,
+  obj: ResolvedObject,
+): string | null {
+  switch (obj.type) {
+    case "inference":
+      return toInferenceUrl(uuid);
+    case "episode":
+      return toEpisodeUrl(uuid);
+    case "chat_datapoint":
+    case "json_datapoint":
+      return toDatapointUrl(obj.dataset_name, uuid);
+    case "model_inference":
+    case "boolean_feedback":
+    case "float_feedback":
+    case "comment_feedback":
+    case "demonstration_feedback":
+      return null;
+    default: {
+      const _exhaustiveCheck: never = obj;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function appendSnapshotHash(url: string, snapshotHash?: string): string {
+  if (!snapshotHash) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}snapshot_hash=${encodeURIComponent(snapshotHash)}`;
+}
+
+// ============================================================================
+// Internal API Routes
+// ============================================================================
+
+export function toResolveUuidApi(uuid: string): string {
+  return `/api/tensorzero/resolve_uuid/${encodeURIComponent(uuid)}`;
+}
+
+export function toInferencePreviewApi(inferenceId: string): string {
+  return `/api/tensorzero/inference_preview/${encodeURIComponent(inferenceId)}`;
+}
+
+export function toEpisodePreviewApi(episodeId: string): string {
+  return `/api/tensorzero/episode_preview/${encodeURIComponent(episodeId)}`;
 }

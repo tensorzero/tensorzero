@@ -1,0 +1,47 @@
+[package]
+name = "autopilot-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+e2e_tests = ["autopilot-tools/e2e_tests"]
+ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings", "dep:tensorzero-ts-types"]
+
+[dependencies]
+# Internal crates
+durable-tools = { path = "../durable-tools" }
+tensorzero-core = { path = "../tensorzero-core" }
+autopilot-client = { path = "../autopilot-client" }
+autopilot-tools = { path = "../autopilot-tools" }
+
+# Async runtime
+tokio.workspace = true
+tokio-util = "0.7"
+async-trait.workspace = true
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
+
+# Database
+sqlx = { workspace = true }
+
+# Utilities
+anyhow.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+schemars.workspace = true
+tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+
+[dev-dependencies]
+mockall = "0.14"
+tensorzero = { path = "../tensorzero-client" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

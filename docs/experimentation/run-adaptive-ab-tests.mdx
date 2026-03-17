@@ -63,7 +63,7 @@ json_mode = "strict"
 
 # Define the experiment configuration
 [functions.extract_entities.experimentation]
-type = "track_and_stop" # the experimentation algorithm
+type = "adaptive"
 candidate_variants = ["gpt-5-mini-good-prompt", "gpt-5-mini-bad-prompt"]
 metric = "exact_match"
 update_period_s = 60  # low for the sake of the demo (recommended: 300)
@@ -83,7 +83,6 @@ You must set up Postgres to use TensorZero's automated experimentation features.
 
 - [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway)
 - [Deploy the TensorZero UI](/deployment/tensorzero-ui)
-- [Deploy ClickHouse](/deployment/clickhouse)
 - [Deploy Postgres](/deployment/postgres)
 
 </Step>
@@ -91,20 +90,24 @@ You must set up Postgres to use TensorZero's automated experimentation features.
 <Step title="Make inference requests">
 
 Make an inference request just like you normally would and keep track of the inference ID or episode ID.
-You can use the TensorZero Inference API or the OpenAI-compatible Inference API.
+You can use the OpenAI SDK pointed at the TensorZero Gateway.
 
 ```python
-response = t0.inference(
-    function_name="extract_entities",
-    input={
-        "messages": [
-            {
-                "role": "user",
-                "content": datapoint.input,
-            }
-        ]
-    },
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::extract_entities",
+    messages=[
+        {
+            "role": "user",
+            "content": datapoint.input,
+        }
+    ],
 )
+
+inference_id = response.id
 ```
 
 </Step>
@@ -117,7 +120,7 @@ Send feedback for your metric and assign it to the inference ID or episode ID.
 t0.feedback(
     metric_name="exact_match",
     value=True,
-    inference_id=response.inference_id,
+    inference_id=inference_id,
 )
 ```
 
@@ -161,10 +164,16 @@ See the [Configuration Reference](/gateway/configuration-reference) for more det
 
 ### Customize the experimentation algorithm
 
-The `track_and_stop` algorithm has multiple parameters that can be customized.
+The adaptive experiment uses a track-and-stop algorithm for best-arm identification.
+The algorithm exposes multiple customizable parameters.
 For example, you can trade off the speed of the experiment with the statistical confidence of the results.
 The default parameters are sensible for most use cases, but advanced users might want to customize them.
 See the [Configuration Reference](/gateway/configuration-reference) for more details.
 
 Two important parameters are `epsilon` and `delta`, which control a fundamental trade-off in experimentation: higher sensitivity and lower error rates require longer experiments.
 For a discussion on `epsilon` and `delta`, see our blog post [Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/).
+
+## Run different experiments per namespace (e.g. customer)
+
+You can configure different experiments per namespace (e.g. per customer).
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for more details.

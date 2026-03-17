@@ -30,19 +30,14 @@ export default defineConfig({
       : 0,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.TENSORZERO_CI
-    ? [
-        ["list"],
-        ["github"],
-        ["buildkite-test-collector/playwright/reporter"],
-        ["junit", { outputFile: "playwright.junit.xml" }],
-      ]
+    ? [["list"], ["github"], ["junit", { outputFile: "playwright.junit.xml" }]]
     : [["dot"], ["junit", { outputFile: "playwright.junit.xml" }]],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL:
       baseURLOverride ||
-      (useUIDocker ? "http://localhost:4000" : "http://localhost:5173"),
+      (useUIDocker ? "http://0.0.0.0:4000" : "http://localhost:5173"),
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on",

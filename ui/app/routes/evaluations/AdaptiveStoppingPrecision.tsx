@@ -1,12 +1,6 @@
-import { CircleHelp } from "lucide-react";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { HelpTooltip } from "~/components/ui/HelpTooltip";
 
 export interface AdaptiveStoppingPrecisionProps {
   precisionTargets: Record<string, string>;
@@ -44,20 +38,11 @@ export function AdaptiveStoppingPrecision({
     <div>
       <div className="mb-3 flex items-center gap-1.5">
         <Label>Adaptive Stopping Precision</Label>
-        <TooltipProvider>
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <span className="inline-flex cursor-help">
-                <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              Stop running an evaluator when both sides of its 95% confidence
-              interval are within the specified threshold of the mean value. Set
-              to 0 to disable adaptive stopping.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <HelpTooltip>
+          Stop running an evaluator when both sides of its 95% confidence
+          interval are within the specified threshold of the mean value. Set to
+          0 to disable adaptive stopping.
+        </HelpTooltip>
       </div>
       <div className="space-y-3">
         {evaluatorNames.map((evaluatorName) => {

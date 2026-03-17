@@ -7,8 +7,12 @@ The TensorZero Gateway can optionally collect inference and feedback data for ob
 Under the hood, TensorZero stores this data in ClickHouse, an open-source columnar database that is optimized for analytical workloads.
 
 <Tip>
-  If you're planning to use the gateway without observability, you don't need to
-  deploy ClickHouse.
+
+If you're planning to use the gateway without observability, you don't need to deploy ClickHouse.
+
+You can also [deploy Postgres](/deployment/postgres) as the backend for observability.
+We recommend using ClickHouse if you're handling >100 inferences per second.
+
 </Tip>
 
 ## Deploy

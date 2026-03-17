@@ -19,63 +19,95 @@ You can find a complete runnable example of how to use the datasets and datapoin
 
 ## Endpoints & Methods
 
-### List datapoints in a dataset
+### Get datapoints by ID
+
+This endpoint retrieves specific datapoints by their IDs.
+
+- **Gateway Endpoint:** `POST /v1/datasets/{dataset_name}/get_datapoints`
+- **Client Method:** `get_datapoints`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `ids` (list of UUIDs, required)
+
+The endpoint returns an object with `datapoints`, a list of datapoint objects.
+Stale (soft-deleted) datapoints are included in the response when fetched by ID.
+
+### List datapoints
 
 This endpoint returns a list of datapoints in the dataset.
 Each datapoint is an object that includes all the relevant fields (e.g. input, output, tags).
 
-- **Gateway Endpoint:** `GET /datasets/{dataset_name}/datapoints`
+- **Gateway Endpoint:** `POST /v1/datasets/{dataset_name}/list_datapoints`
 - **Client Method:** `list_datapoints`
 - **Parameters:**
   - `dataset_name` (string)
-  - `function` (string, optional)
-  - `limit` (int, optional, defaults to 100)
+  - `function_name` (string, optional) - only return datapoints for this function
+  - `limit` (int, optional, defaults to 20)
   - `offset` (int, optional, defaults to 0)
+  - `filter` (object, optional) - filter by tags, time, or logical combinations (AND/OR/NOT)
+  - `order_by` (list of objects, optional) - ordering criteria (e.g. by `timestamp` or `search_relevance`)
 
-If `function` is set, this method only returns datapoints in the dataset for the specified function.
+The endpoint returns an object with `datapoints`, a list of datapoint objects.
 
-### Get a datapoint
-
-This endpoint returns the datapoint with the given ID, including all the relevant fields (e.g. input, output, tags).
-
-- **Gateway Endpoint:** `GET /datasets/{dataset_name}/datapoints/{datapoint_id}`
-- **Client Method:** `get_datapoint`
-- **Parameters:**
-  - `dataset_name` (string)
-  - `datapoint_id` (string)
-
-### Add datapoints to a dataset (or create a dataset)
+### Create datapoints
 
 This endpoint adds a list of datapoints to a dataset.
 If the dataset does not exist, it will be created with the given name.
 
-- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints`
+- **Gateway Endpoint:** `POST /v1/datasets/{dataset_name}/datapoints`
 - **Client Method:** `create_datapoints`
 - **Parameters:**
   - `dataset_name` (string)
   - `datapoints` (list of objects, see below)
 
-For `chat` functions, each datapoint object must have the following fields:
+Each datapoint object must have a `type` field (`"chat"` or `"json"`) and a `function_name` field.
 
-- `function_name` (string)
-- `input` (object, identical to an inference's `input`)
+For `chat` datapoints, the following fields are available:
+
+- `function_name` (string, required)
+- `input` (object, required, identical to an inference's `input`)
 - `output` (a list of objects, optional, each object must be a content block like in an inference's output)
+- `episode_id` (UUID, optional)
 - `allowed_tools` (list of strings, optional, identical to an inference's `allowed_tools`)
 - `tool_choice` (string, optional, identical to an inference's `tool_choice`)
 - `parallel_tool_calls` (boolean, optional, defaults to `false`)
 - `tags` (map of string to string, optional)
 - `name` (string, optional)
 
-For `json` functions, each datapoint object must have the following fields:
+For `json` datapoints, the following fields are available:
 
-- `function_name` (string)
-- `input` (object, identical to an inference's `input`)
+- `function_name` (string, required)
+- `input` (object, required, identical to an inference's `input`)
 - `output` (object, optional, an object that matches the `output_schema` of the function)
 - `output_schema` (object, optional, a dynamic JSON schema that overrides the output schema of the function)
+- `episode_id` (UUID, optional)
 - `tags` (map of string to string, optional)
 - `name` (string, optional)
 
-### Update datapoints in a dataset
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the newly created datapoints.
+
+### Create datapoints from inferences
+
+This endpoint creates datapoints from existing inferences.
+You can specify either a list of inference IDs or a query to find matching inferences.
+If the dataset does not exist, it will be created with the given name.
+
+- **Gateway Endpoint:** `POST /v1/datasets/{dataset_name}/from_inferences`
+- **Client Method:** `create_datapoints_from_inferences`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `type` (string, either `"inference_ids"` or `"inference_query"`)
+
+When `type` is `"inference_ids"`:
+
+- `inference_ids` (list of UUIDs, required) - the inference IDs to create datapoints from
+- `output_source` (string, optional, defaults to `"inference"`) - the source of the output for the datapoint (`"inference"`, `"demonstration"`, or `"none"`)
+
+When `type` is `"inference_query"`, the request body accepts the same parameters as the [List Inferences](/observability/query-historical-inferences) endpoint (e.g. `function_name`, `variant_name`, `output_source`, `filters`, etc.).
+
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the newly created datapoints.
+
+### Update datapoints
 
 This endpoint updates one or more datapoints in a dataset by creating new versions.
 The original datapoint is marked as stale (i.e. a soft deletion), and a new datapoint is created with the updated values and a new ID.
@@ -83,6 +115,9 @@ The response returns the newly created IDs.
 
 - **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints`
 - **Client Method:** `update_datapoints`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoints` (list of objects, see below)
 
 Each object must have the fields `id` (string, UUIDv7) and `type` (`"chat"` or `"json"`).
 
@@ -91,27 +126,27 @@ If provided, they will update the corresponding fields in the datapoint.
 If omitted, the fields will remain unchanged.
 If set to `null`, the fields will be cleared (as long as they are nullable).
 
-For `chat` functions, you can update the following fields:
+For `chat` datapoints, you can update the following fields:
 
 - `input` (object) - replaces the datapoint's input
 - `output` (list of content blocks) - replaces the datapoint's output
-- `tool_params` (object or null) - replaces the tool configuration (can be set to `null` to clear)
+- `allowed_tools` (list of strings or null) - replaces the allowed tools
+- `tool_choice` (string or null) - replaces the tool choice
+- `parallel_tool_calls` (boolean or null) - replaces the parallel tool calls setting
 - `tags` (map of string to string) - replaces all tags
-- `metadata` (object) - updates metadata fields:
-  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+- `name` (string or null) - replaces the name (can be set to `null` to clear)
 
-For `json` functions, you can update the following fields:
+For `json` datapoints, you can update the following fields:
 
 - `input` (object) - replaces the datapoint's input
 - `output` (object or null) - replaces the output (validated against the output schema; can be set to `null` to clear)
 - `output_schema` (object) - replaces the output schema
 - `tags` (map of string to string) - replaces all tags
-- `metadata` (object) - updates metadata fields:
-  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+- `name` (string or null) - replaces the name (can be set to `null` to clear)
 
 <Tip>
 
-If you're only updating datapoint metadata (e.g. `name`), the `update_datapoint_metadata` method below is an alternative that does not affect the datapoint ID.
+If you're only updating datapoint metadata (e.g. `name`), the `update_datapoints_metadata` method below is an alternative that does not affect the datapoint ID.
 
 </Tip>
 
@@ -134,20 +169,32 @@ Each object must have the field `id` (string, UUIDv7).
 
 The following field is optional:
 
-- `metadata` (object) - updates metadata fields:
-  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+- `name` (string or null) - replaces the name (can be set to `null` to clear)
 
-If the `metadata` field is omitted or `null`, no changes will be made to the datapoint.
+If `name` is omitted, no changes will be made to the datapoint.
 
 The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the updated datapoints.
 These IDs are the same as the input IDs since the datapoints are updated in-place.
 
-### Delete a datapoint
+### Delete datapoints
 
-This endpoint performs a **soft deletion**: the datapoint is marked as stale and will be disregarded by the system in the future (e.g. when listing datapoints or running evaluations), but the data remains in the database.
+This endpoint performs a **soft deletion** of one or more datapoints: the datapoints are marked as stale and will be disregarded by the system in the future (e.g. when listing datapoints or running evaluations), but the data remains in the database.
 
-- **Gateway Endpoint:** `DELETE /datasets/{dataset_name}/datapoints/{datapoint_id}`
-- **Client Method:** `delete_datapoint`
+- **Gateway Endpoint:** `DELETE /v1/datasets/{dataset_name}/datapoints`
+- **Client Method:** `delete_datapoints`
 - **Parameters:**
   - `dataset_name` (string)
-  - `datapoint_id` (string)
+  - `ids` (list of UUIDs, required)
+
+The endpoint returns an object with `num_deleted_datapoints`, the number of datapoints that were deleted.
+
+### Delete a dataset
+
+This endpoint performs a **soft deletion** of an entire dataset: all datapoints in the dataset are marked as stale.
+
+- **Gateway Endpoint:** `DELETE /v1/datasets/{dataset_name}`
+- **Client Method:** `delete_dataset`
+- **Parameters:**
+  - `dataset_name` (string)
+
+The endpoint returns an object with `num_deleted_datapoints`, the number of datapoints that were deleted.

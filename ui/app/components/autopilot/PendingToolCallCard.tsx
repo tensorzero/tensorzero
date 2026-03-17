@@ -5,7 +5,12 @@ import { DotSeparator } from "~/components/ui/DotSeparator";
 import { TableItemTime } from "~/components/ui/TableItems";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { cn } from "~/utils/common";
-import { getToolCallEventId, isToolEvent, ToolEventId } from "./EventStream";
+import {
+  getToolCallEventId,
+  isToolEvent,
+  TOOL_CONTENT_MAX_HEIGHT,
+  ToolEventId,
+} from "./EventStream";
 
 type PendingToolCallCardProps = {
   event: GatewayEvent;
@@ -167,7 +172,10 @@ export function PendingToolCallCard({
 
       {/* Tool arguments (expandable) */}
       {isExpanded && args && (
-        <pre className="text-fg-secondary overflow-x-auto font-mono text-xs whitespace-pre-wrap">
+        <pre
+          className="text-fg-secondary overflow-auto font-mono text-xs whitespace-pre-wrap"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
           {JSON.stringify(args, null, 2)}
         </pre>
       )}

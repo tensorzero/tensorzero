@@ -93,7 +93,7 @@ export const Completed: Story = {
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
                 non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null },
+                streaming: { ttft_ms: null, total_ms: null },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
@@ -108,6 +108,7 @@ export const Completed: Story = {
             },
             streaming: {
               ttft_ms: null,
+              total_ms: null,
             },
           },
           skip_relay: false,
@@ -204,7 +205,7 @@ export const LongJobId: Story = {
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
                 non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null },
+                streaming: { ttft_ms: null, total_ms: null },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
@@ -219,6 +220,7 @@ export const LongJobId: Story = {
             },
             streaming: {
               ttft_ms: 300000n,
+              total_ms: 300000n,
             },
           },
           skip_relay: false,

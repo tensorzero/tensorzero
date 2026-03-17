@@ -9,7 +9,6 @@ env:
   AWS_REGION: "us-east-1"
   AWS_SECRET_ACCESS_KEY: "fake_aws_secret_key"
   AZURE_API_KEY: "fake_azure_openai_key"
-  AZURE_OPENAI_DEPLOYMENT_ID: "fake_deployment_id"
   DEEPSEEK_API_KEY: "fake_deepseek_key"
   FIREWORKS_API_KEY: "fake_fireworks_key"
   FORCE_COLOR: 1
@@ -49,12 +48,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Cleanup disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        run: bash ci/free-disk-space.sh
 
-      - name: Install Rust toolchain
+      - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -68,8 +68,8 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
@@ -81,21 +81,19 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Download mock-provider-api-container
-        continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
-        with:
-          name: build-mock-provider-api-container
-          path: .
-
-      - name: Load mock-provider-api-container
-        id: load-mock-provider-api
+      - name: Pull mock-provider-api container
+        id: pull-mock-provider-api
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
-          docker load < mock-provider-api-container.tar
+          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+
+      - name: Pull gateway container
+        run: |
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
 
       - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
-        if: steps.load-mock-provider-api.outcome == 'success' # Only run if artifact was successfully loaded
+        if: steps.pull-mock-provider-api.outcome == 'success' # Only run if pull was successful
         run: |
           echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
@@ -107,13 +105,14 @@ jobs:
 
       - name: Start Docker services (mock-provider-api + dependencies)
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-provider-api
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
+        working-directory: crates
         run: |
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
@@ -123,14 +122,16 @@ jobs:
           done
 
       - name: Run mocked batch tests
+        working-directory: crates
         run: |
           cargo test-mock-batch --no-fail-fast
 
       - name: Print docker compose logs
         if: always()
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print batch logs
         if: always()
+        working-directory: crates
         run: cat batch_logs.txt

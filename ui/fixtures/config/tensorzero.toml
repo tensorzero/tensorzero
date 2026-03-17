@@ -11,6 +11,10 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
+cost = [
+    { pointer = "/usage/prompt_tokens", cost_per_million = 0.15, required = true },
+    { pointer = "/usage/completion_tokens", cost_per_million = 0.60, required = true },
+]
 
 [models."llama-3.1-8b-instruct"]
 routing = ["fireworks"]
@@ -41,9 +45,12 @@ model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
 type = "json"
 output_schema = "functions/json_success_no_input_schema/output_schema.json"
 
+[functions.json_success_no_input_schema.experimentation]
+type = "static"
+candidate_variants = { "test" = 1.0 }
+
 [functions.json_success_no_input_schema.variants.test]
 type = "chat_completion"
-weight = 1
 model = "dummy::json"
 max_tokens = 100
 json_mode = "strict"
@@ -114,7 +121,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 0
 
 [functions.extract_entities.experimentation]
-type = "track_and_stop"
+type = "adaptive"
 metric = "jaro_winkler_similarity"
 candidate_variants = [
     "gpt4o_mini_initial_prompt",
@@ -131,6 +138,12 @@ update_period_s = 60
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
 description = "Generate a haiku about a given topic"
+
+[functions.write_haiku.variants.dummy_slow]
+type = "chat_completion"
+model = "dummy::slow"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 
 [functions.write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
@@ -157,8 +170,11 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "json"
 output_schema = "functions/generate_secret/output_schema.json"
 
+[functions.generate_secret.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.generate_secret.variants.baseline]
-weight = 1
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/generate_secret/baseline/system_template.minijinja"
@@ -171,9 +187,12 @@ type = "json"
 output_schema = "functions/ask_question/output_schema.json"
 system_schema = "functions/ask_question/system_schema.json"
 
+[functions.ask_question.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.ask_question.variants.baseline]
 type = "chat_completion"
-weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -181,7 +200,6 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.ask_question.variants."gpt-4.1-nano"]
 type = "chat_completion"
-weight = 0
 model = "openai::gpt-4.1-nano-2025-04-14"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -189,7 +207,6 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.ask_question.variants."gpt-4.1-mini"]
 type = "chat_completion"
-weight = 0
 model = "openai::gpt-4.1-mini-2025-04-14"
 system_template = "functions/ask_question/baseline/system_template.minijinja"
 json_mode = "strict"
@@ -199,9 +216,12 @@ retries = { num_retries = 4, max_delay_s = 10 }
 type = "chat"
 system_schema = "functions/answer_question/system_schema.json"
 
+[functions.answer_question.experimentation]
+type = "static"
+candidate_variants = { "baseline" = 1.0 }
+
 [functions.answer_question.variants.baseline]
 type = "chat_completion"
-weight = 1
 model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/answer_question/baseline/system_template.minijinja"
 # for honesty
@@ -419,14 +439,12 @@ function_name = "extract_entities"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
-cutoff = 0.6
 
 [evaluations.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
-cutoff = 0.5
 
 [evaluations.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
@@ -449,7 +467,6 @@ type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
-cutoff = 0.5
 
 [evaluations.haiku.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
@@ -473,7 +490,6 @@ input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = false }
-cutoff = 0.2
 
 [evaluations.images.evaluators.honest_answer.variants.mini]
 type = "chat_completion"
@@ -489,7 +505,6 @@ input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = true }
-cutoff = 0.5
 
 [evaluations.images.evaluators.matches_reference.variants.mini]
 type = "chat_completion"

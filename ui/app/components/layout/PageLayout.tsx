@@ -23,7 +23,7 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 }) => (
   <div
     className={cn(
-      "container mx-auto flex flex-col gap-12 px-8 pt-16 pb-20",
+      "pt-page-top pb-page-bottom container mx-auto flex flex-col gap-12 px-8",
       className,
     )}
     {...props}
@@ -33,26 +33,31 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 );
 
 interface PageHeaderProps {
+  banner?: ReactNode;
   eyebrow?: ReactNode;
   heading?: string;
   name?: string;
   count?: CountValue;
   tag?: ReactNode;
+  help?: ReactNode;
   children?: ReactNode;
 }
 
 function PageHeader({
+  banner,
   eyebrow,
   heading,
   name,
   count,
   tag,
+  help,
   children,
 }: PageHeaderProps) {
   const title = heading ?? name;
 
   return (
     <div className="flex flex-col">
+      {banner && <div className="mb-4">{banner}</div>}
       <div className="flex flex-col gap-3">
         {eyebrow && (
           <div className="text-fg-secondary text-sm font-normal">{eyebrow}</div>
@@ -68,6 +73,7 @@ function PageHeader({
               {title}
             </h1>
           )}
+          {help}
           {count !== undefined && <PageCount count={count} />}
           {tag && <span className="ml-1 inline-flex items-center">{tag}</span>}
         </div>
@@ -101,6 +107,7 @@ interface SectionHeaderProps {
   heading: string;
   count?: CountValue;
   badge?: { name: string; tooltip: string };
+  help?: ReactNode;
   children?: ReactNode;
 }
 
@@ -108,11 +115,13 @@ function SectionHeader({
   heading,
   count,
   badge,
+  help,
   children,
 }: SectionHeaderProps) {
   return (
     <h2 className="flex items-center gap-2 text-xl font-medium">
       {heading}
+      {help}
       {count !== undefined && <SectionCount count={count} />}
       {badge && (
         <Tooltip delayDuration={0}>

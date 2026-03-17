@@ -6,7 +6,7 @@ test("should be able to bulk add selected inferences to a new dataset from evalu
 }) => {
   // Navigate to the evaluation page with a specific evaluation run
   await page.goto(
-    "/evaluations/entity_extraction?evaluation_run_ids=0196374c-2b06-7f50-b187-80c15cec5a1f",
+    "/evaluations/runs?evaluation_run_ids=0196374c-2b06-7f50-b187-80c15cec5a1f",
   );
 
   // Wait for the page to load completely
@@ -126,7 +126,7 @@ test("should be able to bulk add selected inferences to a dataset from multi-eva
 }) => {
   // Navigate to the evaluation page with multiple evaluation runs (multi-variant view)
   await page.goto(
-    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-c0bb-7f90-b651-f90eb9fba8f3%2C0196367b-1739-7483-b3f4-f3b0a4bda063",
+    "/evaluations/runs?evaluation_run_ids=0196367b-c0bb-7f90-b651-f90eb9fba8f3%2C0196367b-1739-7483-b3f4-f3b0a4bda063",
   );
 
   // Wait for the page to load completely

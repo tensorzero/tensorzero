@@ -18,8 +18,9 @@ const sizeStyles = {
   },
 };
 
-export interface SwitchProps
-  extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
+export interface SwitchProps extends React.ComponentPropsWithoutRef<
+  typeof SwitchPrimitives.Root
+> {
   size?: SwitchSize;
 }
 

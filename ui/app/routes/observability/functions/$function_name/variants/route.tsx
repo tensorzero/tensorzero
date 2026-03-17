@@ -11,15 +11,19 @@ import {
 import type { LoaderFunctionArgs, RouteHandle } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Suspense, useMemo } from "react";
+import { SnapshotBanner } from "~/components/layout/SnapshotBanner";
+import { useSnapshotHash } from "~/hooks/use-snapshot-hash";
 import BasicInfo from "./VariantBasicInfo";
 import VariantTemplate from "./VariantTemplate";
-import { useFunctionConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
-import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import {
+  getConfigFromRequest,
+  getFunctionConfig,
+} from "~/utils/config/index.server";
 import { countInferencesForVariant } from "~/utils/clickhouse/inference.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { TimeWindow } from "~/types/tensorzero";
+import type { TimeWindow, UiConfig } from "~/types/tensorzero";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import type { Route } from "./+types/route";
@@ -74,7 +78,7 @@ async function fetchVariantPerformance(
   variant_name: string,
   metric_name: string | undefined,
   time_granularity: string,
-  config: Awaited<ReturnType<typeof getConfig>>,
+  config: UiConfig,
 ): Promise<VariantPerformanceData> {
   if (!metric_name || !config.metrics[metric_name]) {
     return undefined;
@@ -127,7 +131,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return redirect("/observability/functions");
   }
 
-  const config = await getConfig();
+  const config = await getConfigFromRequest(request);
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
@@ -147,6 +151,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   // Return granular promises for independent streaming
   return {
     function_name,
+    function_config,
     variant_name,
     // Metrics section - split into selector data and chart data
     metricsWithFeedbackData:
@@ -339,16 +344,18 @@ function VariantDetailPageHeader({
   variantName: string;
 }) {
   const autopilotAvailable = useAutopilotAvailable();
+  const snapshotHash = useSnapshotHash();
 
   return (
     <PageHeader
+      banner={snapshotHash ? <SnapshotBanner /> : undefined}
       eyebrow={
         <Breadcrumbs
           segments={[
             { label: "Functions", href: "/observability/functions" },
             {
               label: functionName,
-              href: toFunctionUrl(functionName),
+              href: toFunctionUrl(functionName, snapshotHash),
               isIdentifier: true,
             },
             { label: "Variants" },
@@ -453,6 +460,7 @@ function InferencesSection({
 export default function VariantDetails({ loaderData }: Route.ComponentProps) {
   const {
     function_name,
+    function_config,
     variant_name,
     metricsWithFeedbackData,
     variantPerformanceData,
@@ -460,17 +468,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     inferenceCountData,
   } = loaderData;
   const location = useLocation();
-  const function_config = useFunctionConfig(function_name);
-
-  if (!function_config) {
-    throw new Response(
-      "Function not found. This likely means there is data in ClickHouse from an old TensorZero config.",
-      {
-        status: 404,
-        statusText: "Not Found",
-      },
-    );
-  }
 
   let variant_info = function_config.variants[variant_name];
   if (!variant_info) {
@@ -494,7 +491,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
         },
         timeouts: {
           non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null },
+          streaming: { ttft_ms: null, total_ms: null },
         },
       };
     } else {

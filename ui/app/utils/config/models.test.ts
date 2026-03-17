@@ -21,6 +21,7 @@ describe("dump_optimizer_output", () => {
               },
               streaming: {
                 ttft_ms: null,
+                total_ms: null,
               },
             },
           },
@@ -31,6 +32,7 @@ describe("dump_optimizer_output", () => {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
         skip_relay: false,
@@ -65,6 +67,7 @@ describe("dump_optimizer_output", () => {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
         skip_relay: false,

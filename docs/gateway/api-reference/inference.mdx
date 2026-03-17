@@ -43,7 +43,7 @@ Each function tool is an object with the following fields:
 - `parameters` (object, required): A JSON Schema defining the tool's parameters
 - `strict` (boolean, optional): Whether to enforce strict schema validation (defaults to `false`)
 
-See [Configuration Reference](/gateway/configuration-reference/#toolstool_name) for more details.
+See [Configuration Reference](/gateway/configuration-reference/#tools-tool_name) for more details.
 
 ##### OpenAI Custom Tools
 
@@ -179,7 +179,7 @@ For example, if you set `max_age_s=3600`, the gateway will only use cache entrie
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -468,16 +468,23 @@ If the content block has type `file`, it must have exactly one of the following 
   - `detail` (optional): controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality. Only supported by some model providers; ignored otherwise.
   - `filename` (optional): a filename to associate with the file
 
-See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
+See the [Call LLMs with image & file inputs](/gateway/call-llms-with-image-and-file-inputs/) guide for more details on how to use images in inference.
 
 If the content block has type `raw_text`, it must have the following additional fields:
 
 - `value`: The text for the content block.
   This content block will ignore any relevant templates and schemas for this function.
 
+<Note>
+
+`raw_text` only works for user and assistant messages. For system messages, `raw_text` is treated as plain text and will not bypass templates.
+
+</Note>
+
 If the content block has type `thought`, it must have the following additional fields:
 
-- `text`: The text for the content block.
+- `text` (string, optional): The text for the content block.
+- `signature` (string, optional): An opaque signature used for multi-turn reasoning conversations with Anthropic and OpenRouter. Pass through the `signature` from the model's response to continue a reasoning conversation.
 
 If the content block has type `unknown`, it must have the following additional fields:
 
@@ -676,6 +683,22 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 
 </Warning>
 
+#### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 #### `output_schema`
 
 - **Type:** object (valid JSON Schema)
@@ -683,21 +706,6 @@ Be careful about the different prefixes: `model_name="gpt-4o"` will use the `[mo
 
 If set, this schema will override the `output_schema` defined in the function configuration for a JSON function.
 This dynamic output schema is used for validating the output of the function, and sent to providers which support structured outputs.
-
-#### `otlp_traces_extra_headers`
-
-- **Type:** object (a map from string to string)
-- **Required:** no (default: `{}`)
-
-Dynamic headers to include in OTLP trace exports for this specific inference request.
-This is useful for adding per-request metadata to OTLP trace exports (e.g. user IDs, request sources).
-
-The headers are automatically prefixed with `tensorzero-otlp-traces-extra-header-` before being sent to the OTLP endpoint.
-
-These headers are merged with any static headers configured in `export.otlp.traces.extra_headers`.
-When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
-
-See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces#send-custom-http-headers) for more details and examples.
 
 #### `parallel_tool_calls`
 
@@ -740,7 +748,7 @@ Currently, we support the following:
   - `top_p`
   - `verbosity`
 
-See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters, and Examples below for usage.
+See [Configuration Reference](/gateway/configuration-reference/#functions-function_name-variants-variant_name) for more details on the parameters, and Examples below for usage.
 
 <Accordion title="Example">
 
@@ -778,7 +786,7 @@ Each object in the array has the following fields:
 - `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
 
 This field allows for dynamic provider tool use at runtime.
-You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference)).
 Only use this field if dynamic provider tool configuration is necessary for your use case.
 
 <Accordion title="Example: OpenAI Web Search (Unscoped)">
@@ -879,6 +887,22 @@ If set, pins the inference request to a particular variant (not recommended).
 You should generally not set this field, and instead let the TensorZero gateway assign a variant.
 This field is primarily used for testing or debugging purposes.
 
+### Request Headers
+
+You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
+The TensorZero client SDKs handle this automatically through parameters like `otlp_traces_extra_headers`, `otlp_traces_extra_attributes`, and `otlp_traces_extra_resources`.
+
+When making raw HTTP requests, use the following header prefixes:
+
+| Header prefix                             | Description                                                                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tensorzero-otlp-traces-extra-header-`    | Custom headers to include in OTLP trace exports. Merged with static headers from `export.otlp.traces.extra_headers` (dynamic values take precedence). |
+| `tensorzero-otlp-traces-extra-attribute-` | Custom span attributes to attach to OTLP trace exports.                                                                                               |
+| `tensorzero-otlp-traces-extra-resource-`  | Custom resource attributes to attach to OTLP trace exports.                                                                                           |
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for more details and examples.
+
 ### Response
 
 The response format depends on the function type (as defined in the configuration file) and whether the response is streamed or not.
@@ -915,7 +939,9 @@ If `type` is `tool_call`, the content block has the following fields:
 
 If `type` is `thought`, the content block has the following fields:
 
-- `text` (string): The text of the thought.
+- `text` (string, optional): The text of the thought. May be absent for encrypted reasoning.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations. Pass this back in subsequent requests to continue a reasoning conversation with Anthropic or OpenRouter.
+- `summary` (array, optional): A summary of the thought, provided by some providers when the full reasoning is encrypted.
 
 If the model provider responds with a content block of an unknown type, it will be included in the response as a content block of type `unknown` with the following additional fields:
 
@@ -978,6 +1004,9 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_usage`
 
@@ -1021,6 +1050,7 @@ If `type` is `thought`, the chunk has the following fields:
 
 - `id`: The ID of the content block.
 - `text`: The text delta for the thought.
+- `signature` (string, optional): An opaque signature for multi-turn reasoning conversations (see above).
 
 ##### `episode_id`
 
@@ -1050,6 +1080,9 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_usage`
 
@@ -1061,6 +1094,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 
@@ -1143,6 +1178,9 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_usage`
 
@@ -1154,6 +1192,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 </Tab>
 <Tab title="Streaming">
@@ -1199,6 +1239,9 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_usage`
 
@@ -1210,6 +1253,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `provider_type`: The provider type (e.g., `"openai"`, `"anthropic"`).
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ##### `raw_response`
 
@@ -1247,8 +1292,7 @@ The raw chunk from the current streaming model inference. This is included in co
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1321,7 +1365,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1347,7 +1392,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1368,8 +1414,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1493,7 +1538,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1519,7 +1565,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1540,8 +1587,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
 # ...
 
 [functions.weather_bot]
@@ -1649,7 +1695,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1676,7 +1723,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1697,8 +1745,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot" /"(get_temperature)"/ /(get_temperature)]/
 # ...
 
 [functions.weather_bot]
@@ -1854,7 +1901,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1880,7 +1928,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -1901,8 +1950,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot"
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot"
 # ...
 
 [functions.weather_bot]
@@ -2030,7 +2078,8 @@ curl -X POST http://localhost:3000/inference \
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2057,7 +2106,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2078,8 +2128,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="draft_email" mark="temperature" mark="chat_completion"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email" mark="temperature" mark="chat_completion"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -2169,7 +2218,8 @@ curl -X POST http://localhost:3000/inference \
   ]
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2194,7 +2244,8 @@ Each JSON message has the following fields:
   ],
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2215,8 +2266,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="extract_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="extract_email"
 # ...
 [functions.extract_email]
 type = "json"
@@ -2304,7 +2354,8 @@ curl -X POST http://localhost:3000/inference \
   }
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```
@@ -2324,7 +2375,8 @@ Each JSON message has the following fields:
   "raw": "{\"email\":", // a JSON content delta
   "usage": {
     "input_tokens": 100,
-    "output_tokens": 100
+    "output_tokens": 100,
+    "cost": 0.0003
   }
 }
 ```

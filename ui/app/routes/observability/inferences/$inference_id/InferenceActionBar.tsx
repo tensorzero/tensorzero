@@ -8,6 +8,8 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { ActionBarAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
+import { CopyMessagesButton } from "~/components/inference/CopyMessagesButton";
 import { TryWithVariantAction } from "./TryWithVariantAction";
 import { HumanFeedbackAction } from "./HumanFeedbackAction";
 import type { ModelInferencesData } from "./inference-data.server";
@@ -16,7 +18,7 @@ interface InferenceActionBarProps {
   inference: StoredInference;
   usedVariantsPromise: Promise<string[]>;
   hasDemonstrationPromise: Promise<boolean>;
-  inputPromise: Promise<Input>;
+  inputPromise: Promise<Input | undefined>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
   locationKey: string;
@@ -51,6 +53,15 @@ export function InferenceActionBar({
         inference={inference}
         onFeedbackAdded={onFeedbackAdded}
       />
+      <AskAutopilotButton
+        message={`Inference ID: ${inference.inference_id}\n\n`}
+      />
+      {/* Keep at end of row — conditionally hidden, so trailing position avoids jitter */}
+      <CopyMessagesButtonStreaming
+        key={`copy-${locationKey}`}
+        inference={inference}
+        inputPromise={inputPromise}
+      />
     </ActionBar>
   );
 }
@@ -82,10 +93,28 @@ function AddToDatasetButtonStreaming({
   );
 }
 
+function CopyMessagesButtonStreaming({
+  inference,
+  inputPromise,
+}: {
+  inference: StoredInference;
+  inputPromise: Promise<Input | undefined>;
+}) {
+  return (
+    <Suspense fallback={<Skeleton className="h-8 w-36" />}>
+      <Await resolve={inputPromise} errorElement={<ActionBarAsyncError />}>
+        {(input) => (
+          <CopyMessagesButton input={input} output={inference.output} />
+        )}
+      </Await>
+    </Suspense>
+  );
+}
+
 interface TryWithVariantActionStreamingProps {
   inference: StoredInference;
   usedVariantsPromise: Promise<string[]>;
-  inputPromise: Promise<Input>;
+  inputPromise: Promise<Input | undefined>;
   modelInferencesPromise: Promise<ModelInferencesData>;
   onFeedbackAdded: (redirectUrl?: string) => void;
 }

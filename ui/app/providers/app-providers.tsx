@@ -3,6 +3,7 @@ import { GlobalToastProvider } from "./global-toast-provider";
 import { SidebarProvider } from "~/components/ui/sidebar";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { Toaster } from "~/components/ui/toaster";
+import { EntitySheetProvider } from "~/context/entity-sheet";
 import { ReadOnlyProvider } from "~/context/read-only";
 import { AutopilotAvailableProvider } from "~/context/autopilot-available";
 import { ConfigProvider, EMPTY_CONFIG } from "~/context/config";
@@ -43,7 +44,7 @@ export function AppProviders({ children, loaderData }: AppProvidersProps) {
               <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
                 <SidebarProvider>
                   <TooltipProvider delayDuration={250}>
-                    {children}
+                    <EntitySheetProvider>{children}</EntitySheetProvider>
                   </TooltipProvider>
                 </SidebarProvider>
               </ConfigProvider>

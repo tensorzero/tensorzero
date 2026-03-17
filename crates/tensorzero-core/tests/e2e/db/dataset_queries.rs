@@ -1,0 +1,2927 @@
+//! Shared test logic for DatasetQueries implementations (ClickHouse and Postgres).
+
+use object_store::path::Path as ObjectStorePath;
+use serde_json::json;
+use sqlx::Row;
+use std::collections::{HashMap, HashSet};
+use tensorzero::{GetDatapointParams, GetDatasetMetadataParams, OrderDirection, Role};
+use tensorzero_core::config::snapshot::SnapshotHash;
+use tensorzero_core::db::clickhouse::query_builder::{
+    DatapointFilter, TagComparisonOperator, TagFilter,
+};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::datasets::{DatasetMetadata, DatasetQueries, GetDatapointsParams};
+use tensorzero_core::db::postgres::test_helpers::get_postgres;
+use tensorzero_core::db::stored_datapoint::{
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
+};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
+use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
+use tensorzero_core::inference::types::stored_input::StoredFile;
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, Text,
+};
+use tensorzero_core::stored_inference::StoredSample;
+use uuid::Uuid;
+
+async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets(
+    conn: impl DatasetQueries,
+) {
+    let params = GetDatasetMetadataParams {
+        function_name: None,
+        limit: None,
+        offset: None,
+    };
+    let metadata = conn.get_dataset_metadata(&params).await.unwrap();
+
+    // We only assert that the result contains the expected datasets
+    // Because other tests insert into the table, there could be additional datasets
+    assert!(metadata.contains(&DatasetMetadata {
+        dataset_name: "foo".to_string(),
+        count: 118,
+        last_updated: "2025-04-15T02:33:58Z".to_string(),
+    }));
+    assert!(metadata.contains(&DatasetMetadata {
+        dataset_name: "bar".to_string(),
+        count: 6,
+        last_updated: "2025-03-14T17:38:09Z".to_string(),
+    }));
+}
+make_db_test!(test_get_dataset_metadata_returns_correct_counts_for_all_datasets);
+
+async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
+    conn: impl DatasetQueries,
+) {
+    let params = GetDatasetMetadataParams {
+        function_name: Some("write_haiku".to_string()),
+        limit: None,
+        offset: None,
+    };
+    let metadata = conn.get_dataset_metadata(&params).await.unwrap();
+
+    // We only assert that the result contains the expected dataset
+    // Because other tests insert into the table, there could be additional datasets
+    assert!(metadata.contains(&DatasetMetadata {
+        dataset_name: "foo".to_string(),
+        count: 77,
+        last_updated: "2025-03-23T20:03:59Z".to_string(),
+    }));
+}
+make_db_test!(test_get_dataset_metadata_returns_correct_counts_for_specific_function);
+
+async fn test_count_datapoints_for_dataset_chat(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let dataset_name = format!("test_count_{}", Uuid::now_v7());
+    let function_name = "test_function";
+
+    // Get initial count
+    let initial_count = conn
+        .count_datapoints_for_dataset(&dataset_name, Some(function_name))
+        .await
+        .unwrap();
+    assert_eq!(
+        initial_count, 0,
+        "Newly-created dataset should have 0 datapoints before insertion"
+    );
+
+    // Insert two datapoints
+    for _ in 0..2 {
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "test".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+    }
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    let new_count = conn
+        .count_datapoints_for_dataset(&dataset_name, Some(function_name))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        new_count, 2,
+        "Dataset should have 2 chat datapoints after insertion"
+    );
+}
+make_db_test!(test_count_datapoints_for_dataset_chat);
+
+async fn test_count_datapoints_for_dataset_json(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let dataset_name = format!("test_count_{}", Uuid::now_v7());
+    let function_name = "test_function";
+
+    // Get initial count
+    let initial_count = conn
+        .count_datapoints_for_dataset(&dataset_name, Some(function_name))
+        .await
+        .unwrap();
+    assert_eq!(
+        initial_count, 0,
+        "Newly-created dataset should have 0 datapoints before insertion"
+    );
+
+    // Insert two datapoints
+    for _ in 0..2 {
+        let datapoint = StoredJsonInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.to_string(),
+            id: Uuid::now_v7(),
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(JsonInferenceOutput {
+                raw: None,
+                parsed: None,
+            }),
+            output_schema: json!({"type":"object"}),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+            .await
+            .unwrap();
+    }
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    let new_count = conn
+        .count_datapoints_for_dataset(&dataset_name, Some(function_name))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        new_count, 2,
+        "Dataset should have 2 json datapoints after insertion"
+    );
+}
+make_db_test!(test_count_datapoints_for_dataset_json);
+
+async fn test_insert_datapoint_chat(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "e2e".to_string());
+
+    let new_datapoint_id = Uuid::now_v7();
+    let datapoint_insert = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: "test_insert_chat".to_string(),
+        function_name: "write_haiku".to_string(),
+        name: Some("test_chat_datapoint".to_string()),
+        id: new_datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "response".to_string(),
+        })]),
+        tool_params: None,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Insert the datapoint
+    conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Verify it was inserted by selecting
+    let inserted_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_insert_chat".to_string(),
+            datapoint_id: new_datapoint_id,
+            allow_stale: None,
+        })
+        .await;
+
+    assert!(
+        inserted_datapoint.is_ok(),
+        "Should be able to select the inserted chat datapoint, but encountered error: {}",
+        inserted_datapoint.unwrap_err()
+    );
+}
+make_db_test!(test_insert_datapoint_chat);
+
+async fn test_insert_datapoint_json(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "e2e".to_string());
+
+    let new_datapoint_id = Uuid::now_v7();
+    let datapoint_insert = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        dataset_name: "test_insert_json".to_string(),
+        function_name: "extract_entities".to_string(),
+        name: Some("test_json_datapoint".to_string()),
+        id: new_datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"data":"extracted"})),
+            raw: Some("{\"data\":\"extracted\"}".to_string()),
+        }),
+        output_schema: json!({"type":"object"}),
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Insert the datapoint
+    conn.insert_datapoints(&[datapoint_insert]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Verify it was inserted by selecting
+    let inserted_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_insert_json".to_string(),
+            datapoint_id: new_datapoint_id,
+            allow_stale: None,
+        })
+        .await;
+    assert!(
+        inserted_datapoint.is_ok(),
+        "Should be able to select the inserted json datapoint, but encountered error: {}",
+        inserted_datapoint.unwrap_err()
+    );
+}
+make_db_test!(test_insert_datapoint_json);
+
+async fn test_insert_datapoint_validates_dataset_name_builder(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    // Test reserved name "builder"
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: "builder".to_string(),
+        function_name: "test_function".to_string(),
+        id: Uuid::now_v7(),
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    let result = conn
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await;
+    assert!(result.is_err());
+}
+make_db_test!(test_insert_datapoint_validates_dataset_name_builder);
+
+async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    // Test reserved prefix "tensorzero::"
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: "tensorzero::system".to_string(),
+        function_name: "test_function".to_string(),
+        id: Uuid::now_v7(),
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    let result = conn
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await;
+    assert!(result.is_err());
+}
+make_db_test!(test_insert_datapoint_validates_dataset_name_tensorzero_prefix);
+
+async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id(
+    conn: impl DatasetQueries,
+) {
+    let datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "bar".to_string(),
+            datapoint_id: Uuid::parse_str("01942e26-c48c-7720-b971-a1f7a3a9ac98").unwrap(),
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    if let StoredDatapoint::Json(datapoint) = datapoint {
+        assert_eq!(datapoint.dataset_name, "bar");
+        assert_eq!(datapoint.function_name, "ask_question");
+        assert_eq!(
+            datapoint.episode_id,
+            Some(Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d721").unwrap())
+        );
+        assert_eq!(datapoint.name, None);
+        assert_eq!(
+            datapoint.id,
+            Uuid::parse_str("01942e26-c48c-7720-b971-a1f7a3a9ac98").unwrap()
+        );
+
+        let input_messages = datapoint.input.messages;
+        assert!(input_messages.contains(&StoredInputMessage {
+            role: Role::User,
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: "Is it a living thing?".to_string(),
+            })],
+        }));
+
+        assert_eq!(
+            datapoint.output.unwrap().parsed,
+            Some(json!({
+                "question": "Is it a large natural object, like a mountain or a tree?",
+                "thinking": "Since the object is not a living thing and is not commonly found indoors, but is a natural object, it narrows down the possibilities to various elements from nature. It could be a rock, a tree, or potentially something like a mountain or a river. To further narrow it down, I will ask if it is a large object or a small object.",
+            }))
+        );
+
+        assert_eq!(
+            datapoint.output_schema,
+            json!({
+                "additionalProperties": false,
+                "properties": {
+                    "question": {
+                        "type": "string",
+                    },
+                    "thinking": {
+                        "type": "string",
+                    },
+                },
+                "required": ["thinking", "question"],
+                "type": "object"
+            })
+        );
+
+        assert!(!datapoint.is_deleted, "is_deleted should be false");
+        assert!(datapoint.staled_at.is_none(), "staled_at should be None");
+        assert_eq!(datapoint.auxiliary, "", "auxiliary should be empty");
+        assert_eq!(
+            datapoint.source_inference_id, None,
+            "source_inference_id should be None"
+        );
+        assert!(!datapoint.is_custom, "is_custom should be false");
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+make_db_test!(test_get_datapoint_returns_correct_json_datapoint_with_specific_id);
+
+async fn test_get_datapoint_returns_correct_chat_datapoint_with_specific_id(
+    conn: impl DatasetQueries,
+) {
+    let datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "foo".to_string(),
+            datapoint_id: Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c28b").unwrap(),
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    if let StoredDatapoint::Chat(datapoint) = datapoint {
+        assert_eq!(datapoint.dataset_name, "foo");
+        assert_eq!(datapoint.function_name, "write_haiku");
+        assert_eq!(
+            datapoint.episode_id,
+            Some(Uuid::parse_str("0193fb9d-73ad-7ad2-807d-a2ef10088ff9").unwrap())
+        );
+        assert_eq!(datapoint.name, None);
+        assert_eq!(
+            datapoint.id,
+            Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c28b").unwrap()
+        );
+
+        assert!(!datapoint.is_deleted, "is_deleted should be false");
+        assert_eq!(datapoint.auxiliary, "", "auxiliary should be empty");
+        assert!(datapoint.staled_at.is_none(), "staled_at should be None");
+        assert_eq!(
+            datapoint.source_inference_id, None,
+            "source_inference_id should be None"
+        );
+        assert!(!datapoint.is_custom, "is_custom should be false");
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_get_datapoint_returns_correct_chat_datapoint_with_specific_id);
+
+async fn test_get_datapoint_returns_error_for_non_existent_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let result = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "foo".to_string(),
+            datapoint_id: Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap(),
+            allow_stale: None,
+        })
+        .await;
+
+    assert!(
+        result.is_err(),
+        "Should return error for non-existent datapoint"
+    );
+}
+make_db_test!(test_get_datapoint_returns_error_for_non_existent_datapoint);
+
+async fn test_chat_datapoint_lifecycle_insert_get_delete(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let datapoint_id = Uuid::now_v7();
+    let source_inference_id = Uuid::now_v7();
+
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "lifecycle".to_string());
+
+    let chat_datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: "test_chat_dataset".to_string(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        episode_id: Some(Uuid::parse_str("0193fb9d-73ad-7ad2-807d-a2ef10088ff9").unwrap()),
+        name: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Code flows like water\nTests catch bugs in their net now\nPeace in the program"
+                .to_string(),
+        })]),
+        tool_params: None,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: Some(source_inference_id),
+        is_custom: false,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Test insertion
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
+
+    // Flush async insert to ensure datapoint is visible before deletion
+    conn.flush_pending_writes().await;
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Test retrieval
+    let retrieved_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_chat_dataset".to_string(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(retrieved_datapoint.id(), datapoint_id);
+    assert_eq!(retrieved_datapoint.function_name(), "write_haiku");
+    assert_eq!(retrieved_datapoint.dataset_name(), "test_chat_dataset");
+
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+        assert_eq!(chat_dp.source_inference_id, Some(source_inference_id));
+    } else {
+        panic!("Expected chat datapoint");
+    }
+
+    // Test staling
+    conn.delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
+        .await
+        .unwrap();
+
+    // Flush async insert to ensure datapoint is deleted
+    conn.flush_pending_writes().await;
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Try to get the datapoint (should return error since it's staled)
+    let staled_result = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_chat_dataset".to_string(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await;
+
+    assert!(
+        staled_result.is_err(),
+        "Should return error for staled datapoint"
+    );
+
+    // Test retrieval with allow_stale=true
+    let staled_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_chat_dataset".to_string(),
+            datapoint_id,
+            allow_stale: Some(true),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(staled_datapoint.id(), datapoint_id);
+
+    if let StoredDatapoint::Chat(chat_dp) = staled_datapoint {
+        assert!(
+            chat_dp.staled_at.is_some(),
+            "Should have staled_at timestamp"
+        );
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_chat_datapoint_lifecycle_insert_get_delete);
+
+async fn test_json_datapoint_lifecycle_insert_get_delete(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let datapoint_id = Uuid::now_v7();
+    let source_inference_id = Uuid::now_v7();
+
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "lifecycle".to_string());
+
+    let json_datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        dataset_name: "test_json_dataset".to_string(),
+        function_name: "extract_entities".to_string(),
+        id: datapoint_id,
+        episode_id: Some(Uuid::parse_str("0193fb9d-73ad-7ad2-807d-a2ef10088ff8").unwrap()),
+        name: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: None,
+        output_schema: json!({"type":"object"}),
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: Some(source_inference_id),
+        is_custom: false,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Test insertion
+    conn.insert_datapoints(&[json_datapoint]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Test retrieval
+    let retrieved_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_json_dataset".to_string(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(retrieved_datapoint.id(), datapoint_id);
+    assert_eq!(retrieved_datapoint.function_name(), "extract_entities");
+    assert_eq!(retrieved_datapoint.dataset_name(), "test_json_dataset");
+
+    if let StoredDatapoint::Json(json_dp) = retrieved_datapoint {
+        assert_eq!(json_dp.source_inference_id, Some(source_inference_id));
+    } else {
+        panic!("Expected json datapoint");
+    }
+
+    // Test staling
+    conn.delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Try to get the datapoint (should return error since it's staled)
+    let staled_result = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_json_dataset".to_string(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await;
+
+    assert!(
+        staled_result.is_err(),
+        "Should return error for staled datapoint"
+    );
+
+    // Test retrieval with allow_stale=true
+    let staled_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "test_json_dataset".to_string(),
+            datapoint_id,
+            allow_stale: Some(true),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(staled_datapoint.id(), datapoint_id);
+
+    if let StoredDatapoint::Json(json_dp) = staled_datapoint {
+        assert!(
+            json_dp.staled_at.is_some(),
+            "Should have staled_at timestamp"
+        );
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+make_db_test!(test_json_datapoint_lifecycle_insert_get_delete);
+
+async fn test_handles_non_existent_datapoint_retrieval(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let result = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: "non_existent_dataset".to_string(),
+            datapoint_id: Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c30d").unwrap(),
+            allow_stale: None,
+        })
+        .await;
+
+    assert!(
+        result.is_err(),
+        "Should return error for non-existent datapoint"
+    );
+}
+make_db_test!(test_handles_non_existent_datapoint_retrieval);
+
+async fn test_handles_duplicate_insertions_gracefully(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let datapoint_id = Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c31e").unwrap();
+    let source_inference_id = Uuid::now_v7();
+
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "duplicate".to_string());
+
+    let chat_datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: "test_chat_dataset".to_string(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        episode_id: Some(Uuid::parse_str("0193fb9d-73ad-7ad2-807d-a2ef10088ff7").unwrap()),
+        name: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Copies everywhere\nDuplicates fill the database\nUnique keys break down"
+                .to_string(),
+        })]),
+        tool_params: None,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: Some(source_inference_id),
+        is_custom: false,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+    let datapoint_slice = [chat_datapoint];
+
+    // First insertion
+    conn.insert_datapoints(&datapoint_slice).await.unwrap();
+
+    // Second insertion with same ID should not throw
+    conn.insert_datapoints(&datapoint_slice).await.unwrap();
+}
+make_db_test!(test_handles_duplicate_insertions_gracefully);
+
+async fn test_handles_staling_of_non_existent_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    // Should not throw when trying to stale a non-existent datapoint
+    let datapoint_id = Uuid::now_v7();
+    let result = conn.delete_datapoints("fake", Some(&[datapoint_id])).await;
+
+    // This should succeed without error (graceful handling)
+    assert!(
+        result.is_ok(),
+        "Should handle staling non-existent datapoint gracefully, but encountered error: {}",
+        result.unwrap_err()
+    );
+}
+make_db_test!(test_handles_staling_of_non_existent_datapoint);
+
+async fn test_count_datapoints_for_dataset_chat_write_haiku(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
+        .count_datapoints_for_dataset("foo", Some("write_haiku"))
+        .await
+        .unwrap();
+
+    // Based on existing test data, we expect some chat datapoints for write_haiku function in foo dataset
+    // TODO(#3903): Stop making assumptions about what data exists in the database.
+    assert!(count > 0, "Should have some chat datapoints");
+}
+make_db_test!(test_count_datapoints_for_dataset_chat_write_haiku);
+
+async fn test_count_datapoints_for_dataset_json_extract_entities(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
+        .count_datapoints_for_dataset("foo", Some("extract_entities"))
+        .await
+        .unwrap();
+
+    // Based on existing test data, we expect some json datapoints for extract_entities function in foo dataset
+    // TODO(#3903): Stop making assumptions about what data exists in the database.
+    assert!(count > 0, "Should have some json datapoints");
+}
+make_db_test!(test_count_datapoints_for_dataset_json_extract_entities);
+
+async fn test_count_datapoints_for_dataset_non_existent_dataset(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
+        .count_datapoints_for_dataset("fake", Some("write_haiku"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        count, 0,
+        "Should have 0 datapoints for non-existent dataset"
+    );
+}
+make_db_test!(test_count_datapoints_for_dataset_non_existent_dataset);
+
+async fn test_count_datapoints_for_dataset_non_existent_function(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let count = conn
+        .count_datapoints_for_dataset("foo", Some("fake"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        count, 0,
+        "Should have 0 datapoints for non-existent function"
+    );
+}
+make_db_test!(test_count_datapoints_for_dataset_non_existent_function);
+
+async fn test_insert_datapoint_handles_invalid_dataset_names(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let mut tags = HashMap::new();
+    tags.insert("test".to_string(), "invalid_name".to_string());
+
+    let chat_datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: "builder".to_string(),
+        function_name: "write_haiku".to_string(),
+        id: Uuid::now_v7(),
+        episode_id: None,
+        name: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![]),
+        tool_params: None,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    let result = conn.insert_datapoints(&[chat_datapoint]).await;
+    assert!(
+        result.is_err(),
+        "Should reject reserved dataset name 'builder'"
+    );
+}
+make_db_test!(test_insert_datapoint_handles_invalid_dataset_names);
+
+async fn test_get_datapoints_with_empty_ids(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let dataset_name = format!("test_get_datapoints_empty_{}", Uuid::now_v7());
+
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: None,
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 0, "Should return empty vector for empty IDs");
+}
+make_db_test!(test_get_datapoints_with_empty_ids);
+
+async fn test_get_datapoints_with_single_chat_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a chat datapoint
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_chat".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve using get_datapoints
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 1, "Should return exactly one datapoint");
+
+    if let StoredDatapoint::Chat(dp) = &result[0] {
+        assert_eq!(dp.id, datapoint_id);
+        assert_eq!(dp.function_name, "test_function");
+        assert_eq!(dp.name, Some("test_chat".to_string()));
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_get_datapoints_with_single_chat_datapoint);
+
+async fn test_get_datapoints_with_tag_filter_from_small_fixtures(conn: impl DatasetQueries) {
+    let filter = DatapointFilter::Tag(TagFilter {
+        key: "tensorzero::evaluation_run_id".to_string(),
+        value: "01963691-9d3c-7793-a8be-3937ebb849c1".to_string(),
+        comparison_operator: TagComparisonOperator::Equal,
+    });
+
+    let datapoints = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some("foo".to_string()),
+            function_name: Some("write_haiku".to_string()),
+            ids: None,
+            limit: 20,
+            offset: 0,
+            allow_stale: true,
+            filter: Some(filter),
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    let expected_id = Uuid::parse_str("0196374a-d03f-7420-9da5-1561cba71ddb").unwrap();
+
+    assert!(
+        datapoints
+            .iter()
+            .any(|datapoint| datapoint.id() == expected_id),
+        "TagFilter should match datapoint {expected_id} from `ui/fixtures/small-fixtures/chat_inference_datapoint_examples.jsonl`"
+    );
+}
+make_db_test!(test_get_datapoints_with_tag_filter_from_small_fixtures);
+
+async fn test_get_datapoints_with_single_json_datapoint(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a json datapoint
+    let datapoint = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_json".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"key": "value"})),
+            raw: Some("{\"key\":\"value\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve using get_datapoints
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 1, "Should return exactly one datapoint");
+
+    if let StoredDatapoint::Json(dp) = &result[0] {
+        assert_eq!(dp.id, datapoint_id);
+        assert_eq!(dp.function_name, "test_function");
+        assert_eq!(dp.name, Some("test_json".to_string()));
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+make_db_test!(test_get_datapoints_with_single_json_datapoint);
+
+async fn test_get_datapoints_with_multiple_mixed_datapoints(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+
+    // Create IDs
+    let chat_id1 = Uuid::now_v7();
+    let json_id = Uuid::now_v7();
+    let chat_id2 = Uuid::now_v7();
+
+    // Insert chat datapoint 1
+    let chat_dp1 = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id1,
+        name: Some("chat1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 1".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
+        .await
+        .unwrap();
+
+    // Insert json datapoint
+    let json_dp = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_json_function".to_string(),
+        id: json_id,
+        name: Some("json1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"data": "test"})),
+            raw: Some("{\"data\":\"test\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+        .await
+        .unwrap();
+
+    // Insert chat datapoint 2
+    let chat_dp2 = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id2,
+        name: Some("chat2".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 2".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve all three datapoints
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![chat_id1, json_id, chat_id2]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        3,
+        "Should return all three datapoints (2 chat, 1 json)"
+    );
+
+    // Verify we got all the expected IDs
+    let returned_ids: Vec<Uuid> = result.iter().map(StoredDatapoint::id).collect();
+    assert!(returned_ids.contains(&chat_id1));
+    assert!(returned_ids.contains(&json_id));
+    assert!(returned_ids.contains(&chat_id2));
+
+    // Count types
+    let chat_count = result
+        .iter()
+        .filter(|dp| matches!(dp, StoredDatapoint::Chat(_)))
+        .count();
+    let json_count = result
+        .iter()
+        .filter(|dp| matches!(dp, StoredDatapoint::Json(_)))
+        .count();
+
+    assert_eq!(chat_count, 2, "Should have 2 chat datapoints");
+    assert_eq!(json_count, 1, "Should have 1 json datapoint");
+}
+make_db_test!(test_get_datapoints_with_multiple_mixed_datapoints);
+
+async fn test_get_datapoints_with_non_existent_ids(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert one datapoint
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Query with both existing and non-existent IDs
+    let non_existent_id = Uuid::now_v7();
+    let another_non_existent_id = Uuid::now_v7();
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id, non_existent_id, another_non_existent_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        1,
+        "Should only return the one existing datapoint"
+    );
+    assert_eq!(result[0].id(), datapoint_id);
+}
+make_db_test!(test_get_datapoints_with_non_existent_ids);
+
+async fn test_get_datapoints_with_search_query(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+
+    // Create IDs
+    let chat_id1 = Uuid::now_v7();
+    let json_id = Uuid::now_v7();
+    let chat_id2 = Uuid::now_v7();
+
+    // Insert chat datapoint 1
+    let chat_dp1 = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id1,
+        name: Some("chat1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 1".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp1)])
+        .await
+        .unwrap();
+
+    // Insert json datapoint
+    let json_dp = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_json_function".to_string(),
+        id: json_id,
+        name: Some("json1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"data": "test"})),
+            raw: Some("{\"data\":\"test\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+        .await
+        .unwrap();
+
+    // Insert chat datapoint 2
+    let chat_dp2 = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id2,
+        name: Some("chat2".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 2".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(chat_dp2)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve all three datapoints
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: None,
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: Some(vec![DatapointOrderBy {
+                term: DatapointOrderByTerm::SearchRelevance,
+                direction: OrderDirection::Desc,
+            }]),
+            search_query_experimental: Some("chat".to_string()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 2, "Should return 2 datapoints (both chats)");
+
+    // Verify we got all the expected IDs
+    let returned_ids: HashSet<Uuid> = result.iter().map(StoredDatapoint::id).collect();
+    assert!(returned_ids.contains(&chat_id1));
+    assert!(returned_ids.contains(&chat_id2));
+}
+make_db_test!(test_get_datapoints_with_search_query);
+
+async fn test_get_datapoints_with_search_query_with_json_encoded_term(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+
+    // Insert json datapoint with escaped content
+    let json_id = Uuid::now_v7();
+    let parsed_value = json!({"data": "this is an input string with \"escaped\" content"});
+    let json_dp = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_json_function".to_string(),
+        id: json_id,
+        name: Some("json1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(parsed_value.clone()),
+            raw: Some(serde_json::to_string(&parsed_value).unwrap()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Json(json_dp)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve all three datapoints
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: None,
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: Some(vec![DatapointOrderBy {
+                term: DatapointOrderByTerm::SearchRelevance,
+                direction: OrderDirection::Desc,
+            }]),
+            search_query_experimental: Some(r#""escaped" content"#.to_string()),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        1,
+        "Should return the newly inserted json datapoint"
+    );
+    assert_eq!(result[0].id(), json_id);
+}
+make_db_test!(test_get_datapoints_with_search_query_with_json_encoded_term);
+
+async fn test_get_datapoints_respects_allow_stale_false(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Verify we can retrieve it before staling
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(result.len(), 1, "Should retrieve datapoint before staling");
+
+    // Stale the datapoint
+    conn.delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Try to retrieve with allow_stale=false
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        0,
+        "Should not return staled datapoint when allow_stale=false"
+    );
+}
+make_db_test!(test_get_datapoints_respects_allow_stale_false);
+
+async fn test_get_datapoints_respects_allow_stale_true(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Stale the datapoint
+    conn.delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Try to retrieve with allow_stale=true
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: true,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        1,
+        "Should return staled datapoint when allow_stale=true"
+    );
+
+    if let StoredDatapoint::Chat(dp) = &result[0] {
+        assert!(
+            dp.staled_at.is_some(),
+            "Datapoint should have staled_at timestamp"
+        );
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_get_datapoints_respects_allow_stale_true);
+
+async fn test_get_datapoints_with_wrong_dataset_name(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint in one dataset
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    };
+
+    conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Try to retrieve with different dataset name
+    let wrong_dataset = format!("wrong_{dataset_name}");
+    let result = conn
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(wrong_dataset),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            limit: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+            order_by: None,
+            search_query_experimental: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        0,
+        "Should not return datapoint when querying wrong dataset"
+    );
+}
+make_db_test!(test_get_datapoints_with_wrong_dataset_name);
+
+async fn test_chat_datapoint_with_file_object_storage_roundtrip(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
+
+    // Create a StoredFile with ObjectStorage
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/original.png".parse().unwrap()),
+        detail: None,
+        mime_type: mime::IMAGE_PNG,
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image.png").unwrap(),
+        },
+        filename: None,
+    });
+
+    let chat_datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_with_file".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::File(Box::new(
+                    stored_file.clone(),
+                ))],
+            }],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Insert the datapoint
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify the file was preserved correctly
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+        assert_eq!(chat_dp.id, datapoint_id);
+        assert_eq!(chat_dp.input.messages.len(), 1);
+        assert_eq!(chat_dp.input.messages[0].content.len(), 1);
+
+        match &chat_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(
+                    file.source_url,
+                    Some("https://example.com/original.png".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_chat_datapoint_with_file_object_storage_roundtrip);
+
+async fn test_json_datapoint_with_file_object_storage_roundtrip(
+    conn: impl DatasetQueries + TestDatabaseHelpers,
+) {
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
+
+    // Create a StoredFile with ObjectStorage
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/data.json".parse().unwrap()),
+        detail: None,
+        mime_type: mime::APPLICATION_JSON,
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/data.json").unwrap(),
+        },
+        filename: None,
+    });
+
+    let json_datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_json_with_file".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::File(Box::new(
+                    stored_file.clone(),
+                ))],
+            }],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"result": "success"})),
+            raw: Some("{\"result\":\"success\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Insert the datapoint
+    conn.insert_datapoints(&[json_datapoint]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify the file was preserved correctly
+    if let StoredDatapoint::Json(json_dp) = retrieved_datapoint {
+        assert_eq!(json_dp.id, datapoint_id);
+        assert_eq!(json_dp.input.messages.len(), 1);
+        assert_eq!(json_dp.input.messages[0].content.len(), 1);
+
+        match &json_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.mime_type, mime::APPLICATION_JSON);
+                assert_eq!(
+                    file.source_url,
+                    Some("https://example.com/data.json".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+make_db_test!(test_json_datapoint_with_file_object_storage_roundtrip);
+
+async fn test_datapoint_with_mixed_file_types(conn: impl DatasetQueries + TestDatabaseHelpers) {
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
+
+    // Create multiple StoredFiles
+    let stored_file1 = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        detail: None,
+        mime_type: mime::IMAGE_PNG,
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
+        },
+        filename: None,
+    });
+
+    let stored_file2 = StoredFile(ObjectStoragePointer {
+        source_url: None, // No source URL
+        detail: None,
+        mime_type: mime::IMAGE_JPEG,
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
+        },
+        filename: None,
+    });
+
+    let chat_datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_mixed_files".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![
+                StoredInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        StoredInputMessageContent::Text(Text {
+                            text: "Here are some files".to_string(),
+                        }),
+                        StoredInputMessageContent::File(Box::new(stored_file1.clone())),
+                    ],
+                },
+                StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::File(Box::new(
+                        stored_file2.clone(),
+                    ))],
+                },
+            ],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: None,
+    });
+
+    // Insert the datapoint
+    conn.insert_datapoints(&[chat_datapoint]).await.unwrap();
+
+    conn.sleep_for_writes_to_be_visible().await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = conn
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify all files were preserved correctly
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+        assert_eq!(chat_dp.id, datapoint_id);
+        assert_eq!(chat_dp.input.messages.len(), 2);
+
+        // Check first message with text and file
+        assert_eq!(chat_dp.input.messages[0].content.len(), 2);
+        match &chat_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Here are some files");
+            }
+            _ => panic!("Expected Text content"),
+        }
+        match &chat_dp.input.messages[0].content[1] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(
+                    file.source_url,
+                    Some("https://example.com/image1.png".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+
+        // Check second message with file only
+        assert_eq!(chat_dp.input.messages[1].content.len(), 1);
+        match &chat_dp.input.messages[1].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(file.source_url, None);
+                assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+make_db_test!(test_datapoint_with_mixed_file_types);
+
+// Tool Call Storage Format Tests (Migration 0041)
+// These tests verify the new decomposed storage format for tool calls
+
+mod tool_call_storage_tests {
+    use super::*;
+    use serde_json::json;
+    use tensorzero_core::tool::{
+        AllowedTools, AllowedToolsChoice, FunctionTool, ProviderTool, ProviderToolScope,
+        ProviderToolScopeModelProvider, Tool, ToolCallConfigDatabaseInsert, ToolChoice,
+    };
+
+    async fn test_tool_call_storage_static_tools_only(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 1: Static tools only (from function config, not provided dynamically)
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![], // No dynamic tools
+                vec![], // No provider tools
+                AllowedTools {
+                    tools: ["static_tool_1".to_string(), "static_tool_2".to_string()]
+                        .into_iter()
+                        .collect(),
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        // Verify by retrieving the datapoint
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            // Verify roundtrip - tool_params should be reconstructed correctly
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // No dynamic tools
+            assert!(tool_params.dynamic_tools.is_empty());
+
+            // No provider tools
+            assert!(tool_params.dynamic_provider_tools.is_empty());
+
+            // Allowed tools should contain static tools
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_tool_1".to_string())
+            );
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_tool_2".to_string())
+            );
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::Explicit
+            );
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Auto);
+            assert_eq!(tool_params.parallel_tool_calls, None);
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_static_tools_only);
+
+    async fn test_tool_call_storage_dynamic_tools_only(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 2: Dynamic tools only (provided at runtime)
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool = Tool::Function(FunctionTool {
+            name: "runtime_tool".to_string(),
+            description: "A tool provided at runtime".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        });
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool], // Dynamic tool
+                vec![],             // No provider tools
+                AllowedTools {
+                    tools: vec![], // Empty static tools
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify dynamic tool is present
+            assert_eq!(tool_params.dynamic_tools.len(), 1);
+
+            let Tool::Function(tool) = &tool_params.dynamic_tools[0] else {
+                panic!("Expected Function tool");
+            };
+            assert_eq!(tool.name, "runtime_tool");
+            assert_eq!(tool.description, "A tool provided at runtime");
+            assert!(!tool.strict);
+
+            // No static tools (empty allowed_tools)
+            assert!(tool_params.allowed_tools.tools.is_empty());
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::Explicit
+            );
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Required);
+            assert_eq!(tool_params.parallel_tool_calls, Some(true));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_dynamic_tools_only);
+
+    async fn test_tool_call_storage_mixed_static_and_dynamic(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 3: Mixed static + dynamic tools
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool = Tool::Function(FunctionTool {
+            name: "dynamic_x".to_string(),
+            description: "Dynamic tool X".to_string(),
+            parameters: json!({"type": "object"}),
+            strict: true,
+        });
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool],
+                vec![],
+                AllowedTools {
+                    tools: vec!["static_a".to_string(), "static_b".to_string()],
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify both static and dynamic tools
+            assert_eq!(tool_params.dynamic_tools.len(), 1);
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_a".to_string())
+            );
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_b".to_string())
+            );
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_mixed_static_and_dynamic);
+
+    async fn test_tool_call_storage_provider_tools(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 4: Provider tools (model-provider-specific tools)
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let provider_tool = ProviderTool {
+            scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
+                model_name: "gpt-4".to_string(),
+                provider_name: Some("openai".to_string()),
+            }),
+            tool: json!({
+                "type": "code_interpreter"
+            }),
+        };
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![provider_tool],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify provider tools are preserved (previously would have been lost!)
+            assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
+            if let ProviderToolScope::ModelProvider(mp) =
+                &tool_params.dynamic_provider_tools[0].scope
+            {
+                assert_eq!(mp.model_name, "gpt-4");
+                assert_eq!(mp.provider_name, Some("openai".to_string()));
+            } else {
+                panic!("Expected ModelProvider scope");
+            }
+            assert_eq!(
+                tool_params.dynamic_provider_tools[0].tool["type"],
+                "code_interpreter"
+            );
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_provider_tools);
+
+    async fn test_tool_call_storage_function_default_choice(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 5: AllowedToolsChoice::FunctionDefault
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec!["func_tool_1".to_string()],
+                    choice: AllowedToolsChoice::FunctionDefault, // Key: use function defaults
+                },
+                ToolChoice::None,
+                Some(false),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // FunctionDefault should preserve the choice
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::FunctionDefault
+            );
+            assert_eq!(tool_params.tool_choice, ToolChoice::None);
+            assert_eq!(tool_params.parallel_tool_calls, Some(false));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_function_default_choice);
+
+    async fn test_tool_call_storage_dynamic_allowed_tools_choice(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 6: AllowedToolsChoice::AllAllowedTools
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec!["explicit_tool_1".to_string(), "explicit_tool_2".to_string()],
+                    choice: AllowedToolsChoice::Explicit, // Explicit list
+                },
+                ToolChoice::Specific("explicit_tool_1".to_string()),
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // DynamicAllowedTools should preserve the explicit list
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::Explicit
+            );
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"explicit_tool_1".to_string())
+            );
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"explicit_tool_2".to_string())
+            );
+
+            if let ToolChoice::Specific(tool_name) = tool_params.tool_choice {
+                assert_eq!(tool_name, "explicit_tool_1");
+            } else {
+                panic!("Expected Specific tool choice");
+            }
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_dynamic_allowed_tools_choice);
+
+    async fn test_tool_call_storage_empty_none(conn: impl DatasetQueries + TestDatabaseHelpers) {
+        // Test Case 7: Empty/None tool params
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: None, // No tools at all
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            // Should have no tool params
+            assert!(chat_dp.tool_params.is_none());
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_empty_none);
+
+    async fn test_tool_call_storage_roundtrip_comprehensive(
+        conn: impl DatasetQueries + TestDatabaseHelpers,
+    ) {
+        // Test Case 8: Comprehensive roundtrip test
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool1 = Tool::Function(FunctionTool {
+            name: "dynamic_tool_1".to_string(),
+            description: "First dynamic tool".to_string(),
+            parameters: json!({"type": "object", "properties": {"param1": {"type": "string"}}}),
+            strict: false,
+        });
+
+        let dynamic_tool2 = Tool::Function(FunctionTool {
+            name: "dynamic_tool_2".to_string(),
+            description: "Second dynamic tool".to_string(),
+            parameters: json!({"type": "object", "properties": {"param2": {"type": "number"}}}),
+            strict: true,
+        });
+
+        let provider_tool = ProviderTool {
+            scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
+                model_name: "claude-opus-4-5".to_string(),
+                provider_name: Some("anthropic".to_string()),
+            }),
+            tool: json!({
+                "type": "computer_use"
+            }),
+        };
+
+        let datapoint = StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool1, dynamic_tool2],
+                vec![provider_tool],
+                AllowedTools {
+                    tools: vec!["static_1".to_string(), "static_2".to_string()],
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        };
+
+        conn.insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        conn.sleep_for_writes_to_be_visible().await;
+
+        let retrieved_datapoint = conn
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify all components survived the roundtrip
+            assert_eq!(tool_params.dynamic_tools.len(), 2);
+            assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
+
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_1".to_string())
+            );
+            assert!(
+                tool_params
+                    .allowed_tools
+                    .tools
+                    .contains(&"static_2".to_string())
+            );
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Required);
+            assert_eq!(tool_params.parallel_tool_calls, Some(true));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+    make_db_test!(test_tool_call_storage_roundtrip_comprehensive);
+}
+
+// ===== SNAPSHOT HASH TESTS =====
+// These tests verify that snapshot_hash is correctly written to the database.
+// They use database-specific queries and cannot use the make_db_test! macro.
+
+/// Test that snapshot_hash is written correctly to ClickHouse for chat datapoints.
+#[tokio::test]
+async fn test_insert_chat_datapoint_snapshot_hash_clickhouse() {
+    let clickhouse = get_clickhouse().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_chat_ch_{}", Uuid::now_v7());
+
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    clickhouse
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Query ClickHouse directly to verify snapshot_hash was written
+    let query = format!(
+        "SELECT snapshot_hash FROM ChatInferenceDatapoint WHERE id = '{datapoint_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "ChatInferenceDatapoint should have snapshot_hash in ClickHouse"
+    );
+    // Verify it matches the expected value (decimal string representation)
+    let stored_hash: SnapshotHash = datapoint_row["snapshot_hash"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to Postgres for chat datapoints.
+#[tokio::test]
+async fn test_insert_chat_datapoint_snapshot_hash_postgres() {
+    let postgres = get_postgres().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_chat_pg_{}", Uuid::now_v7());
+
+    let datapoint = StoredChatInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "write_haiku".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    postgres
+        .insert_datapoints(&[StoredDatapoint::Chat(datapoint)])
+        .await
+        .unwrap();
+
+    // Query Postgres directly to verify snapshot_hash was written
+    let pool = postgres.get_pool().unwrap();
+    let row = sqlx::query("SELECT snapshot_hash FROM tensorzero.chat_datapoints WHERE id = $1")
+        .bind(datapoint_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    let stored_hash_bytes: Option<Vec<u8>> = row.get("snapshot_hash");
+    assert!(
+        stored_hash_bytes.is_some(),
+        "ChatInferenceDatapoint should have snapshot_hash in Postgres"
+    );
+
+    let stored_hash = SnapshotHash::from_bytes(&stored_hash_bytes.unwrap());
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to ClickHouse for JSON datapoints.
+#[tokio::test]
+async fn test_insert_json_datapoint_snapshot_hash_clickhouse() {
+    let clickhouse = get_clickhouse().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_json_ch_{}", Uuid::now_v7());
+
+    let datapoint = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "extract_entities".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some("{}".to_string()),
+            parsed: Some(json!({})),
+        }),
+        output_schema: json!({"type":"object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    clickhouse
+        .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        .await
+        .unwrap();
+
+    clickhouse.sleep_for_writes_to_be_visible().await;
+
+    // Query ClickHouse directly to verify snapshot_hash was written
+    let query = format!(
+        "SELECT snapshot_hash FROM JsonInferenceDatapoint WHERE id = '{datapoint_id}' FORMAT JSONEachRow"
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "JsonInferenceDatapoint should have snapshot_hash in ClickHouse"
+    );
+    // Verify it matches the expected value (decimal string representation)
+    let stored_hash: SnapshotHash = datapoint_row["snapshot_hash"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}
+
+/// Test that snapshot_hash is written correctly to Postgres for JSON datapoints.
+#[tokio::test]
+async fn test_insert_json_datapoint_snapshot_hash_postgres() {
+    let postgres = get_postgres().await;
+    let snapshot_hash = SnapshotHash::new_test();
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_snapshot_json_pg_{}", Uuid::now_v7());
+
+    let datapoint = StoredJsonInferenceDatapoint {
+        dataset_name: dataset_name.clone(),
+        function_name: "extract_entities".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some("{}".to_string()),
+            parsed: Some(json!({})),
+        }),
+        output_schema: json!({"type":"object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+        is_deleted: false,
+        updated_at: String::new(),
+        snapshot_hash: Some(snapshot_hash.clone()),
+    };
+
+    postgres
+        .insert_datapoints(&[StoredDatapoint::Json(datapoint)])
+        .await
+        .unwrap();
+
+    // Query Postgres directly to verify snapshot_hash was written
+    let pool = postgres.get_pool().unwrap();
+    let row = sqlx::query("SELECT snapshot_hash FROM tensorzero.json_datapoints WHERE id = $1")
+        .bind(datapoint_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    let stored_hash_bytes: Option<Vec<u8>> = row.get("snapshot_hash");
+    assert!(
+        stored_hash_bytes.is_some(),
+        "JsonInferenceDatapoint should have snapshot_hash in Postgres"
+    );
+
+    let stored_hash = SnapshotHash::from_bytes(&stored_hash_bytes.unwrap());
+    assert_eq!(
+        stored_hash, snapshot_hash,
+        "Stored snapshot_hash should match the inserted value"
+    );
+}

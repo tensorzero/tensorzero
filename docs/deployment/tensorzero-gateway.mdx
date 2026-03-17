@@ -6,14 +6,6 @@ description: Learn how to deploy and customize the TensorZero Gateway.
 The TensorZero Gateway is the core component that handles inference requests and collects observability data.
 It's easy to get started with the TensorZero Gateway.
 
-<Note>
-
-You need to only deploy a standalone gateway if you plan to use the TensorZero UI or interact with the gateway using programming languages other than Python.
-The TensorZero Python SDK includes a built-in embedded gateway, so you don't need to deploy a standalone gateway if you're only using Python.
-See the [Clients](/gateway/clients/) page for more details on how to interact with the TensorZero Gateway.
-
-</Note>
-
 ## Deploy
 
 The gateway requires one of the following command line arguments:
@@ -24,8 +16,8 @@ The gateway requires one of the following command line arguments:
     `--config-file` supports glob patterns, e.g. `--config-file
     /path/to/**/*.toml`.
   </Tip>
-- `--run-clickhouse-migrations`: Run ClickHouse database migrations and exit.
 - `--run-postgres-migrations`: Run Postgres database migrations and exit.
+- `--run-clickhouse-migrations`: Run ClickHouse database migrations and exit.
 
 There are many ways to deploy the TensorZero Gateway.
 Here are a few examples:
@@ -61,7 +53,30 @@ docker run \
 
 <Accordion title="Run with Docker Compose">
 
-We provide an example production-grade [`docker-compose.yml`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/docker-compose.yml) for reference.
+You can run the TensorZero Gateway using Docker Compose:
+
+```yaml
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3000/status
+      interval: 15s
+      timeout: 1s
+      retries: 2
+```
+
+Make sure to create a `.env` file with the relevant environment variables (e.g. `TENSORZERO_POSTGRES_URL` and model provider API keys).
 
 </Accordion>
 
@@ -97,7 +112,7 @@ See the [optimizing latency and throughput](/deployment/optimize-latency-and-thr
 ### Set up model provider credentials
 
 The TensorZero Gateway accepts the following environment variables for provider credentials.
-Unless you specify an alternative credential location in your configuration file, these environment variables are required for the providers that are used in a variant with positive weight.
+Unless you specify an alternative credential location in your configuration file, these environment variables are required for the providers that are used in a variant that can be sampled.
 If required credentials are missing, the gateway will fail on startup.
 
 Unless customized in your configuration file, the following credentials are used by default:
@@ -119,12 +134,6 @@ Unless customized in your configuration file, the following credentials are used
 | OpenRouter              | `OPENROUTER_API_KEY`                                                                                      |
 | Together                | `TOGETHER_API_KEY`                                                                                        |
 | xAI                     | `XAI_API_KEY`                                                                                             |
-
-<Tip>
-
-See [`.env.example`](https://github.com/tensorzero/tensorzero/blob/main/examples/production-deployment/.env.example) for a complete example with every supported environment variable.
-
-</Tip>
 
 ### Set up custom configuration
 
@@ -152,13 +161,41 @@ Alternatively, you can also set the environment variable `TENSORZERO_DISABLE_PSE
 
 </Accordion>
 
-### Set up observability with ClickHouse
+### Set up observability
 
 Optionally, the TensorZero Gateway can collect inference and feedback data for observability, optimization, evaluations, and experimentation.
-After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
-If you don't provide this environment variable, observability will be disabled.
+TensorZero supports both Postgres and ClickHouse as observability backends.
+Postgres is the simpler choice; we recommend ClickHouse if you're handling >100 inferences per second.
 
+If you don't provide either of the environment variables below, observability will be disabled.
 We recommend setting up observability early to monitor your LLM application and collect data for future optimization, but this can be done incrementally as needed.
+
+#### Postgres
+
+After [deploying Postgres](/deployment/postgres), you need to configure the `TENSORZERO_POSTGRES_URL` environment variable with the connection details.
+
+#### ClickHouse
+
+After [deploying ClickHouse](/deployment/clickhouse), you need to configure the `TENSORZERO_CLICKHOUSE_URL` environment variable with the connection details.
+
+### Customize the bind address and port
+
+By default, the gateway binds to `0.0.0.0:3000`.
+You can customize the bind address and port in the configuration ([`gateway.bind_address`](/gateway/configuration-reference#bind_address)), with the `--bind-address` CLI flag, or with the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
+Only one of these methods can be used at a time.
+
+```toml title="tensorzero.toml"
+[gateway]
+bind_address = "0.0.0.0:3000"
+```
+
+```bash
+gateway --bind-address 0.0.0.0:3000 --config-file tensorzero.toml
+```
+
+```bash
+TENSORZERO_GATEWAY_BIND_ADDRESS=0.0.0.0:3000 gateway --config-file tensorzero.toml
+```
 
 ### Customize the logging format
 
@@ -175,8 +212,8 @@ The `/status` endpoint checks that the gateway is running successfully.
 { "status": "ok" }
 ```
 
-The `/health` endpoint additionally checks that it can communicate with ClickHouse (if observability is enabled).
+The `/health` endpoint additionally checks that it can communicate with dependencies like Postgres or ClickHouse (if enabled).
 
 ```json title="GET /health"
-{ "gateway": "ok", "clickhouse": "ok" }
+{ "gateway": "ok", "postgres": "ok" }
 ```

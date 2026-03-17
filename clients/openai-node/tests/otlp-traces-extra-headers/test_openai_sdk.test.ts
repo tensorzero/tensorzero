@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
 import { v7 as uuidv7 } from "uuid";
+import { GATEWAY_URL } from "../helpers";
 
 // Client setup
 let client: OpenAI;
@@ -15,7 +16,7 @@ let client: OpenAI;
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "not-used",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${GATEWAY_URL}/openai/v1`,
   });
 });
 
@@ -48,7 +49,7 @@ describe("OTLP Traces Extra Headers", () => {
         headers: {
           "tensorzero-otlp-traces-extra-header-x-dummy-tensorzero": testValue,
         },
-      }
+      },
     );
 
     const inferenceId = result.id;

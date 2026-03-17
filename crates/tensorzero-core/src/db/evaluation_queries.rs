@@ -1,0 +1,475 @@
+//! Evaluation statistics types and trait definitions.
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
+
+use chrono::{DateTime, Utc};
+#[cfg(test)]
+use mockall::automock;
+use uuid::Uuid;
+
+use crate::config::MetricConfigOptimize;
+use crate::endpoints::inference::InferenceResponse;
+use crate::error::Error;
+use crate::function::FunctionConfigType;
+use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
+use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+
+/// Database struct for deserializing evaluation run info.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
+pub struct EvaluationRunInfoRow {
+    pub evaluation_run_id: Uuid,
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub variant_name: String,
+    pub dataset_name: String,
+    pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub snapshot_hash: Option<String>,
+}
+
+/// Database struct for deserializing evaluation run search results.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
+pub struct EvaluationRunSearchResult {
+    pub evaluation_run_id: Uuid,
+    pub evaluation_name: String,
+    pub dataset_name: String,
+    pub variant_name: String,
+}
+
+/// Metric metadata stored on an inference evaluation run.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InferenceEvaluationRunMetricMetadata {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_name: Option<String>,
+    /// `boolean` or `float`
+    pub value_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimize: Option<MetricConfigOptimize>,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceEvaluationRunSource {
+    DatasetName,
+    DatapointIds,
+}
+
+impl std::fmt::Display for InferenceEvaluationRunSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            InferenceEvaluationRunSource::DatasetName => "dataset_name",
+            InferenceEvaluationRunSource::DatapointIds => "datapoint_ids",
+        };
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InferenceEvaluationRunInsert {
+    pub run_id: Uuid,
+    /// A human-readable evaluation name.
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub function_type: FunctionConfigType,
+    pub dataset_name: String,
+    pub variant_names: Vec<String>,
+    pub metrics: Vec<InferenceEvaluationRunMetricMetadata>,
+    pub source: InferenceEvaluationRunSource,
+    pub snapshot_hash: Option<Vec<u8>>,
+}
+
+/// Database struct for deserializing evaluation run info by IDs.
+/// This is a simpler struct than `EvaluationRunInfoRow` - used when querying by specific run IDs.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
+pub struct EvaluationRunInfoByIdRow {
+    pub evaluation_run_id: Uuid,
+    pub variant_name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Metadata from an inference evaluation run, used to resolve function_name and metrics
+/// from the database instead of requiring the evaluation config.
+#[derive(Debug, Clone)]
+pub struct InferenceEvaluationRunMetadata {
+    pub evaluation_name: String,
+    pub function_name: String,
+    pub function_type: FunctionConfigType,
+    pub metrics: Vec<InferenceEvaluationRunMetricMetadata>,
+}
+
+/// Database struct for deserializing evaluation statistics from ClickHouse.
+/// Contains aggregated metrics for an evaluation run.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct EvaluationStatisticsRow {
+    pub evaluation_run_id: Uuid,
+    pub metric_name: String,
+    pub datapoint_count: u32,
+    pub mean_metric: f64,
+    pub ci_lower: Option<f64>,
+    pub ci_upper: Option<f64>,
+}
+
+/// Result of checking for existing human feedback for an inference evaluation.
+/// This is used to determine if a human has already provided feedback for a
+/// (metric_name, datapoint_id, output) combination, allowing the evaluation
+/// system to use human feedback instead of running automated evaluators.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct InferenceEvaluationHumanFeedbackRow {
+    /// The human-provided evaluation value (JSON).
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub value: serde_json::Value,
+    /// The inference ID associated with this feedback.
+    pub evaluator_inference_id: Uuid,
+}
+
+/// Internal struct for deserializing evaluation results.
+/// The output fields are kept as strings and converted to typed structs based on function type.
+#[derive(Debug, Deserialize, sqlx::FromRow)]
+pub(crate) struct RawEvaluationResultRow {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub datapoint_id: Uuid,
+    pub evaluation_run_id: Uuid,
+    pub evaluator_inference_id: Option<Uuid>,
+    #[serde(default, deserialize_with = "deserialize_optional_json_string")]
+    #[sqlx(json)]
+    pub input: Option<StoredInput>,
+    pub generated_output: Option<String>,
+    pub reference_output: Option<String>,
+    pub dataset_name: String,
+    pub metric_name: Option<String>,
+    pub metric_value: Option<String>,
+    pub feedback_id: Option<Uuid>,
+    pub is_human_feedback: bool,
+    pub variant_name: String,
+    pub name: Option<String>,
+    pub staled_at: Option<String>,
+}
+
+/// Evaluation result for a chat function.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct ChatEvaluationResultRow {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub datapoint_id: Uuid,
+    pub evaluation_run_id: Uuid,
+    /// The evaluator inference ID, if the feedback was generated by an LLM judge
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_inference_id: Option<Uuid>,
+    /// The input to the function
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<Input>,
+    /// The generated output from the model
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_output: Option<Vec<ContentBlockChatOutput>>,
+    /// The reference output from the datapoint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_output: Option<Vec<ContentBlockChatOutput>>,
+    pub dataset_name: String,
+    /// The name of the metric (e.g., "tensorzero::evaluation_name::haiku::evaluator_name::exact_match")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_name: Option<String>,
+    /// The metric value as a string (could be boolean or float)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_value: Option<String>,
+    /// The feedback ID for this metric
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback_id: Option<Uuid>,
+    /// Whether this feedback was human-submitted
+    pub is_human_feedback: bool,
+    /// The variant name used for this inference
+    pub variant_name: String,
+    /// The datapoint name (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// When the datapoint was marked as stale (if ever)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
+}
+
+/// Evaluation result for a JSON function.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct JsonEvaluationResultRow {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub datapoint_id: Uuid,
+    pub evaluation_run_id: Uuid,
+    /// The evaluator inference ID, if the feedback was generated by an LLM judge
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_inference_id: Option<Uuid>,
+    /// The input to the function
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<Input>,
+    /// The generated output from the model
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_output: Option<JsonInferenceOutput>,
+    /// The reference output from the datapoint
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_output: Option<JsonInferenceOutput>,
+    pub dataset_name: String,
+    /// The name of the metric (e.g., "tensorzero::evaluation_name::haiku::evaluator_name::exact_match")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_name: Option<String>,
+    /// The metric value as a string (could be boolean or float)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metric_value: Option<String>,
+    /// The feedback ID for this metric
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feedback_id: Option<Uuid>,
+    /// Whether this feedback was human-submitted
+    pub is_human_feedback: bool,
+    /// The variant name used for this inference
+    pub variant_name: String,
+    /// The datapoint name (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// When the datapoint was marked as stale (if ever)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
+}
+
+/// Evaluation result row that can represent either chat or JSON function output.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum EvaluationResultRow {
+    Chat(ChatEvaluationResultRow),
+    Json(JsonEvaluationResultRow),
+}
+
+impl EvaluationResultRow {
+    pub fn datapoint_id(&self) -> Uuid {
+        match self {
+            EvaluationResultRow::Chat(row) => row.datapoint_id,
+            EvaluationResultRow::Json(row) => row.datapoint_id,
+        }
+    }
+
+    pub fn evaluation_run_id(&self) -> Uuid {
+        match self {
+            EvaluationResultRow::Chat(row) => row.evaluation_run_id,
+            EvaluationResultRow::Json(row) => row.evaluation_run_id,
+        }
+    }
+}
+
+impl RawEvaluationResultRow {
+    /// Convert a raw result row to a typed Chat result row.
+    pub fn into_chat(self) -> Result<ChatEvaluationResultRow, Error> {
+        let generated_output = self
+            .generated_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(crate::error::ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize generated_output: {e}"),
+                })
+            })?;
+        let reference_output = self
+            .reference_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(crate::error::ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize reference_output: {e}"),
+                })
+            })?;
+        Ok(ChatEvaluationResultRow {
+            inference_id: self.inference_id,
+            episode_id: self.episode_id,
+            datapoint_id: self.datapoint_id,
+            evaluation_run_id: self.evaluation_run_id,
+            evaluator_inference_id: self.evaluator_inference_id,
+            input: self.input.map(|i| i.into_input()),
+            generated_output,
+            reference_output,
+            dataset_name: self.dataset_name,
+            metric_name: self.metric_name,
+            metric_value: self.metric_value,
+            feedback_id: self.feedback_id,
+            is_human_feedback: self.is_human_feedback,
+            variant_name: self.variant_name,
+            name: self.name,
+            staled_at: self.staled_at,
+        })
+    }
+
+    /// Convert a raw result row to a typed Json result row.
+    pub fn into_json(self) -> Result<JsonEvaluationResultRow, Error> {
+        let generated_output = self
+            .generated_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(crate::error::ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize generated_output: {e}"),
+                })
+            })?;
+        let reference_output = self
+            .reference_output
+            .map(|s| serde_json::from_str(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(crate::error::ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize reference_output: {e}"),
+                })
+            })?;
+        Ok(JsonEvaluationResultRow {
+            inference_id: self.inference_id,
+            episode_id: self.episode_id,
+            datapoint_id: self.datapoint_id,
+            evaluation_run_id: self.evaluation_run_id,
+            evaluator_inference_id: self.evaluator_inference_id,
+            input: self.input.map(|i| i.into_input()),
+            generated_output,
+            reference_output,
+            dataset_name: self.dataset_name,
+            metric_name: self.metric_name,
+            metric_value: self.metric_value,
+            feedback_id: self.feedback_id,
+            is_human_feedback: self.is_human_feedback,
+            variant_name: self.variant_name,
+            name: self.name,
+            staled_at: self.staled_at,
+        })
+    }
+}
+
+/// Trait for evaluation-related queries.
+#[async_trait]
+#[cfg_attr(test, automock)]
+pub trait EvaluationQueries {
+    /// Fetches metadata (function_name, function_type, metrics) for one or more inference evaluation runs.
+    /// Returns a Vec of (run_id, metadata) pairs for each found run.
+    async fn get_inference_evaluation_run_metadata(
+        &self,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, InferenceEvaluationRunMetadata)>, Error>;
+
+    /// Inserts or updates run-level metadata for an inference evaluation run.
+    async fn insert_inference_evaluation_run(
+        &self,
+        run: &InferenceEvaluationRunInsert,
+    ) -> Result<(), Error>;
+
+    /// Counts the total number of unique evaluation runs across all functions.
+    async fn count_total_evaluation_runs(&self) -> Result<u64, Error>;
+
+    /// Lists evaluation runs with pagination.
+    async fn list_evaluation_runs(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunInfoRow>, Error>;
+
+    /// Counts unique datapoints across the specified evaluation runs.
+    async fn count_datapoints_for_evaluation(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<u64, Error>;
+
+    /// Searches evaluation runs by ID or variant name.
+    async fn search_evaluation_runs(
+        &self,
+        evaluation_name: Option<&str>,
+        function_name: Option<&str>,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationRunSearchResult>, Error>;
+
+    /// Gets evaluation run info for specific evaluation run IDs and function name.
+    async fn get_evaluation_run_infos(
+        &self,
+        evaluation_run_ids: &[Uuid],
+        function_name: &str,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets evaluation run info for inferences associated with a specific datapoint.
+    async fn get_evaluation_run_infos_for_datapoint(
+        &self,
+        datapoint_id: &Uuid,
+        function_name: &str,
+        function_type: FunctionConfigType,
+    ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets evaluation statistics (aggregated metrics) for specified evaluation runs.
+    ///
+    /// For each evaluation run and metric, returns:
+    /// - datapoint count
+    /// - mean metric value
+    /// - confidence interval bounds (Wald CI for float metrics, Wilson CI for boolean metrics)
+    async fn get_evaluation_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationStatisticsRow>, Error>;
+
+    /// Gets paginated evaluation results across all datapoints for one or more evaluation runs.
+    ///
+    /// # Arguments
+    /// * `function_name` - The name of the function being evaluated
+    /// * `evaluation_run_ids` - The UUIDs of evaluation runs to query
+    /// * `function_type` - The type of function (Chat or Json), determines which tables to query
+    /// * `metric_names` - The metric names to filter feedback by
+    /// * `datapoint_id` - Optional datapoint ID to filter by. When provided, pagination is ignored
+    ///   and all results for that datapoint are returned.
+    /// * `limit` - Maximum number of datapoints to return (ignored if datapoint_id is provided)
+    /// * `offset` - Number of datapoints to skip (ignored if datapoint_id is provided)
+    #[expect(clippy::too_many_arguments)]
+    async fn get_evaluation_results(
+        &self,
+        function_name: &str,
+        evaluation_run_ids: &[Uuid],
+        function_type: FunctionConfigType,
+        metric_names: &[String],
+        datapoint_id: Option<&Uuid>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<EvaluationResultRow>, Error>;
+
+    /// Serializes an inference response's output into a string that is consistent
+    /// with how `get_serialized_inference_output_for_feedback` stored it.
+    ///
+    /// ClickHouse preserves the original struct field order, so this is plain
+    /// `serde_json::to_string`. Postgres JSONB does not preserve key order, so
+    /// this sorts keys before serializing.
+    ///
+    /// Call this before `get_inference_evaluation_human_feedback` to produce
+    /// a correctly normalized output string.
+    ///
+    /// TODO(#6664): Make the lookup order-independent instead of requiring a particular
+    /// backend-dependent serialization implementation.
+    fn serialize_output_for_feedback(
+        &self,
+        inference_response: &InferenceResponse,
+    ) -> Result<String, Error>;
+
+    /// Gets existing human feedback for a given inference evaluation if it exists.
+    ///
+    /// # Arguments
+    /// * `metric_name` - The name of the metric being evaluated
+    /// * `datapoint_id` - The UUID of the datapoint being evaluated
+    /// * `output` - The serialized inference output, produced by
+    ///   [`serialize_output_for_feedback`](Self::serialize_output_for_feedback)
+    async fn get_inference_evaluation_human_feedback(
+        &self,
+        metric_name: &str,
+        datapoint_id: &Uuid,
+        output: &str,
+    ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error>;
+}

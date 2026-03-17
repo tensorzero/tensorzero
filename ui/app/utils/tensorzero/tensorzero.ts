@@ -45,6 +45,7 @@ import type {
   GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  GetEvaluationRunMetadataResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
   GetFunctionThroughputByVariantResponse,
@@ -285,54 +286,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetModelLatencyResponse;
-  }
-
-  /**
-   * Inserts a datapoint from an existing inference with a given ID and setting for where to get the output from.
-   * @param datasetName - The name of the dataset to insert the datapoint into
-   * @param inferenceId - The ID of the existing inference to use as a base
-   * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
-   * @returns A promise that resolves with the created datapoint response containing the new ID
-   * @throws Error if validation fails or the request fails
-   */
-  async createDatapointFromInferenceLegacy(
-    datasetName: string,
-    inferenceId: string,
-    outputKind: "inherit" | "demonstration" | "none" = "inherit",
-    functionName: string,
-    variantName: string,
-    episodeId: string,
-  ): Promise<DatapointResponse> {
-    if (!datasetName || typeof datasetName !== "string") {
-      throw new Error("Dataset name must be a non-empty string");
-    }
-
-    if (!inferenceId || typeof inferenceId !== "string") {
-      throw new Error("Inference ID must be a non-empty string");
-    }
-
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
-
-    const request = {
-      inference_id: inferenceId,
-      output: outputKind,
-      function_name: functionName,
-      variant_name: variantName,
-      episode_id: episodeId,
-    };
-
-    const response = await this.fetch(endpoint, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-
-    const body = await response.json();
-    return DatapointResponseSchema.parse(body);
   }
 
   /**
@@ -666,6 +619,18 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    */
   async getUiConfig(): Promise<UiConfig> {
     const response = await this.fetch("/internal/ui_config", { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as UiConfig;
+  }
+
+  async getUiConfigByHash(hash: string): Promise<UiConfig> {
+    const response = await this.fetch(
+      `/internal/ui_config/${encodeURIComponent(hash)}`,
+      { method: "GET" },
+    );
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
@@ -1433,25 +1398,27 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
-   * Searches evaluation runs by ID or variant name.
-   * @param evaluationName - The name of the evaluation
-   * @param functionName - The name of the function being evaluated
+   * Searches evaluation runs by run ID, evaluation name, dataset name, or variant name.
    * @param query - The search query (case-insensitive)
+   * @param functionName - Function name filter
+   * @param evaluationName - Optional evaluation name filter
    * @param limit - Maximum number of results to return (default: 100)
    * @param offset - Number of results to skip (default: 0)
    * @returns A promise that resolves with the search results
    * @throws Error if the request fails
    */
   async searchEvaluationRuns(
-    evaluationName: string,
-    functionName: string,
     query: string,
+    functionName: string,
+    evaluationName?: string,
     limit: number = 100,
     offset: number = 0,
   ): Promise<SearchEvaluationRunsResponse> {
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
     searchParams.append("function_name", functionName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
+    }
     searchParams.append("query", query);
     searchParams.append("limit", limit.toString());
     searchParams.append("offset", offset.toString());
@@ -1644,10 +1611,31 @@ export class TensorZeroClient extends BaseTensorZeroClient {
   }
 
   /**
+   * Gets metadata for an evaluation run from the database.
+   * @param evaluationRunIds - The UUIDs of the evaluation runs
+   * @returns A promise that resolves with the run metadata
+   * @throws Error if the request fails or the run is not found
+   */
+  async getEvaluationRunMetadata(
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationRunMetadataResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const endpoint = `/internal/evaluations/run_metadata?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationRunMetadataResponse;
+  }
+
+  /**
    * Gets paginated evaluation results across one or more evaluation runs.
-   * @param evaluationName - The name of the evaluation
    * @param evaluationRunIds - Array of evaluation run UUIDs to query
    * @param options - Optional parameters for filtering and pagination
+   * @param options.evaluationName - Optional name of the evaluation (resolved from DB if omitted)
    * @param options.datapointId - Optional datapoint ID to filter results to a specific datapoint
    * @param options.limit - Maximum number of datapoints to return (default: 100)
    * @param options.offset - Number of datapoints to skip (default: 0)
@@ -1655,17 +1643,19 @@ export class TensorZeroClient extends BaseTensorZeroClient {
    * @throws Error if the request fails
    */
   async getEvaluationResults(
-    evaluationName: string,
     evaluationRunIds: string[],
     options: {
+      evaluationName?: string;
       datapointId?: string;
       limit?: number;
       offset?: number;
     } = {},
   ): Promise<GetEvaluationResultsResponse> {
-    const { datapointId, limit = 100, offset = 0 } = options;
+    const { evaluationName, datapointId, limit = 100, offset = 0 } = options;
     const searchParams = new URLSearchParams();
-    searchParams.append("evaluation_name", evaluationName);
+    if (evaluationName) {
+      searchParams.append("evaluation_name", evaluationName);
+    }
     searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
     if (datapointId) {
       searchParams.append("datapoint_id", datapointId);
@@ -1720,6 +1710,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       maxDatapoints,
       precisionTargets,
       onEvent,
+      signal,
     } = params;
 
     const requestBody: RunEvaluationRequest = {
@@ -1743,6 +1734,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
         Accept: "text/event-stream",
       },
       body: JSON.stringify(requestBody),
+      signal,
     });
 
     if (!response.ok) {
@@ -1910,4 +1902,6 @@ export interface RunEvaluationStreamingParams {
   precisionTargets?: Record<string, number>;
   /** Callback for SSE events */
   onEvent: (event: EvaluationRunEvent) => void;
+  /** Optional signal to abort the request */
+  signal?: AbortSignal;
 }

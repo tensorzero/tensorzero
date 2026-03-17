@@ -9,20 +9,18 @@ The example shows how to:
 
 ## Running the Example
 
-1. Launch the TensorZero Gateway, TensorZero UI, and ClickHouse with `docker compose up`.
+1. Launch the TensorZero Gateway, TensorZero UI, and Postgres with `docker compose up`.
 2. Run an inference:
    ```bash
-   curl -X POST "http://localhost:3000/inference" \
+   curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
    -H "Content-Type: application/json" \
    -d '{
-       "function_name": "functionA",
-       "input": {
+       "model": "tensorzero::function_name::functionA",
        "messages": [
            {
            "role": "user",
            "content": "Share a fun fact about artificial intelligence."
            }
        ]
-       }
    }'
    ```

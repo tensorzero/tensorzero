@@ -77,8 +77,10 @@ function extractCodeBlockInfo(children: React.ReactNode): {
  * Read-only code block with copy button and word wrap toggle.
  * Reusable component for displaying code snippets consistently.
  */
-export interface ReadOnlyCodeBlockProps
-  extends Pick<CodeEditorProps, "className" | "maxHeight"> {
+export interface ReadOnlyCodeBlockProps extends Pick<
+  CodeEditorProps,
+  "className" | "maxHeight"
+> {
   code: string;
   language?: Language;
 }
@@ -115,7 +117,7 @@ function MarkdownCodeBlock({ children }: { children?: React.ReactNode }) {
   );
 }
 
-const components: Components = {
+const defaultComponents: Components = {
   // Headings
   h1: ({ children }) => (
     <h1 className="mt-6 mb-4 text-2xl font-semibold first:mt-0">{children}</h1>
@@ -210,12 +212,28 @@ const components: Components = {
 interface MarkdownProps {
   children: string;
   className?: string;
+  remarkPlugins?: React.ComponentProps<typeof ReactMarkdown>["remarkPlugins"];
+  components?: Components & Record<string, React.ComponentType<never>>;
 }
 
-export function Markdown({ children, className }: MarkdownProps) {
+export function Markdown({
+  children,
+  className,
+  remarkPlugins,
+  components,
+}: MarkdownProps) {
+  const mergedPlugins = remarkPlugins
+    ? [remarkGfm, ...remarkPlugins]
+    : [remarkGfm];
+  const mergedComponents = components
+    ? { ...defaultComponents, ...components }
+    : defaultComponents;
   return (
     <div className={cn("text-fg-secondary text-sm", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={mergedPlugins}
+        components={mergedComponents}
+      >
         {children}
       </ReactMarkdown>
     </div>

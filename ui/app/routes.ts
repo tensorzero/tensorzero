@@ -10,6 +10,8 @@ export default [
 
   // API routes
   ...prefix("api", [
+    route("auth/set_gateway_key", "routes/api/auth/set_gateway_key.route.ts"),
+
     route(
       "curated_inferences/count",
       "routes/api/curated_inferences/count.route.ts",
@@ -25,11 +27,12 @@ export default [
       "workflow_evaluations/search_runs",
       "routes/api/workflow_evaluations/search_runs/route.ts",
     ),
-
     route(
-      "evaluations/search_runs/:evaluation_name",
-      "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
+      "evaluations/search_runs",
+      "routes/api/evaluations/search_runs/route.ts",
     ),
+
+    route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),
 
     route(
       "function/:function_name/feedback_counts",
@@ -39,6 +42,18 @@ export default [
     ...prefix("tensorzero", [
       route("inference", "routes/api/tensorzero/inference.ts"),
       route("status", "routes/api/tensorzero/status.ts"),
+      route(
+        "resolve_uuid/:uuid",
+        "routes/api/tensorzero/resolve_uuid.route.ts",
+      ),
+      route(
+        "inference_preview/:inference_id",
+        "routes/api/tensorzero/inference_preview.route.ts",
+      ),
+      route(
+        "episode_preview/:episode_id",
+        "routes/api/tensorzero/episode_preview.route.ts",
+      ),
     ]),
 
     route(
@@ -66,12 +81,24 @@ export default [
       "routes/api/autopilot/sessions/$session_id/events/authorize.route.ts",
     ),
     route(
+      "autopilot/sessions/:session_id/events/answer-questions",
+      "routes/api/autopilot/sessions/$session_id/events/answer-questions.route.ts",
+    ),
+    route(
       "autopilot/sessions/:session_id/events/message",
       "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
     ),
     route(
       "autopilot/sessions/:session_id/actions/interrupt",
       "routes/api/autopilot/sessions/$session_id/actions/interrupt.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply.route.ts",
+    ),
+    route(
+      "autopilot/sessions/:session_id/config-apply/apply-all",
+      "routes/api/autopilot/sessions/$session_id/config-apply/apply-all.route.ts",
     ),
     route(
       "autopilot/sessions/:session_id/actions/approve_all",
@@ -100,17 +127,8 @@ export default [
   // Evaluations
   route("evaluations", "routes/evaluations/layout.tsx", [
     index("routes/evaluations/route.tsx"),
-    route(
-      ":evaluation_name",
-      "routes/evaluations/$evaluation_name/layout.tsx",
-      [
-        index("routes/evaluations/$evaluation_name/route.tsx"),
-        route(
-          ":datapoint_id",
-          "routes/evaluations/$evaluation_name/$datapoint_id/route.tsx",
-        ),
-      ],
-    ),
+    route("runs", "routes/evaluations/runs.tsx"),
+    route("results/:datapoint_id", "routes/evaluations/results/route.tsx"),
   ]),
 
   // Workflow Evaluations (formerly Dynamic Evaluations)

@@ -69,7 +69,8 @@ TensorZero will attempt the following methods in order:
 3. `AWS_BEARER_TOKEN_BEDROCK` environment variable (bearer auth)
 4. AWS SDK credential chain (SigV4)
 
-See the [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
+You can also provide credentials dynamically at inference time using the `dynamic::` prefix (e.g. `access_key_id = "dynamic::aws_access_key_id"`).
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details on authentication options.
 
 ### AWS Region
 
@@ -111,18 +112,16 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -132,21 +131,22 @@ You can enable [AWS Bedrock's prompt caching capability](https://docs.aws.amazon
 
 For example, to enable caching on your system prompt:
 
-```bash {14-21}
-curl -X POST "http://localhost:3000/inference" \
+```bash {15-22}
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "...",
-    "input": {
-      "system": "... very long prompt ...",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    },
-    "extra_body": [
+    "model": "tensorzero::model_name::claude_haiku_4_5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "... very long prompt ..."
+      },
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ],
+    "tensorzero::extra_body": [
         {
             "pointer": "/system/-",
             "value": {
@@ -165,21 +165,22 @@ The `/abc/-` notation appends a value to the `abc` array.
 
 Similarly, to enable caching on a message:
 
-```bash {16}
-curl -X POST "http://localhost:3000/inference" \
+```bash {17}
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "...",
-    "input": {
-      "system": "... very long prompt ...",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    },
-    "extra_body": [
+    "model": "tensorzero::model_name::claude_haiku_4_5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "... very long prompt ..."
+      },
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ],
+    "tensorzero::extra_body": [
         {
             "pointer": "/messages/0/content/-",
             "value": {
@@ -192,15 +193,15 @@ curl -X POST "http://localhost:3000/inference" \
 
 <Tip>
 
-You can specify `extra_body` in the [configuration](/gateway/configuration-reference) or at [inference time](/gateway/api-reference/inference).
-If you're using the OpenAI-Compatible Inference API, use `tensorzero::extra_body` instead.
+You can also specify `extra_body` in the [configuration](/gateway/configuration-reference).
+See the [API Reference](/gateway/api-reference/inference-openai-compatible) for more information.
 
 </Tip>
 
 <Tip>
 
-You can retrieve prompt caching usage information with `include_raw_usage`.
-See the [API Reference](/gateway/api-reference/inference) for more information.
+You can retrieve prompt caching usage information with `tensorzero::include_raw_usage`.
+See the [API Reference](/gateway/api-reference/inference-openai-compatible) for more information.
 
 </Tip>
 

@@ -85,7 +85,7 @@ services:
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -99,20 +99,35 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
+
+## Batch Inference
+
+GCP Vertex AI Gemini supports [batch inference](/gateway/guides/batch-inference/) using Google Cloud Storage for input and output files.
+
+To enable batch inference, configure the `provider_types.gcp_vertex_gemini.batch` section in your configuration file:
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://my-bucket/batch-inputs/"
+output_uri_prefix = "gs://my-bucket/batch-outputs/"
+```
+
+The service account used by the gateway must have read/write access to the specified GCS buckets.
+
+See the [Batch Inference](/gateway/guides/batch-inference/) guide and [Configuration Reference](/gateway/configuration-reference/) for more details.
 
 ## Thinking Parameters
 

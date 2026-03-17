@@ -100,8 +100,6 @@ ui:
   additionalEnv:
     secretName: "tensorzero-secret"
     keys:
-      - name: TENSORZERO_CLICKHOUSE_URL
-        key: TENSORZERO_CLICKHOUSE_URL
       - name: TENSORZERO_GATEWAY_URL
         key: TENSORZERO_GATEWAY_URL
 

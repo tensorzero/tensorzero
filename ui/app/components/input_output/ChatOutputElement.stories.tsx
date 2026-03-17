@@ -3,18 +3,10 @@ import { ChatOutputElement } from "./ChatOutputElement";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ContentBlockChatOutput } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const meta = {
   title: "Input Output/ChatOutputElement",
   component: ChatOutputElement,
-  decorators: [
-    (Story) => (
-      <GlobalToastProvider>
-        <Story />
-      </GlobalToastProvider>
-    ),
-  ],
 } satisfies Meta<typeof ChatOutputElement>;
 
 export default meta;

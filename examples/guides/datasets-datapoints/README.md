@@ -11,7 +11,7 @@ See [API Reference: Datasets & Datapoints](https://www.tensorzero.com/docs/gatew
 1. Install Docker.
 2. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 3. Set the `OPENAI_API_KEY` environment variable.
-4. Launch the TensorZero and ClickHouse: `docker compose up`
+4. Launch TensorZero and Postgres: `docker compose up`
 
 ### Running the Example
 

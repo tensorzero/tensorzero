@@ -1,0 +1,54 @@
+[package]
+name = "autopilot-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+e2e_tests = []
+ts-bindings = [
+    "dep:ts-rs",
+    "dep:tensorzero-ts-types",
+    "tensorzero-core/ts-bindings",
+    "tensorzero/ts-bindings",
+    "config-applier/ts-bindings",
+    "durable-tools/ts-bindings",
+]
+
+[dependencies]
+durable-tools = { path = "../durable-tools" }
+tensorzero = { path = "../tensorzero-client" }
+autopilot-client = { path = "../autopilot-client" }
+tensorzero-core = { path = "../tensorzero-core" }
+config-applier = { path = "../config-applier" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
+object_store = { workspace = true }
+arrow = { workspace = true }
+parquet = { workspace = true }
+serde_arrow = { workspace = true }
+rand.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+evaluations = { path = "../evaluations" }
+futures.workspace = true
+schemars.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+ts-rs = { workspace = true, optional = true }
+uuid.workspace = true
+
+[dev-dependencies]
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
+durable = { workspace = true }
+mockall = "0.14"
+
+[lints]
+workspace = true

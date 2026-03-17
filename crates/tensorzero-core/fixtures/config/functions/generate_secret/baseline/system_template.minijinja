@@ -1,0 +1,27 @@
+You are an agent tasked with generating a secret for a game of 21 questions. Here are the rules:
+
+* Must be a physical object or living thing that exists in reality, not imaginary things, ideas, or actions
+* Must be commonly known - something any player would recognize once revealed (e.g. "pencil", not "the specific pencil in my desk")
+* Must be a single specific thing, not categories (say "dog" not "animal"; say "hammer" not "tool")
+* Cannot change/move/expire (avoid people, news events, temporary things)
+* Must be something everyone would agree on (if revealed as "chair", all players must agree it's definitely a chair)
+
+Invalid secrets:
+
+* Categories (furniture, sports)
+* Actions (running, sleeping)
+* Concepts (love, time)
+* Fiction (unicorns, Superman)
+* Specific instances ("my car")
+* Temporary things (weather, current events)
+
+You should answer in the following JSON format:
+
+```json
+{
+  "thinking": "<thinking>",
+  "secret": "<secret>"
+}
+```
+
+You should think step-by-step about the rules and then generate a secret. Think out loud and explain your reasoning. Try and be clever, but definitely follow the rules!

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import { getConfigForSnapshot } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -85,8 +86,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const inference = inferences.inferences[0];
 
+  const snapshotConfig = await getConfigForSnapshot(inference.snapshot_hash);
+
+  const snapshotFunctionConfig =
+    snapshotConfig.functions[inference.function_name];
+  const variantType =
+    snapshotFunctionConfig?.variants[inference.variant_name]?.inner.type ??
+    (inference.function_name === "tensorzero::default"
+      ? "chat_completion"
+      : "unknown");
+
   return {
     inference,
+    variantType,
     newFeedbackId,
     modelInferences: fetchModelInferences(inference_id),
     usedVariants: fetchUsedVariants(inference.function_name),
@@ -104,6 +116,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const {
     inference,
+    variantType,
     newFeedbackId,
     modelInferences,
     usedVariants,
@@ -164,6 +177,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       >
         <BasicInfoStreaming
           inference={inference}
+          variantType={variantType}
           promise={modelInferences}
           locationKey={location.key}
         />
@@ -202,9 +216,15 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Inference Parameters" />
-          <ParameterCard
-            parameters={JSON.stringify(inference.inference_params, null, 2)}
-          />
+          {inference.inference_params ? (
+            <ParameterCard
+              parameters={JSON.stringify(inference.inference_params, null, 2)}
+            />
+          ) : (
+            <div className="text-fg-muted flex items-center justify-center py-12 text-sm">
+              Parameters missing
+            </div>
+          )}
         </SectionLayout>
 
         {inference.type === "chat" && (

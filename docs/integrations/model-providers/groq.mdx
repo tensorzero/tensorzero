@@ -19,21 +19,19 @@ type = "chat_completion"
 model = "groq::meta-llama/llama-4-scout-17b-16e-instruct"
 ```
 
-Additionally, you can set `model_name` in the inference request to use a specific Groq model, without having to configure a function and variant in TensorZero.
+Additionally, you can set the `model` parameter in the [OpenAI-compatible inference endpoint](/gateway/api-reference/inference-openai-compatible) to use a specific Groq model, without having to configure a function and variant in TensorZero.
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "groq::meta-llama/llama-4-scout-17b-16e-instruct",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::groq::meta-llama/llama-4-scout-17b-16e-instruct",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -79,6 +77,9 @@ model = "llama4_scout_17b_16e_instruct"
 
 See the [list of models available on Groq](https://groq.com/pricing).
 
+For reasoning models (e.g. `qwen/qwen3-32b`), set `reasoning_format = "parsed"` to receive structured reasoning content separately from the main response.
+See the [Configuration Reference](/gateway/configuration-reference/) for more details.
+
 ### Credentials
 
 You must set the `GROQ_API_KEY` environment variable before running the gateway.
@@ -101,7 +102,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - GROQ_API_KEY=${GROQ_API_KEY:?Environment variable GROQ_API_KEY must be set.}
+      GROQ_API_KEY: ${GROQ_API_KEY:?Environment variable GROQ_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -115,17 +116,15 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
