@@ -35,17 +35,16 @@ jobs:
     runs-on: ${{ matrix.replicated && 'namespace-profile-tensorzero-8x16;ephemeral-storage.size-multiplier=2' || 'namespace-profile-tensorzero-8x16' }}
     continue-on-error: ${{ matrix.clickhouse_version.allow_failure }}
     if: github.repository == 'tensorzero/tensorzero'
-    # TODO - switch back to 'latest': https://github.com/tensorzero/tensorzero/issues/6080
     strategy:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.11","prefix":"25.11","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
           - replicated: true
             clickhouse_version:
-              { "tag": "25.11", "prefix": "25.11", "allow_failure": false }
-        include: ${{ inputs.is_merge_group && fromJSON('[{"clickhouse_version":{"tag":"25.11","prefix":"25.11","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "latest", "prefix": "latest", "allow_failure": false }
+        include: ${{ inputs.is_merge_group && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     env:
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -55,6 +54,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
             if rustup show; then
@@ -73,6 +73,7 @@ jobs:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
+          workspaces: "crates -> target"
 
       - name: "Free up disk space"
         run: bash ci/free-disk-space.sh
@@ -85,6 +86,7 @@ jobs:
       # Start building the tests in the background while we download conatiners, fixtures, etc.
       # The subsequent cargo command will wait for this to complete.
       - name: Start building tests in the background
+        working-directory: crates
         run: cargo test-clickhouse --no-run &
 
       - name: Set ClickHouse replicated cluster name
@@ -134,11 +136,11 @@ jobs:
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
@@ -155,8 +157,8 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_URL \
             -e R2_ACCESS_KEY_ID \
             -e R2_SECRET_ACCESS_KEY \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
@@ -179,8 +181,8 @@ jobs:
           docker run --rm --network host \
             -e TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests \
             -e TENSORZERO_CLICKHOUSE_CLUSTER_NAME \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml' \
             --run-clickhouse-migrations
@@ -192,8 +194,8 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_CLUSTER_NAME \
             -e R2_ACCESS_KEY_ID \
             -e R2_SECRET_ACCESS_KEY \
-            -v $(pwd)/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
-            -v $(pwd)/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
+            -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
+            -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-${{ github.sha }} \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
@@ -210,6 +212,7 @@ jobs:
           done
 
       - name: Test (Rust)
+        working-directory: crates
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
@@ -218,7 +221,7 @@ jobs:
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
 
       - name: Print ClickHouse error logs (replicated)
         if: always() && matrix.replicated == true
@@ -255,7 +258,7 @@ jobs:
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print ClickHouse error logs (non-replicated)
         if: always() && matrix.replicated == false

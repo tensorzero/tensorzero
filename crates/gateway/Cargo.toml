@@ -1,0 +1,56 @@
+[package]
+name = "gateway"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
+evaluations = { path = "../evaluations" }
+axum = { workspace = true }
+tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+mimalloc = "0.1.48"
+clap = { workspace = true }
+tower-http = { workspace = true, features = ["metrics", "decompression-gzip", "decompression-br", "decompression-zstd"] }
+metrics-exporter-prometheus = { workspace = true }
+http = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+tensorzero-auth = { path = "../tensorzero-auth" }
+autopilot-client = { path = "../autopilot-client" }
+autopilot-worker = { path = "../autopilot-worker" }
+autopilot-tools = { path = "../autopilot-tools" }
+durable-tools = { path = "../durable-tools" }
+sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+ts-rs = { workspace = true, optional = true }
+async-stream = { workspace = true }
+
+[lints]
+workspace = true
+
+[features]
+e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests", "autopilot-tools/e2e_tests"]
+default = []
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings", "autopilot-worker/ts-bindings", "evaluations/ts-bindings"]
+
+[dev-dependencies]
+reqwest.workspace = true
+tempfile = { workspace = true }
+tensorzero = { path = "../tensorzero-client", features = ["e2e_tests"] }
+serde_json = { workspace = true }
+reqwest-sse-stream = { workspace = true }
+futures = { workspace = true }
+secrecy = { workspace = true }
+uuid = { workspace = true }
+tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
+flate2 = "1.1.8"
+zstd = "0.13.3"
+brotli = "8.0.2"

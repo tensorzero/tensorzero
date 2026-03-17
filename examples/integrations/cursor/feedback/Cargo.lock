@@ -199,7 +199,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -784,9 +784,6 @@ name = "built"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4ad8f11f288f48ca24471bbd51ac257aaeaaa07adae295591266b792902ae64"
-dependencies = [
- "git2",
-]
 
 [[package]]
 name = "bumpalo"
@@ -1421,7 +1418,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=43d73ea835f1e528462105250ce01822af09d7fc#43d73ea835f1e528462105250ce01822af09d7fc"
+source = "git+https://github.com/tensorzero/durable?rev=2d69424943b1db91b055154062143457c91e8ee7#2d69424943b1db91b055154062143457c91e8ee7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1442,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-trait",
  "durable",
@@ -1545,10 +1542,11 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "clap",
  "futures",
  "indicatif",
@@ -2767,7 +2765,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "minijinja",
  "serde",
@@ -3333,9 +3331,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.13"
+version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1906b49b0c3bc04b5fe5d86a77925ae6524a19b816ae38ce1e426255f1d8a31"
+checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -3732,7 +3730,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "async-stream",
  "futures",
@@ -4655,7 +4653,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82a72c767771b47409d2345987fda8628641887d5466101319899796367354a0"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -4663,10 +4661,9 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "0.0.0"
+version = "2026.3.1"
 dependencies = [
  "async-trait",
- "git2",
  "lazy_static",
  "mime 0.4.0-a.0",
  "reqwest 0.12.28",
@@ -4683,7 +4680,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "axum",
  "chrono",
@@ -4702,11 +4699,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.3.0"
+version = "2026.3.1"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -4731,10 +4728,10 @@ dependencies = [
  "dashmap",
  "derive_builder 0.20.2",
  "durable",
+ "durable-tools-spawn",
  "enum-map",
  "futures",
  "futures-core",
- "git2",
  "globset",
  "google-cloud-auth",
  "hex",
@@ -4812,7 +4809,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "axum",
  "chrono",
@@ -4839,7 +4836,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "aws-smithy-types",
  "infer",
@@ -4860,7 +4857,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.3.0"
+version = "2026.3.1"
 dependencies = [
  "serde",
  "serde_json",

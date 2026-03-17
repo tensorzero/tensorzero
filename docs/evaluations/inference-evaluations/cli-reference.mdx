@@ -19,13 +19,13 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       # ... and any other relevant API credentials ...
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
 ```
 
@@ -39,7 +39,7 @@ docker compose run --rm evaluations \
 
 <Accordion title="Building from Source">
 
-You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/evaluations) for instructions.
+You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/crates/evaluations) for instructions.
 
 </Accordion>
 
@@ -65,9 +65,16 @@ See [Integrations](/integrations/model-providers) for more information.
 #### `TENSORZERO_CLICKHOUSE_URL`
 
 - **Example:** `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/database_name`
-- **Required:** yes
+- **Required:** either ClickHouse or Postgres must be available
 
 This environment variable specifies the URL of your ClickHouse database.
+
+#### `TENSORZERO_POSTGRES_URL`
+
+- **Example:** `TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/mydatabase"`
+- **Required:** either ClickHouse or Postgres must be available
+
+This environment variable specifies the URL of your Postgres database.
 
 ### CLI Flags
 
@@ -136,7 +143,7 @@ Use this flag when you want to evaluate a specific subset of datapoints rather t
 - **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
 
 This flag specifies the dataset to use for evaluation.
-The dataset should be stored in your ClickHouse database.
+The dataset should be stored in your database.
 
 <Note>
   This flag is mutually exclusive with `--datapoint-ids`. You must provide

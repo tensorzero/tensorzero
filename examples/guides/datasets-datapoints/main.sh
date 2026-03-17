@@ -12,6 +12,7 @@ cat << 'EOF' > "$TEMP_FILE"
 {
   "datapoints": [
     {
+      "type": "json",
       "function_name": "extract_recipient",
       "input": {
         "messages": [
@@ -28,6 +29,7 @@ cat << 'EOF' > "$TEMP_FILE"
       }
     },
     {
+      "type": "json",
       "function_name": "extract_recipient",
       "input": {
         "messages": [
@@ -48,6 +50,7 @@ cat << 'EOF' > "$TEMP_FILE"
       }
     },
     {
+      "type": "chat",
       "function_name": "draft_email",
       "input": {
         "messages": [
@@ -71,23 +74,23 @@ cat << 'EOF' > "$TEMP_FILE"
 EOF
 
 # 1. Insert datapoints
-echo -e "POST ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints\n"
+echo -e "POST ${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/datapoints\n"
 BULK_INSERT_RESPONSE=$(curl -s -X POST \
-  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints" \
+  "${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/datapoints" \
   -H "Content-Type: application/json" \
   -d @"$TEMP_FILE")
 
 echo "$BULK_INSERT_RESPONSE"
 
-# Check if bulk insert was successful by verifying it's a valid JSON array
-if ! echo "$BULK_INSERT_RESPONSE" | jq -e 'type == "array"' >/dev/null; then
+# Check if bulk insert was successful by verifying the response has an "ids" field
+if ! echo "$BULK_INSERT_RESPONSE" | jq -e '.ids | type == "array"' >/dev/null; then
     echo "Error: Bulk insert failed - invalid response format"
     rm "$TEMP_FILE"
     exit 1
 fi
 
 # Extract the first datapoint ID from the response
-FIRST_DATAPOINT_ID=$(echo "$BULK_INSERT_RESPONSE" | jq -r '.[0]')
+FIRST_DATAPOINT_ID=$(echo "$BULK_INSERT_RESPONSE" | jq -r '.ids[0]')
 
 # Check if we got a valid ID
 if [ -z "$FIRST_DATAPOINT_ID" ] || [ "$FIRST_DATAPOINT_ID" = "null" ]; then
@@ -97,29 +100,40 @@ if [ -z "$FIRST_DATAPOINT_ID" ] || [ "$FIRST_DATAPOINT_ID" = "null" ]; then
 fi
 
 # 2. Get a single datapoint
-echo -e "\nGET ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/${FIRST_DATAPOINT_ID}\n"
-GET_RESPONSE=$(curl -s -X GET \
-  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/${FIRST_DATAPOINT_ID}")
+echo -e "\nPOST ${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/get_datapoints\n"
+GET_RESPONSE=$(curl -s -X POST \
+  "${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/get_datapoints" \
+  -H "Content-Type: application/json" \
+  -d "{\"ids\": [\"${FIRST_DATAPOINT_ID}\"]}")
 
 echo "$GET_RESPONSE"
 
 # 3. Delete the first datapoint
-echo -e "\nDELETE ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/${FIRST_DATAPOINT_ID}"
-curl -s -X DELETE \
-  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/${FIRST_DATAPOINT_ID}"
+echo -e "\nDELETE ${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/datapoints\n"
+DELETE_RESPONSE=$(curl -s -X DELETE \
+  "${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/datapoints" \
+  -H "Content-Type: application/json" \
+  -d "{\"ids\": [\"${FIRST_DATAPOINT_ID}\"]}")
+
+echo "$DELETE_RESPONSE"
 
 # 4. List all datapoints
-echo -e "\nGET ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints\n"
-LIST_RESPONSE=$(curl -s -X GET \
-  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints")
+echo -e "\nPOST ${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/list_datapoints\n"
+LIST_RESPONSE=$(curl -s -X POST \
+  "${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/list_datapoints" \
+  -H "Content-Type: application/json" \
+  -d '{}')
 
 echo "$LIST_RESPONSE"
 
 # 5. Clean up - delete remaining datapoints
-echo "$LIST_RESPONSE" | jq -r '.[].id' | while read -r datapoint_id; do
+REMAINING_IDS=$(echo "$LIST_RESPONSE" | jq -c '[.datapoints[].id]')
+if [ "$REMAINING_IDS" != "[]" ] && [ -n "$REMAINING_IDS" ]; then
   curl -s -X DELETE \
-    "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/${datapoint_id}"
-done
+    "${GATEWAY_URL}/v1/datasets/${DATASET_NAME}/datapoints" \
+    -H "Content-Type: application/json" \
+    -d "{\"ids\": ${REMAINING_IDS}}"
+fi
 
 # Clean up temporary file
 rm "$TEMP_FILE"

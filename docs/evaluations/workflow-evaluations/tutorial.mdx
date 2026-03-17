@@ -25,7 +25,7 @@ You can think of them like integration tests for your LLM applications.
 
 <Tip>
 
-For a more complex, runnable example, see the [Workflow Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/dynamic_evaluations/simple-agentic-rag).
+For a more complex, runnable example, see the [Workflow Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/workflow_evaluations/simple-agentic-rag).
 
 </Tip>
 
@@ -43,7 +43,6 @@ First, let's initialize the TensorZero client (just like you would for typical i
 ```python
 from tensorzero import TensorZeroGateway
 
-# Initialize the client with `build_http` or `build_embedded`
 with TensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 ) as t0:
@@ -66,7 +65,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```python
-run_info = t0.dynamic_evaluation_run(
+run_info = t0.workflow_evaluation_run(
     # Assume we have these variants defined in our `tensorzero.toml` configuration file
     variants={
         "generate_database_query": "o4_mini_prompt_baseline",
@@ -93,7 +92,6 @@ First, let's initialize the TensorZero client (just like you would for typical i
 ```python
 from tensorzero import AsyncTensorZeroGateway
 
-# Initialize the client with `build_http` or `build_embedded`
 async with await AsyncTensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 ) as t0:
@@ -116,7 +114,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```python
-run_info = await t0.dynamic_evaluation_run(
+run_info = await t0.workflow_evaluation_run(
     # Assume we have these variants defined in our `tensorzero.toml` configuration file
     variants={
         "generate_database_query": "o4_mini_prompt_baseline",
@@ -152,7 +150,7 @@ If you specify a `project_name`, you'll be able to compare this run against othe
 The `display_name` is a human-readable identifier for the run that you can use to identify the run in the TensorZero UI.
 
 ```bash
-curl -X POST http://localhost:3000/dynamic_evaluation_run \
+curl -X POST http://localhost:3000/workflow_evaluation_run \
   -H "Content-Type: application/json" \
   -d '{
     "variants": {
@@ -183,7 +181,7 @@ If you specify a `task_name`, you'll be able to compare this episode against epi
 We encourage you to use the `task_name` to provide a meaningful identifier for the task that the episode is tackling.
 
 ```python
-episode_info = t0.dynamic_evaluation_run_episode(
+episode_info = t0.workflow_evaluation_run_episode(
     run_id=run_info.run_id,
     task_name="user_query_123",
 )
@@ -200,7 +198,7 @@ You can optionally also specify a `task_name` for the episode.
 If you specify a `task_name`, you'll be able to compare this episode against episodes for that task from other runs using the TensorZero UI.
 
 ```python
-episode_info = await t0.dynamic_evaluation_run_episode(
+episode_info = await t0.workflow_evaluation_run_episode(
     run_id=run_info.run_id,
     task_name="user_query_123",
 )
@@ -217,7 +215,7 @@ You can optionally also specify a `task_name` for the episode.
 If you specify a `task_name`, you'll be able to compare this episode against episodes for that task from other runs using the TensorZero UI.
 
 ```bash
-curl -X POST http://localhost:3000/dynamic_evaluation_run/{run_id}/episode \
+curl -X POST http://localhost:3000/workflow_evaluation_run/{run_id}/episode \
   -H "Content-Type: application/json" \
   -d '{
     "task_name": "user_query_123"
@@ -238,32 +236,32 @@ See our [Quickstart](/quickstart/) to learn how to set up our LLM gateway, obser
 
 </Tip>
 
-<Tip title="Using the OpenAI SDK?">
-
-You can also use the OpenAI SDK for inference calls.
-See the [Quickstart](/quickstart/) for more details.
+You can use the OpenAI SDK for inference calls by pointing it at the TensorZero Gateway.
+Pass the `episode_id` from the workflow evaluation run episode via `extra_body` so that inferences are associated with the evaluation run.
 
 (Similarly, you can also use workflow evaluations with any framework or agent that is OpenAI-compatible by passing along the episode ID and function name in the request to TensorZero.)
-
-</Tip>
 
 <Tabs>
 
 <Tab title="Python">
 
 ```python
-generate_database_query_response = t0.inference(
-    function_name="generate_database_query",
-    episode_id=episode_info.episode_id,
-    input={ ... },
+from openai import OpenAI
+
+openai_client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+generate_database_query_response = openai_client.chat.completions.create(
+    model="tensorzero::function_name::generate_database_query",
+    messages=[...],
+    extra_body={"tensorzero::episode_id": str(episode_info.episode_id)},
 )
 
 search_result = my_blackbox_search_function(generate_database_query_response)
 
-generate_final_answer_response = t0.inference(
-    function_name="generate_final_answer",
-    episode_id=episode_info.episode_id,
-    input={ ... },
+generate_final_answer_response = openai_client.chat.completions.create(
+    model="tensorzero::function_name::generate_final_answer",
+    messages=[...],
+    extra_body={"tensorzero::episode_id": str(episode_info.episode_id)},
 )
 
 task_success_score = my_blackbox_scoring_function(generate_final_answer_response)
@@ -280,18 +278,22 @@ t0.feedback(
 <Tab title="Python (Async)">
 
 ```python
-generate_database_query_response = await t0.inference(
-    function_name="generate_database_query",
-    episode_id=episode_info.episode_id,
-    input={ ... },
+from openai import AsyncOpenAI
+
+openai_client = AsyncOpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
+
+generate_database_query_response = await openai_client.chat.completions.create(
+    model="tensorzero::function_name::generate_database_query",
+    messages=[...],
+    extra_body={"tensorzero::episode_id": str(episode_info.episode_id)},
 )
 
 search_result = my_blackbox_search_function(generate_database_query_response)
 
-generate_final_answer_response = await t0.inference(
-    function_name="generate_final_answer",
-    episode_id=episode_info.episode_id,
-    input={ ... },
+generate_final_answer_response = await openai_client.chat.completions.create(
+    model="tensorzero::function_name::generate_final_answer",
+    messages=[...],
+    extra_body={"tensorzero::episode_id": str(episode_info.episode_id)},
 )
 
 task_success_score = my_blackbox_scoring_function(generate_final_answer_response)
@@ -301,45 +303,6 @@ await t0.feedback(
     episode_id=episode_info.episode_id,
     value=task_success_score,
 )
-```
-
-</Tab>
-
-<Tab title="HTTP">
-
-```bash
-# First inference call
-curl -X POST http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "generate_database_query",
-    "episode_id": "00000000-0000-0000-0000-000000000000",
-    "input": { ... }
-  }'
-
-# Run your custom search function with the result...
-my_blackbox_search_function(...)
-
-# Second inference call
-curl -X POST http://localhost:3000/inference \
-  -H "Content-Type: application/json" \
-  -d '{
-    "function_name": "generate_final_answer",
-    "episode_id": "00000000-0000-0000-0000-000000000000",
-    "input": { ... }
-  }'
-
-# Run your custom scoring function with the result...
-my_blackbox_scoring_function(...)
-
-# Feedback call
-curl -X POST http://localhost:3000/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "metric_name": "task_success",
-    "episode_id": "00000000-0000-0000-0000-000000000000",
-    "value": 0.85
-  }'
 ```
 
 </Tab>

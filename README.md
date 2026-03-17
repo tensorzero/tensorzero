@@ -55,7 +55,7 @@ Take what you need, adopt incrementally, and complement with other tools.
 > **Integrate with TensorZero once and access every major LLM provider.**
 
 - [x] **[Call any LLM](https://www.tensorzero.com/docs/gateway/call-any-llm)** (API or self-hosted) through a single unified API
-- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, **[structured outputs (JSON)](https://www.tensorzero.com/docs/gateway/generate-structured-outputs)**, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
+- [x] Infer with **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, **[structured outputs (JSON)](https://www.tensorzero.com/docs/gateway/generate-structured-outputs)**, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/call-llms-with-image-and-file-inputs)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
 - [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a structured interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
 - [x] Use any programming language: **[integrate via our Python SDK, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
@@ -98,7 +98,7 @@ You can use TensorZero with any OpenAI SDK (Python, Node, Go, etc.) or OpenAI-co
 from openai import OpenAI
 
 # Point the client to the TensorZero Gateway
-client = OpenAI(base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 response = client.chat.completions.create(
     # Call any model provider (or TensorZero function)
@@ -125,41 +125,13 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
-<table>
-<tr></tr> <!-- flip highlight order -->
-<tr>
-<td width="50%" align="center" valign="middle"><b>Observability » UI</b></td>
-<td width="50%" align="center" valign="middle"><b>Observability » Programmatic</b></td>
-</tr>
-<tr>
-<td width="50%" align="center" valign="middle"><video src="https://github.com/user-attachments/assets/a23e4c95-18fa-482c-8423-6078fb4cf285"></video></td>
-<td width="50%" align="left" valign="middle">
-
-```python
-t0.experimental_list_inferences(
-  function_name="sales_agent",
-  filters=BooleanMetricFilter(
-      metric_name="converted_sale",
-      value=True,
-  ),
-  # + compound filters
-  # + search
-  # + pagination
-  # ... and more ...
-)
-```
-
-</td>
-</tr>
-</table>
-
 ### 📈 LLM Optimization
 
 > **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
 
-- [x] Optimize your models with supervised fine-tuning, RLHF, and other techniques
-- [x] Optimize your prompts with automated prompt engineering algorithms like **[GEPA](https://www.tensorzero.com/docs/optimization/gepa)** and MIPROv2
-- [x] Optimize your **[inference strategy](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)** with dynamic in-context learning, best/mixture-of-N sampling, etc.
+- [x] Optimize your models with **[supervised fine-tuning](https://www.tensorzero.com/docs/optimization/supervised-fine-tuning-sft)**, RLHF, and other techniques
+- [x] Optimize your prompts with automated prompt engineering algorithms like **[GEPA](https://www.tensorzero.com/docs/optimization/gepa)**
+- [x] Optimize your **[inference strategy](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)** with **[dynamic in-context learning](https://www.tensorzero.com/docs/optimization/dynamic-in-context-learning-dicl)**, best/mixture-of-N sampling, etc.
 - [x] Enable a feedback loop for your LLMs: a data & learning flywheel turning production data into smarter, faster, and cheaper models
 - [ ] Soon: synthetic data generation
 

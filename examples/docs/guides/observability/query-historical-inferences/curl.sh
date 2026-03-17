@@ -2,17 +2,15 @@
 
 # 1. Make an inference with a tag
 echo "1. Making an inference with tag \`my_tag=my_value\`"
-INFERENCE_RESPONSE=$(curl -s -X POST http://localhost:3000/inference \
+INFERENCE_RESPONSE=$(curl -s -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-5-mini",
-    "input": {
-      "messages": [{"role": "user", "content": "Write a haiku about TensorZero."}]
-    },
-    "tags": {"my_tag": "my_value"}
+    "model": "tensorzero::model_name::openai::gpt-5-mini",
+    "messages": [{"role": "user", "content": "Write a haiku about TensorZero."}],
+    "tensorzero::tags": {"my_tag": "my_value"}
   }')
 
-INFERENCE_ID=$(echo "$INFERENCE_RESPONSE" | jq -r '.inference_id')
+INFERENCE_ID=$(echo "$INFERENCE_RESPONSE" | jq -r '.id')
 echo "Completed Inference: $INFERENCE_ID"
 echo
 

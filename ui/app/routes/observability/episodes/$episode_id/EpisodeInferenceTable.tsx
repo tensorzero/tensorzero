@@ -76,13 +76,17 @@ function TableRows({
             <TableItemFunction
               functionName={inference.function_name}
               functionType={inference.type}
-              link={toFunctionUrl(inference.function_name)}
+              link={toFunctionUrl(
+                inference.function_name,
+                inference.snapshot_hash,
+              )}
             />
           </TableCell>
           <TableCell>
             <VariantLink
               variantName={inference.variant_name}
               functionName={inference.function_name}
+              snapshotHash={inference.snapshot_hash}
             >
               <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                 {inference.variant_name}

@@ -113,7 +113,7 @@ test("should display inferences with old image content", async ({ page }) => {
   await expect(fourthNewImage).toBeVisible();
 });
 
-test("tag navigation works by evaluation_name", async ({ page }) => {
+test("tag navigation works by evaluation_run_id", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196368f-1b05-7181-b50c-e2ea0acea312",
   );
@@ -121,21 +121,22 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
   // Wait for page to load
   await page.waitForLoadState("networkidle");
 
-  // Use a more specific selector for the code element with entity_extraction
-  // Look for a table cell containing the exact text "entity_extraction"
-  const entityExtractionCell = page
+  // Find the evaluation_run_id tag value and click it
+  const evaluationRunIdCell = page
     .locator("span")
-    .filter({ hasText: /^entity_extraction$/ })
+    .filter({ hasText: /^0196368f-19bd-7082-a677-1c0bf346ff24$/ })
     .first();
 
   // Wait for the element to be visible
-  await entityExtractionCell.waitFor({ state: "visible" });
+  await evaluationRunIdCell.waitFor({ state: "visible" });
 
   // Click the element
-  await entityExtractionCell.click();
+  await evaluationRunIdCell.click();
 
-  // Assert that the page is /evaluations/entity_extraction
-  await expect(page).toHaveURL("/evaluations/entity_extraction");
+  // Assert that the page navigates to the evaluation runs page
+  await expect(page).toHaveURL(
+    "/evaluations/runs?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24",
+  );
 });
 
 test("tag navigation works by datapoint_id", async ({ page }) => {

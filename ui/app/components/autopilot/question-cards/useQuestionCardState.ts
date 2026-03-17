@@ -32,7 +32,18 @@ export function useQuestionCardState(
   ) => void,
 ) {
   const [activeStep, setActiveStep] = useState(0);
-  const [answers, setAnswers] = useState<StepAnswers>(() => new Map());
+  const [answers, setAnswers] = useState<StepAnswers>(() => {
+    const initial: StepAnswers = new Map();
+    payload.questions.forEach((question, idx) => {
+      if (question.type === "free_response" && question.default_value) {
+        initial.set(idx, {
+          status: StepStatus.AnsweredFreeResponse,
+          text: question.default_value,
+        });
+      }
+    });
+    return initial;
+  });
 
   const questionCount = payload.questions.length;
   const isSingleQuestion = questionCount === 1;
