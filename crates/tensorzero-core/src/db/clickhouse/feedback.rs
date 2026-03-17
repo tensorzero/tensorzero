@@ -428,6 +428,12 @@ fn build_metrics_with_feedback_query(
              WHERE function_name = {{function_name:String}} \
              AND key = '{escaped_key}' AND value = '{escaped_value}'"
         );
+        let metric_target_id_subquery = format!(
+            "{tag_subquery} \
+             UNION ALL \
+             SELECT DISTINCT episode_id_uint FROM InferenceByEpisodeId \
+             WHERE id_uint IN ({tag_subquery})"
+        );
 
         let query = format!(
             r"
@@ -443,7 +449,7 @@ fn build_metrics_with_feedback_query(
                 toUInt32(count()) as feedback_count
               FROM BooleanMetricFeedbackByVariant
               WHERE function_name = {{function_name:String}} {variant_clause}
-                AND target_id_uint IN ({tag_subquery})
+                AND target_id_uint IN ({metric_target_id_subquery})
               GROUP BY function_name, metric_name
               HAVING feedback_count > 0
 
@@ -456,7 +462,7 @@ fn build_metrics_with_feedback_query(
                 toUInt32(count()) as feedback_count
               FROM FloatMetricFeedbackByVariant
               WHERE function_name = {{function_name:String}} {variant_clause}
-                AND target_id_uint IN ({tag_subquery})
+                AND target_id_uint IN ({metric_target_id_subquery})
               GROUP BY function_name, metric_name
               HAVING feedback_count > 0
 
@@ -2348,6 +2354,27 @@ mod tests {
             params.get("variant_name"),
             Some(&"test_variant".to_string())
         );
+    }
+
+    #[test]
+    fn test_build_metrics_with_feedback_query_with_tag_includes_episode_ids() {
+        let tag = TagFilter {
+            tag_name: "tensorzero::namespace".to_string(),
+            tag_value: "mobile".to_string(),
+        };
+        let (query, _) =
+            build_metrics_with_feedback_query("test_function", "ChatInference", None, Some(&tag));
+
+        assert_query_contains(
+            &query,
+            "AND target_id_uint IN (SELECT toUInt128(inference_id) FROM InferenceTag",
+        );
+        assert_query_contains(&query, "UNION ALL");
+        assert_query_contains(
+            &query,
+            "SELECT DISTINCT episode_id_uint FROM InferenceByEpisodeId",
+        );
+        assert_query_contains(&query, "WHERE id_uint IN (SELECT toUInt128(inference_id)");
     }
 
     #[test]

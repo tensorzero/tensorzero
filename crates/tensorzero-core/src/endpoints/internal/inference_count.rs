@@ -206,8 +206,10 @@ async fn get_inference_count(
         .into());
     }
 
-    // Handle group_by=variant case - this requires the specialized method
-    if let Some(InferenceCountGroupBy::Variant) = params.group_by {
+    // Handle group_by=variant and tag-filtered count requests via the specialized method.
+    // `count_inferences` doesn't support the endpoint-level tag filter, while
+    // `count_inferences_by_variant` does.
+    if matches!(params.group_by, Some(InferenceCountGroupBy::Variant)) || tag.is_some() {
         let count_params = CountInferencesForFunctionParams {
             function_name,
             function_type: function.config_type(),
@@ -217,11 +219,17 @@ async fn get_inference_count(
         let variant_rows = database.count_inferences_by_variant(count_params).await?;
 
         let inference_count = variant_rows.iter().map(|r| r.inference_count).sum();
-        let count_by_variant = variant_rows.into_iter().map(Into::into).collect();
+        if let Some(InferenceCountGroupBy::Variant) = params.group_by {
+            let count_by_variant = variant_rows.into_iter().map(Into::into).collect();
+            return Ok(InferenceCountResponse {
+                inference_count,
+                count_by_variant: Some(count_by_variant),
+            });
+        }
 
         return Ok(InferenceCountResponse {
             inference_count,
-            count_by_variant: Some(count_by_variant),
+            count_by_variant: None,
         });
     }
 
@@ -557,6 +565,77 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.inference_count, 42);
+        assert!(result.count_by_variant.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_inference_count_with_tag_calls_count_by_variant() {
+        let config_str = r#"
+            [functions.test_function]
+            type = "chat"
+
+            [functions.test_function.variants.test_variant]
+            type = "chat_completion"
+            model = "openai::gpt-4"
+        "#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_str.as_bytes()).unwrap();
+
+        let config = Config::load_from_path_optional_verify_credentials(
+            &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+            false,
+        )
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_queries
+            .expect_count_inferences_by_variant()
+            .withf(|params| {
+                assert_eq!(params.function_name, "test_function");
+                assert_eq!(params.variant_name, None);
+                assert!(params.tag.is_some());
+                true
+            })
+            .times(1)
+            .returning(|_| {
+                Box::pin(async move {
+                    Ok(vec![CountByVariant {
+                        variant_name: "test_variant".to_string(),
+                        inference_count: 7,
+                        last_used_at: "2025-01-01T00:00:00.000Z".to_string(),
+                    }])
+                })
+            });
+        mock_clickhouse
+            .inference_queries
+            .expect_count_inferences()
+            .times(0);
+
+        let params = InferenceCountQueryParams {
+            variant_name: None,
+            group_by: None,
+            tag: Some("tensorzero::namespace::mobile".to_string()),
+        };
+        let tag = TagFilter {
+            tag_name: "tensorzero::namespace".to_string(),
+            tag_value: "mobile".to_string(),
+        };
+
+        let result = get_inference_count(
+            &config,
+            &mock_clickhouse,
+            "test_function",
+            &params,
+            Some(&tag),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.inference_count, 7);
         assert!(result.count_by_variant.is_none());
     }
 
