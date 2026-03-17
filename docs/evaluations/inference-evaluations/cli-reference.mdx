@@ -21,11 +21,11 @@ services:
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       # ... and any other relevant API credentials ...
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
 ```
 
@@ -143,7 +143,7 @@ Use this flag when you want to evaluate a specific subset of datapoints rather t
 - **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
 
 This flag specifies the dataset to use for evaluation.
-The dataset should be stored in your ClickHouse database.
+The dataset should be stored in your database.
 
 <Note>
   This flag is mutually exclusive with `--datapoint-ids`. You must provide
