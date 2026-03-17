@@ -810,6 +810,7 @@ fn mistral_usage_to_tensorzero_usage(usage: MistralUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
+        // Mistral's API does not expose cache token counts in the usage response.
         cache_read_input_tokens: None,
         cache_write_input_tokens: None,
         cost: None,

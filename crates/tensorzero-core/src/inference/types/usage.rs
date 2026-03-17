@@ -75,8 +75,8 @@ impl Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
-            cache_read_input_tokens: Some(0),
-            cache_write_input_tokens: Some(0),
+            cache_read_input_tokens: None,
+            cache_write_input_tokens: None,
             cost: Some(Decimal::ZERO),
         }
     }
@@ -251,13 +251,17 @@ where
                 (Some(a), Some(b)) => Some(a + b),
                 _ => None,
             },
+            // For cache tokens, None means "not reported by provider" — skip it
+            // rather than dropping the entire aggregate.
             cache_read_input_tokens: match (acc.cache_read_input_tokens, mi_cache_read) {
                 (Some(a), Some(b)) => Some(a + b),
-                _ => None,
+                (Some(a), None) | (None, Some(a)) => Some(a),
+                (None, None) => None,
             },
             cache_write_input_tokens: match (acc.cache_write_input_tokens, mi_cache_write) {
                 (Some(a), Some(b)) => Some(a + b),
-                _ => None,
+                (Some(a), None) | (None, Some(a)) => Some(a),
+                (None, None) => None,
             },
             cost: match (acc.cost, mi_cost) {
                 (Some(a), Some(b)) => Some(a + b),
