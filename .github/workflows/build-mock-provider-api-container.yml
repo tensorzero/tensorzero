@@ -26,26 +26,45 @@ jobs:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
+      - name: Check whether `mock-provider-api` image already exists
+        id: image-check
+        run: |
+          IMAGE="tensorzero/mock-provider-api:sha-${{ github.sha }}"
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "Image ${IMAGE} already exists on Docker Hub; skipping rebuild."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Image ${IMAGE} does not exist on Docker Hub; building it now."
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@f378676225212387f1283f4da878712af2c4cd60
+        if: steps.image-check.outputs.exists != 'true'
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        if: steps.image-check.outputs.exists != 'true'
         with:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Build and push `mock-provider-api` container
+        if: steps.image-check.outputs.exists != 'true'
         run: |
           docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/tensorzero-core/tests/mock-provider-api/Dockerfile . -t tensorzero/mock-provider-api:sha-${{ github.sha }} --push
 
       - name: Wait for image to be available on Docker Hub
         run: |
           IMAGE="tensorzero/mock-provider-api:sha-${{ github.sha }}"
+          if [ "${{ steps.image-check.outputs.exists }}" = "true" ]; then
+            echo "Image ${IMAGE} is already available on Docker Hub"
+            exit 0
+          fi
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 60); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
