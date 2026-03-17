@@ -3435,3 +3435,54 @@ async fn test_nested_skip_credential_validation() {
     .await;
     assert!(!skip_credential_validation());
 }
+
+#[tokio::test]
+async fn test_relay_warns_models_without_skip_relay() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let config_str = r#"
+        [gateway.relay]
+        gateway_url = "http://localhost:9999"
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        model_name = "good"
+    "#;
+
+    let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config should load successfully");
+    assert!(
+        logs_contain("do not have `skip_relay` set"),
+        "Expected warning about models without `skip_relay` in relay mode"
+    );
+}
+
+#[tokio::test]
+async fn test_relay_no_warn_when_skip_relay_set() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let config_str = r#"
+        [gateway.relay]
+        gateway_url = "http://localhost:9999"
+
+        [models.my-model]
+        routing = ["dummy"]
+        skip_relay = true
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        model_name = "good"
+    "#;
+
+    let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config should load successfully");
+    assert!(
+        !logs_contain("do not have `skip_relay` set"),
+        "Should not warn when all models have `skip_relay` set"
+    );
+}
