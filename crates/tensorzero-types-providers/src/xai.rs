@@ -74,6 +74,8 @@ pub struct XAIUsage {
     pub prompt_tokens: Option<u32>,
     pub completion_tokens: Option<u32>,
     pub completion_tokens_details: Option<XAICompletionTokensDetails>,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<super::openai::OpenAIPromptTokensDetails>,
 }
 
 /// Details about completion tokens, including reasoning tokens

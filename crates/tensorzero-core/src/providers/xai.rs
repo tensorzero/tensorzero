@@ -71,7 +71,7 @@ impl From<XAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens,
-            cache_read_input_tokens: None,
+            cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
             cache_write_input_tokens: None,
             cost: None,
         }
@@ -1083,6 +1083,7 @@ mod tests {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
                 completion_tokens_details: None,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

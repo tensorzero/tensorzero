@@ -37,13 +37,36 @@ impl Migration for Migration0051<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        Ok(!check_column_exists(
+        // Check all four columns so a partially applied migration is re-attempted.
+        let mi_read = check_column_exists(
             self.clickhouse,
             "ModelInference",
             "cache_read_input_tokens",
             MIGRATION_ID,
         )
-        .await?)
+        .await?;
+        let mi_write = check_column_exists(
+            self.clickhouse,
+            "ModelInference",
+            "cache_write_input_tokens",
+            MIGRATION_ID,
+        )
+        .await?;
+        let stats_read = check_column_exists(
+            self.clickhouse,
+            "ModelProviderStatistics",
+            "total_cache_read_input_tokens",
+            MIGRATION_ID,
+        )
+        .await?;
+        let stats_write = check_column_exists(
+            self.clickhouse,
+            "ModelProviderStatistics",
+            "total_cache_write_input_tokens",
+            MIGRATION_ID,
+        )
+        .await?;
+        Ok(!(mi_read && mi_write && stats_read && stats_write))
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
