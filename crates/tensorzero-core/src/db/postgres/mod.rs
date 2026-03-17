@@ -38,6 +38,33 @@ pub mod test_helpers;
 
 const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to your Postgres database with `--run-postgres-migrations`. Please see our documentation to learn more: https://www.tensorzero.com/docs/deployment/postgres";
 
+/// Slow query threshold for batch INSERT logging (1 second).
+const SLOW_QUERY_THRESHOLD: Duration = Duration::from_secs(1);
+
+/// Execute a built query with timing instrumentation.
+/// Logs a structured warning (table name, row count, elapsed time) for slow queries
+/// without including the full SQL, which can be enormous for bulk INSERTs.
+pub(crate) async fn execute_with_timing<'q>(
+    query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    pool: &PgPool,
+    table_name: &str,
+    row_count: usize,
+) -> Result<(), Error> {
+    let start = std::time::Instant::now();
+    let result = query.execute(pool).await;
+    let elapsed = start.elapsed();
+    if elapsed > SLOW_QUERY_THRESHOLD {
+        tracing::warn!(
+            table = table_name,
+            rows = row_count,
+            elapsed_ms = elapsed.as_millis() as u64,
+            "Slow Postgres write: INSERT into `{table_name}` ({row_count} rows) took {elapsed:.2?}",
+        );
+    }
+    result?;
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
     Enabled {

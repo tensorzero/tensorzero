@@ -28,6 +28,35 @@ use super::model_inferences::{
 /// Uses bounded channels to provide backpressure: when the write queue is full,
 /// new rows are dropped and logged rather than buffering without limit.
 ///
+/// Each table type (chat, json, model inferences) has its own accumulator task that
+/// collects rows and flushes them when `max_rows` or `flush_interval_ms` is reached.
+/// Within each flush, the metadata and data INSERTs run concurrently via `tokio::join!`.
+///
+/// ## Detecting backpressure
+///
+/// When Postgres INSERT latency exceeds the flush interval, the accumulator blocks
+/// (it can't accept new rows while flushing). This causes the bounded input channel
+/// to fill up, at which point `try_send` fails with `TrySendError::Full` and the
+/// error is logged. Monitor for these log messages:
+///
+///   `"Postgres batch channel full — dropping ... inference record"`
+///
+/// If you see sustained drops, consider:
+/// 1. Increasing `write_queue_capacity` to absorb temporary spikes
+/// 2. Tuning `max_rows` / `flush_interval_ms` to reduce per-flush latency
+/// 3. Scaling up Postgres (connections, IOPS, etc.)
+///
+/// ## Future: concurrent flush worker pool
+///
+/// The current design flushes serially within each accumulator — while an INSERT is
+/// in flight, the accumulator cannot collect new rows. If INSERT latency regularly
+/// exceeds `flush_interval_ms` and the above tuning is insufficient, the next step
+/// would be to decouple accumulation from flushing by introducing a shared pool of
+/// N flush workers. The accumulator would hand off ready batches to the pool and
+/// immediately start collecting the next batch. This adds complexity (shared
+/// `Arc<Mutex<Receiver>>`, boxed futures, two-stage shutdown) but eliminates
+/// accumulator stalls under sustained Postgres latency.
+///
 /// When a `PostgresBatchSender` is dropped, the batch writer will finish
 /// processing all outstanding batches once all senders are dropped.
 #[derive(Debug)]
@@ -151,7 +180,7 @@ impl PostgresBatchWriter {
         let batch_timeout = Duration::from_millis(config.flush_interval_ms);
         let max_rows = config.max_rows_postgres.unwrap_or(config.max_rows);
 
-        // Chat inferences flush task
+        // Chat inferences accumulator
         {
             let pool = pool.clone();
             let channel = self.chat_inferences_rx;
@@ -163,31 +192,7 @@ impl PostgresBatchWriter {
                     move |buffer| {
                         let pool = pool.clone();
                         async move {
-                            // TODO: if this errors, should we retry?
-                            match build_insert_chat_inferences_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing chat inferences to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building chat inferences query: {e}");
-                                }
-                            }
-                            match build_insert_chat_inference_data_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing chat inference IO to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building chat inference IO query: {e}");
-                                }
-                            }
+                            flush_chat_inferences(&pool, &buffer).await;
                             buffer
                         }
                     },
@@ -196,7 +201,7 @@ impl PostgresBatchWriter {
             });
         }
 
-        // JSON inferences flush task
+        // JSON inferences accumulator
         {
             let pool = pool.clone();
             let channel = self.json_inferences_rx;
@@ -208,31 +213,7 @@ impl PostgresBatchWriter {
                     move |buffer| {
                         let pool = pool.clone();
                         async move {
-                            // TODO: if this errors, should we retry?
-                            match build_insert_json_inferences_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing json inferences to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building json inferences query: {e}");
-                                }
-                            }
-                            match build_insert_json_inference_data_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing json inference IO to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building json inference IO query: {e}");
-                                }
-                            }
+                            flush_json_inferences(&pool, &buffer).await;
                             buffer
                         }
                     },
@@ -241,7 +222,7 @@ impl PostgresBatchWriter {
             });
         }
 
-        // Model inferences flush task
+        // Model inferences accumulator
         {
             let channel = self.model_inferences_rx;
             join_set.spawn(async move {
@@ -252,31 +233,7 @@ impl PostgresBatchWriter {
                     move |buffer| {
                         let pool = pool.clone();
                         async move {
-                            // TODO: if this errors, should we retry?
-                            match build_insert_model_inferences_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing model inferences to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building model inferences query: {e}");
-                                }
-                            }
-                            match build_insert_model_inference_data_query(&buffer) {
-                                Ok(mut qb) => {
-                                    if let Err(e) = qb.build().execute(&pool).await {
-                                        tracing::error!(
-                                            "Error writing model inference IO to Postgres: {e}"
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Error building model inference IO query: {e}");
-                                }
-                            }
+                            flush_model_inferences(&pool, &buffer).await;
                             buffer
                         }
                     },
@@ -291,4 +248,110 @@ impl PostgresBatchWriter {
             }
         }
     }
+}
+
+/// Execute both chat inference INSERTs (metadata + data) concurrently.
+async fn flush_chat_inferences(pool: &PgPool, buffer: &[ChatInferenceDatabaseInsert]) {
+    let row_count = buffer.len();
+    let metadata_future = async {
+        match build_insert_chat_inferences_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "chat_inferences", row_count).await
+                {
+                    tracing::error!("Error writing chat inferences to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building chat inferences query: {e}");
+            }
+        }
+    };
+    let data_future = async {
+        match build_insert_chat_inference_data_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "chat_inference_data", row_count)
+                        .await
+                {
+                    tracing::error!("Error writing chat inference data to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building chat inference data query: {e}");
+            }
+        }
+    };
+    tokio::join!(metadata_future, data_future);
+}
+
+/// Execute both JSON inference INSERTs (metadata + data) concurrently.
+async fn flush_json_inferences(pool: &PgPool, buffer: &[JsonInferenceDatabaseInsert]) {
+    let row_count = buffer.len();
+    let metadata_future = async {
+        match build_insert_json_inferences_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "json_inferences", row_count).await
+                {
+                    tracing::error!("Error writing json inferences to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building json inferences query: {e}");
+            }
+        }
+    };
+    let data_future = async {
+        match build_insert_json_inference_data_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "json_inference_data", row_count)
+                        .await
+                {
+                    tracing::error!("Error writing json inference data to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building json inference data query: {e}");
+            }
+        }
+    };
+    tokio::join!(metadata_future, data_future);
+}
+
+/// Execute both model inference INSERTs (metadata + data) concurrently.
+async fn flush_model_inferences(pool: &PgPool, buffer: &[StoredModelInference]) {
+    let row_count = buffer.len();
+    let metadata_future = async {
+        match build_insert_model_inferences_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "model_inferences", row_count)
+                        .await
+                {
+                    tracing::error!("Error writing model inferences to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building model inferences query: {e}");
+            }
+        }
+    };
+    let data_future = async {
+        match build_insert_model_inference_data_query(buffer) {
+            Ok(mut qb) => {
+                if let Err(e) =
+                    super::execute_with_timing(qb.build(), pool, "model_inference_data", row_count)
+                        .await
+                {
+                    tracing::error!("Error writing model inference data to Postgres: {e}");
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error building model inference data query: {e}");
+            }
+        }
+    };
+    tokio::join!(metadata_future, data_future);
 }
