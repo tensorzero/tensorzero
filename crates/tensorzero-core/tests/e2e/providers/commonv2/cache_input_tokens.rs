@@ -210,19 +210,20 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     );
 
     // For providers that support cache tokens, verify the fields are populated.
-    // The second request should have cache_read_input_tokens > 0 since
-    // the identical prompt should be cached from the first request.
-    if cache_read2.is_some() || cache_write1.is_some() {
-        // If the provider reports any cache tokens, the second request
-        // should show cache_read > 0
-        if let Some(cr) = cache_read2 {
-            assert!(
-                cr > 0,
-                "Provider {} reported cache_read_input_tokens={} on second request, expected > 0",
-                provider.variant_name,
-                cr
-            );
-        }
+    // Only assert cache_read > 0 on the second request when the first request
+    // actually wrote to cache (cache_write > 0). Provider-proxy replays may
+    // return Some(0) for both requests since no real caching occurs.
+    if let Some(cw) = cache_write1
+        && cw > 0
+        && let Some(cr) = cache_read2
+    {
+        assert!(
+            cr > 0,
+            "Provider {} wrote {} cache tokens on first request but cache_read_input_tokens={} on second request, expected > 0",
+            provider.variant_name,
+            cw,
+            cr
+        );
     }
 }
 
@@ -320,15 +321,18 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     );
 
     // For providers that support cache tokens, verify the fields are populated.
-    if cache_read2.is_some() || cache_write1.is_some() {
-        if let Some(cr) = cache_read2 {
-            assert!(
-                cr > 0,
-                "Provider {} reported cache_read_input_tokens={} on second streaming request, expected > 0",
-                provider.variant_name,
-                cr
-            );
-        }
+    // Only assert cache_read > 0 when the first request actually wrote to cache.
+    if let Some(cw) = cache_write1
+        && cw > 0
+        && let Some(cr) = cache_read2
+    {
+        assert!(
+            cr > 0,
+            "Provider {} wrote {} cache tokens on first streaming request but cache_read_input_tokens={} on second, expected > 0",
+            provider.variant_name,
+            cw,
+            cr
+        );
     }
 }
 
