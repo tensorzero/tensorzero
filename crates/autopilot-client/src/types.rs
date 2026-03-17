@@ -497,6 +497,15 @@ impl AutopilotToolResult {
             Self::Legacy { result } => serde_json::from_str(result),
         }
     }
+
+    /// Like `value`, but avoids a clone
+    #[expect(deprecated)]
+    pub fn into_value(self) -> Result<JsonValue, serde_json::Error> {
+        match self {
+            Self::Typed { result_value, .. } => Ok(result_value),
+            Self::Legacy { result } => serde_json::from_str(&result),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
