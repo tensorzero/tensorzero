@@ -251,6 +251,8 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "user_questions_answers":
     case "auto_eval_example_labeling":
     case "auto_eval_example_labeling_answers":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "visualization":
     case "unknown":
       return {};
@@ -443,6 +445,16 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
+    case "auto_eval_behavior_spec":
+      return "Behavior Spec";
+    case "auto_eval_behavior_spec_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Behavior Spec
+          <DotSeparator />
+          Submitted
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -705,6 +717,8 @@ function EventItemContent({
     case "tool_call_authorization":
     case "visualization":
     case "auto_eval_example_labeling":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">
@@ -884,6 +898,8 @@ function getStatusLabel(status: AutopilotStatus): {
     case "waiting_for_user_questions_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_behavior_spec_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
