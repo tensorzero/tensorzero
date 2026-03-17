@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockGetObject = vi.fn<
-  (storagePath: unknown) => Promise<string>
->();
+const mockGetObject = vi.fn<(storagePath: unknown) => Promise<string>>();
 
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
@@ -29,25 +27,23 @@ describe("resolve.server", () => {
       system: undefined,
       messages: [
         {
-          role: "user",
+          role: "user" as const,
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: "transcribe this",
             },
             {
-              type: "file",
-              file_type: "object_storage_pointer",
-              source_url: null,
+              type: "file" as const,
+              file_type: "object_storage_pointer" as const,
               mime_type: "audio/webm;codecs=opus",
               storage_path: {
                 kind: {
-                  type: "filesystem",
+                  type: "filesystem" as const,
                   path: "/tmp/object_storage",
                 },
                 path: "observability/files/audio_sample.webm",
               },
-              detail: null,
               filename: "audio_sample.webm",
             },
           ],
@@ -75,23 +71,21 @@ describe("resolve.server", () => {
     );
 
     const storedInput = {
-      system: null,
+      system: undefined,
       messages: [
         {
-          role: "user",
+          role: "user" as const,
           content: [
             {
-              type: "file",
+              type: "file" as const,
               mime_type: "image/png",
-              source_url: null,
               storage_path: {
                 kind: {
-                  type: "filesystem",
+                  type: "filesystem" as const,
                   path: "/tmp/object_storage",
                 },
                 path: "observability/files/image.png",
               },
-              detail: null,
               filename: "image.png",
             },
           ],

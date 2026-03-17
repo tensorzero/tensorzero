@@ -10,19 +10,27 @@ function base64ToBlob(base64: string, mime: string) {
   return new Blob([byteArray], { type: mime });
 }
 
-// Generate a Blob URL from base64 or data URL
+export function toDisplayUrl(data: string, mimeType: string) {
+  if (data.startsWith("data:") || data.startsWith("blob:")) {
+    return data;
+  }
+  return `data:${mimeType};base64,${data}`;
+}
+
+// Generate a Blob URL from raw base64 or return a URL-safe representation immediately.
 export function useBase64UrlToBlobUrl(url: string, mimeType: string) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const displayUrl = toDisplayUrl(url, mimeType);
 
   useEffect(() => {
     let base64: string | null = null;
-    if (url.startsWith("data:")) {
-      const match = url.match(/^data:(.*?);base64,(.*)$/);
+    if (displayUrl.startsWith("data:")) {
+      const match = displayUrl.match(/^data:(.*?);base64,(.*)$/);
       if (match) {
         base64 = match[2];
       }
     } else {
-      base64 = url;
+      base64 = displayUrl;
     }
 
     let blobUrl: string | null = null;
@@ -31,13 +39,13 @@ export function useBase64UrlToBlobUrl(url: string, mimeType: string) {
       blobUrl = URL.createObjectURL(blob);
       setObjectUrl(blobUrl);
     } else {
-      setObjectUrl(url);
+      setObjectUrl(displayUrl);
     }
 
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [url, mimeType]);
+  }, [displayUrl, mimeType]);
 
-  return objectUrl ?? url;
+  return objectUrl ?? displayUrl;
 }
