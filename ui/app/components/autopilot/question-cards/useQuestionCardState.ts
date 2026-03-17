@@ -14,7 +14,11 @@ enum StepStatus {
 type StepAnswer =
   | { status: StepStatus.Unanswered }
   | { status: StepStatus.Skipped }
-  | { status: StepStatus.AnsweredMultipleChoice; selected: Set<string> }
+  | {
+      status: StepStatus.AnsweredMultipleChoice;
+      selected: Set<string>;
+      freeResponseText: string;
+    }
   | { status: StepStatus.AnsweredFreeResponse; text: string };
 
 type StepAnswers = Map<number, StepAnswer>;
@@ -60,6 +64,10 @@ export function useQuestionCardState(
         step.status === StepStatus.AnsweredMultipleChoice
           ? step.selected
           : new Set<string>();
+      const currentFreeText =
+        step.status === StepStatus.AnsweredMultipleChoice
+          ? step.freeResponseText
+          : "";
 
       let updated: Set<string>;
       if (question.multi_select) {
@@ -77,6 +85,25 @@ export function useQuestionCardState(
       next.set(questionIndex, {
         status: StepStatus.AnsweredMultipleChoice,
         selected: updated,
+        freeResponseText: currentFreeText,
+      });
+      return next;
+    });
+  };
+
+  const handleMcFreeTextChange = (questionIndex: number, text: string) => {
+    setAnswers((prev) => {
+      const step = getStep(prev, questionIndex);
+      const current =
+        step.status === StepStatus.AnsweredMultipleChoice
+          ? step.selected
+          : new Set<string>();
+
+      const next = new Map(prev);
+      next.set(questionIndex, {
+        status: StepStatus.AnsweredMultipleChoice,
+        selected: current,
+        freeResponseText: text,
       });
       return next;
     });
@@ -127,12 +154,17 @@ export function useQuestionCardState(
         case StepStatus.Unanswered:
           responses[question.id] = { type: "skipped" };
           break;
-        case StepStatus.AnsweredMultipleChoice:
-          responses[question.id] = {
+        case StepStatus.AnsweredMultipleChoice: {
+          const mcAnswer: UserQuestionAnswer & { type: "multiple_choice" } = {
             type: "multiple_choice",
             selected: Array.from(step.selected),
           };
+          if (step.freeResponseText.trim()) {
+            mcAnswer.free_response_text = step.freeResponseText.trim();
+          }
+          responses[question.id] = mcAnswer;
           break;
+        }
         case StepStatus.AnsweredFreeResponse:
           responses[question.id] = {
             type: "free_response",
@@ -193,8 +225,13 @@ export function useQuestionCardState(
           : new Set<string>(),
       freeText:
         step.status === StepStatus.AnsweredFreeResponse ? step.text : "",
+      mcFreeText:
+        step.status === StepStatus.AnsweredMultipleChoice
+          ? step.freeResponseText
+          : "",
       onToggle: (value: string) => handleMcToggle(idx, value),
       onFreeTextChange: (text: string) => handleFreeTextChange(idx, text),
+      onMcFreeTextChange: (text: string) => handleMcFreeTextChange(idx, text),
     };
   };
 

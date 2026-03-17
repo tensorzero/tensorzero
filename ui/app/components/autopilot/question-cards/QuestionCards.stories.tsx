@@ -194,6 +194,48 @@ export const MultiQuestion: Story = {
   },
 };
 
+const mcWithFreeResponsePayload: EventPayloadUserQuestions = {
+  questions: [
+    {
+      id: "q1",
+      header: "Deployment strategy",
+      question: "Which deployment strategy should we use for the rollout?",
+      type: "multiple_choice",
+      options: [
+        {
+          id: "blue-green",
+          label: "Blue-green",
+          description:
+            "Run two identical environments and switch traffic all at once.",
+        },
+        {
+          id: "canary",
+          label: "Canary",
+          description:
+            "Gradually shift traffic to the new version while monitoring.",
+        },
+        {
+          id: "rolling",
+          label: "Rolling update",
+          description:
+            "Replace instances one at a time until all are on the new version.",
+        },
+      ],
+      multi_select: false,
+      include_free_response: true,
+    },
+  ],
+};
+
+export const McWithFreeResponse: Story = {
+  args: {
+    eventId: "evt-005",
+    payload: mcWithFreeResponsePayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
 export const Loading: Story = {
   args: {
     eventId: "evt-004",

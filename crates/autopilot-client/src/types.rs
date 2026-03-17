@@ -767,6 +767,10 @@ pub struct MultipleChoiceQuestion {
     pub options: Vec<MultipleChoiceOption>,
     /// Set to true to allow the user to select multiple options instead of just one.
     pub multi_select: bool,
+    /// Set to true to show a free-text textarea below the options for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub include_free_response: Option<bool>,
 }
 
 /// An option in a multiple choice question.
@@ -805,10 +809,14 @@ pub enum UserQuestionAnswer {
 /// A user's answer to a multiple choice question.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct MultipleChoiceAnswer {
     /// IDs of the selected options.
     pub selected: Vec<Uuid>,
+    /// Optional free-text response for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub free_response_text: Option<String>,
 }
 
 /// A user's free-form text answer.

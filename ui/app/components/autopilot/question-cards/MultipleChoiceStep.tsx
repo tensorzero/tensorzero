@@ -1,4 +1,5 @@
 import { Markdown } from "~/components/ui/markdown";
+import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
 
@@ -13,12 +14,16 @@ type MultipleChoiceStepProps = {
   question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
   selectedValues: Set<string>;
   onToggle: (value: string) => void;
+  mcFreeText: string;
+  onMcFreeTextChange: (text: string) => void;
 };
 
 export function MultipleChoiceStep({
   question,
   selectedValues,
   onToggle,
+  mcFreeText,
+  onMcFreeTextChange,
 }: MultipleChoiceStepProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -71,6 +76,16 @@ export function MultipleChoiceStep({
           );
         })}
       </div>
+
+      {!!question.include_free_response && (
+        <Textarea
+          value={mcFreeText}
+          onChange={(e) => onMcFreeTextChange(e.target.value)}
+          placeholder="Type any additional context..."
+          className="bg-bg-secondary min-h-[60px] resize-none text-sm"
+          rows={2}
+        />
+      )}
     </div>
   );
 }
