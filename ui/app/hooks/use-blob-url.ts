@@ -24,7 +24,9 @@ export function useBase64UrlToBlobUrl(url: string, mimeType: string) {
 
   useEffect(() => {
     let base64: string | null = null;
-    if (displayUrl.startsWith("data:")) {
+    if (displayUrl.startsWith("blob:")) {
+      // Already a blob URL, nothing to convert
+    } else if (displayUrl.startsWith("data:")) {
       const match = displayUrl.match(/^data:(.*?);base64,(.*)$/);
       if (match) {
         base64 = match[2];
