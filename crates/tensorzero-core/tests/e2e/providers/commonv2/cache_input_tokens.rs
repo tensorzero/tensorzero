@@ -324,8 +324,7 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
 
     // Second request - triggers cache read (different user message, same cached system prompt).
     // May fail through provider-proxy if no recording exists yet for this payload.
-    let Some(usage2) = get_streaming_usage(&client, &payload2, &provider.variant_name).await
-    else {
+    let Some(usage2) = get_streaming_usage(&client, &payload2, &provider.variant_name).await else {
         println!(
             "Warning: second streaming request for {} did not return usage — skipping cache read assertions",
             provider.variant_name
