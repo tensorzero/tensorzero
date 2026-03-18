@@ -1421,11 +1421,11 @@ jobs:
     uses: ./.github/workflows/client-tests.yml
     secrets: inherit
 
-  minikube:
+  k3d:
     needs: [build-gateway-container, build-ui-container]
     permissions:
       contents: read
-    uses: ./.github/workflows/minikube.yml
+    uses: ./.github/workflows/k3d.yml
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1528,7 +1528,7 @@ jobs:
         endpoint-tests,
         lint-rust,
         live-tests,
-        minikube,
+        k3d,
         mock-optimization-tests,
         mocked-batch-tests,
         postgres-tests,
