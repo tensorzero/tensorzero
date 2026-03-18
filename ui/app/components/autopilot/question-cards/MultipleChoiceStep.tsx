@@ -14,6 +14,8 @@ type MultipleChoiceStepProps = {
   question: Extract<EventPayloadUserQuestion, { type: "multiple_choice" }>;
   selectedValues: Set<string>;
   onToggle: (value: string) => void;
+  otherSelected: boolean;
+  onOtherToggle: () => void;
   mcFreeText: string;
   onMcFreeTextChange: (text: string) => void;
 };
@@ -22,6 +24,8 @@ export function MultipleChoiceStep({
   question,
   selectedValues,
   onToggle,
+  otherSelected,
+  onOtherToggle,
   mcFreeText,
   onMcFreeTextChange,
 }: MultipleChoiceStepProps) {
@@ -75,17 +79,54 @@ export function MultipleChoiceStep({
             </button>
           );
         })}
-      </div>
 
-      {!!question.include_free_response && (
-        <Textarea
-          value={mcFreeText}
-          onChange={(e) => onMcFreeTextChange(e.target.value)}
-          placeholder="Type any additional context..."
-          className="bg-bg-secondary min-h-[60px] resize-none text-sm"
-          rows={2}
-        />
-      )}
+        {!!question.include_free_response && (
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onOtherToggle}
+              className={cn(
+                "group relative flex cursor-pointer flex-col items-start rounded-lg border px-3 py-2 text-left transition-all",
+                otherSelected
+                  ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:ring-purple-400"
+                  : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-sm font-medium",
+                  otherSelected
+                    ? "text-purple-700 dark:text-purple-300"
+                    : "text-fg-primary",
+                )}
+              >
+                Other
+              </span>
+              <span
+                className={cn(
+                  "text-xs leading-snug",
+                  otherSelected
+                    ? "text-purple-600 dark:text-purple-400"
+                    : "text-fg-muted",
+                )}
+              >
+                Provide your own answer
+              </span>
+            </button>
+
+            {otherSelected && (
+              <Textarea
+                value={mcFreeText}
+                onChange={(e) => onMcFreeTextChange(e.target.value)}
+                placeholder="Type your answer..."
+                className="bg-bg-secondary min-h-[60px] resize-none text-sm"
+                rows={2}
+                autoFocus
+              />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

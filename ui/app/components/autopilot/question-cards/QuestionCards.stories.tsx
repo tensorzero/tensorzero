@@ -194,7 +194,7 @@ export const MultiQuestion: Story = {
   },
 };
 
-const mcWithFreeResponsePayload: EventPayloadUserQuestions = {
+const singleSelectWithOtherPayload: EventPayloadUserQuestions = {
   questions: [
     {
       id: "q1",
@@ -227,10 +227,49 @@ const mcWithFreeResponsePayload: EventPayloadUserQuestions = {
   ],
 };
 
-export const McWithFreeResponse: Story = {
+export const SingleSelectWithOther: Story = {
   args: {
     eventId: "evt-005",
-    payload: mcWithFreeResponsePayload,
+    payload: singleSelectWithOtherPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+const multiSelectWithOtherPayload: EventPayloadUserQuestions = {
+  questions: [
+    {
+      id: "q1",
+      header: "Features",
+      question: "Which features do you want to enable?",
+      type: "multiple_choice",
+      options: [
+        {
+          id: "i18n",
+          label: "Internationalization",
+          description: "Support for multiple languages and locales.",
+        },
+        {
+          id: "tz",
+          label: "Timezone support",
+          description: "Handle dates across different timezones correctly.",
+        },
+        {
+          id: "relative",
+          label: "Relative time",
+          description: 'Display dates as "2 hours ago" or "in 3 days".',
+        },
+      ],
+      multi_select: true,
+      include_free_response: true,
+    },
+  ],
+};
+
+export const MultiSelectWithOther: Story = {
+  args: {
+    eventId: "evt-006",
+    payload: multiSelectWithOtherPayload,
     isLoading: false,
     onSubmit: () => {},
   },

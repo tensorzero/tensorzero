@@ -17,7 +17,8 @@ export function formatResponse(
         })
         .join(", ");
       if (response.free_response_text) {
-        return `${labels} — ${response.free_response_text}`;
+        const otherLabel = `Other: ${response.free_response_text}`;
+        return labels ? `${labels}, ${otherLabel}` : otherLabel;
       }
       return labels;
     }
