@@ -914,7 +914,7 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
 
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,

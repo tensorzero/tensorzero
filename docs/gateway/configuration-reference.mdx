@@ -4856,6 +4856,7 @@ If you set `type = "s3_compatible"`, the following fields are available.
 
 Defines the endpoint of the object storage service.
 You can use this field to specify a custom endpoint for the object storage service (e.g. GCP Cloud Storage, Cloudflare R2, and many more).
+You can also set it to `env::YOUR_ENVIRONMENT_VARIABLE` to read from the environment variable `YOUR_ENVIRONMENT_VARIABLE` on startup.
 
 ##### `bucket_name`
 

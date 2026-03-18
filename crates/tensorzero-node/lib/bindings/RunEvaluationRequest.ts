@@ -46,4 +46,5 @@ export type RunEvaluationRequest = {
       function_config: EvaluationFunctionConfig;
     }
   | { function_name: string; evaluator_names: Array<string> }
+  | { evaluation_name: string }
 );

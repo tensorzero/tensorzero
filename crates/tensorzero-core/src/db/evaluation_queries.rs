@@ -33,6 +33,8 @@ pub struct EvaluationRunInfoRow {
 #[derive(Debug, Deserialize, sqlx::FromRow)]
 pub struct EvaluationRunSearchResult {
     pub evaluation_run_id: Uuid,
+    pub evaluation_name: String,
+    pub dataset_name: String,
     pub variant_name: String,
 }
 
@@ -381,7 +383,7 @@ pub trait EvaluationQueries {
     /// Searches evaluation runs by ID or variant name.
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,

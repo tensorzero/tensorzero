@@ -142,7 +142,7 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::azure::)'
 # We have a low rate limit on Azure, so we often need to retry several times
-retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+retries = { backoff = "exponential", count = 16, delay = "5s", jitter = true, max-delay = "120s" }
 
 [[profile.default.overrides]]
 filter = 'test(test_clickhouse_migration_manager)'

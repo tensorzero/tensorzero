@@ -27,10 +27,9 @@ export default [
       "workflow_evaluations/search_runs",
       "routes/api/workflow_evaluations/search_runs/route.ts",
     ),
-
     route(
-      "evaluations/search_runs/:evaluation_name",
-      "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
+      "evaluations/search_runs",
+      "routes/api/evaluations/search_runs/route.ts",
     ),
 
     route("evaluations/cancel", "routes/api/evaluations/cancel.route.ts"),

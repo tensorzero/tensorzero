@@ -117,9 +117,10 @@ async function resolveFile(
 ): Promise<ZodResolvedBase64File> {
   const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
-  const data = `data:${content.file.mime_type};base64,${json.data}`;
   return {
-    data,
+    // Keep the canonical internal representation as raw base64.
+    // Display code can wrap this in a data URL or Blob URL as needed.
+    data: json.data,
     mime_type: content.file.mime_type,
   };
 }
