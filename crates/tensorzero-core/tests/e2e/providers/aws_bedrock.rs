@@ -131,7 +131,9 @@ async fn get_providers() -> E2ETestProviders {
         // Bedrock's Converse API doesn't support Anthropic's output_format parameter
         reasoning_inference: vec![claude_thinking_provider.clone()],
         reasoning_usage_inference: vec![claude_thinking_provider],
-        cache_input_tokens_inference: cache_providers,
+        // Disabled: provider-proxy replays the same cached response for both requests,
+        // so cache_write > 0 on request 1 but cache_read stays 0 on request 2.
+        cache_input_tokens_inference: vec![],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
