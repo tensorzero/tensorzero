@@ -27,6 +27,72 @@ use tensorzero_core::{
 
 use super::common::ModelTestProvider;
 
+const MAX_RATE_LIMIT_RETRIES: u32 = 5;
+
+fn is_rate_limit_error(status: StatusCode, body: &Value) -> bool {
+    status.as_u16() == 429
+        || body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .is_some_and(|e| e.contains("429") || e.contains("RESOURCE_EXHAUSTED"))
+}
+
+/// Retry a request that returns `Result<Value, (StatusCode, Value)>`.
+/// Retries with exponential backoff when the error contains a rate limit (429).
+async fn retry_on_rate_limit<F, Fut>(f: F) -> Value
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<Value, (StatusCode, Value)>>,
+{
+    let mut delay = std::time::Duration::from_secs(2);
+    let mut last_err = None;
+    for attempt in 0..MAX_RATE_LIMIT_RETRIES {
+        match f().await {
+            Ok(val) => return val,
+            Err((status, body)) => {
+                assert!(
+                    is_rate_limit_error(status, &body),
+                    "Request failed with non-retryable error: status={status}, body={body}"
+                );
+                println!(
+                    "Rate limited (attempt {}/{}), retrying in {delay:?}...",
+                    attempt + 1,
+                    MAX_RATE_LIMIT_RETRIES
+                );
+                last_err = Some((status, body));
+                tokio::time::sleep(delay).await;
+                delay *= 2;
+            }
+        }
+    }
+    let (status, body) = last_err.expect("should have at least one attempt");
+    panic!("Request failed after {MAX_RATE_LIMIT_RETRIES} attempts: status={status}, body={body}");
+}
+
+/// Retry a request until the response is not a rate limit error.
+/// Returns the first non-rate-limited `(StatusCode, Value)` response.
+async fn retry_until_non_rate_limit<F, Fut>(f: F) -> (StatusCode, Value)
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = (StatusCode, Value)>,
+{
+    let mut delay = std::time::Duration::from_secs(2);
+    for attempt in 0..MAX_RATE_LIMIT_RETRIES {
+        let (status, body) = f().await;
+        if !is_rate_limit_error(status, &body) {
+            return (status, body);
+        }
+        println!(
+            "Rate limited (attempt {}/{}), retrying in {delay:?}...",
+            attempt + 1,
+            MAX_RATE_LIMIT_RETRIES
+        );
+        tokio::time::sleep(delay).await;
+        delay *= 2;
+    }
+    panic!("Request still rate limited after {MAX_RATE_LIMIT_RETRIES} attempts");
+}
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -1168,14 +1234,23 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
 
     println!("Good input: {good_input}");
 
-    let good_response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&good_input)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(good_response.status(), StatusCode::OK);
-    let good_json = good_response.json::<Value>().await.unwrap();
+    // Retry on rate limit (429) errors from the provider
+    let good_json = retry_on_rate_limit(|| async {
+        let resp = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&good_input)
+            .send()
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body: Value = resp.json().await.unwrap();
+        if status == StatusCode::OK {
+            Ok(body)
+        } else {
+            Err((status, body))
+        }
+    })
+    .await;
     println!("Good response: {good_json}");
 
     // Break the signature and check that it fails
@@ -1184,15 +1259,19 @@ pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &st
     bad_input["input"]["messages"][1]["content"][0]["signature"] =
         Value::String(bad_signature.clone());
 
-    let bad_response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&bad_input)
-        .send()
-        .await
-        .unwrap();
-
-    let status = bad_response.status();
-    let resp: Value = bad_response.json().await.unwrap();
+    // Retry on rate limit (429) errors — we expect an "Invalid `signature`" error, not a rate limit
+    let (status, resp) = retry_until_non_rate_limit(|| async {
+        let resp = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&bad_input)
+            .send()
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body: Value = resp.json().await.unwrap();
+        (status, body)
+    })
+    .await;
     assert_eq!(
         status,
         StatusCode::BAD_GATEWAY,
