@@ -2772,8 +2772,10 @@ pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
     // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM) do.
+    // providers (e.g. VLLM, DeepSeek) do. vLLM >=0.8 uses `reasoning` instead
+    // of `reasoning_content`, so we accept both via alias.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "reasoning")]
     pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
@@ -2915,8 +2917,10 @@ struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM) do.
+    // providers (e.g. VLLM, DeepSeek) do. vLLM >=0.8 uses `reasoning` instead
+    // of `reasoning_content`, so we accept both via alias.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "reasoning")]
     reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
@@ -3292,6 +3296,7 @@ mod tests {
     use base64::Engine;
     use base64::prelude::*;
     use futures::FutureExt;
+    use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
 
@@ -6533,5 +6538,57 @@ mod tests {
             "output_file_id should also be set for partial failures"
         );
         // This combination should NOT trigger the Failed path — output is still usable.
+    }
+
+    #[gtest]
+    fn test_openai_response_message_reasoning_alias() {
+        // vLLM >=0.8 uses `reasoning` instead of `reasoning_content`.
+        // Verify both field names deserialize correctly.
+        let json_with_reasoning_content = serde_json::json!({
+            "content": "Hello",
+            "reasoning_content": "thinking via reasoning_content"
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_reasoning_content).expect("should deserialize");
+        expect_that!(
+            msg.reasoning_content.as_deref(),
+            some(eq("thinking via reasoning_content"))
+        );
+
+        let json_with_reasoning = serde_json::json!({
+            "content": "Hello",
+            "reasoning": "thinking via reasoning"
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_reasoning).expect("should deserialize");
+        expect_that!(
+            msg.reasoning_content.as_deref(),
+            some(eq("thinking via reasoning"))
+        );
+    }
+
+    #[gtest]
+    fn test_openai_delta_reasoning_alias() {
+        // Verify streaming delta also accepts `reasoning` alias.
+        let json_with_reasoning = serde_json::json!({
+            "reasoning": "streaming reasoning"
+        });
+        let delta: OpenAIDelta =
+            serde_json::from_value(json_with_reasoning).expect("should deserialize");
+        expect_that!(
+            delta.reasoning_content.as_deref(),
+            some(eq("streaming reasoning"))
+        );
+
+        let json_with_reasoning_content = serde_json::json!({
+            "reasoning_content": "streaming reasoning_content"
+        });
+        let delta: OpenAIDelta =
+            serde_json::from_value(json_with_reasoning_content).expect("should deserialize");
+        expect_that!(
+            delta.reasoning_content.as_deref(),
+            some(eq("streaming reasoning_content"))
+        );
+    }
     }
 }
