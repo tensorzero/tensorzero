@@ -94,7 +94,9 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         UnfilteredInferenceExtraHeaders::default()
     };
 
-    let payload = json!({
+    // Use different user messages so the provider-proxy records separate responses.
+    // The large system prompt (which is the cached part) is identical in both requests.
+    let payload1 = json!({
         "model_name": provider.model_name,
         "episode_id": episode_id,
         "input": {
@@ -106,12 +108,24 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         "extra_body": cache_control_extra_body(),
     });
 
+    let payload2 = json!({
+        "model_name": provider.model_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": LARGE_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": "Summarize the above text in two sentences."}]
+        },
+        "stream": false,
+        "extra_headers": extra_headers.extra_headers,
+        "extra_body": cache_control_extra_body(),
+    });
+
     let client = Client::new();
 
     // First request - triggers cache write
     let response1 = client
         .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
+        .json(&payload1)
         .send()
         .await
         .expect("failed to send first inference request");
@@ -149,10 +163,10 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         provider.variant_name, input_tokens1, cache_write1, cache_read1
     );
 
-    // Second request - triggers cache read
+    // Second request - triggers cache read (different user message, same cached system prompt)
     let response2 = client
         .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
+        .json(&payload2)
         .send()
         .await
         .expect("failed to send second inference request");
@@ -203,16 +217,16 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         This suggests cache_read_input_tokens may not be included in input_tokens."
     );
 
-    // Assert consistency between cache write and cache read
-    assert_eq!(
-        input_tokens1, input_tokens2,
-        "input_tokens should be consistent between cache write ({input_tokens1}) and cache read ({input_tokens2})"
+    // Assert consistency between cache write and cache read.
+    // The two requests have slightly different user messages (for proxy compatibility),
+    // so allow a small difference in input_tokens.
+    let diff = input_tokens1.abs_diff(input_tokens2);
+    assert!(
+        diff <= 5,
+        "input_tokens should be approximately equal between requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
     // For providers that support cache tokens, verify the fields are populated.
-    // Only assert cache_read > 0 on the second request when the first request
-    // actually wrote to cache (cache_write > 0). Provider-proxy replays may
-    // return Some(0) for both requests since no real caching occurs.
     if let Some(cw) = cache_write1
         && cw > 0
         && let Some(cr) = cache_read2
@@ -249,7 +263,9 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         UnfilteredInferenceExtraHeaders::default()
     };
 
-    let payload = json!({
+    // Use different user messages so the provider-proxy records separate responses.
+    // The large system prompt (which is the cached part) is identical in both requests.
+    let payload1 = json!({
         "model_name": provider.model_name,
         "episode_id": episode_id,
         "input": {
@@ -261,10 +277,22 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         "extra_body": cache_control_extra_body(),
     });
 
+    let payload2 = json!({
+        "model_name": provider.model_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": LARGE_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": "Summarize the above text in two sentences."}]
+        },
+        "stream": true,
+        "extra_headers": extra_headers.extra_headers,
+        "extra_body": cache_control_extra_body(),
+    });
+
     let client = Client::new();
 
     // First request - triggers cache write
-    let usage1 = get_streaming_usage(&client, &payload, &provider.variant_name)
+    let usage1 = get_streaming_usage(&client, &payload1, &provider.variant_name)
         .await
         .expect("first streaming request should return usage");
     let input_tokens1 = usage1
@@ -282,8 +310,8 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         provider.variant_name, input_tokens1, cache_write1, cache_read1
     );
 
-    // Second request - triggers cache read
-    let usage2 = get_streaming_usage(&client, &payload, &provider.variant_name)
+    // Second request - triggers cache read (different user message, same cached system prompt)
+    let usage2 = get_streaming_usage(&client, &payload2, &provider.variant_name)
         .await
         .expect("second streaming request should return usage");
     let input_tokens2 = usage2
@@ -314,14 +342,16 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         This suggests cache_read_input_tokens may not be included in input_tokens."
     );
 
-    // Assert consistency between cache write and cache read
-    assert_eq!(
-        input_tokens1, input_tokens2,
-        "input_tokens should be consistent between cache write ({input_tokens1}) and cache read ({input_tokens2}) for streaming"
+    // Assert consistency between cache write and cache read.
+    // The two requests have slightly different user messages (for proxy compatibility),
+    // so allow a small difference in input_tokens.
+    let diff = input_tokens1.abs_diff(input_tokens2);
+    assert!(
+        diff <= 5,
+        "input_tokens should be approximately equal between streaming requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
     // For providers that support cache tokens, verify the fields are populated.
-    // Only assert cache_read > 0 when the first request actually wrote to cache.
     if let Some(cw) = cache_write1
         && cw > 0
         && let Some(cr) = cache_read2
