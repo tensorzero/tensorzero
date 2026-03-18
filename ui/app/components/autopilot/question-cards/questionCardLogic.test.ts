@@ -8,6 +8,7 @@ import {
   isStepAnswered,
   buildResponses,
   getStep,
+  markUnansweredAsSkipped,
 } from "./questionCardLogic";
 import type { StepAnswers } from "./questionCardLogic";
 
@@ -222,6 +223,48 @@ describe("applyMcFreeTextChange", () => {
     expect(step.selected).toEqual(new Set(["x"]));
     expect(step.otherSelected).toBe(true);
     expect(step.freeResponseText).toBe("new text");
+  });
+});
+
+describe("markUnansweredAsSkipped", () => {
+  it("preserves free-text-only multiple choice answers", () => {
+    const answers: StepAnswers = new Map([
+      [
+        0,
+        {
+          status: StepStatus.AnsweredMultipleChoice,
+          selected: new Set<string>(),
+          otherSelected: true,
+          freeResponseText: "my custom answer",
+        },
+      ],
+    ]);
+
+    const finalAnswers = markUnansweredAsSkipped(
+      [singleSelectQuestion],
+      answers,
+    );
+    expect(getStep(finalAnswers, 0)).toEqual(getStep(answers, 0));
+  });
+
+  it("marks empty multiple choice other answers as skipped", () => {
+    const answers: StepAnswers = new Map([
+      [
+        0,
+        {
+          status: StepStatus.AnsweredMultipleChoice,
+          selected: new Set<string>(),
+          otherSelected: true,
+          freeResponseText: "   ",
+        },
+      ],
+    ]);
+
+    const finalAnswers = markUnansweredAsSkipped(
+      [singleSelectQuestion],
+      answers,
+    );
+    expect(getStep(finalAnswers, 0)).toEqual({ status: StepStatus.Skipped });
   });
 });
 

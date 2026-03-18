@@ -212,13 +212,7 @@ export function markUnansweredAsSkipped(
   const result = new Map(base);
   questions.forEach((_, idx) => {
     const step = getStep(base, idx);
-    const answered =
-      (step.status === StepStatus.AnsweredMultipleChoice &&
-        (step.selected.size > 0 ||
-          (step.otherSelected && step.freeResponseText.trim().length > 0))) ||
-      (step.status === StepStatus.AnsweredFreeResponse &&
-        step.text.trim().length > 0);
-    if (!answered && step.status !== StepStatus.Skipped) {
+    if (!isStepAnswered(base, idx) && step.status !== StepStatus.Skipped) {
       result.set(idx, { status: StepStatus.Skipped });
     }
   });
