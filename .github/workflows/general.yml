@@ -822,6 +822,44 @@ jobs:
       - name: Lint Helm charts
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
 
+      - name: Install kubeconform
+        run: |
+          curl -sSLo kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          rm kubeconform.tar.gz
+
+      - name: Validate Helm templates with kubeconform (default values)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Validate Helm templates with kubeconform (ingress + persistence + UI)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            --set gateway.ingress.enabled=true \
+            --set persistence.enabled=true \
+            --set ui.deploy=true \
+            --set ui.ingress.enabled=true \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Validate Helm templates with kubeconform (minimal - no UI, no ingress)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            --set gateway.ingress.enabled=false \
+            --set ui.deploy=false \
+            --set persistence.enabled=false \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.7.2
+
+      - name: Run Helm unit tests
+        run: helm unittest examples/production-deployment-k8s-helm/
+
   # This job is intentionally NOT included in check-all-general-jobs-passed
   # It runs as an optional check that shows up in the PR but doesn't block merging
   cargo-deny:
