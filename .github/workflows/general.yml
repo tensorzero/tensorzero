@@ -133,8 +133,9 @@ jobs:
 
       - name: Pull and retag `gateway` and `ui` containers
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:latest
 
@@ -962,8 +963,9 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
@@ -1049,9 +1051,10 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
@@ -1166,8 +1169,9 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
@@ -1353,7 +1357,8 @@ jobs:
 
       - name: Pull and retag gateway container
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
 
       - name: Launch ClickHouse container for E2E tests
