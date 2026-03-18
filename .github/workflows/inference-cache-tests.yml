@@ -24,17 +24,17 @@ jobs:
           - cache_backend: clickhouse
             test_filter: "test(_clickhouse)"
             cache_backend_env: clickhouse
-            services: "clickhouse"
+            services: "clickhouse provider-proxy"
           - cache_backend: valkey
             test_filter: "test(valkey)"
             cache_backend_env: valkey
             valkey_url: "redis://valkey:6379"
-            services: "clickhouse postgres gateway-postgres-migrations valkey"
+            services: "clickhouse postgres gateway-postgres-migrations valkey provider-proxy"
           - cache_backend: redis
             test_filter: "test(valkey)"
             cache_backend_env: valkey
             valkey_url: "redis://redis:6379"
-            services: "clickhouse postgres gateway-postgres-migrations redis"
+            services: "clickhouse postgres gateway-postgres-migrations redis provider-proxy"
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
@@ -46,8 +46,10 @@ jobs:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
-      - name: Pull live-tests container image
-        run: docker pull tensorzero/live-tests:sha-${{ github.sha }}
+      - name: Pull container images
+        run: |
+          docker pull tensorzero/live-tests:sha-${{ github.sha }}
+          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
 
       - name: Start infrastructure services
         run: >

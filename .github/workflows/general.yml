@@ -1362,8 +1362,13 @@ jobs:
     secrets: inherit
 
   inference-cache-tests:
-    if: ${{ needs.detect-changes.outputs.code == true && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
-    needs: [detect-changes, build-live-tests-container]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    needs:
+      [
+        detect-changes,
+        build-live-tests-container,
+        build-provider-proxy-container,
+      ]
     permissions:
       contents: read
       actions: read
