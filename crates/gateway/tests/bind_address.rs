@@ -32,13 +32,22 @@ async fn test_bind_address_cli_flag() {
         child_data.output
     );
 
-    // Verify the health endpoint responds
-    let health_response = child_data.call_health_endpoint().await;
-    assert!(
-        health_response.status().is_success(),
-        "Health endpoint failed with status {}",
-        health_response.status()
-    );
+    // The server can start listening before dependent services finish becoming
+    // healthy, so poll `/health` briefly instead of asserting on the first probe.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let health_response = child_data.call_health_endpoint().await;
+        if health_response.status().is_success() {
+            break;
+        }
+
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "Health endpoint failed with status {}",
+            health_response.status()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
 }
 
 /// Test that specifying both --bind-address CLI flag and config file bind_address causes an error.

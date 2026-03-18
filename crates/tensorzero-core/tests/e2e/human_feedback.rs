@@ -12,6 +12,7 @@ use tensorzero_core::inference::types::{Arguments, JsonInferenceOutput, Role, Sy
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::poll_for_result::poll_for_result;
 
 // TODO: make these write human feedback and make sure this is writing correctly.
 
@@ -89,10 +90,16 @@ async fn test_comment_human_feedback() {
     conn.sleep_for_writes_to_be_visible().await;
 
     // Check CommentFeedback
-    let feedbacks = conn
-        .query_feedback_by_target_id(episode_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(episode_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks
+                .iter()
+                .any(|f| matches!(f, FeedbackRow::Comment(c) if c.id == feedback_id))
+        },
+        "human comment feedback should become visible",
+    )
+    .await;
     let comment_feedback = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -141,10 +148,16 @@ async fn test_comment_human_feedback() {
     conn.sleep_for_writes_to_be_visible().await;
 
     // Check CommentFeedback
-    let feedbacks = conn
-        .query_feedback_by_target_id(episode_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(episode_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks
+                .iter()
+                .any(|f| matches!(f, FeedbackRow::Comment(c) if c.id == feedback_id))
+        },
+        "second human comment feedback should become visible",
+    )
+    .await;
     let comment_feedback = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -240,10 +253,16 @@ async fn test_demonstration_feedback() {
     conn.sleep_for_writes_to_be_visible().await;
 
     // Check DemonstrationFeedback
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks.iter().any(
+                |f| matches!(f, FeedbackRow::Demonstration(d) if d.id == feedback_id),
+            )
+        },
+        "human dynamic demonstration feedback should become visible",
+    )
+    .await;
     let demo_feedback = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -389,10 +408,16 @@ async fn test_demonstration_feedback_json() {
     conn.sleep_for_writes_to_be_visible().await;
 
     // Check DemonstrationFeedback
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks.iter().any(
+                |f| matches!(f, FeedbackRow::Demonstration(d) if d.id == feedback_id),
+            )
+        },
+        "human dynamic tool demonstration feedback should become visible",
+    )
+    .await;
     let demo_feedback = feedbacks
         .iter()
         .find_map(|f| match f {

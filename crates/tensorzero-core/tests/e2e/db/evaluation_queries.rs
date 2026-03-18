@@ -78,14 +78,17 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
         "search result variant_name should be the first variant"
     );
 
-    // Verify via list_evaluation_runs (returns more fields)
-    // Since run_id is a v7 UUID (timestamp-based), the newly inserted run will be first.
+    // Verify via list_evaluation_runs (returns more fields).
+    // Other e2e tests can insert evaluation runs concurrently, so avoid assuming
+    // the newest run globally belongs to this test.
     let listed = conn
-        .list_evaluation_runs(1, 0)
+        .list_evaluation_runs(25, 0)
         .await
         .expect("list_evaluation_runs should succeed");
-    assert_eq!(listed.len(), 1, "list should return at least one run");
-    let row = &listed[0];
+    let row = listed
+        .iter()
+        .find(|row| row.evaluation_run_id == run.run_id)
+        .expect("list should include the inserted run on the first page");
     assert_eq!(
         row.evaluation_run_id, run.run_id,
         "listed run_id should match inserted value"

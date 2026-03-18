@@ -18,6 +18,7 @@ use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::poll_for_result::poll_for_result;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::delegating_connection::{DelegatingDatabaseConnection, PrimaryDatastore};
 use tensorzero_core::db::feedback::{FeedbackQueries, FeedbackRow};
@@ -110,10 +111,16 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     conn.flush_pending_writes().await;
     conn.sleep_for_writes_to_be_visible().await;
-    let feedbacks = conn
-        .query_feedback_by_target_id(episode_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(episode_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks
+                .iter()
+                .any(|f| matches!(f, FeedbackRow::Comment(c) if c.id == feedback_id))
+        },
+        "comment feedback should become visible",
+    )
+    .await;
     let comment = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -218,10 +225,16 @@ async fn test_comment_feedback_with_payload(inference_payload: serde_json::Value
     // Check CommentFeedback
     conn.flush_pending_writes().await;
     conn.sleep_for_writes_to_be_visible().await;
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks
+                .iter()
+                .any(|f| matches!(f, FeedbackRow::Comment(c) if c.id == feedback_id))
+        },
+        "inference comment feedback should become visible",
+    )
+    .await;
     let comment = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -406,10 +419,16 @@ async fn test_demonstration_feedback_with_payload(inference_payload: serde_json:
     let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     conn.flush_pending_writes().await;
     conn.sleep_for_writes_to_be_visible().await;
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks.iter().any(
+                |f| matches!(f, FeedbackRow::Demonstration(d) if d.id == feedback_id),
+            )
+        },
+        "demonstration feedback should become visible",
+    )
+    .await;
     let demo = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -586,10 +605,16 @@ async fn test_demonstration_feedback_json() {
     let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     conn.flush_pending_writes().await;
     conn.sleep_for_writes_to_be_visible().await;
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks.iter().any(
+                |f| matches!(f, FeedbackRow::Demonstration(d) if d.id == feedback_id),
+            )
+        },
+        "dynamic demonstration feedback should become visible",
+    )
+    .await;
     let demo = feedbacks
         .iter()
         .find_map(|f| match f {
@@ -727,10 +752,16 @@ async fn test_demonstration_feedback_llm_judge() {
     let conn = DelegatingDatabaseConnection::new_for_e2e_test().await;
     conn.flush_pending_writes().await;
     conn.sleep_for_writes_to_be_visible().await;
-    let feedbacks = conn
-        .query_feedback_by_target_id(inference_id, None, None, Some(100))
-        .await
-        .unwrap();
+    let feedbacks = poll_for_result(
+        || async { conn.query_feedback_by_target_id(inference_id, None, None, Some(100)).await },
+        |feedbacks| {
+            feedbacks.iter().any(
+                |f| matches!(f, FeedbackRow::Demonstration(d) if d.id == feedback_id),
+            )
+        },
+        "dynamic tool demonstration feedback should become visible",
+    )
+    .await;
     let demo = feedbacks
         .iter()
         .find_map(|f| match f {
