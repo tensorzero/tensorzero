@@ -1069,6 +1069,7 @@ async fn find_function(
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
                     experimentation: ExperimentationConfigWithNamespaces::default(),
+                    evaluators: HashMap::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))

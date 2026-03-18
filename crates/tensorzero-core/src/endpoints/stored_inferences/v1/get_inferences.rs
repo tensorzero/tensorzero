@@ -126,6 +126,7 @@ mod tests {
                 description: None,
                 experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: Default::default(),
+                evaluators: HashMap::new(),
             })),
         );
         config

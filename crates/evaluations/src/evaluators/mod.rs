@@ -7,7 +7,9 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{FeedbackParams, InferenceResponse, Input};
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
-use tensorzero_core::evaluations::{EvaluatorConfig, get_evaluator_metric_name};
+use tensorzero_core::evaluations::{
+    EvaluatorConfig, get_evaluator_metric_name, get_function_evaluator_metric_name,
+};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
@@ -32,8 +34,10 @@ pub struct EvaluateInferenceParams {
     pub input: Arc<Input>,
     /// Evaluator configurations to run.
     pub evaluators: Arc<HashMap<String, EvaluatorConfig>>,
-    /// Evaluation name for metric naming. `None` for standalone evaluators (top-level naming).
+    /// Evaluation name for metric naming. `None` for function-level evaluators.
     pub evaluation_name: Option<Arc<String>>,
+    /// Function name, used for metric naming when evaluation_name is None.
+    pub function_name: Arc<String>,
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
     pub inference_cache: CacheEnabledMode,
@@ -67,6 +71,7 @@ pub(crate) async fn evaluate_inference(
         input,
         evaluators,
         evaluation_name,
+        function_name,
         clients,
         evaluation_run_id,
         inference_cache,
@@ -108,6 +113,7 @@ pub(crate) async fn evaluate_inference(
                     clients: &clients,
                     datapoint: &datapoint,
                     evaluation_name: evaluation_name.as_deref().map(String::as_str),
+                    function_name: &function_name,
                     evaluation_run_id,
                     input: &input,
                     inference_cache,
@@ -159,10 +165,16 @@ pub(crate) async fn evaluate_inference(
                             // Only send feedback when send_feedback is true
                             // Dynamic variants have send_feedback=false and skip feedback persistence
                             if send_feedback {
-                                let metric_name = get_evaluator_metric_name(
-                                    evaluation_name.as_deref().map(String::as_str),
-                                    &evaluator_name,
-                                );
+                                let metric_name = match evaluation_name.as_deref() {
+                                    Some(eval_name) => get_evaluator_metric_name(
+                                        eval_name,
+                                        &evaluator_name,
+                                    ),
+                                    None => get_function_evaluator_metric_name(
+                                        &function_name,
+                                        &evaluator_name,
+                                    ),
+                                };
                                 match clients
                                     .inference_executor
                                     .feedback(FeedbackParams {
@@ -211,6 +223,7 @@ struct RunEvaluatorParams<'a> {
     clients: &'a Clients,
     datapoint: &'a Datapoint,
     evaluation_name: Option<&'a str>,
+    function_name: &'a str,
     evaluation_run_id: Uuid,
     input: &'a Input,
     inference_cache: CacheEnabledMode,
@@ -235,6 +248,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         clients,
         datapoint,
         evaluation_name,
+        function_name,
         evaluation_run_id,
         input,
         inference_cache,
@@ -267,6 +281,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
                 clients,
                 llm_judge_config,
                 evaluation_name,
+                function_name,
                 evaluator_name: &evaluator_name,
                 evaluation_run_id,
                 input,

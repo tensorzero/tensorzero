@@ -173,6 +173,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: Default::default(),
+            evaluators: HashMap::new(),
         })
     }
 

@@ -146,6 +146,7 @@ mod tests {
                 description: None,
                 experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: HashSet::new(),
+                evaluators: HashMap::new(),
             })),
         );
 
@@ -166,6 +167,7 @@ mod tests {
                 description: None,
                 experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_template_names: HashSet::new(),
+                evaluators: HashMap::new(),
             })),
         );
 
