@@ -134,6 +134,24 @@ impl EvaluatorConfig {
             }
         }
     }
+
+    /// Converts this loaded evaluator config back to its uninitialized form.
+    /// Note: For LLMJudge evaluators, variant information cannot be reconstructed
+    /// as it's stored separately in the function table, so an empty variants map is used.
+    pub fn as_uninitialized(&self) -> UninitializedEvaluatorConfig {
+        match self {
+            EvaluatorConfig::ExactMatch(config) => {
+                UninitializedEvaluatorConfig::ExactMatch(config.clone())
+            }
+            EvaluatorConfig::LLMJudge(config) => {
+                UninitializedEvaluatorConfig::LLMJudge(config.as_uninitialized())
+            }
+            EvaluatorConfig::ToolUse(config) => {
+                UninitializedEvaluatorConfig::ToolUse(config.clone())
+            }
+            EvaluatorConfig::Regex(config) => UninitializedEvaluatorConfig::Regex(config.clone()),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -212,6 +230,24 @@ pub struct LLMJudgeConfig {
     pub cutoff: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+impl LLMJudgeConfig {
+    /// Converts this loaded LLM judge config back to its uninitialized form.
+    /// Note: Variant information cannot be reconstructed as it's stored separately
+    /// in the function table during loading, so an empty variants map is used.
+    #[expect(deprecated)]
+    pub fn as_uninitialized(&self) -> UninitializedLLMJudgeConfig {
+        UninitializedLLMJudgeConfig {
+            input_format: self.input_format.clone(),
+            variants: HashMap::new(),
+            output_type: self.output_type,
+            optimize: self.optimize,
+            include: self.include.clone(),
+            cutoff: self.cutoff,
+            description: self.description.clone(),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
