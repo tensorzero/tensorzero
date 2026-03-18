@@ -35,8 +35,11 @@ pub struct StoredBatchWritesConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_rows_postgres: Option<usize>,
-    #[serde(default = "crate::config::default_write_queue_capacity")]
-    pub write_queue_capacity: usize,
+    /// `None` means unbounded (legacy behavior).
+    /// `Some(n)` means bounded channels with capacity `n`.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_queue_capacity: Option<usize>,
 }
 
 impl Default for StoredBatchWritesConfig {
@@ -47,7 +50,7 @@ impl Default for StoredBatchWritesConfig {
             flush_interval_ms: crate::config::default_flush_interval_ms(),
             max_rows: crate::config::default_max_rows(),
             max_rows_postgres: None,
-            write_queue_capacity: crate::config::default_write_queue_capacity(),
+            write_queue_capacity: None,
         }
     }
 }
@@ -158,7 +161,7 @@ mod tests {
     }
 
     /// Historical: before `write_queue_capacity` was added to `BatchWritesConfig`,
-    /// stored configs didn't include this field. They should still parse with the default value.
+    /// stored configs didn't include this field. They should parse with `None` (unbounded).
     #[test]
     fn test_historical_no_write_queue_capacity() {
         let toml_str = r"
@@ -175,9 +178,31 @@ mod tests {
             toml::from_str(toml_str).expect("should parse without write_queue_capacity");
         let config: ObservabilityConfig = stored.into();
         assert_eq!(
+            config.batch_writes.write_queue_capacity, None,
+            "should default to None (unbounded) when not set"
+        );
+    }
+
+    /// Stored configs that have an explicit `write_queue_capacity` should preserve it.
+    #[test]
+    fn test_explicit_write_queue_capacity() {
+        let toml_str = r"
+            enabled = true
+
+            [batch_writes]
+            enabled = true
+            flush_interval_ms = 100
+            max_rows = 500
+            write_queue_capacity = 5000
+        ";
+
+        let stored: StoredObservabilityConfig =
+            toml::from_str(toml_str).expect("should parse with explicit write_queue_capacity");
+        let config: ObservabilityConfig = stored.into();
+        assert_eq!(
             config.batch_writes.write_queue_capacity,
-            crate::config::default_write_queue_capacity(),
-            "should use default write_queue_capacity"
+            Some(5000),
+            "should preserve explicit write_queue_capacity"
         );
     }
 }

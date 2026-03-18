@@ -482,10 +482,6 @@ impl ObservabilityConfig {
     }
 }
 
-pub(crate) fn default_write_queue_capacity() -> usize {
-    10_000
-}
-
 pub(crate) fn default_flush_interval_ms() -> u64 {
     100
 }
@@ -510,10 +506,13 @@ pub struct BatchWritesConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_rows_postgres: Option<usize>,
-    /// Capacity of the bounded batch writer channels per table type.
-    /// When the channel is full, new rows are dropped and logged.
-    #[serde(default = "default_write_queue_capacity")]
-    pub write_queue_capacity: usize,
+    /// Optional capacity for bounded batch writer channels per table type.
+    /// When set, channels are bounded: if full, new rows are dropped and logged
+    /// to protect against out-of-memory crashes.
+    /// When unset (`None`), channels are unbounded (legacy behavior).
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_queue_capacity: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -524,7 +523,7 @@ impl Default for BatchWritesConfig {
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
             max_rows_postgres: None,
-            write_queue_capacity: default_write_queue_capacity(),
+            write_queue_capacity: None,
         }
     }
 }
@@ -1603,9 +1602,10 @@ impl Config {
             }
             .into());
         }
-        if self.gateway.observability.batch_writes.write_queue_capacity == 0 {
+        if self.gateway.observability.batch_writes.write_queue_capacity == Some(0) {
             return Err(ErrorDetails::Config {
-                message: "Batch writes `write_queue_capacity` must be greater than 0".to_string(),
+                message: "Batch writes `write_queue_capacity` must be greater than 0 when set"
+                    .to_string(),
             }
             .into());
         }
