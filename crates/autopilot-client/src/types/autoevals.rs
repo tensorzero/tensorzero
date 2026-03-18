@@ -77,15 +77,15 @@ pub enum AutoEvalExampleSource {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalExampleSourceInference {
     /// The inference ID of the historical datapoint for auto evals
-    id: Uuid,
+    pub id: Uuid,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct AutoEvalExampleSourceSynthetic {
-    full_prompt: Option<AutoEvalContentBlock>,
-    full_response: AutoEvalContentBlock,
+    pub full_prompt: Option<AutoEvalContentBlock>,
+    pub full_response: AutoEvalContentBlock,
 }
 
 /// A multiple-choice labeling question within an autoeval example.
