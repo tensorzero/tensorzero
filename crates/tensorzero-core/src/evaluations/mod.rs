@@ -285,6 +285,52 @@ pub fn get_function_evaluator_metric_name(function_name: &str, evaluator_name: &
     format!("tensorzero::function_name::{function_name}::evaluator_name::{evaluator_name}")
 }
 
+/// Resolves an evaluator name against a function's evaluators and evaluation configs.
+///
+/// Resolution order:
+/// 1. Check the function's own evaluators for a direct name match
+/// 2. Parse fully-qualified evaluation metric name
+///    (`tensorzero::evaluation_name::{eval}::evaluator_name::{evaluator}`)
+///    and look up the evaluator from the named evaluation
+///
+/// Returns the resolved evaluator config and the canonical name to use as the key.
+pub fn resolve_evaluator<'a>(
+    name: &str,
+    function_name: &str,
+    function_evaluators: &'a HashMap<String, EvaluatorConfig>,
+    evaluations: &'a HashMap<String, std::sync::Arc<EvaluationConfig>>,
+) -> Option<(String, &'a EvaluatorConfig)> {
+    // 1. Direct match on the function's own evaluators
+    if let Some(evaluator) = function_evaluators.get(name) {
+        return Some((name.to_string(), evaluator));
+    }
+
+    // 2. Parse fully-qualified evaluation metric name
+    if let Some((eval_name, evaluator_name)) = parse_evaluation_metric_name(name)
+        && let Some(eval_config) = evaluations.get(eval_name)
+    {
+        let EvaluationConfig::Inference(inference_config) = eval_config.as_ref();
+        if inference_config.function_name == function_name
+            && let Some(evaluator) = inference_config.evaluators.get(evaluator_name)
+        {
+            return Some((name.to_string(), evaluator));
+        }
+    }
+
+    None
+}
+
+/// Parses `tensorzero::evaluation_name::{eval}::evaluator_name::{evaluator}`
+/// into `(eval, evaluator)`. Returns `None` if the name doesn't match this format.
+fn parse_evaluation_metric_name(name: &str) -> Option<(&str, &str)> {
+    let rest = name.strip_prefix("tensorzero::evaluation_name::")?;
+    let (eval_name, rest) = rest.split_once("::evaluator_name::")?;
+    if eval_name.is_empty() || rest.is_empty() {
+        return None;
+    }
+    Some((eval_name, rest))
+}
+
 #[derive(Clone, Debug, JsonSchema, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -2509,6 +2555,189 @@ mod tests {
             has_entry(expected_metric_name.to_string(), anything())
         );
     }
+    // ---- resolve_evaluator tests ----
+
+    /// Helper to build an ExactMatch evaluator config for tests
+    fn make_exact_match_evaluator() -> EvaluatorConfig {
+        #[expect(deprecated)]
+        let config = ExactMatchConfig { cutoff: None };
+        EvaluatorConfig::ExactMatch(config)
+    }
+
+    /// Helper to build an evaluation config targeting a given function with given evaluators
+    fn make_evaluation(function_name: &str, evaluator_names: &[&str]) -> Arc<EvaluationConfig> {
+        let evaluators = evaluator_names
+            .iter()
+            .map(|name| (name.to_string(), make_exact_match_evaluator()))
+            .collect();
+        Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
+            evaluators,
+            function_name: function_name.to_string(),
+            description: None,
+        }))
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_direct_match_on_function() {
+        let mut function_evaluators = HashMap::new();
+        function_evaluators.insert("my_eval".to_string(), make_exact_match_evaluator());
+        let evaluations = HashMap::new();
+
+        let result = resolve_evaluator("my_eval", "my_func", &function_evaluators, &evaluations);
+        // This should resolve correctly
+        expect_that(result, some(anything()));
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_fully_qualified_evaluation_name() {
+        let function_evaluators = HashMap::new();
+        let mut evaluations = HashMap::new();
+        evaluations.insert(
+            "haiku".to_string(),
+            make_evaluation("write_haiku", &["exact_match"]),
+        );
+
+        let result = resolve_evaluator(
+            "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
+            "write_haiku",
+            &function_evaluators,
+            &evaluations,
+        );
+        expect_that!(result, some(anything()));
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_fully_qualified_wrong_function() {
+        let function_evaluators = HashMap::new();
+        let mut evaluations = HashMap::new();
+        evaluations.insert(
+            "haiku".to_string(),
+            make_evaluation("write_haiku", &["exact_match"]),
+        );
+
+        // The evaluation targets write_haiku, but we're asking for other_function
+        let result = resolve_evaluator(
+            "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
+            "other_function",
+            &function_evaluators,
+            &evaluations,
+        );
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_fully_qualified_missing_evaluation() {
+        let function_evaluators = HashMap::new();
+        let evaluations = HashMap::new();
+
+        let result = resolve_evaluator(
+            "tensorzero::evaluation_name::nonexistent::evaluator_name::exact_match",
+            "write_haiku",
+            &function_evaluators,
+            &evaluations,
+        );
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_fully_qualified_missing_evaluator_in_evaluation() {
+        let function_evaluators = HashMap::new();
+        let mut evaluations = HashMap::new();
+        evaluations.insert(
+            "haiku".to_string(),
+            make_evaluation("write_haiku", &["exact_match"]),
+        );
+
+        let result = resolve_evaluator(
+            "tensorzero::evaluation_name::haiku::evaluator_name::nonexistent",
+            "write_haiku",
+            &function_evaluators,
+            &evaluations,
+        );
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_not_found() {
+        let function_evaluators = HashMap::new();
+        let evaluations = HashMap::new();
+
+        let result =
+            resolve_evaluator("nonexistent", "my_func", &function_evaluators, &evaluations);
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_function_takes_priority_over_evaluation() {
+        let mut function_evaluators = HashMap::new();
+        function_evaluators.insert("exact_match".to_string(), make_exact_match_evaluator());
+        let mut evaluations = HashMap::new();
+        evaluations.insert(
+            "haiku".to_string(),
+            make_evaluation("my_func", &["exact_match"]),
+        );
+
+        // Short name "exact_match" should resolve from the function, not the evaluation
+        let result =
+            resolve_evaluator("exact_match", "my_func", &function_evaluators, &evaluations);
+        expect_that!(result, some(anything()));
+    }
+
+    #[gtest]
+    fn test_resolve_evaluator_short_name_does_not_match_evaluation() {
+        let function_evaluators = HashMap::new();
+        let mut evaluations = HashMap::new();
+        evaluations.insert(
+            "haiku".to_string(),
+            make_evaluation("write_haiku", &["exact_match"]),
+        );
+
+        // Short name should NOT resolve from evaluations — must use fully-qualified name
+        let result = resolve_evaluator(
+            "exact_match",
+            "write_haiku",
+            &function_evaluators,
+            &evaluations,
+        );
+        expect_that!(result, none());
+    }
+
+    // ---- parse_evaluation_metric_name tests ----
+
+    #[gtest]
+    fn test_parse_evaluation_metric_name_valid() {
+        let result = parse_evaluation_metric_name(
+            "tensorzero::evaluation_name::haiku::evaluator_name::exact_match",
+        );
+        expect_that!(result, some(eq(("haiku", "exact_match"))));
+    }
+
+    #[gtest]
+    fn test_parse_evaluation_metric_name_wrong_prefix() {
+        let result = parse_evaluation_metric_name(
+            "wrong::evaluation_name::haiku::evaluator_name::exact_match",
+        );
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_parse_evaluation_metric_name_plain_name() {
+        let result = parse_evaluation_metric_name("exact_match");
+        expect_that!(result, none());
+    }
+
+    #[gtest]
+    fn test_parse_evaluation_metric_name_empty_parts() {
+        let result = parse_evaluation_metric_name(
+            "tensorzero::evaluation_name::::evaluator_name::exact_match",
+        );
+        expect_that!(result, none());
+
+        let result =
+            parse_evaluation_metric_name("tensorzero::evaluation_name::haiku::evaluator_name::");
+        expect_that!(result, none());
+    }
+
     // Helper functions for tests
     fn create_test_schema() -> JSONSchema {
         let schema_value = serde_json::json!({

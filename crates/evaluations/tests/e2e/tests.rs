@@ -3514,3 +3514,88 @@ async fn run_evaluation_with_function_name_and_evaluator_names() {
     }
     assert_eq!(successes, 6, "Should have 6 successful evaluations");
 }
+
+/// Tests that evaluation-scoped evaluators can be resolved via the
+/// `(function_name, evaluator_names)` path. The `exact_match` evaluator is
+/// defined on `[evaluations.haiku]` (targeting `write_haiku`), and should be
+/// resolvable when referenced by name through the function path.
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluation_with_evaluation_scoped_evaluator_via_function_path() {
+    init_tracing_for_tests();
+    let db = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let dataset_name = format!("good-haiku-eval-scoped-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &db,
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = get_e2e_config_path();
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Use the fully-qualified evaluation-scoped evaluator name to reference
+    // [evaluations.haiku.evaluators.exact_match] via the function path.
+    let evaluator_name =
+        "tensorzero::evaluation_name::haiku::evaluator_name::exact_match".to_string();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: None,
+        function_name: Some("write_haiku".to_string()),
+        evaluator_names: Some(vec![evaluator_name.clone()]),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: Some(vec![]),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 2,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
+        cutoffs: vec![],
+    };
+
+    let mut output = Vec::new();
+    Box::pin(run_evaluation(args, evaluation_run_id, &mut output))
+        .await
+        .expect("Evaluation with evaluation-scoped evaluator via function path should succeed");
+
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().collect();
+
+    // First line is RunInfo
+    let run_info: serde_json::Value =
+        serde_json::from_str(output_lines[0]).expect("RunInfo should be valid JSON");
+    assert_eq!(run_info["evaluation_run_id"], evaluation_run_id.to_string());
+    assert!(
+        run_info["num_datapoints"].as_u64().unwrap() > 0,
+        "Should have datapoints"
+    );
+
+    // Parse result lines
+    let mut successes = 0;
+    for line in output_lines.iter().skip(1) {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let info = match parsed {
+            EvaluationUpdate::Success(info) => info,
+            EvaluationUpdate::Error(err) => panic!("Unexpected evaluation error: {}", err.message),
+            EvaluationUpdate::RunInfo(_) | EvaluationUpdate::FatalError(_) => continue,
+        };
+
+        assert!(
+            info.evaluations.contains_key(&evaluator_name),
+            "Should have evaluation result keyed by fully-qualified name, got keys: {:?}",
+            info.evaluations.keys().collect::<Vec<_>>()
+        );
+
+        successes += 1;
+    }
+    assert!(
+        successes > 0,
+        "Should have at least one successful evaluation"
+    );
+}

@@ -24,7 +24,9 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
+use tensorzero_core::evaluations::{
+    EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig, resolve_evaluator,
+};
 use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 // =============================================================================
@@ -323,10 +325,8 @@ fn resolve_evaluation_config(
     }
 }
 
-/// Resolves evaluator configs by name from the function's evaluators.
-///
-/// TODO(#6983): allow evaluators defined under evaluations to be referenced here
-/// for (function, evaluators) style evaluation runs.
+/// Resolves evaluator configs by name from the function's evaluators
+/// and from evaluations that target this function.
 fn resolve_evaluators(
     function_name: &str,
     evaluator_names: &[String],
@@ -344,12 +344,20 @@ fn resolve_evaluators(
     let function_evaluators = function_config.evaluators();
     let mut evaluators = HashMap::new();
     for name in evaluator_names {
-        let evaluator = function_evaluators.get(name).ok_or_else(|| {
+        let (resolved_name, evaluator) = resolve_evaluator(
+            name,
+            function_name,
+            function_evaluators,
+            &app_state.config.evaluations,
+        )
+        .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Evaluator `{name}` not found on function `{function_name}`"),
+                message: format!(
+                    "Evaluator `{name}` not found on function `{function_name}` or in evaluations targeting it"
+                ),
             })
         })?;
-        evaluators.insert(name.clone(), evaluator.clone());
+        evaluators.insert(resolved_name, evaluator.clone());
     }
     Ok(evaluators)
 }

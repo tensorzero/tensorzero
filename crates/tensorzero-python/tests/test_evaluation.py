@@ -887,6 +887,80 @@ def test_sync_run_evaluation_function_name_without_evaluator_names_error(
         )
 
 
+def test_sync_run_evaluation_with_evaluation_scoped_evaluator_via_function_path(
+    evaluation_datasets: Dict[str, str],
+    sync_client: TensorZeroGateway,
+):
+    """Test that evaluation-scoped evaluators can be resolved via the function path
+    using their fully-qualified name.
+
+    The `exact_match` evaluator is defined on `[evaluations.haiku]` (targeting
+    `write_haiku`), and should be resolvable via the fully-qualified metric name
+    `tensorzero::evaluation_name::haiku::evaluator_name::exact_match`.
+    """
+    evaluator_name = "tensorzero::evaluation_name::haiku::evaluator_name::exact_match"
+    job = sync_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=[evaluator_name],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert evaluator_name in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert evaluator_name in stats
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_evaluation_scoped_evaluator_via_function_path(
+    evaluation_datasets: Dict[str, str],
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test async client resolving evaluation-scoped evaluators via the function path
+    using their fully-qualified name."""
+    evaluator_name = "tensorzero::evaluation_name::haiku::evaluator_name::exact_match"
+    job = await async_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=[evaluator_name],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert evaluator_name in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert evaluator_name in stats
+
+
 def test_sync_run_evaluation_evaluator_names_without_function_name_error(
     sync_client: TensorZeroGateway,
 ):

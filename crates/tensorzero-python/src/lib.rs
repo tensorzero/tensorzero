@@ -958,12 +958,19 @@ fn resolve_evaluation_config(
             let function_evaluators = func.evaluators();
             let mut evaluators = HashMap::new();
             for name in &evaluator_names {
-                let evaluator = function_evaluators.get(name).ok_or_else(|| {
-                    PyValueError::new_err(format!(
-                        "evaluator `{name}` not found on function `{function_name}`"
-                    ))
-                })?;
-                evaluators.insert(name.clone(), evaluator.clone());
+                let (resolved_name, evaluator) =
+                    tensorzero_core::evaluations::resolve_evaluator(
+                        name,
+                        &function_name,
+                        function_evaluators,
+                        &app_state.config.evaluations,
+                    )
+                    .ok_or_else(|| {
+                        PyValueError::new_err(format!(
+                            "evaluator `{name}` not found on function `{function_name}` or in evaluations targeting it"
+                        ))
+                    })?;
+                evaluators.insert(resolved_name, evaluator.clone());
             }
             Ok(ResolvedEvaluationConfig {
                 function_name,
