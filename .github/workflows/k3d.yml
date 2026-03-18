@@ -86,32 +86,33 @@ jobs:
 
       - name: Ping the gateway
         run: |
-          # Port-forward the gateway service to localhost
-          kubectl port-forward -n tensorzero svc/tensorzero-gateway 3000:3000 &
-          PF_PID=$!
-
-          # Wait for port-forward to be ready
-          sleep 2
-
           GATEWAY_URL="http://localhost:3000"
-          echo "Gateway URL: $GATEWAY_URL"
 
           # TODO - add a 'startupProbe' to the gateway helm chart
           count=0
           max_attempts=40
-          while ! curl ${GATEWAY_URL}/health; do
-            echo "Waiting for gateway to be healthy (attempt $count/$max_attempts)..."
-            sleep 1
+          while true; do
+            # (Re)start port-forward on each attempt since it dies if the pod isn't ready
+            kill $PF_PID 2>/dev/null || true
+            kubectl port-forward -n tensorzero svc/tensorzero-gateway 3000:3000 &
+            PF_PID=$!
+            sleep 2
+
+            if curl -sf ${GATEWAY_URL}/health; then
+              echo "Gateway is healthy!"
+              kill $PF_PID || true
+              exit 0
+            fi
+
             count=$((count + 1))
+            echo "Waiting for gateway to be healthy (attempt $count/$max_attempts)..."
             if [ $count -ge $max_attempts ]; then
               echo "Gateway failed to become healthy after $max_attempts attempts"
               kill $PF_PID || true
               exit 1
             fi
+            sleep 1
           done
-          echo "Gateway is healthy!"
-
-          kill $PF_PID || true
 
       - name: Print pod statuses
         if: always()
