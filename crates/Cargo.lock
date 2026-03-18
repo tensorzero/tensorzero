@@ -2740,6 +2740,7 @@ dependencies = [
  "flate2",
  "futures",
  "http 1.4.0",
+ "http-body-util",
  "metrics-exporter-prometheus",
  "mimalloc",
  "reqwest 0.12.28",

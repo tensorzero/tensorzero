@@ -8,6 +8,7 @@ use http::StatusCode;
 use reqwest_sse_stream::{Event, RequestBuilderExt};
 use std::time::Duration;
 use tokio::time::error::Elapsed;
+use uuid::Uuid;
 
 /// Test the gateway does not log '/health' requests when RUST_LOG and [gateway.debug] are not set
 #[tokio::test]
@@ -64,11 +65,13 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
     .await;
 
     let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
 
     let stream = client
         .post(format!("http://{}/inference", child_data.addr))
         .json(&serde_json::json!({
             "model_name": model_name,
+            "episode_id": episode_id.to_string(),
             "input": {
                 "messages": [
                     {
@@ -140,6 +143,46 @@ async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
         assert!(
             finish_line.contains("finished processing request"),
             "Unexpected log line: {finish_line}"
+        );
+
+        // Verify that the inference was stored despite the client dropping the connection.
+        // The dummy::slow_second_chunk model takes 2 seconds to produce the second chunk,
+        // and the DB write happens after all chunks are collected, so we need to wait
+        // long enough for that to complete.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        let lookup_client = reqwest::Client::new();
+        let response = lookup_client
+            .post(format!(
+                "http://{}/v1/inferences/list_inferences",
+                child_data.addr
+            ))
+            .json(&serde_json::json!({
+                "episode_id": episode_id.to_string(),
+            }))
+            .send()
+            .await
+            .expect("Failed to send list_inferences request");
+
+        assert!(
+            response.status().is_success(),
+            "list_inferences returned status {}",
+            response.status()
+        );
+
+        let body: serde_json::Value = response.json().await.unwrap();
+        let inferences = body["inferences"]
+            .as_array()
+            .expect("Expected `inferences` array in response");
+        assert_eq!(
+            inferences.len(),
+            1,
+            "Expected exactly one inference for episode_id {episode_id}, got: {inferences:?}"
+        );
+        assert_eq!(
+            inferences[0]["episode_id"],
+            episode_id.to_string(),
+            "Inference episode_id mismatch"
         );
     }
 }

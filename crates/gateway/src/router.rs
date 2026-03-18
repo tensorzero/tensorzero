@@ -6,17 +6,22 @@
 use crate::routes::build_api_routes;
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, Request},
+    extract::{DefaultBodyLimit, Request, State},
     middleware::{self, Next},
-    response::Response,
+    response::{IntoResponse, Response},
 };
+use http_body_util::{BodyStream, StreamBody};
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
-use tensorzero_core::endpoints::TensorzeroAuthMiddlewareState;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
+use tensorzero_core::{
+    endpoints::TensorzeroAuthMiddlewareState,
+    error::{Error, ErrorDetails},
+};
+use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tower_http::decompression::RequestDecompressionLayer;
 
 /// Builds the final Axum router for the gateway,
@@ -62,6 +67,10 @@ pub fn build_axum_router(
         // Accept encoded requests and transparently decompress them.
         // Supported encodings: gzip, br, zstd.
         .layer(RequestDecompressionLayer::new())
+        .layer(axum::middleware::from_fn_with_state(
+            app_state.clone(),
+            possibly_prevent_request_cancellation,
+        ))
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(axum::middleware::from_fn_with_state(
             in_flight_requests_data.clone(),
@@ -76,6 +85,64 @@ pub fn build_axum_router(
 /// to accidentally skip running authentication on a route, especially if we later refactor
 /// how we build up our router.
 const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health", "/internal/autopilot/status"];
+
+/// This middleware spawns all non-'safe' (e.g. non GET/HEAD/OPTIONS) requests on a new tokio task,
+/// and awaits the task completion. This prevents the handler future from getting dropped if
+/// the client closes the connection early.
+///
+/// This ensures that POST requests (e.g. POST /inference) continue to run even if the client closes the connection early.
+/// so that we perform all of our desired side effects (writing to the database, handling rate limiting, etc.)
+///
+/// Note that it's inherently impossible to guarantee that we *start* processing a request,
+/// since the client might close the connection before sending the complete HTTP request
+/// (e.g. it doesn't write all of the headers or body).
+/// We guarantee that if we *start* processing a request, we will run our handler/stream logic to completion,
+/// including all our side effects (writing to the database, handling rate limiting, etc.).
+async fn possibly_prevent_request_cancellation(
+    State(state): State<AppStateData>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if request.method().is_safe() {
+        return next.run(request).await;
+    }
+
+    let deferred_tasks = state.deferred_tasks.clone();
+
+    let task = async move {
+        let resp = next.run(request).await;
+        let (parts, body) = resp.into_parts();
+        let mut stream = BodyStream::new(body);
+        // We spawn a separate tokio task to drive the stream to completion
+        // To match the behavior of the original stream, we only buffer a single frame
+        // (meaning that the `send` call will suspend until axum processes the previous frame from the `StreamBody`
+        // on the other end).
+        // This ensures that the stream will always be driven to completion, even if the client closes the connection early.
+        let (send, recv) = tokio::sync::mpsc::channel(1);
+        deferred_tasks.spawn(async move {
+            while let Some(chunk) = stream.next().await {
+                // We deliberately ignore errors here - even if the receiver is dropped
+                // (due to the client closing the connection early), we still want to
+                // drive the original stream to completion, which will finish executing
+                // all of the tensorzero stream logic (e.g. writing the collected chunks
+                // to the database, handling rate limiting, etc.)
+                let _ = send.send(chunk).await;
+            }
+        });
+        let spawned_stream = axum::body::Body::new(StreamBody::new(ReceiverStream::new(recv)));
+        Response::from_parts(parts, spawned_stream)
+    };
+    // Our 'task' includes the call to 'next.run(request)', which ensures that the request handler
+    // will still be executed to completion, even if the client closes the connection early.
+    // The 'task' future includes additional handling for streaming responses
+    match state.deferred_tasks.spawn(task).await {
+        Ok(resp) => resp,
+        Err(e) => Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to join task in prevent_post_request_cancellation: {e:?}"),
+        })
+        .into_response(),
+    }
+}
 
 async fn add_version_header(request: Request, next: Next) -> Response {
     #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
