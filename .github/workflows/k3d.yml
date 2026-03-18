@@ -10,14 +10,19 @@ on:
         required: true
 
 jobs:
-  deploy-minikube:
+  deploy-k3d:
     runs-on: ubuntu-latest
-    name: Run 'examples/production-deployment-k8s-helm' on minikube
+    name: Run 'examples/production-deployment-k8s-helm' on k3d
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start minikube
-        uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9
+      - name: Install k3d
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Create k3d cluster
+        run: |
+          k3d cluster create tensorzero --wait
 
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
@@ -31,8 +36,7 @@ jobs:
           docker pull tensorzero/ui-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
-          docker save tensorzero/gateway:sha-${{ github.sha }} | minikube image load -
-          docker save tensorzero/ui:sha-${{ github.sha }} | minikube image load -
+          k3d image import tensorzero/gateway:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }} -c tensorzero
 
       - name: Create helm overrides file
         run: |
@@ -58,7 +62,7 @@ jobs:
           # Fix the extra indentation caused by inlining the yaml file in our workflow
           sed -i 's/^        //' helm-ci-overrides.yaml
 
-      - name: Install ClickHouse on minikube
+      - name: Install ClickHouse
         run: |
           cd examples/production-deployment-k8s-helm
           helm repo add altinity https://altinity.github.io/helm-charts
@@ -69,7 +73,7 @@ jobs:
           kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
           kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
 
-      - name: Install TensorZero on minikube
+      - name: Install TensorZero
         run: |
           cd examples/production-deployment-k8s-helm
           kubectl create namespace tensorzero
@@ -82,8 +86,14 @@ jobs:
 
       - name: Ping the gateway
         run: |
-          # Get the minikube service URL
-          GATEWAY_URL=$(minikube service tensorzero-gateway -n tensorzero --url)
+          # Port-forward the gateway service to localhost
+          kubectl port-forward -n tensorzero svc/tensorzero-gateway 3000:3000 &
+          PF_PID=$!
+
+          # Wait for port-forward to be ready
+          sleep 2
+
+          GATEWAY_URL="http://localhost:3000"
           echo "Gateway URL: $GATEWAY_URL"
 
           # TODO - add a 'startupProbe' to the gateway helm chart
@@ -95,10 +105,13 @@ jobs:
             count=$((count + 1))
             if [ $count -ge $max_attempts ]; then
               echo "Gateway failed to become healthy after $max_attempts attempts"
+              kill $PF_PID || true
               exit 1
             fi
           done
           echo "Gateway is healthy!"
+
+          kill $PF_PID || true
 
       - name: Print pod statuses
         if: always()
