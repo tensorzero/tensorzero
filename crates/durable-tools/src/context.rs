@@ -674,6 +674,7 @@ async fn embeddings_step<S: Send + Sync + 'static>(
         credentials: serializable.credentials,
         cache_options: serializable.cache_options,
         include_raw_response: serializable.include_raw_response,
+        extra_headers: Default::default(),
     };
     step_state
         .state

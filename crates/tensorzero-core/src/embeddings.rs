@@ -205,6 +205,7 @@ impl EmbeddingModelConfig {
                     let cache_lookup = embedding_cache_lookup(
                         &clients.cache_manager,
                         &provider_request,
+                        &extra_headers.inference_extra_headers,
                         clients.cache_options.max_age_s,
                         provider_type.clone(),
                     )
@@ -253,7 +254,8 @@ impl EmbeddingModelConfig {
                             };
                             let _ = start_cache_write(
                                 &clients.cache_manager,
-                                provider_request.get_cache_key()?,
+                                provider_request
+                                    .get_cache_key(&extra_headers.inference_extra_headers)?,
                                 CacheData {
                                     output: EmbeddingCacheData {
                                         embedding: first_embedding.clone(),
