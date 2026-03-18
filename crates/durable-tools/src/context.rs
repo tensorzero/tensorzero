@@ -77,6 +77,11 @@ impl<S> ToolAppState<S> {
         &self.t0_client
     }
 
+    /// Get a reference to the tool registry.
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.tool_registry
+    }
+
     /// Get a reference to the extra state.
     pub fn extra_state(&self) -> &S {
         &self.extra_state
@@ -373,8 +378,12 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
                 let state = &step_state.state;
 
                 // Create SimpleToolContext
-                let simple_ctx =
-                    SimpleToolContext::new(&state.pool, &state.t0_client, &heartbeater);
+                let simple_ctx = SimpleToolContext::new(
+                    &state.pool,
+                    &state.t0_client,
+                    &heartbeater,
+                    &state.tool_registry,
+                );
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
@@ -576,6 +585,7 @@ pub struct SimpleToolContext<'a> {
     pool: &'a PgPool,
     t0_client: &'a Arc<dyn TensorZeroClient>,
     heartbeater: &'a Arc<dyn Heartbeater>,
+    tool_registry: &'a ToolRegistry,
 }
 
 impl<'a> SimpleToolContext<'a> {
@@ -584,11 +594,13 @@ impl<'a> SimpleToolContext<'a> {
         pool: &'a PgPool,
         t0_client: &'a Arc<dyn TensorZeroClient>,
         heartbeater: &'a Arc<dyn Heartbeater>,
+        tool_registry: &'a ToolRegistry,
     ) -> Self {
         Self {
             pool,
             t0_client,
             heartbeater,
+            tool_registry,
         }
     }
 
@@ -609,6 +621,13 @@ impl<'a> SimpleToolContext<'a> {
     /// Get the heartbeater for extending the task lease during long-running operations.
     pub fn heartbeater(&self) -> &Arc<dyn Heartbeater> {
         self.heartbeater
+    }
+
+    /// Get a reference to the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    pub fn registry(&self) -> &ToolRegistry {
+        self.tool_registry
     }
 
     /// Call TensorZero inference.
