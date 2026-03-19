@@ -140,6 +140,20 @@ export function BasicInfo({
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
             tooltip="Output Tokens"
           />
+          {inferenceUsage?.provider_cache_read_input_tokens != null && (
+            <Chip
+              icon={<Cached className="text-fg-tertiary" />}
+              label={`${inferenceUsage.provider_cache_read_input_tokens} tok`}
+              tooltip="Provider Cache Read Tokens"
+            />
+          )}
+          {inferenceUsage?.provider_cache_write_input_tokens != null && (
+            <Chip
+              icon={<Cached className="text-fg-tertiary" />}
+              label={`${inferenceUsage.provider_cache_write_input_tokens} tok`}
+              tooltip="Provider Cache Write Tokens"
+            />
+          )}
           {inferenceUsage?.cost != null && (
             <Chip
               icon={<Cost className="text-fg-tertiary" />}
