@@ -79,17 +79,15 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
     );
 
     // Verify via list_evaluation_runs (returns more fields)
-    // Since run_id is a v7 UUID (timestamp-based), the newly inserted run will be first.
+    // Use a larger limit because parallel tests may insert runs with newer v7 UUIDs.
     let listed = conn
-        .list_evaluation_runs(1, 0)
+        .list_evaluation_runs(100, 0)
         .await
         .expect("list_evaluation_runs should succeed");
-    assert_eq!(listed.len(), 1, "list should return at least one run");
-    let row = &listed[0];
-    assert_eq!(
-        row.evaluation_run_id, run.run_id,
-        "listed run_id should match inserted value"
-    );
+    let row = listed
+        .iter()
+        .find(|r| r.evaluation_run_id == run.run_id)
+        .expect("listed results should contain the inserted run");
     assert_eq!(
         row.evaluation_name, run.evaluation_name,
         "listed evaluation_name should match inserted value"
