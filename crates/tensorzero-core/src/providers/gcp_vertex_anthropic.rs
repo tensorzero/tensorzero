@@ -758,7 +758,7 @@ pub struct GCPVertexAnthropicUsage {
     cache_creation_input_tokens: Option<u32>,
     /// Number of input tokens read from cache
     #[serde(default)]
-    cache_read_input_tokens: Option<u32>,
+    provider_cache_read_input_tokens: Option<u32>,
 }
 
 impl From<GCPVertexAnthropicUsage> for Usage {
@@ -768,21 +768,21 @@ impl From<GCPVertexAnthropicUsage> for Usage {
         let total_input_tokens = match (
             value.input_tokens,
             value.cache_creation_input_tokens,
-            value.cache_read_input_tokens,
+            value.provider_cache_read_input_tokens,
         ) {
             (None, None, None) => None,
             _ => Some(
                 value.input_tokens.unwrap_or(0)
                     + value.cache_creation_input_tokens.unwrap_or(0)
-                    + value.cache_read_input_tokens.unwrap_or(0),
+                    + value.provider_cache_read_input_tokens.unwrap_or(0),
             ),
         };
 
         Usage {
             input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
-            cache_read_input_tokens: value.cache_read_input_tokens,
-            cache_write_input_tokens: value.cache_creation_input_tokens,
+            provider_cache_read_input_tokens: value.provider_cache_read_input_tokens,
+            provider_cache_write_input_tokens: value.cache_creation_input_tokens,
             cost: None,
         }
     }
@@ -1373,7 +1373,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: Some(100),
-            cache_read_input_tokens: Some(200),
+            provider_cache_read_input_tokens: Some(200),
         };
 
         let usage: Usage = anthropic_usage.into();

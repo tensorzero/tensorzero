@@ -17,7 +17,7 @@ pub enum ApiType {
 
 /// A single entry in the raw usage array, representing usage data from one model inference.
 /// This preserves the original provider-specific usage object for fields that TensorZero
-/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
+/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `provider_cache_read_input_tokens`).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -62,9 +62,9 @@ pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_read_input_tokens: Option<u32>,
+    pub provider_cache_read_input_tokens: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_write_input_tokens: Option<u32>,
+    pub provider_cache_write_input_tokens: Option<u32>,
     #[serde(default, with = "tensorzero_types::serde_utils::decimal_float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub cost: Option<Decimal>,
@@ -75,8 +75,8 @@ impl Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: Some(Decimal::ZERO),
         }
     }
@@ -116,8 +116,8 @@ where
             let Usage {
                 input_tokens: chunk_input_tokens,
                 output_tokens: chunk_output_tokens,
-                cache_read_input_tokens: chunk_cache_read,
-                cache_write_input_tokens: chunk_cache_write,
+                provider_cache_read_input_tokens: chunk_cache_read,
+                provider_cache_write_input_tokens: chunk_cache_write,
                 cost: chunk_cost,
             } = chunk_usage;
 
@@ -159,15 +159,15 @@ where
                 }
             };
 
-            acc.cache_read_input_tokens = match (acc.cache_read_input_tokens, chunk_cache_read) {
-                (_, None) => acc.cache_read_input_tokens,
+            acc.provider_cache_read_input_tokens = match (acc.provider_cache_read_input_tokens, chunk_cache_read) {
+                (_, None) => acc.provider_cache_read_input_tokens,
                 (None, chunk_value) => chunk_value,
                 (Some(current_value), Some(chunk_value)) => {
                     if current_value > chunk_value {
                         tracing::warn!(
-                            "Unexpected non-cumulative `cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                            "Unexpected non-cumulative `provider_cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
                         );
-                        debug_assert!(false, "Unexpected non-cumulative `cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
+                        debug_assert!(false, "Unexpected non-cumulative `provider_cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
                     }
 
                     if current_value < chunk_value {
@@ -178,15 +178,15 @@ where
                 }
             };
 
-            acc.cache_write_input_tokens = match (acc.cache_write_input_tokens, chunk_cache_write) {
-                (_, None) => acc.cache_write_input_tokens,
+            acc.provider_cache_write_input_tokens = match (acc.provider_cache_write_input_tokens, chunk_cache_write) {
+                (_, None) => acc.provider_cache_write_input_tokens,
                 (None, chunk_value) => chunk_value,
                 (Some(current_value), Some(chunk_value)) => {
                     if current_value > chunk_value {
                         tracing::warn!(
-                            "Unexpected non-cumulative `cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                            "Unexpected non-cumulative `provider_cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
                         );
-                        debug_assert!(false, "Unexpected non-cumulative `cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
+                        debug_assert!(false, "Unexpected non-cumulative `provider_cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
                     }
 
                     if current_value < chunk_value {
@@ -237,8 +237,8 @@ where
         let Usage {
             input_tokens: mi_input_tokens,
             output_tokens: mi_output_tokens,
-            cache_read_input_tokens: mi_cache_read,
-            cache_write_input_tokens: mi_cache_write,
+            provider_cache_read_input_tokens: mi_cache_read,
+            provider_cache_write_input_tokens: mi_cache_write,
             cost: mi_cost,
         } = mi_usage;
 
@@ -253,12 +253,18 @@ where
             },
             // For cache tokens, None means "not reported by provider" — skip it
             // rather than dropping the entire aggregate.
-            cache_read_input_tokens: match (acc.cache_read_input_tokens, mi_cache_read) {
+            provider_cache_read_input_tokens: match (
+                acc.provider_cache_read_input_tokens,
+                mi_cache_read,
+            ) {
                 (Some(a), Some(b)) => Some(a + b),
                 (Some(a), None) | (None, Some(a)) => Some(a),
                 (None, None) => None,
             },
-            cache_write_input_tokens: match (acc.cache_write_input_tokens, mi_cache_write) {
+            provider_cache_write_input_tokens: match (
+                acc.provider_cache_write_input_tokens,
+                mi_cache_write,
+            ) {
                 (Some(a), Some(b)) => Some(a + b),
                 (Some(a), None) | (None, Some(a)) => Some(a),
                 (None, None) => None,
@@ -343,8 +349,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
@@ -367,22 +373,22 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(10),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(25),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -406,22 +412,22 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -444,15 +450,15 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -473,15 +479,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -507,15 +513,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(80),  // Smaller than previous (unexpected)
                 output_tokens: Some(30), // Smaller than previous (unexpected)
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -545,8 +551,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let result = aggregate_usage_across_model_inferences(vec![usage]);
@@ -568,15 +574,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -599,15 +605,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: None, // This should propagate None for input_tokens
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -629,15 +635,15 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -658,15 +664,15 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -688,16 +694,16 @@ mod tests {
             Usage {
                 input_tokens: Some(69),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             // message_delta chunk: only output_tokens, no input_tokens
             Usage {
                 input_tokens: None,
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];
@@ -729,8 +735,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(100),
             output_tokens: Some(50),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: Some(Decimal::new(18, 5)), // 0.00018
         };
         let result = aggregate_usage_from_single_streaming_model_inference(vec![usage]);
@@ -747,22 +753,22 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(10),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(5, 5)), // 0.00005
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(25),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(12, 5)), // 0.00012
             },
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(18, 5)), // 0.00018
             },
         ];
@@ -782,15 +788,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(18, 5)), // 0.00018
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(27, 5)), // 0.00027
             },
         ];
@@ -808,15 +814,15 @@ mod tests {
             Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: Some(Decimal::new(18, 5)), // 0.00018
             },
             Usage {
                 input_tokens: Some(200),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         ];

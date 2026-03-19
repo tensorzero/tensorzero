@@ -1744,8 +1744,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1831,8 +1831,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1932,8 +1932,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2039,8 +2039,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2175,8 +2175,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2304,8 +2304,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2646,8 +2646,8 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
-                        cache_read_input_tokens: None,
-                        cache_write_input_tokens: None,
+                        provider_cache_read_input_tokens: None,
+                        provider_cache_write_input_tokens: None,
                         cost: None,
                     })
                 );

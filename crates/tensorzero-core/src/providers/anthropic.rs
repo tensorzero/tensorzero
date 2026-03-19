@@ -1281,7 +1281,7 @@ pub struct AnthropicUsage {
     cache_creation_input_tokens: Option<u32>,
     /// Number of input tokens read from cache
     #[serde(default)]
-    cache_read_input_tokens: Option<u32>,
+    provider_cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
@@ -1291,21 +1291,21 @@ impl From<AnthropicUsage> for Usage {
         let total_input_tokens = match (
             value.input_tokens,
             value.cache_creation_input_tokens,
-            value.cache_read_input_tokens,
+            value.provider_cache_read_input_tokens,
         ) {
             (None, None, None) => None,
             _ => Some(
                 value.input_tokens.unwrap_or(0)
                     + value.cache_creation_input_tokens.unwrap_or(0)
-                    + value.cache_read_input_tokens.unwrap_or(0),
+                    + value.provider_cache_read_input_tokens.unwrap_or(0),
             ),
         };
 
         Usage {
             input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
-            cache_read_input_tokens: value.cache_read_input_tokens,
-            cache_write_input_tokens: value.cache_creation_input_tokens,
+            provider_cache_read_input_tokens: value.provider_cache_read_input_tokens,
+            provider_cache_write_input_tokens: value.cache_creation_input_tokens,
             cost: None,
         }
     }
@@ -2605,7 +2605,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: Some(100),
-            cache_read_input_tokens: Some(200),
+            provider_cache_read_input_tokens: Some(200),
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2617,14 +2617,14 @@ mod tests {
         );
         assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
         assert_eq!(
-            usage.cache_read_input_tokens,
+            usage.provider_cache_read_input_tokens,
             Some(200),
-            "cache_read_input_tokens should be forwarded from Anthropic"
+            "provider_cache_read_input_tokens should be forwarded from Anthropic"
         );
         assert_eq!(
-            usage.cache_write_input_tokens,
+            usage.provider_cache_write_input_tokens,
             Some(100),
-            "cache_write_input_tokens should map from cache_creation_input_tokens"
+            "provider_cache_write_input_tokens should map from cache_creation_input_tokens"
         );
 
         // Test cache write only (first request to a new prompt)
@@ -2632,7 +2632,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: Some(4000),
-            cache_read_input_tokens: None,
+            provider_cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2643,12 +2643,12 @@ mod tests {
             "input_tokens should include cache_creation tokens"
         );
         assert_eq!(
-            usage.cache_write_input_tokens,
+            usage.provider_cache_write_input_tokens,
             Some(4000),
             "cache_write should be set on first request"
         );
         assert_eq!(
-            usage.cache_read_input_tokens, None,
+            usage.provider_cache_read_input_tokens, None,
             "cache_read should be None on first request"
         );
 
@@ -2657,7 +2657,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: None,
-            cache_read_input_tokens: Some(4000),
+            provider_cache_read_input_tokens: Some(4000),
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2668,11 +2668,11 @@ mod tests {
             "input_tokens should include cache_read tokens"
         );
         assert_eq!(
-            usage.cache_write_input_tokens, None,
+            usage.provider_cache_write_input_tokens, None,
             "cache_write should be None on cache hit"
         );
         assert_eq!(
-            usage.cache_read_input_tokens,
+            usage.provider_cache_read_input_tokens,
             Some(4000),
             "cache_read should be set on cache hit"
         );
@@ -2682,13 +2682,13 @@ mod tests {
             input_tokens: Some(100),
             output_tokens: Some(50),
             cache_creation_input_tokens: None,
-            cache_read_input_tokens: None,
+            provider_cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.cache_read_input_tokens, None);
-        assert_eq!(usage.cache_write_input_tokens, None);
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
     }
 
     #[test]
@@ -2698,28 +2698,28 @@ mod tests {
             "input_tokens": 15,
             "output_tokens": 30,
             "cache_creation_input_tokens": 4200,
-            "cache_read_input_tokens": 0
+            "provider_cache_read_input_tokens": 0
         }"#;
         let anthropic_usage: AnthropicUsage = serde_json::from_str(json)
             .expect("should deserialize Anthropic usage with cache tokens");
         let usage: Usage = anthropic_usage.into();
         assert_eq!(usage.input_tokens, Some(4215));
-        assert_eq!(usage.cache_write_input_tokens, Some(4200));
-        assert_eq!(usage.cache_read_input_tokens, Some(0));
+        assert_eq!(usage.provider_cache_write_input_tokens, Some(4200));
+        assert_eq!(usage.provider_cache_read_input_tokens, Some(0));
 
         // Simulate cache read response
         let json = r#"{
             "input_tokens": 15,
             "output_tokens": 42,
             "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 4200
+            "provider_cache_read_input_tokens": 4200
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize Anthropic usage with cache read");
         let usage: Usage = anthropic_usage.into();
         assert_eq!(usage.input_tokens, Some(4215));
-        assert_eq!(usage.cache_write_input_tokens, Some(0));
-        assert_eq!(usage.cache_read_input_tokens, Some(4200));
+        assert_eq!(usage.provider_cache_write_input_tokens, Some(0));
+        assert_eq!(usage.provider_cache_read_input_tokens, Some(4200));
 
         // Simulate response with no cache fields at all
         let json = r#"{
@@ -2730,8 +2730,8 @@ mod tests {
             serde_json::from_str(json).expect("should deserialize without cache fields");
         let usage: Usage = anthropic_usage.into();
         assert_eq!(usage.input_tokens, Some(100));
-        assert_eq!(usage.cache_write_input_tokens, None);
-        assert_eq!(usage.cache_read_input_tokens, None);
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
     }
 
     #[test]

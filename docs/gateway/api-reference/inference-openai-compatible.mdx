@@ -311,7 +311,7 @@ See `tensorzero_raw_response` in the [response](#response) section for more deta
 
 If `true`, the response's `usage` object will include a `tensorzero_raw_usage` field containing an array of raw provider-specific usage data from each model inference.
 
-This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `cache_read_input_tokens`.
+This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `provider_cache_read_input_tokens`.
 
 For streaming requests, this requires `stream_options.include_usage` to be `true` (or omitted, in which case it will be automatically enabled).
 
