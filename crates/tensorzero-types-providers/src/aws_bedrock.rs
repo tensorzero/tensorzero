@@ -338,9 +338,9 @@ pub struct Usage {
     pub output_tokens: i32,
     #[serde(default)]
     pub total_tokens: Option<i32>,
-    #[serde(default)]
+    #[serde(default, rename = "cacheReadInputTokens")]
     pub provider_cache_read_input_tokens: Option<i32>,
-    #[serde(default)]
+    #[serde(default, rename = "cacheWriteInputTokens")]
     pub provider_cache_write_input_tokens: Option<i32>,
 }
 

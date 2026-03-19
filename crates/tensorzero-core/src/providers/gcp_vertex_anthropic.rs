@@ -757,7 +757,7 @@ pub struct GCPVertexAnthropicUsage {
     #[serde(default)]
     cache_creation_input_tokens: Option<u32>,
     /// Number of input tokens read from cache
-    #[serde(default)]
+    #[serde(default, rename = "cache_read_input_tokens")]
     provider_cache_read_input_tokens: Option<u32>,
 }
 
