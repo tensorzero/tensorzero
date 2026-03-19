@@ -214,8 +214,8 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
         output: Some(vec![]),
         input_tokens: Some(100),
         output_tokens: Some(50),
-        provider_cache_read_input_tokens: None,
-        provider_cache_write_input_tokens: None,
+        provider_cache_read_input_tokens: Some(80),
+        provider_cache_write_input_tokens: Some(20),
         response_time_ms: Some(1234),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -261,6 +261,14 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
     assert_eq!(read.ttft_ms, model_inference.ttft_ms);
     assert_eq!(read.cached, model_inference.cached);
     assert_eq!(read.finish_reason, model_inference.finish_reason);
+    assert_eq!(
+        read.provider_cache_read_input_tokens, model_inference.provider_cache_read_input_tokens,
+        "provider_cache_read_input_tokens should round-trip"
+    );
+    assert_eq!(
+        read.provider_cache_write_input_tokens, model_inference.provider_cache_write_input_tokens,
+        "provider_cache_write_input_tokens should round-trip"
+    );
     assert!(
         read.timestamp.is_some(),
         "timestamp should be populated on read"
