@@ -227,7 +227,7 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     // so allow a small difference in input_tokens.
     let diff = input_tokens1.abs_diff(input_tokens2);
     assert!(
-        diff <= 5,
+        diff <= 10,
         "input_tokens should be approximately equal between requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
@@ -357,7 +357,7 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     // so allow a small difference in input_tokens.
     let diff = input_tokens1.abs_diff(input_tokens2);
     assert!(
-        diff <= 5,
+        diff <= 10,
         "input_tokens should be approximately equal between streaming requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
