@@ -5,10 +5,10 @@
 //! 2. Second request: triggers cache read
 //!
 //! Both requests should report input_tokens > 4000 to prove that cache tokens
-//! (cache_write_input_tokens, cache_read_input_tokens) are properly included
+//! (provider_cache_write_input_tokens, provider_cache_read_input_tokens) are properly included
 //! in the input_tokens count.
 //!
-//! Also verifies that `cache_read_input_tokens` and `cache_write_input_tokens`
+//! Also verifies that `provider_cache_read_input_tokens` and `provider_cache_write_input_tokens`
 //! fields are present in the usage response for providers that support them.
 //!
 //! This addresses issue #5688 where some providers (e.g., AWS Bedrock) report
@@ -153,10 +153,10 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
 
     // Check cache token fields on first request (cache write)
     let cache_write1 = usage1
-        .get("cache_write_input_tokens")
+        .get("provider_cache_write_input_tokens")
         .and_then(|t| t.as_u64());
     let cache_read1 = usage1
-        .get("cache_read_input_tokens")
+        .get("provider_cache_read_input_tokens")
         .and_then(|t| t.as_u64());
     println!(
         "Provider {} (request 1): input_tokens={}, cache_write={:?}, cache_read={:?}",
@@ -167,7 +167,7 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     assert!(
         input_tokens1 > 4000,
         "input_tokens ({input_tokens1}) should be > 4000 for first request (cache write). \
-        This suggests cache_write_input_tokens may not be included in input_tokens."
+        This suggests provider_cache_write_input_tokens may not be included in input_tokens."
     );
 
     // Second request - triggers cache read (different user message, same cached system prompt).
@@ -206,10 +206,10 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
 
     // Check cache token fields on second request (cache read)
     let cache_write2 = usage2
-        .get("cache_write_input_tokens")
+        .get("provider_cache_write_input_tokens")
         .and_then(|t| t.as_u64());
     let cache_read2 = usage2
-        .get("cache_read_input_tokens")
+        .get("provider_cache_read_input_tokens")
         .and_then(|t| t.as_u64());
     println!(
         "Provider {} (request 2): input_tokens={}, cache_write={:?}, cache_read={:?}",
@@ -219,7 +219,7 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     assert!(
         input_tokens2 > 4000,
         "input_tokens ({input_tokens2}) should be > 4000 for second request (cache read). \
-        This suggests cache_read_input_tokens may not be included in input_tokens."
+        This suggests provider_cache_read_input_tokens may not be included in input_tokens."
     );
 
     // Assert consistency between cache write and cache read.
@@ -304,10 +304,10 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         .and_then(|t| t.as_u64())
         .expect("first streaming response should have input_tokens");
     let cache_write1 = usage1
-        .get("cache_write_input_tokens")
+        .get("provider_cache_write_input_tokens")
         .and_then(|t| t.as_u64());
     let cache_read1 = usage1
-        .get("cache_read_input_tokens")
+        .get("provider_cache_read_input_tokens")
         .and_then(|t| t.as_u64());
     println!(
         "Provider {} (streaming request 1): input_tokens={}, cache_write={:?}, cache_read={:?}",
@@ -318,7 +318,7 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     assert!(
         input_tokens1 > 4000,
         "input_tokens ({input_tokens1}) should be > 4000 for first streaming request (cache write). \
-        This suggests cache_write_input_tokens may not be included in input_tokens."
+        This suggests provider_cache_write_input_tokens may not be included in input_tokens."
     );
 
     // Second request - triggers cache read (different user message, same cached system prompt).
@@ -336,10 +336,10 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         .and_then(|t| t.as_u64())
         .expect("second streaming response should have input_tokens");
     let cache_write2 = usage2
-        .get("cache_write_input_tokens")
+        .get("provider_cache_write_input_tokens")
         .and_then(|t| t.as_u64());
     let cache_read2 = usage2
-        .get("cache_read_input_tokens")
+        .get("provider_cache_read_input_tokens")
         .and_then(|t| t.as_u64());
     println!(
         "Provider {} (streaming request 2): input_tokens={}, cache_write={:?}, cache_read={:?}",
@@ -349,7 +349,7 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     assert!(
         input_tokens2 > 4000,
         "input_tokens ({input_tokens2}) should be > 4000 for second streaming request (cache read). \
-        This suggests cache_read_input_tokens may not be included in input_tokens."
+        This suggests provider_cache_read_input_tokens may not be included in input_tokens."
     );
 
     // Assert consistency between cache write and cache read.

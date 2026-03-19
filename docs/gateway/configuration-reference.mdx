@@ -604,7 +604,7 @@ cost = [
   { pointer = "/usage/output_tokens", cost_per_million = 15.00, required = true },
   # Anthropic reports cached tokens separately (not included in input_tokens),
   # so add them at their discounted rates.
-  { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+  { pointer = "/usage/provider_cache_read_input_tokens", cost_per_million = 0.30 },
   { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
   # Web search: $10 per 1,000 searches = $0.01 per search
   { pointer = "/usage/server_tool_use/web_search_requests", cost_per_unit = 0.01 },

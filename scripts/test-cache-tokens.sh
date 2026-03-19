@@ -231,8 +231,8 @@ if [ "$HAS_CH" = true ]; then
     id,
     input_tokens,
     output_tokens,
-    cache_read_input_tokens,
-    cache_write_input_tokens,
+    provider_cache_read_input_tokens,
+    provider_cache_write_input_tokens,
     model_name
   FROM ModelInference
   ORDER BY timestamp DESC
@@ -247,8 +247,8 @@ if [ "$HAS_CH" = true ]; then
     model_name,
     model_provider_name,
     minute,
-    sumMerge(total_cache_read_input_tokens) as cache_read,
-    sumMerge(total_cache_write_input_tokens) as cache_write
+    sumMerge(total_provider_cache_read_input_tokens) as cache_read,
+    sumMerge(total_provider_cache_write_input_tokens) as cache_write
   FROM ModelProviderStatistics
   GROUP BY model_name, model_provider_name, minute
   HAVING cache_read > 0 OR cache_write > 0
@@ -262,13 +262,13 @@ if [ "$HAS_PG" = true ]; then
   echo "============================================"
   echo "  Postgres Results: model_inferences"
   echo "============================================"
-  "$PSQL" "$PG_URL" -c "SELECT id, input_tokens, output_tokens, cache_read_input_tokens, cache_write_input_tokens, model_name FROM tensorzero.model_inferences ORDER BY created_at DESC LIMIT 30;"
+  "$PSQL" "$PG_URL" -c "SELECT id, input_tokens, output_tokens, provider_cache_read_input_tokens, provider_cache_write_input_tokens, model_name FROM tensorzero.model_inferences ORDER BY created_at DESC LIMIT 30;"
 
   echo ""
   echo "============================================"
   echo "  Postgres Results: model_provider_statistics"
   echo "============================================"
-  "$PSQL" "$PG_URL" -c "SELECT model_name, model_provider_name, minute, total_cache_read_input_tokens as cache_read, total_cache_write_input_tokens as cache_write FROM tensorzero.model_provider_statistics WHERE total_cache_read_input_tokens > 0 OR total_cache_write_input_tokens > 0 ORDER BY minute DESC LIMIT 20;"
+  "$PSQL" "$PG_URL" -c "SELECT model_name, model_provider_name, minute, total_provider_cache_read_input_tokens as cache_read, total_provider_cache_write_input_tokens as cache_write FROM tensorzero.model_provider_statistics WHERE total_provider_cache_read_input_tokens > 0 OR total_provider_cache_write_input_tokens > 0 ORDER BY minute DESC LIMIT 20;"
 fi
 
 if [ "$HAS_CH" = false ] && [ "$HAS_PG" = false ]; then

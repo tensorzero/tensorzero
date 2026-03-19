@@ -548,8 +548,8 @@ async fn test_write_read_completed_batch_inference_chat(
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         },
         finish_reason: Some(FinishReason::Stop),
@@ -562,8 +562,8 @@ async fn test_write_read_completed_batch_inference_chat(
         usage: Usage {
             input_tokens: Some(20),
             output_tokens: Some(30),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         },
         finish_reason: Some(FinishReason::ToolCall),
@@ -862,8 +862,8 @@ async fn test_write_read_completed_batch_inference_json(
         usage: Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         },
         finish_reason: Some(FinishReason::Stop),
@@ -876,8 +876,8 @@ async fn test_write_read_completed_batch_inference_json(
         usage: Usage {
             input_tokens: Some(20),
             output_tokens: Some(30),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         },
         finish_reason: Some(FinishReason::ToolCall),

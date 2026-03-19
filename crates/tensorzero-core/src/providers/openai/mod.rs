@@ -2671,8 +2671,10 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
-            cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: usage
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -2697,8 +2699,8 @@ impl From<OpenAIEmbeddingUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: Some(0), // this is always zero for embeddings
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -4379,8 +4381,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -5870,11 +5872,11 @@ mod tests {
         assert_eq!(usage.input_tokens, Some(10), "input_tokens should be 10");
         assert_eq!(usage.output_tokens, Some(20), "output_tokens should be 20");
         assert_eq!(
-            usage.cache_read_input_tokens, None,
+            usage.provider_cache_read_input_tokens, None,
             "cache_read should be None without prompt_tokens_details"
         );
         assert_eq!(
-            usage.cache_write_input_tokens, None,
+            usage.provider_cache_write_input_tokens, None,
             "OpenAI doesn't report cache_write"
         );
     }
@@ -5895,12 +5897,12 @@ mod tests {
         assert_eq!(usage.input_tokens, Some(5000));
         assert_eq!(usage.output_tokens, Some(100));
         assert_eq!(
-            usage.cache_read_input_tokens,
+            usage.provider_cache_read_input_tokens,
             Some(4500),
             "cache_read should come from prompt_tokens_details.cached_tokens"
         );
         assert_eq!(
-            usage.cache_write_input_tokens, None,
+            usage.provider_cache_write_input_tokens, None,
             "OpenAI doesn't report cache_write"
         );
     }
@@ -5919,8 +5921,8 @@ mod tests {
             serde_json::from_str(json).expect("should deserialize OpenAI usage with cached_tokens");
         let usage: Usage = openai_usage.into();
         assert_eq!(usage.input_tokens, Some(5000));
-        assert_eq!(usage.cache_read_input_tokens, Some(4500));
-        assert_eq!(usage.cache_write_input_tokens, None);
+        assert_eq!(usage.provider_cache_read_input_tokens, Some(4500));
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
 
         // Without prompt_tokens_details
         let json = r#"{
@@ -5930,8 +5932,8 @@ mod tests {
         let openai_usage: OpenAIUsage =
             serde_json::from_str(json).expect("should deserialize without cached_tokens");
         let usage: Usage = openai_usage.into();
-        assert_eq!(usage.cache_read_input_tokens, None);
-        assert_eq!(usage.cache_write_input_tokens, None);
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
 
         // With prompt_tokens_details but no cached_tokens
         let json = r#"{
@@ -5942,7 +5944,7 @@ mod tests {
         let openai_usage: OpenAIUsage =
             serde_json::from_str(json).expect("should deserialize with empty details");
         let usage: Usage = openai_usage.into();
-        assert_eq!(usage.cache_read_input_tokens, None);
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
     }
 
     #[test]

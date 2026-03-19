@@ -822,8 +822,8 @@ fn make_provider_batch_inference_output(
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
         output_tokens: usage_metadata.output_tokens(),
-        cache_read_input_tokens: usage_metadata.cached_content_token_count,
-        cache_write_input_tokens: None,
+        provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+        provider_cache_write_input_tokens: None,
         cost: None,
     };
 
@@ -3074,8 +3074,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.output_tokens(),
-            cache_read_input_tokens: usage_metadata.cached_content_token_count,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
 
@@ -3171,8 +3171,8 @@ fn convert_stream_response_with_metadata_to_chunk(
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
                     output_tokens: metadata.output_tokens(),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 })
             } else {
@@ -3853,8 +3853,8 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -3972,8 +3972,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -4105,8 +4105,8 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
