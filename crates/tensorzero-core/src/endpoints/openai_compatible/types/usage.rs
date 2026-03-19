@@ -93,3 +93,125 @@ impl From<Usage> for OpenAICompatibleUsage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_sum_usage_strict_both_some() {
+        let mut usage = OpenAICompatibleUsage::zero();
+        let other = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+            provider_cache_read_input_tokens: Some(5),
+            provider_cache_write_input_tokens: Some(3),
+            cost: Some(Decimal::new(1, 2)),
+        };
+        usage.sum_usage_strict(&other);
+        expect_that!(usage.prompt_tokens, some(eq(10)));
+        expect_that!(usage.completion_tokens, some(eq(20)));
+        expect_that!(usage.total_tokens, some(eq(30)));
+        expect_that!(usage.provider_cache_read_input_tokens, some(eq(5)));
+        expect_that!(usage.provider_cache_write_input_tokens, some(eq(3)));
+    }
+
+    #[gtest]
+    fn test_sum_usage_strict_cache_none_preserves_known_value() {
+        // Start with known cache values, sum with None cache — should preserve existing
+        let mut usage = OpenAICompatibleUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            total_tokens: Some(150),
+            provider_cache_read_input_tokens: Some(80),
+            provider_cache_write_input_tokens: Some(20),
+            tensorzero_cost: Some(Decimal::new(5, 2)),
+        };
+        let other = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(5),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            cost: Some(Decimal::new(1, 2)),
+        };
+        usage.sum_usage_strict(&other);
+        expect_that!(usage.prompt_tokens, some(eq(110)));
+        expect_that!(
+            usage.provider_cache_read_input_tokens,
+            some(eq(80)),
+            "None cache should preserve the existing value, not contaminate to None"
+        );
+        expect_that!(
+            usage.provider_cache_write_input_tokens,
+            some(eq(20)),
+            "None cache should preserve the existing value, not contaminate to None"
+        );
+    }
+
+    #[gtest]
+    fn test_sum_usage_strict_cache_none_from_accumulator_preserves_other() {
+        // Start with None cache, sum with Some — should pick up the value
+        let mut usage = OpenAICompatibleUsage {
+            prompt_tokens: Some(0),
+            completion_tokens: Some(0),
+            total_tokens: Some(0),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            tensorzero_cost: Some(Decimal::ZERO),
+        };
+        let other = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(5),
+            provider_cache_read_input_tokens: Some(8),
+            provider_cache_write_input_tokens: Some(2),
+            cost: Some(Decimal::new(1, 2)),
+        };
+        usage.sum_usage_strict(&other);
+        expect_that!(
+            usage.provider_cache_read_input_tokens,
+            some(eq(8)),
+            "Should pick up cache value from other when accumulator is None"
+        );
+        expect_that!(
+            usage.provider_cache_write_input_tokens,
+            some(eq(2)),
+            "Should pick up cache value from other when accumulator is None"
+        );
+    }
+
+    #[gtest]
+    fn test_sum_usage_strict_both_none_cache_stays_none() {
+        let mut usage = OpenAICompatibleUsage::default();
+        let other = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(5),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+        usage.sum_usage_strict(&other);
+        expect_that!(usage.provider_cache_read_input_tokens, none());
+        expect_that!(usage.provider_cache_write_input_tokens, none());
+    }
+
+    #[gtest]
+    fn test_sum_usage_strict_input_tokens_none_contaminates() {
+        // For non-cache fields, None should contaminate (strict behavior)
+        let mut usage = OpenAICompatibleUsage::zero();
+        let other = Usage {
+            input_tokens: None,
+            output_tokens: Some(5),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+        usage.sum_usage_strict(&other);
+        expect_that!(
+            usage.prompt_tokens,
+            none(),
+            "None input_tokens should contaminate to None"
+        );
+        expect_that!(usage.completion_tokens, some(eq(5)));
+    }
+}

@@ -233,16 +233,22 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         "input_tokens should be approximately equal between requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
-    // Log cache token behavior for debugging. We don't assert cache_read > 0 because
-    // the provider-proxy records real responses that may not reflect cache hits
-    // (e.g., Bedrock may return cache_write > 0 on first request but cache_read=0
-    // on second because the real API didn't cache between two rapid requests).
-    if let Some(cw) = cache_write1
-        && cw > 0
-    {
-        println!(
-            "Provider {} wrote {} cache tokens on first request, cache_read on second: {:?}",
-            provider.variant_name, cw, cache_read2
+    // Assert that cache token fields are populated for providers that support caching.
+    // On first request, cache_write should be > 0 (the system prompt gets cached).
+    // On second request, cache_read may or may not be > 0 depending on provider behavior
+    // through the provider-proxy, so we only assert it's present (Some) when cache_write was reported.
+    if let Some(cw) = cache_write1 {
+        assert!(
+            cw > 0,
+            "Provider {} reported cache_write_input_tokens={} on first request, expected > 0",
+            provider.variant_name,
+            cw
+        );
+        // If the provider supports caching, the second request should also report cache fields
+        assert!(
+            cache_read2.is_some() || cache_write2.is_some(),
+            "Provider {} reported cache tokens on first request but neither cache_read nor cache_write on second",
+            provider.variant_name
         );
     }
 }
@@ -365,13 +371,18 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         "input_tokens should be approximately equal between streaming requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
-    // Log cache token behavior for debugging (see non-streaming test for rationale).
-    if let Some(cw) = cache_write1
-        && cw > 0
-    {
-        println!(
-            "Provider {} wrote {} cache tokens on first streaming request, cache_read on second: {:?}",
-            provider.variant_name, cw, cache_read2
+    // Assert that cache token fields are populated for providers that support caching.
+    if let Some(cw) = cache_write1 {
+        assert!(
+            cw > 0,
+            "Provider {} reported cache_write_input_tokens={} on first streaming request, expected > 0",
+            provider.variant_name,
+            cw
+        );
+        assert!(
+            cache_read2.is_some() || cache_write2.is_some(),
+            "Provider {} reported cache tokens on first streaming request but neither cache_read nor cache_write on second",
+            provider.variant_name
         );
     }
 }
