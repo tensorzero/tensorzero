@@ -54,12 +54,15 @@ impl OpenAICompatibleUsage {
             _ => None,
         };
 
+        // For cache tokens, None means "not reported by provider" — preserve
+        // the known value rather than dropping the entire aggregate.
         self.provider_cache_read_input_tokens = match (
             self.provider_cache_read_input_tokens,
             other.provider_cache_read_input_tokens,
         ) {
             (Some(a), Some(b)) => Some(a + b),
-            _ => None,
+            (Some(a), None) | (None, Some(a)) => Some(a),
+            (None, None) => None,
         };
 
         self.provider_cache_write_input_tokens = match (
@@ -67,7 +70,8 @@ impl OpenAICompatibleUsage {
             other.provider_cache_write_input_tokens,
         ) {
             (Some(a), Some(b)) => Some(a + b),
-            _ => None,
+            (Some(a), None) | (None, Some(a)) => Some(a),
+            (None, None) => None,
         };
 
         self.tensorzero_cost = match (self.tensorzero_cost, other.cost) {
