@@ -584,6 +584,131 @@ async fn test_prometheus_metrics_feedback_demonstration() {
     );
 }
 
+#[tokio::test]
+async fn test_prometheus_metrics_embeddings() {
+    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let client = Client::new();
+
+    let requests_before = get_metric_u32(&client, requests_metric).await;
+    let inferences_before = get_metric_u32(&client, inferences_metric).await;
+
+    // Run embeddings with a single input
+    let embeddings_payload = serde_json::json!({
+        "model_name": "prometheus-test-embedding-model",
+        "input": "Hello, world!",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/embeddings"))
+        .json(&embeddings_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+
+    // Sleep for 1 second to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let requests_after = get_metric_u32(&client, requests_metric).await;
+    let inferences_after = get_metric_u32(&client, inferences_metric).await;
+
+    assert_eq!(
+        requests_after,
+        requests_before + 1,
+        "Embeddings request count should have increased by 1"
+    );
+    assert_eq!(
+        inferences_after,
+        inferences_before + 1,
+        "Embeddings inference count should have increased by 1 for a single input"
+    );
+}
+
+#[tokio::test]
+async fn test_prometheus_metrics_embeddings_batch() {
+    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let client = Client::new();
+
+    let requests_before = get_metric_u32(&client, requests_metric).await;
+    let inferences_before = get_metric_u32(&client, inferences_metric).await;
+
+    // Run embeddings with a batch of 3 inputs
+    let embeddings_payload = serde_json::json!({
+        "model_name": "prometheus-test-embedding-model",
+        "input": ["Hello", "World", "Foo"],
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/embeddings"))
+        .json(&embeddings_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+
+    // Sleep for 1 second to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let requests_after = get_metric_u32(&client, requests_metric).await;
+    let inferences_after = get_metric_u32(&client, inferences_metric).await;
+
+    assert_eq!(
+        requests_after,
+        requests_before + 1,
+        "Embeddings request count should have increased by 1 for a batch request"
+    );
+    assert_eq!(
+        inferences_after,
+        inferences_before + 3,
+        "Embeddings inference count should have increased by 3 for a batch of 3 inputs"
+    );
+}
+
+#[tokio::test]
+async fn test_prometheus_metrics_embeddings_dryrun() {
+    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    let client = Client::new();
+
+    let requests_before = get_metric_u32(&client, requests_metric).await;
+    let inferences_before = get_metric_u32(&client, inferences_metric).await;
+
+    // Run embeddings with dryrun
+    let embeddings_payload = serde_json::json!({
+        "model_name": "prometheus-test-embedding-model",
+        "input": "Hello, world!",
+        "dryrun": true,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/embeddings"))
+        .json(&embeddings_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+
+    // Sleep for 1 second to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let requests_after = get_metric_u32(&client, requests_metric).await;
+    let inferences_after = get_metric_u32(&client, inferences_metric).await;
+
+    assert_eq!(
+        requests_after, requests_before,
+        "Embeddings request count should not have changed when dryrun is true"
+    );
+    assert_eq!(
+        inferences_after, inferences_before,
+        "Embeddings inference count should not have changed when dryrun is true"
+    );
+}
+
 async fn get_metric_u32(client: &Client, metric_name: &str) -> u32 {
     let metrics = get_metrics(client).await;
     metrics
