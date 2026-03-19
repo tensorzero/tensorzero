@@ -97,10 +97,11 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     // Use different user messages so the provider-proxy records separate responses.
     // The large system prompt (which is the cached part) is identical in both requests.
     let payload1 = json!({
-        "model_name": provider.model_name,
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input": {
-            "system": LARGE_SYSTEM_PROMPT,
+            "system": {"assistant_name": LARGE_SYSTEM_PROMPT},
             "messages": [{"role": "user", "content": "Briefly summarize the above text in one sentence."}]
         },
         "stream": false,
@@ -109,10 +110,11 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
     });
 
     let payload2 = json!({
-        "model_name": provider.model_name,
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input": {
-            "system": LARGE_SYSTEM_PROMPT,
+            "system": {"assistant_name": LARGE_SYSTEM_PROMPT},
             "messages": [{"role": "user", "content": "Summarize the above text in two sentences."}]
         },
         "stream": false,
@@ -270,10 +272,11 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     // Use different user messages so the provider-proxy records separate responses.
     // The large system prompt (which is the cached part) is identical in both requests.
     let payload1 = json!({
-        "model_name": provider.model_name,
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input": {
-            "system": LARGE_SYSTEM_PROMPT,
+            "system": {"assistant_name": LARGE_SYSTEM_PROMPT},
             "messages": [{"role": "user", "content": "Briefly summarize the above text in one sentence."}]
         },
         "stream": true,
@@ -282,10 +285,11 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
     });
 
     let payload2 = json!({
-        "model_name": provider.model_name,
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input": {
-            "system": LARGE_SYSTEM_PROMPT,
+            "system": {"assistant_name": LARGE_SYSTEM_PROMPT},
             "messages": [{"role": "user", "content": "Summarize the above text in two sentences."}]
         },
         "stream": true,
