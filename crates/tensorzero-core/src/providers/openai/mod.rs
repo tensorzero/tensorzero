@@ -2720,7 +2720,7 @@ pub(super) fn openai_response_tool_call_to_tensorzero_tool_call(
 /// Raw helper for deserializing both `reasoning` and `reasoning_content` fields.
 /// vLLM >=0.8 sends both fields simultaneously (typically one null), so we
 /// can't use `#[serde(alias)]` which errors on duplicate keys.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Deserialize)]
 struct OpenAIResponseMessageRaw {
     content: Option<String>,
     reasoning_content: Option<String>,
@@ -2896,7 +2896,7 @@ struct OpenAIToolCallChunk {
 }
 
 /// Raw helper for deserializing both `reasoning` and `reasoning_content` fields in streaming deltas.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Deserialize)]
 struct OpenAIDeltaRaw {
     content: Option<String>,
     reasoning_content: Option<String>,
