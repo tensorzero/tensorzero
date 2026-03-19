@@ -228,7 +228,11 @@ impl FunctionConfigChat {
             parallel_tool_calls: self.parallel_tool_calls,
             description: self.description.clone(),
             experimentation: None,
-            evaluators: HashMap::new(),
+            evaluators: self
+                .evaluators
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
         }
     }
 }
@@ -251,7 +255,11 @@ impl FunctionConfigJson {
             )),
             description: self.description.clone(),
             experimentation: None,
-            evaluators: HashMap::new(),
+            evaluators: self
+                .evaluators
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
         }
     }
 }
