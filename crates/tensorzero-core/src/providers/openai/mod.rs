@@ -2767,15 +2767,22 @@ pub(super) fn openai_response_tool_call_to_tensorzero_tool_call(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// Raw helper for deserializing both `reasoning` and `reasoning_content` fields.
+/// vLLM >=0.8 sends both fields simultaneously (typically one null), so we
+/// can't use `#[serde(alias)]` which errors on duplicate keys.
+#[derive(Deserialize)]
+struct OpenAIResponseMessageRaw {
+    content: Option<String>,
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
-    // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM, DeepSeek) do. vLLM >=0.8 uses `reasoning` instead
-    // of `reasoning_content`, so we accept both via alias.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(alias = "reasoning")]
     pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
@@ -2911,16 +2918,21 @@ struct OpenAIToolCallChunk {
     function: OpenAIFunctionCallChunk,
 }
 
+/// Raw helper for deserializing both `reasoning` and `reasoning_content` fields in streaming deltas.
+#[derive(Deserialize)]
+struct OpenAIDeltaRaw {
+    content: Option<String>,
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
+    tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+}
+
 // This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
-    // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM, DeepSeek) do. vLLM >=0.8 uses `reasoning` instead
-    // of `reasoning_content`, so we accept both via alias.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(alias = "reasoning")]
     reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
