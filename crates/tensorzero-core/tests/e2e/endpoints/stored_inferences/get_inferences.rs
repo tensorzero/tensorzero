@@ -1507,8 +1507,10 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
 /// and empty dispreferred_outputs.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_list_inferences_output_source_none() {
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let request = json!({
         "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
         "output_source": "none",
         "limit": 3
     });
