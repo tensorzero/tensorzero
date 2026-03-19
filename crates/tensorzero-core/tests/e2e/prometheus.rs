@@ -595,12 +595,12 @@ async fn test_prometheus_metrics_embeddings() {
 
     // Run embeddings with a single input
     let embeddings_payload = serde_json::json!({
-        "model_name": "prometheus-test-embedding-model",
+        "model": "prometheus-test-embedding-model",
         "input": "Hello, world!",
     });
 
     let response = client
-        .post(get_gateway_endpoint("/embeddings"))
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
         .json(&embeddings_payload)
         .send()
         .await
@@ -637,12 +637,12 @@ async fn test_prometheus_metrics_embeddings_batch() {
 
     // Run embeddings with a batch of 3 inputs
     let embeddings_payload = serde_json::json!({
-        "model_name": "prometheus-test-embedding-model",
+        "model": "prometheus-test-embedding-model",
         "input": ["Hello", "World", "Foo"],
     });
 
     let response = client
-        .post(get_gateway_endpoint("/embeddings"))
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
         .json(&embeddings_payload)
         .send()
         .await
@@ -679,13 +679,13 @@ async fn test_prometheus_metrics_embeddings_dryrun() {
 
     // Run embeddings with dryrun
     let embeddings_payload = serde_json::json!({
-        "model_name": "prometheus-test-embedding-model",
+        "model": "prometheus-test-embedding-model",
         "input": "Hello, world!",
-        "dryrun": true,
+        "tensorzero::dryrun": true,
     });
 
     let response = client
-        .post(get_gateway_endpoint("/embeddings"))
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
         .json(&embeddings_payload)
         .send()
         .await
