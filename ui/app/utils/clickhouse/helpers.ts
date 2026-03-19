@@ -17,6 +17,8 @@ export const getMetricName = (feedback: FeedbackRow) => {
 export const inferenceUsageSchema = z.object({
   input_tokens: z.number().nullish(),
   output_tokens: z.number().nullish(),
+  provider_cache_read_input_tokens: z.number().nullish(),
+  provider_cache_write_input_tokens: z.number().nullish(),
   cost: z.number().nullish(),
 });
 
@@ -30,13 +32,34 @@ export function getTotalInferenceUsage(
     model_inferences.every((m) => m.cost != null);
   return model_inferences.reduce(
     (acc, curr) => {
+      // For cache tokens, None means "not reported" — preserve known values
+      const cacheRead =
+        acc.provider_cache_read_input_tokens != null ||
+        curr.provider_cache_read_input_tokens != null
+          ? (acc.provider_cache_read_input_tokens ?? 0) +
+            (curr.provider_cache_read_input_tokens ?? 0)
+          : null;
+      const cacheWrite =
+        acc.provider_cache_write_input_tokens != null ||
+        curr.provider_cache_write_input_tokens != null
+          ? (acc.provider_cache_write_input_tokens ?? 0) +
+            (curr.provider_cache_write_input_tokens ?? 0)
+          : null;
       return {
         input_tokens: acc.input_tokens + (curr.input_tokens ?? 0),
         output_tokens: acc.output_tokens + (curr.output_tokens ?? 0),
+        provider_cache_read_input_tokens: cacheRead,
+        provider_cache_write_input_tokens: cacheWrite,
         cost: allCostsPresent ? (acc.cost ?? 0) + (curr.cost ?? 0) : null,
       };
     },
-    { input_tokens: 0, output_tokens: 0, cost: allCostsPresent ? 0 : null },
+    {
+      input_tokens: 0,
+      output_tokens: 0,
+      provider_cache_read_input_tokens: null as number | null,
+      provider_cache_write_input_tokens: null as number | null,
+      cost: allCostsPresent ? 0 : null,
+    },
   );
 }
 
