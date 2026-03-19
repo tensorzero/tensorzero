@@ -28,17 +28,8 @@ import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import type { ModelInferencesData } from "./inference-data.server";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 
-function formatInputTokensLabel(usage: InferenceUsage | undefined): string {
-  const input = usage?.input_tokens ?? "";
-  const cacheRead = usage?.provider_cache_read_input_tokens;
-  if (cacheRead != null && cacheRead > 0) {
-    return `${input} tok (${cacheRead} cached)`;
-  }
-  return `${input} tok`;
-}
-
-function formatInputTokensTooltip(usage: InferenceUsage | undefined): string {
-  const parts: string[] = ["Input Tokens"];
+function formatCacheTooltip(usage: InferenceUsage | undefined): string {
+  const parts: string[] = [];
   if (usage?.provider_cache_read_input_tokens != null) {
     parts.push(`Cache read: ${usage.provider_cache_read_input_tokens} tokens`);
   }
@@ -155,9 +146,17 @@ export function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             icon={<InputIcon className="text-fg-tertiary" />}
-            label={formatInputTokensLabel(inferenceUsage)}
-            tooltip={formatInputTokensTooltip(inferenceUsage)}
+            label={`${inferenceUsage?.input_tokens ?? ""} tok`}
+            tooltip="Input Tokens"
           />
+          {inferenceUsage?.provider_cache_read_input_tokens != null &&
+            inferenceUsage.provider_cache_read_input_tokens > 0 && (
+              <Chip
+                icon={<Cached className="text-fg-tertiary" />}
+                label={`${inferenceUsage.provider_cache_read_input_tokens} tok`}
+                tooltip={formatCacheTooltip(inferenceUsage)}
+              />
+            )}
           <Chip
             icon={<Output className="text-fg-tertiary" />}
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
