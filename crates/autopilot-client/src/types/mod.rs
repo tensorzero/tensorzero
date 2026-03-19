@@ -1042,6 +1042,98 @@ pub struct S3UploadResponse {
 }
 
 // =============================================================================
+// Failure Mode Analysis Types
+// =============================================================================
+
+/// Query parameters for cursor-based pagination on FMA endpoints.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FmaCursorPaginationParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Query parameters for listing failures.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListFailuresParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_mode_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unclassified: Option<bool>,
+}
+
+/// A failure mode returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureModeResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A failure returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub failure_mode_id: Option<Uuid>,
+    pub episode_id: Uuid,
+    pub inference_id: Option<Uuid>,
+    pub characterization: String,
+    pub pinned: bool,
+    pub failure_mode_id_is_user_provided: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// An analysis returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisResponse {
+    pub id: Uuid,
+    pub deployment_id: String,
+    pub function_name: String,
+    pub tool_name: String,
+    pub session_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruction: Option<String>,
+    pub filters: Option<serde_json::Value>,
+    pub max_failures: Option<i32>,
+    pub fit_score: Option<f64>,
+    pub failure_mode_count: i64,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response from listing failure modes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailureModesResponse {
+    pub failure_modes: Vec<FailureModeResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailuresResponse {
+    pub failures: Vec<FailureResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing analyses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListAnalysesResponse {
+    pub analyses: Vec<AnalysisResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+// =============================================================================
 // Error Types
 // =============================================================================
 
