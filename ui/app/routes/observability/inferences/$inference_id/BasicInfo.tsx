@@ -26,6 +26,29 @@ import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import type { ModelInferencesData } from "./inference-data.server";
+import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+
+function formatInputTokensLabel(usage: InferenceUsage | undefined): string {
+  const input = usage?.input_tokens ?? "";
+  const cacheRead = usage?.provider_cache_read_input_tokens;
+  if (cacheRead != null && cacheRead > 0) {
+    return `${input} tok (${cacheRead} cached)`;
+  }
+  return `${input} tok`;
+}
+
+function formatInputTokensTooltip(usage: InferenceUsage | undefined): string {
+  const parts: string[] = ["Input Tokens"];
+  if (usage?.provider_cache_read_input_tokens != null) {
+    parts.push(`Cache read: ${usage.provider_cache_read_input_tokens} tokens`);
+  }
+  if (usage?.provider_cache_write_input_tokens != null) {
+    parts.push(
+      `Cache write: ${usage.provider_cache_write_input_tokens} tokens`,
+    );
+  }
+  return parts.join("\n");
+}
 
 interface BasicInfoStreamingProps {
   inference: StoredInference;
@@ -132,28 +155,14 @@ export function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             icon={<InputIcon className="text-fg-tertiary" />}
-            label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-            tooltip="Input Tokens"
+            label={formatInputTokensLabel(inferenceUsage)}
+            tooltip={formatInputTokensTooltip(inferenceUsage)}
           />
           <Chip
             icon={<Output className="text-fg-tertiary" />}
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
             tooltip="Output Tokens"
           />
-          {inferenceUsage?.provider_cache_read_input_tokens != null && (
-            <Chip
-              icon={<Cached className="text-fg-tertiary" />}
-              label={`${inferenceUsage.provider_cache_read_input_tokens} tok`}
-              tooltip="Provider Cache Read Tokens"
-            />
-          )}
-          {inferenceUsage?.provider_cache_write_input_tokens != null && (
-            <Chip
-              icon={<Cached className="text-fg-tertiary" />}
-              label={`${inferenceUsage.provider_cache_write_input_tokens} tok`}
-              tooltip="Provider Cache Write Tokens"
-            />
-          )}
           {inferenceUsage?.cost != null && (
             <Chip
               icon={<Cost className="text-fg-tertiary" />}
