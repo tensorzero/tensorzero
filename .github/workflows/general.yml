@@ -1366,6 +1366,7 @@ jobs:
     needs:
       [
         detect-changes,
+        build-gateway-container,
         build-live-tests-container,
         build-provider-proxy-container,
       ]

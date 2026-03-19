@@ -6,8 +6,10 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SQLX_OFFLINE: 1
   TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
 
 jobs:
   cache-tests:
@@ -24,7 +26,9 @@ jobs:
           - cache_backend: clickhouse
             test_filter: "test(_clickhouse)"
             cache_backend_env: clickhouse
-            services: "clickhouse provider-proxy"
+            # Still need to pass valkey_url and start valkey; we force clickhouse in the backend
+            valkey_url: "redis://valkey:6379"
+            services: "clickhouse valkey provider-proxy"
           - cache_backend: valkey
             test_filter: "test(valkey)"
             cache_backend_env: valkey
@@ -48,8 +52,10 @@ jobs:
 
       - name: Pull container images
         run: |
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
           docker pull tensorzero/live-tests:sha-${{ github.sha }}
           docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
 
       - name: Start infrastructure services
         run: >
@@ -57,16 +63,15 @@ jobs:
           up ${{ matrix.services }} -d --wait
 
       - name: Run cache tests
-        run: >
-          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
-          run --no-deps --rm
-          -e TENSORZERO_CI=1
-          -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }}
-          ${{ matrix.valkey_url && format('-e TENSORZERO_VALKEY_URL={0}', matrix.valkey_url) || '-e TENSORZERO_VALKEY_URL=""' }}
-          live-tests
-          sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst
-          --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml
-          --profile cache -E '${{ matrix.test_filter }}' -j 4"
+        run: |
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --no-deps --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
+            -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
+            live-tests \
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
+            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
+            --profile cache -E '${{ matrix.test_filter }}' -j 4"
 
       - name: Print logs
         if: always()
