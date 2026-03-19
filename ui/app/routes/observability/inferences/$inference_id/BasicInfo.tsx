@@ -26,6 +26,20 @@ import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { InlineAsyncError } from "~/components/ui/error/ErrorContentPrimitives";
 import type { ModelInferencesData } from "./inference-data.server";
+import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+
+function formatCacheTooltip(usage: InferenceUsage | undefined): string {
+  const parts: string[] = [];
+  if (usage?.provider_cache_read_input_tokens != null) {
+    parts.push(`Cache read: ${usage.provider_cache_read_input_tokens} tokens`);
+  }
+  if (usage?.provider_cache_write_input_tokens != null) {
+    parts.push(
+      `Cache write: ${usage.provider_cache_write_input_tokens} tokens`,
+    );
+  }
+  return parts.join("\n");
+}
 
 interface BasicInfoStreamingProps {
   inference: StoredInference;
@@ -133,7 +147,13 @@ export function BasicInfo({
           <Chip
             icon={<InputIcon className="text-fg-tertiary" />}
             label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-            tooltip="Input Tokens"
+            secondaryLabel={
+              inferenceUsage?.provider_cache_read_input_tokens != null &&
+              inferenceUsage.provider_cache_read_input_tokens > 0
+                ? `(${inferenceUsage.provider_cache_read_input_tokens} cached)`
+                : undefined
+            }
+            tooltip={formatCacheTooltip(inferenceUsage) || "Input Tokens"}
           />
           <Chip
             icon={<Output className="text-fg-tertiary" />}
