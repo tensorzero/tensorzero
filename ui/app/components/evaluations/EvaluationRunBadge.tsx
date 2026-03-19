@@ -1,12 +1,18 @@
-import type { SearchEvaluationRunResult } from "~/types/tensorzero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { Badge } from "../ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 import { cn } from "~/utils/common";
 
+export interface EvaluationRunBadgeInfo {
+  evaluation_run_id: string;
+  variant_name: string;
+  evaluation_name?: string;
+  dataset_name?: string;
+}
+
 interface EvaluationRunBadgeProps {
-  runInfo: SearchEvaluationRunResult;
+  runInfo: EvaluationRunBadgeInfo;
   getColor: (runId: string) => string;
   createdAt?: Date;
   onRemove?: (e: React.MouseEvent) => void;

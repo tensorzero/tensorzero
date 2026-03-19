@@ -94,6 +94,7 @@ pub fn default_whitelisted_tool_names() -> HashSet<String> {
         "get_inferences",
         "upload_dataset",
         "list_episodes",
+        "gepa",
     ]
     .into_iter()
     .map(String::from)

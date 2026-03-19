@@ -27,9 +27,11 @@ use tensorzero_core::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, StoredInput, Usage,
+    ContentBlockChatOutput, ContentBlockOutput, FinishReason, JsonInferenceOutput, StoredInput,
+    Usage,
 };
 use tensorzero_core::jsonschema_util::JSONSchema;
+use tensorzero_types::Text;
 use uuid::Uuid;
 
 use crate::db::get_test_postgres;
@@ -1126,3 +1128,220 @@ async fn test_write_read_completed_batch_inference_json(
     );
 }
 make_db_test!(test_write_read_completed_batch_inference_json);
+
+/// Tests the fix for the GCP Vertex batch inference bug:
+/// When a provider reports Completed but we fail to process the response
+/// (e.g. empty elements from all JSONL rows failing to parse),
+/// `write_poll_batch_inference` should mark the batch as Failed
+/// so it doesn't stay stuck in Pending forever.
+async fn test_write_poll_completed_batch_with_empty_elements_marks_failed(
+    database: impl BatchInferenceQueries
+    + ConfigQueries
+    + InferenceQueries
+    + ModelInferenceQueries
+    + TestDatabaseHelpers,
+) {
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"test": "empty_elements"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+
+    // Write a Pending batch request
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+
+    // Write some batch model inferences so there's data in the DB
+    write_2_batch_model_inference_rows(&database, batch_id).await;
+    database.sleep_for_writes_to_be_visible().await;
+
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    // Simulate: provider says Completed but with an empty elements map
+    // (this is what happens when all JSONL rows fail to parse)
+    let completed_response = ProviderBatchInferenceResponse {
+        elements: HashMap::new(),
+        raw_request: raw_request.clone(),
+        raw_response: raw_response.clone(),
+    };
+    let result = write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Completed(completed_response),
+        Arc::from("test_provider"),
+        &config,
+    )
+    .await;
+
+    // Should return an error (MissingBatchInferenceResponse)
+    assert!(
+        result.is_err(),
+        "write_poll_batch_inference should fail when elements is empty"
+    );
+
+    // The batch should now be marked as Failed in the database
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    let batch_request_result = poll_for_result_with_interval_and_timeout(
+        || get_batch_request(&database, &query),
+        |r| r.status == BatchStatus::Failed,
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(30),
+        "Timed out waiting for batch status to become Failed after processing error",
+    )
+    .await;
+    assert_eq!(
+        batch_request_result.status,
+        BatchStatus::Failed,
+        "Batch should be marked as Failed when processing a completed batch fails"
+    );
+}
+make_db_test!(test_write_poll_completed_batch_with_empty_elements_marks_failed);
+
+/// Tests the DB replication lag scenario:
+/// Provider reports Completed with valid elements (non-empty), but the
+/// `BatchModelInference` rows are not yet visible in the database (simulated
+/// by not writing them at all). The batch should stay Pending so the next
+/// poll can retry once the rows become visible.
+async fn test_replication_lag_completed_batch_stays_pending_for_retry(
+    database: impl BatchInferenceQueries
+    + ConfigQueries
+    + InferenceQueries
+    + ModelInferenceQueries
+    + TestDatabaseHelpers,
+) {
+    let batch_id = Uuid::now_v7();
+    let batch_params = json!({"test": "replication_lag"});
+    let function_name = "test_function";
+    let variant_name = "test_variant";
+    let model_name = "test_model";
+    let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
+
+    // Write a Pending batch request (but NO BatchModelInference rows —
+    // simulating replication lag where the rows aren't visible yet)
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id,
+        batch_params: &batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
+        status: BatchStatus::Pending,
+        errors: vec![],
+        snapshot_hash: Some(SnapshotHash::new_test()),
+    });
+    write_batch_request_row(&database, &batch_request)
+        .await
+        .expect("Failed to write batch request");
+    database.sleep_for_writes_to_be_visible().await;
+
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .into_config_without_writing_for_tests();
+
+    // Provider says Completed with valid inference results
+    let inference_id_1 = Uuid::now_v7();
+    let inference_id_2 = Uuid::now_v7();
+    let mut elements = HashMap::new();
+    elements.insert(
+        inference_id_1,
+        ProviderBatchInferenceOutput {
+            id: Uuid::now_v7(),
+            output: vec![ContentBlockOutput::Text(Text {
+                text: "Hello from inference 1".to_string(),
+            })],
+            raw_response: "raw provider response 1".to_string(),
+            usage: Usage::default(),
+            finish_reason: Some(FinishReason::Stop),
+        },
+    );
+    elements.insert(
+        inference_id_2,
+        ProviderBatchInferenceOutput {
+            id: Uuid::now_v7(),
+            output: vec![ContentBlockOutput::Text(Text {
+                text: "Hello from inference 2".to_string(),
+            })],
+            raw_response: "raw provider response 2".to_string(),
+            usage: Usage::default(),
+            finish_reason: Some(FinishReason::Stop),
+        },
+    );
+
+    let completed_response = ProviderBatchInferenceResponse {
+        elements,
+        raw_request: raw_request.clone(),
+        raw_response: raw_response.clone(),
+    };
+
+    // Poll with the completed response — DB has no BatchModelInference rows
+    let result = write_poll_batch_inference(
+        &database,
+        &batch_request,
+        PollBatchInferenceResponse::Completed(completed_response),
+        Arc::from("test_provider"),
+        &config,
+    )
+    .await;
+
+    // The batch should stay Pending (not Failed) so the next poll can retry
+    // once the DB rows become visible.
+    match result {
+        Ok(PollInferenceResponse::Pending) => {
+            // This is the desired behavior after the fix
+        }
+        Ok(other) => {
+            panic!("Expected Pending response for replication lag scenario, got: {other:?}");
+        }
+        Err(e) => {
+            // Current (broken) behavior: returns an error and marks batch as Failed.
+            // After the fix, this path should not be taken.
+            panic!("Replication lag scenario should return Pending, not error: {e}");
+        }
+    }
+
+    // Verify the batch is still Pending in the database (not Failed)
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
+    let batch_request_result = poll_for_result_with_interval_and_timeout(
+        || get_batch_request(&database, &query),
+        |r| r.status == BatchStatus::Pending,
+        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(10),
+        "Batch should remain Pending during replication lag, but status changed",
+    )
+    .await;
+    assert_eq!(
+        batch_request_result.status,
+        BatchStatus::Pending,
+        "Batch should stay Pending when provider completed but DB rows not yet visible \
+         (replication lag). Marking as Failed permanently loses the batch."
+    );
+}
+make_db_test!(test_replication_lag_completed_batch_stays_pending_for_retry);

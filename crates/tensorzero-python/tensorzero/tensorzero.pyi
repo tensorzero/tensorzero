@@ -957,7 +957,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
         Specify either `evaluation_name` (to use a configured evaluation) or
         `function_name` + `evaluator_names` (to use top-level evaluators directly).
@@ -1430,7 +1429,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
         Specify either `evaluation_name` (to use a configured evaluation) or
         `function_name` + `evaluator_names` (to use top-level evaluators directly).

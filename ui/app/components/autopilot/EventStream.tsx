@@ -28,6 +28,7 @@ import {
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
+  AutoEvalContentBlock,
   AutoEvalLabeledExample,
   AutopilotStatus,
   EventPayloadMessageContent,
@@ -251,6 +252,8 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "user_questions_answers":
     case "auto_eval_example_labeling":
     case "auto_eval_example_labeling_answers":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "visualization":
     case "unknown":
       return {};
@@ -443,6 +446,16 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     }
+    case "auto_eval_behavior_spec":
+      return "Behavior Spec";
+    case "auto_eval_behavior_spec_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Behavior Spec
+          <DotSeparator />
+          Submitted
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -589,24 +602,26 @@ function AutoEvalLabelingAnswersContent({
       {examples.map((example, idx) => (
         <div key={idx} className="flex flex-col gap-2">
           {/* Context blocks */}
-          {example.context.map((block, blockIdx) => (
-            <div key={blockIdx} className="flex flex-col gap-0.5">
-              {block.label && (
-                <span className="text-fg-muted text-xs font-medium">
-                  {block.label}
-                </span>
-              )}
-              {block.type === "markdown" ? (
-                <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-                  {block.text}
-                </p>
-              ) : (
-                <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
-                  {JSON.stringify(block.data, null, 2)}
-                </pre>
-              )}
-            </div>
-          ))}
+          {[example.maybe_excerpted_prompt, example.maybe_excerpted_response]
+            .filter((block): block is AutoEvalContentBlock => block !== null)
+            .map((block, blockIdx) => (
+              <div key={blockIdx} className="flex flex-col gap-0.5">
+                {block.label && (
+                  <span className="text-fg-muted text-xs font-medium">
+                    {block.label}
+                  </span>
+                )}
+                {block.type === "markdown" ? (
+                  <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+                    {block.text}
+                  </p>
+                ) : (
+                  <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
+                    {JSON.stringify(block.data, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
           {/* Label answer */}
           <div className="flex flex-col gap-0.5">
             <span className="text-fg-muted text-xs font-medium">
@@ -705,6 +720,8 @@ function EventItemContent({
     case "tool_call_authorization":
     case "visualization":
     case "auto_eval_example_labeling":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">
@@ -884,6 +901,8 @@ function getStatusLabel(status: AutopilotStatus): {
     case "waiting_for_user_questions_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_behavior_spec_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };

@@ -70,6 +70,12 @@ pub async fn create_key(
     Ok(key)
 }
 
+pub fn parse_expires_at(s: &str) -> Result<DateTime<Utc>, TensorZeroAuthError> {
+    DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|e| TensorZeroAuthError::InvalidExpiresAt(e.to_string()))
+}
+
 #[derive(Debug, Clone)]
 pub enum AuthResult {
     /// The API key exists and is not disabled.

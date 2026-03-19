@@ -401,14 +401,14 @@ function MainContent({
 
 function EvalRunSelectorWithData({
   data,
-  evaluationName,
+  functionName,
 }: {
   data: RunInfoData;
-  evaluationName: string;
+  functionName: string;
 }) {
   return (
     <EvalRunSelector
-      evaluationName={evaluationName}
+      functionName={functionName}
       selectedRunIdInfos={data.selected_evaluation_run_infos}
       allowedRunInfos={data.allowedEvaluationRunInfos}
     />
@@ -494,7 +494,7 @@ export default function EvaluationDatapointPage({
             {(infoData) => (
               <EvalRunSelectorWithData
                 data={infoData}
-                evaluationName={evaluation_name}
+                functionName={functionName}
               />
             )}
           </Await>

@@ -2,6 +2,10 @@
 //!
 //! These types are shared between the client and server.
 
+mod autoevals;
+
+pub use autoevals::*;
+
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -142,6 +146,7 @@ pub enum AutopilotStatus {
     WaitingForToolExecution,
     WaitingForUserQuestionsAnswers,
     WaitingForAutoEvalExampleLabelingAnswers,
+    WaitingForAutoEvalBehaviorSpecAnswers,
     WaitingForRetry,
     Failed,
 }
@@ -238,6 +243,8 @@ pub enum EventPayload {
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpec(EventPayloadAutoEvalBehaviorSpec),
+    AutoEvalBehaviorSpecAnswers(EventPayloadAutoEvalBehaviorSpecAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -267,6 +274,7 @@ pub enum CreateEventPayload {
     ToolResult(CreateEventPayloadToolResult),
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabelingAnswers(CreateEventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpecAnswers(CreateEventPayloadAutoEvalBehaviorSpecAnswers),
 }
 
 /// Event payload as seen by gateway consumers.
@@ -291,6 +299,8 @@ pub enum GatewayEventPayload {
     UserQuestionsAnswers(EventPayloadUserQuestionsAnswers),
     AutoEvalExampleLabeling(EventPayloadAutoEvalExampleLabeling),
     AutoEvalExampleLabelingAnswers(EventPayloadAutoEvalExampleLabelingAnswers),
+    AutoEvalBehaviorSpec(EventPayloadAutoEvalBehaviorSpec),
+    AutoEvalBehaviorSpecAnswers(EventPayloadAutoEvalBehaviorSpecAnswers),
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
     Unknown,
@@ -319,6 +329,12 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
             }
             EventPayload::AutoEvalExampleLabelingAnswers(a) => {
                 Ok(GatewayEventPayload::AutoEvalExampleLabelingAnswers(a))
+            }
+            EventPayload::AutoEvalBehaviorSpec(s) => {
+                Ok(GatewayEventPayload::AutoEvalBehaviorSpec(s))
+            }
+            EventPayload::AutoEvalBehaviorSpecAnswers(a) => {
+                Ok(GatewayEventPayload::AutoEvalBehaviorSpecAnswers(a))
             }
             EventPayload::Unknown => Ok(GatewayEventPayload::Unknown),
         }
@@ -483,6 +499,15 @@ impl AutopilotToolResult {
         match self {
             Self::Typed { result_value, .. } => Ok(result_value.clone()),
             Self::Legacy { result } => serde_json::from_str(result),
+        }
+    }
+
+    /// Like `value`, but avoids a clone
+    #[expect(deprecated)]
+    pub fn into_value(self) -> Result<JsonValue, serde_json::Error> {
+        match self {
+            Self::Typed { result_value, .. } => Ok(result_value),
+            Self::Legacy { result } => serde_json::from_str(&result),
         }
     }
 }
@@ -723,7 +748,18 @@ pub struct EventPayloadUserQuestion {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub enum EventPayloadUserQuestionInner {
     MultipleChoice(MultipleChoiceQuestion),
-    FreeResponse,
+    FreeResponse(FreeResponseQuestion),
+}
+
+/// A free-response question with an optional pre-filled value.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct FreeResponseQuestion {
+    /// Pre-filled text shown in the input. The user can edit or submit as-is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub default_value: Option<String>,
 }
 
 /// A multiple choice question with options.
@@ -785,127 +821,6 @@ pub struct MultipleChoiceAnswer {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
-}
-
-// =============================================================================
-// AutoEval Example Labeling Types
-// =============================================================================
-
-/// Payload for an autoeval example labeling event.
-///
-/// Groups labeled examples together, each with rich context blocks
-/// (e.g. prompt/response) and associated labeling questions.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalExampleLabeling {
-    pub examples: Vec<AutoEvalExampleLabeling>,
-}
-
-/// A single example to label, with context and a structured labeling question.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalExampleLabeling {
-    /// Rich content blocks providing context (e.g. the prompt and response).
-    pub context: Vec<AutoEvalContentBlock>,
-    /// The multiple-choice labeling question for this example.
-    pub label_question: AutoEvalLabelQuestion,
-    /// An optional free-response explanation question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_question: Option<AutoEvalExplanationQuestion>,
-}
-
-/// A multiple-choice labeling question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalLabelQuestion {
-    pub id: Uuid,
-    pub header: String,
-    pub question: String,
-    pub options: Vec<MultipleChoiceOption>,
-}
-
-/// A free-response explanation question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalExplanationQuestion {
-    pub id: Uuid,
-    pub header: String,
-    pub question: String,
-}
-
-/// A block of rich content displayed alongside an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export, tag = "type", rename_all = "snake_case")
-)]
-pub enum AutoEvalContentBlock {
-    /// Rendered as formatted markdown.
-    Markdown {
-        text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
-    /// Rendered as a formatted JSON viewer.
-    Json {
-        data: serde_json::Value,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
-}
-
-/// Minimal input payload for submitting autoeval example labeling answers.
-/// The server enriches this with context from the original labeling event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
-    /// Map from question UUID to response.
-    pub responses: HashMap<Uuid, UserQuestionAnswer>,
-    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-    pub auto_eval_example_labeling_event_id: Uuid,
-}
-
-/// Self-contained read-only payload for labeled autoeval examples.
-/// Includes the full context blocks so the UI can render everything
-/// without looking up the original labeling event.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalExampleLabelingAnswers {
-    pub examples: Vec<AutoEvalLabeledExample>,
-    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-    pub auto_eval_example_labeling_event_id: Uuid,
-}
-
-/// A labeled example with its full context and submitted answers.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalLabeledExample {
-    /// Rich content blocks providing context (e.g. the prompt and response).
-    pub context: Vec<AutoEvalContentBlock>,
-    /// The multiple-choice labeling question for this example.
-    pub label_question: AutoEvalLabelQuestion,
-    /// The user's answer to the label question.
-    pub label_answer: UserQuestionAnswer,
-    /// An optional free-response explanation question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_question: Option<AutoEvalExplanationQuestion>,
-    /// The user's answer to the explanation question, if one was present.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_answer: Option<UserQuestionAnswer>,
 }
 
 // =============================================================================

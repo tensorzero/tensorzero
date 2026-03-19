@@ -84,7 +84,9 @@ pub struct DatapointStatsResponse {
 /// Query parameters for searching evaluation runs.
 #[derive(Debug, Deserialize)]
 pub struct SearchEvaluationRunsParams {
-    pub evaluation_name: String,
+    #[serde(default)]
+    pub evaluation_name: Option<String>,
+    #[serde(default)]
     pub function_name: Option<String>,
     pub query: String,
     #[serde(default = "default_limit")]
@@ -107,6 +109,8 @@ pub struct SearchEvaluationRunsResponse {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct SearchEvaluationRunResult {
     pub evaluation_run_id: Uuid,
+    pub evaluation_name: String,
+    pub dataset_name: String,
     pub variant_name: String,
 }
 

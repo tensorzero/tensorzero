@@ -7,7 +7,7 @@ This example focuses on OpenAI, but TensorZero also integrates with other provid
 ## Prerequisites
 
 1. Set the `OPENAI_API_KEY` environment variable
-2. Set the `TENSORZERO_CLICKHOUSE_URL` environment variable (e.g., `http://chuser:chpassword@localhost:8123/tensorzero`)
+2. Set the `TENSORZERO_POSTGRES_URL` environment variable (e.g., `postgres://postgres:postgres@localhost:5432/tensorzero`)
 
 ## Running the Example
 

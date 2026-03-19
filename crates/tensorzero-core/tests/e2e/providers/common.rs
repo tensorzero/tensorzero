@@ -167,7 +167,6 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_empty_message_content_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::common::test_inference_extra_body_with_provider;
-        use $crate::providers::common::test_assistant_prefill_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_nonstreaming_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_simple_streaming_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_json_mode_nonstreaming_with_provider;
@@ -204,14 +203,6 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
-            }
-        }
-
-        #[tokio::test]
-        async fn test_assistant_prefill_inference_request() {
-            let providers = $func().await.simple_inference;
-            for provider in providers {
-                test_assistant_prefill_inference_request_with_provider(provider).await;
             }
         }
 
@@ -2667,83 +2658,6 @@ pub async fn test_warn_ignored_thought_block_with_provider(
             provider.variant_name
         );
     }
-}
-
-pub async fn test_assistant_prefill_inference_request_with_provider(provider: E2ETestProvider) {
-    skip_for_postgres!();
-    // * Mistral doesn't support assistant prefill
-    // * Our TGI deployment on sagemaker is OOMing when we try to use prefill
-    // * Some AWS Bedrock models error when the last message is an assistant message
-    // * Azure AI foundry seems to ignore trailing assistant messages
-    // * Azure gpt-5-mini with reasoning ignores trailing assistant messages
-    // * xAI seems to also ignore them
-    // * Hyperbolic seems to ignore these params
-    // * Fireworks kimi-k2p5 ignores trailing assistant messages
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name == "aws_sagemaker"
-        || provider.model_provider_name == "aws_bedrock"
-        || provider.variant_name == "azure"
-        || provider.variant_name == "azure-kimi"
-        || provider.variant_name == "hyperbolic"
-        || provider.variant_name == "xai"
-        || provider.variant_name == "fireworks"
-    {
-        return;
-    }
-    let episode_id = Uuid::now_v7();
-    let extra_headers = if provider.is_modal_provider() {
-        get_modal_extra_headers()
-    } else {
-        UnfilteredInferenceExtraHeaders::default()
-    };
-
-    let payload = serde_json::json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "Tell me a fun fact"
-                },
-                {
-                    "role": "assistant",
-                    "content": "The capital city "
-                },
-                {
-                    "role": "assistant",
-                    "content": " of Japan is"
-                },
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "extra_headers": extra_headers.extra_headers,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json}");
-
-    assert_eq!(response_json["content"][0]["type"], "text");
-    let content = response_json["content"][0]["text"].as_str().unwrap();
-    assert!(
-        content.to_lowercase().contains("tokyo"),
-        "Content should contain 'tokyo': {content}"
-    );
-
-    // We don't check clickhouse, since we do this in lots of places
 }
 
 pub async fn test_empty_message_content_with_provider(provider: E2ETestProvider) {

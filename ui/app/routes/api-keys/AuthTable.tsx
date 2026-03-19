@@ -40,11 +40,15 @@ function ApiKeyRow({
   onEdit: (apiKey: KeyInfo) => void;
 }) {
   const isDisabled = apiKey.disabled_at !== undefined;
+  const isExpired =
+    apiKey.expires_at !== undefined &&
+    new Date(apiKey.expires_at) <= new Date();
+  const isInactive = isDisabled || isExpired;
 
   const publicIdElement = (
     <code
       className={`inline-block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap ${
-        isDisabled ? "cursor-help line-through" : ""
+        isInactive ? "cursor-help line-through" : ""
       }`}
     >
       {apiKey.public_id}
@@ -55,7 +59,7 @@ function ApiKeyRow({
     <TableRow
       key={apiKey.public_id}
       id={apiKey.public_id}
-      className={isDisabled ? "opacity-50" : ""}
+      className={isInactive ? "opacity-50" : ""}
     >
       <TableCell className="w-0">
         {isDisabled ? (
@@ -63,6 +67,13 @@ function ApiKeyRow({
             <TooltipTrigger asChild>{publicIdElement}</TooltipTrigger>
             <TooltipContent>
               Disabled on {formatDate(new Date(apiKey.disabled_at!))}
+            </TooltipContent>
+          </Tooltip>
+        ) : isExpired ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{publicIdElement}</TooltipTrigger>
+            <TooltipContent>
+              Expired on {formatDate(new Date(apiKey.expires_at!))}
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -77,6 +88,13 @@ function ApiKeyRow({
         ) : (
           <span className="text-gray-400">—</span>
         )}
+      </TableCell>
+      <TableCell className="w-0">
+        <span className="whitespace-nowrap">
+          {apiKey.expires_at
+            ? formatDate(new Date(apiKey.expires_at))
+            : "Never"}
+        </span>
       </TableCell>
       <TableCell className="w-0">
         <span className="whitespace-nowrap">
@@ -97,11 +115,11 @@ function ApiKeyRow({
           </ReadOnlyGuard>
           <ReadOnlyGuard asChild>
             <Button
-              onClick={() => !isDisabled && onDelete(apiKey.public_id)}
+              onClick={() => !isInactive && onDelete(apiKey.public_id)}
               variant="ghost"
               size="icon"
               className="opacity-60 transition-opacity hover:opacity-100"
-              disabled={isDisabled}
+              disabled={isInactive}
             >
               <Trash className="h-4 w-4" />
             </Button>
@@ -184,6 +202,7 @@ export default function AuthTable({ apiKeys }: { apiKeys: KeyInfo[] }) {
             <TableRow>
               <TableHead className="w-0 whitespace-nowrap">Public ID</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead className="w-0 whitespace-nowrap">Expires</TableHead>
               <TableHead className="w-0 whitespace-nowrap">Created</TableHead>
               <TableHead className="w-0"></TableHead>
             </TableRow>

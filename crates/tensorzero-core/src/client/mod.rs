@@ -132,13 +132,23 @@ impl HTTPGateway {
         Ok(resp)
     }
 
-    fn customize_builder<'a>(
+    pub fn customize_builder<'a>(
         &self,
         mut builder: TensorzeroRequestBuilder<'a>,
     ) -> TensorzeroRequestBuilder<'a> {
         if let Some(timeout) = self.timeout {
             builder = builder.timeout(timeout);
         }
+        builder.headers(self.headers.clone())
+    }
+
+    /// Like `customize_builder` but without applying the per-request timeout.
+    /// Use this for long-running SSE streams (e.g. evaluation runs) where the
+    /// stream lifetime is unbounded and should not be subject to the HTTP timeout.
+    pub fn customize_builder_no_timeout<'a>(
+        &self,
+        builder: TensorzeroRequestBuilder<'a>,
+    ) -> TensorzeroRequestBuilder<'a> {
         builder.headers(self.headers.clone())
     }
 
@@ -375,7 +385,7 @@ impl Display for TensorZeroError {
 
 #[derive(Debug, thiserror::Error)]
 #[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] Error);
+pub struct TensorZeroInternalError(#[from] pub Error);
 
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]

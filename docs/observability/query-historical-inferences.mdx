@@ -217,7 +217,8 @@ List inferences with filtering, pagination, and sorting.
 </ParamField>
 
 <ParamField body="function_name" type="string">
-  Filter by function name.
+  Filter by function name. Including this improves query performance if your
+  observability backend is ClickHouse.
 </ParamField>
 
 <ParamField body="limit" type="integer" default={20}>

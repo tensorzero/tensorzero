@@ -11,4 +11,5 @@ export type EvaluationIdentifier =
       evaluation_name: string;
       function_config: EvaluationFunctionConfig;
     }
-  | { function_name: string; evaluator_names: Array<string> };
+  | { function_name: string; evaluator_names: Array<string> }
+  | { evaluation_name: string };

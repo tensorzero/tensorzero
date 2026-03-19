@@ -31,8 +31,14 @@ export class PostgresClient {
     return new PostgresClient(await NativePostgresClient.fromPostgresUrl(url));
   }
 
-  async createApiKey(description?: string | null): Promise<string> {
-    return this.nativePostgresClient.createApiKey(description);
+  async createApiKey(
+    description?: string | null,
+    expiresAt?: string | null,
+  ): Promise<string> {
+    return this.nativePostgresClient.createApiKey(
+      description,
+      expiresAt ?? null,
+    );
   }
 
   async listApiKeys(limit?: number, offset?: number): Promise<KeyInfo[]> {
