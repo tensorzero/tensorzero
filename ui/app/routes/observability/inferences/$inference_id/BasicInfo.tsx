@@ -147,16 +147,14 @@ export function BasicInfo({
           <Chip
             icon={<InputIcon className="text-fg-tertiary" />}
             label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-            tooltip="Input Tokens"
+            secondaryLabel={
+              inferenceUsage?.provider_cache_read_input_tokens != null &&
+              inferenceUsage.provider_cache_read_input_tokens > 0
+                ? `(${inferenceUsage.provider_cache_read_input_tokens} cached)`
+                : undefined
+            }
+            tooltip={formatCacheTooltip(inferenceUsage) || "Input Tokens"}
           />
-          {inferenceUsage?.provider_cache_read_input_tokens != null &&
-            inferenceUsage.provider_cache_read_input_tokens > 0 && (
-              <Chip
-                icon={<Cached className="text-fg-tertiary" />}
-                label={`${inferenceUsage.provider_cache_read_input_tokens} tok`}
-                tooltip={formatCacheTooltip(inferenceUsage)}
-              />
-            )}
           <Chip
             icon={<Output className="text-fg-tertiary" />}
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
