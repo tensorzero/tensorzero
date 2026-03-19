@@ -152,6 +152,8 @@ pub struct OrderBy {
 }
 
 /// Filters for querying inferences.
+/// NOTE: This is stored in DB. Please do not make breaking changes.
+/// If we have to, we should make a separate storage type and convert.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
