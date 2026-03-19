@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::migration_0037::quantiles_sql_args;
 
-/// This migration adds `cache_read_input_tokens` and `cache_write_input_tokens` columns
+/// This migration adds `provider_cache_read_input_tokens` and `provider_cache_write_input_tokens` columns
 /// to `ModelInference`, and corresponding aggregate columns to `ModelProviderStatistics`.
 /// This brings ClickHouse in parity with the Postgres migration
 /// `20260313000000_cache_token_columns.sql`.
@@ -41,28 +41,28 @@ impl Migration for Migration0051<'_> {
         let mi_read = check_column_exists(
             self.clickhouse,
             "ModelInference",
-            "cache_read_input_tokens",
+            "provider_cache_read_input_tokens",
             MIGRATION_ID,
         )
         .await?;
         let mi_write = check_column_exists(
             self.clickhouse,
             "ModelInference",
-            "cache_write_input_tokens",
+            "provider_cache_write_input_tokens",
             MIGRATION_ID,
         )
         .await?;
         let stats_read = check_column_exists(
             self.clickhouse,
             "ModelProviderStatistics",
-            "total_cache_read_input_tokens",
+            "total_provider_cache_read_input_tokens",
             MIGRATION_ID,
         )
         .await?;
         let stats_write = check_column_exists(
             self.clickhouse,
             "ModelProviderStatistics",
-            "total_cache_write_input_tokens",
+            "total_provider_cache_write_input_tokens",
             MIGRATION_ID,
         )
         .await?;
@@ -76,24 +76,24 @@ impl Migration for Migration0051<'_> {
         // 1. Add columns to ModelInference
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS cache_read_input_tokens Nullable(UInt32)"
+                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS provider_cache_read_input_tokens Nullable(UInt32)"
             ))
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS cache_write_input_tokens Nullable(UInt32)"
+                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS provider_cache_write_input_tokens Nullable(UInt32)"
             ))
             .await?;
 
         // 2. Add aggregate columns to ModelProviderStatistics
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_cache_read_input_tokens AggregateFunction(sum, Nullable(UInt32))"
+                "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_provider_cache_read_input_tokens AggregateFunction(sum, Nullable(UInt32))"
             ))
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(format!(
-                "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_cache_write_input_tokens AggregateFunction(sum, Nullable(UInt32))"
+                "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_provider_cache_write_input_tokens AggregateFunction(sum, Nullable(UInt32))"
             ))
             .await?;
 
@@ -139,8 +139,8 @@ impl Migration for Migration0051<'_> {
                 sumState(output_tokens) as total_output_tokens,
                 countState() as count,
                 sumState(cost) as total_cost,
-                sumState(cache_read_input_tokens) as total_cache_read_input_tokens,
-                sumState(cache_write_input_tokens) as total_cache_write_input_tokens
+                sumState(provider_cache_read_input_tokens) as total_provider_cache_read_input_tokens,
+                sumState(provider_cache_write_input_tokens) as total_provider_cache_write_input_tokens
             FROM ModelInference
             {view_where_clause}
             GROUP BY model_name, model_provider_name, minute
@@ -177,13 +177,13 @@ impl Migration for Migration0051<'_> {
             let query = format!(
                 r"
                 INSERT INTO ModelProviderStatistics
-                    (model_name, model_provider_name, minute, total_cache_read_input_tokens, total_cache_write_input_tokens)
+                    (model_name, model_provider_name, minute, total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens)
                 SELECT
                     model_name,
                     model_provider_name,
                     toStartOfMinute(timestamp) as minute,
-                    sumState(cache_read_input_tokens) as total_cache_read_input_tokens,
-                    sumState(cache_write_input_tokens) as total_cache_write_input_tokens
+                    sumState(provider_cache_read_input_tokens) as total_provider_cache_read_input_tokens,
+                    sumState(provider_cache_write_input_tokens) as total_provider_cache_write_input_tokens
                 FROM ModelInference
                 WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                 GROUP BY model_name, model_provider_name, minute
@@ -203,10 +203,10 @@ impl Migration for Migration0051<'_> {
         format!(
             r"
             DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC;
-            ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_cache_read_input_tokens;
-            ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_cache_write_input_tokens;
-            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN cache_read_input_tokens;
-            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN cache_write_input_tokens;
+            ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_provider_cache_read_input_tokens;
+            ALTER TABLE ModelProviderStatistics{on_cluster_name} DROP COLUMN total_provider_cache_write_input_tokens;
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN provider_cache_read_input_tokens;
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN provider_cache_write_input_tokens;
             CREATE MATERIALIZED VIEW IF NOT EXISTS ModelProviderStatisticsView{on_cluster_name} TO ModelProviderStatistics AS SELECT model_name, model_provider_name, toStartOfMinute(timestamp) as minute, quantilesTDigestState({qs})(response_time_ms) as response_time_ms_quantiles, quantilesTDigestState({qs})(ttft_ms) as ttft_ms_quantiles, sumState(input_tokens) as total_input_tokens, sumState(output_tokens) as total_output_tokens, countState() as count, sumState(cost) as total_cost FROM ModelInference GROUP BY model_name, model_provider_name, minute;"
         )
     }
@@ -215,14 +215,14 @@ impl Migration for Migration0051<'_> {
         Ok(check_column_exists(
             self.clickhouse,
             "ModelInference",
-            "cache_read_input_tokens",
+            "provider_cache_read_input_tokens",
             MIGRATION_ID,
         )
         .await?
             && check_column_exists(
                 self.clickhouse,
                 "ModelProviderStatistics",
-                "total_cache_read_input_tokens",
+                "total_provider_cache_read_input_tokens",
                 MIGRATION_ID,
             )
             .await?)

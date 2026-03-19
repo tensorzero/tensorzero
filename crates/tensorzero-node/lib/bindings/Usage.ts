@@ -3,7 +3,7 @@
 export type Usage = {
   input_tokens?: number;
   output_tokens?: number;
-  cache_read_input_tokens?: number;
-  cache_write_input_tokens?: number;
+  provider_cache_read_input_tokens?: number;
+  provider_cache_write_input_tokens?: number;
   cost: number | null;
 };

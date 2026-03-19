@@ -1126,8 +1126,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1169,8 +1169,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1231,8 +1231,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1277,8 +1277,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1355,8 +1355,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1398,8 +1398,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1523,8 +1523,8 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(75),
             output_tokens: Some(126),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];

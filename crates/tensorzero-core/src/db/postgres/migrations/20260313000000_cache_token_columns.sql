@@ -1,14 +1,14 @@
 -- Add cache token columns to model_inferences.
 -- These track prompt caching (cache reads and cache writes) reported by providers.
 -- NULL means the provider did not report cache token information for this inference.
-ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS cache_read_input_tokens INTEGER;
-ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS cache_write_input_tokens INTEGER;
+ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS provider_cache_read_input_tokens INTEGER;
+ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS provider_cache_write_input_tokens INTEGER;
 
 -- Add cache token columns to model_provider_statistics for aggregation.
 ALTER TABLE tensorzero.model_provider_statistics
-    ADD COLUMN IF NOT EXISTS total_cache_read_input_tokens BIGINT;
+    ADD COLUMN IF NOT EXISTS total_provider_cache_read_input_tokens BIGINT;
 ALTER TABLE tensorzero.model_provider_statistics
-    ADD COLUMN IF NOT EXISTS total_cache_write_input_tokens BIGINT;
+    ADD COLUMN IF NOT EXISTS total_provider_cache_write_input_tokens BIGINT;
 
 -- Recreate the incremental refresh function to include cache token columns.
 CREATE OR REPLACE FUNCTION tensorzero.refresh_model_provider_statistics_incremental(
@@ -54,8 +54,8 @@ BEGIN
         total_output_tokens,
         inference_count,
         total_cost,
-        total_cache_read_input_tokens,
-        total_cache_write_input_tokens
+        total_provider_cache_read_input_tokens,
+        total_provider_cache_write_input_tokens
     )
     SELECT
         model_name,
@@ -66,8 +66,8 @@ BEGIN
         SUM(output_tokens)::BIGINT AS total_output_tokens,
         COUNT(*)::BIGINT AS inference_count,
         SUM(cost)::NUMERIC AS total_cost,
-        SUM(cache_read_input_tokens)::BIGINT AS total_cache_read_input_tokens,
-        SUM(cache_write_input_tokens)::BIGINT AS total_cache_write_input_tokens
+        SUM(provider_cache_read_input_tokens)::BIGINT AS total_provider_cache_read_input_tokens,
+        SUM(provider_cache_write_input_tokens)::BIGINT AS total_provider_cache_write_input_tokens
     FROM tensorzero.model_inferences
     WHERE created_at >= refresh_from
       AND created_at <= refresh_to
@@ -78,8 +78,8 @@ BEGIN
         total_output_tokens = EXCLUDED.total_output_tokens,
         inference_count = EXCLUDED.inference_count,
         total_cost = EXCLUDED.total_cost,
-        total_cache_read_input_tokens = EXCLUDED.total_cache_read_input_tokens,
-        total_cache_write_input_tokens = EXCLUDED.total_cache_write_input_tokens;
+        total_provider_cache_read_input_tokens = EXCLUDED.total_provider_cache_read_input_tokens,
+        total_provider_cache_write_input_tokens = EXCLUDED.total_provider_cache_write_input_tokens;
 
     -- Keep retention behavior correct: if old source partitions were dropped,
     -- remove stale stats buckets that are now older than the earliest source row.

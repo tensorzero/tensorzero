@@ -946,12 +946,12 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(100));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
-            inference_response.usage.cache_read_input_tokens,
+            inference_response.usage.provider_cache_read_input_tokens,
             Some(80),
-            "vLLM automatic prefix caching should populate cache_read_input_tokens"
+            "vLLM automatic prefix caching should populate provider_cache_read_input_tokens"
         );
         assert_eq!(
-            inference_response.usage.cache_write_input_tokens, None,
+            inference_response.usage.provider_cache_write_input_tokens, None,
             "vLLM does not report cache write tokens"
         );
     }

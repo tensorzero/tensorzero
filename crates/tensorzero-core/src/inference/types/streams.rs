@@ -1077,8 +1077,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -1115,8 +1115,8 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
@@ -1173,15 +1173,15 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let chunks = vec![
@@ -1250,8 +1250,8 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
@@ -1262,8 +1262,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1297,8 +1297,8 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let chunks = vec![
@@ -1396,8 +1396,8 @@ mod tests {
         let model_inference_usage = Usage {
             input_tokens: Some(15),
             output_tokens: Some(10),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let chunks = vec![
@@ -1540,15 +1540,15 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let chunks = vec![
@@ -1617,8 +1617,8 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
@@ -1629,8 +1629,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1681,15 +1681,15 @@ mod tests {
         let usage1 = Usage {
             input_tokens: Some(10),
             output_tokens: Some(5),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let usage2 = Usage {
             input_tokens: Some(5),
             output_tokens: Some(10),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let dynamic_output_schema = JSONSchema::compile_background(serde_json::json!({
@@ -1767,8 +1767,8 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             finish_reason: Some(FinishReason::ToolCall),
@@ -1779,8 +1779,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(15),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1917,8 +1917,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(2),
                     output_tokens: Some(4),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -1973,8 +1973,8 @@ mod tests {
             model_inference_usage: Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             finish_reason: Some(FinishReason::Stop),
@@ -1985,8 +1985,8 @@ mod tests {
             Usage {
                 input_tokens: Some(2),
                 output_tokens: Some(4),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2088,8 +2088,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -2186,8 +2186,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -2275,8 +2275,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(5),
                     output_tokens: Some(10),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -2368,8 +2368,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(15),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -2444,8 +2444,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(5),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -2574,8 +2574,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(30),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,
@@ -2661,8 +2661,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -2682,8 +2682,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             })
         );

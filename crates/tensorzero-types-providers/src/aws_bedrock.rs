@@ -339,9 +339,9 @@ pub struct Usage {
     #[serde(default)]
     pub total_tokens: Option<i32>,
     #[serde(default)]
-    pub cache_read_input_tokens: Option<i32>,
+    pub provider_cache_read_input_tokens: Option<i32>,
     #[serde(default)]
-    pub cache_write_input_tokens: Option<i32>,
+    pub provider_cache_write_input_tokens: Option<i32>,
 }
 
 /// Response metrics

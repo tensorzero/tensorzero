@@ -126,8 +126,8 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
         Usage {
             input_tokens: Some(10),
             output_tokens: Some(16),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     );
@@ -147,8 +147,8 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
         Usage {
             input_tokens: Some(10),
             output_tokens: Some(16),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     );
@@ -238,8 +238,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
             usage: Some(Usage {
                 input_tokens: Some(20),
                 output_tokens: Some(40),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -255,8 +255,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
-                cache_read_input_tokens: None,
-                cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -275,8 +275,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
         &Usage {
             input_tokens: Some(1),
             output_tokens: Some(2),
-            cache_read_input_tokens: None,
-            cache_write_input_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         },
         None,
@@ -313,8 +313,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                 &Some(Usage {
                     input_tokens: Some(20),
                     output_tokens: Some(40),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 })
             );
@@ -324,8 +324,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                 &Some(Usage {
                     input_tokens: Some(100),
                     output_tokens: Some(200),
-                    cache_read_input_tokens: None,
-                    cache_write_input_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 })
             );
