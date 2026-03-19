@@ -192,6 +192,16 @@ impl Error {
         &self.details
     }
 
+    /// Returns true if this is a `BatchInferenceNotYetVisible` error, indicating the
+    /// provider completed but DB rows aren't visible yet (likely replication lag).
+    /// The batch should stay `Pending` so the next poll can retry.
+    pub fn is_retryable_batch_error(&self) -> bool {
+        matches!(
+            *self.details,
+            ErrorDetails::BatchInferenceNotYetVisible { .. }
+        )
+    }
+
     /// Ensures that the OpenTelemetry span corresponding to `span` is marked as an error.
     /// If our level is `ERROR`, then we'll do nothing, since logging an error automatically marks the span as an error.
     /// If our level is anything else, then we explicitly mark the span as an error using our own messages
@@ -421,6 +431,13 @@ pub enum ErrorDetails {
     },
     BatchNotFound {
         id: Uuid,
+    },
+    /// Provider returned valid completed results but the corresponding
+    /// `BatchModelInference` rows are not yet visible in the database.
+    /// This is typically caused by database replication lag and is transient.
+    BatchInferenceNotYetVisible {
+        batch_id: Uuid,
+        expected_count: usize,
     },
     BadFileFetch {
         url: Url,
@@ -850,6 +867,7 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchInferenceNotYetVisible { .. } => tracing::Level::WARN,
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
@@ -1016,6 +1034,7 @@ impl ErrorDetails {
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::BatchInferenceNotYetVisible { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1398,6 +1417,16 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::BatchNotFound { id } => {
                 write!(f, "Batch request not found for id: {id}")
+            }
+            ErrorDetails::BatchInferenceNotYetVisible {
+                batch_id,
+                expected_count,
+            } => {
+                write!(
+                    f,
+                    "Batch {batch_id}: provider returned {expected_count} completed inferences \
+                     but no matching BatchModelInference rows found in database (possible replication lag)"
+                )
             }
             ErrorDetails::Cache { message } => {
                 write!(f, "Error in cache: {message}")
@@ -2334,6 +2363,44 @@ mod tests {
         assert_eq!(
             error_with_id.status_code(),
             StatusCode::INTERNAL_SERVER_ERROR,
+        );
+    }
+
+    #[test]
+    fn test_is_retryable_batch_error() {
+        // BatchInferenceNotYetVisible is retryable (replication lag)
+        let error = Error::new(ErrorDetails::BatchInferenceNotYetVisible {
+            batch_id: Uuid::now_v7(),
+            expected_count: 30,
+        });
+        assert!(
+            error.is_retryable_batch_error(),
+            "BatchInferenceNotYetVisible should be retryable"
+        );
+
+        // MissingBatchInferenceResponse is NOT retryable (permanent failure)
+        let error_no_id =
+            Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None });
+        assert!(
+            !error_no_id.is_retryable_batch_error(),
+            "MissingBatchInferenceResponse should not be retryable"
+        );
+
+        let error_with_id = Error::new(ErrorDetails::MissingBatchInferenceResponse {
+            inference_id: Some(Uuid::now_v7()),
+        });
+        assert!(
+            !error_with_id.is_retryable_batch_error(),
+            "MissingBatchInferenceResponse with inference_id should not be retryable"
+        );
+
+        // Other errors are not retryable
+        let other_error = Error::new(ErrorDetails::Config {
+            message: "some error".to_string(),
+        });
+        assert!(
+            !other_error.is_retryable_batch_error(),
+            "Non-batch errors should not be retryable"
         );
     }
 

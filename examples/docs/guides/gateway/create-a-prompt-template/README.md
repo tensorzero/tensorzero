@@ -10,7 +10,7 @@ This folder contains the code for the [Guides » Gateway » Create a prompt temp
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Launch the TensorZero Gateway and a local ClickHouse database:
+2. Launch the TensorZero Gateway and a local Postgres database:
 
 ```bash
 docker compose up

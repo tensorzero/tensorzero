@@ -63,6 +63,9 @@ test("should create, display, delete, and persist API key states", async ({
   const firstDescriptionCell = firstKeyRow.locator("td").nth(1);
   await expect(firstDescriptionCell).toContainText("—");
 
+  const firstExpiresAtCell = firstKeyRow.locator("td").nth(2);
+  await expect(firstExpiresAtCell).toContainText("Never");
+
   // 3. Create API key with description
   await page.getByText("Generate API Key").click();
   await expect(
@@ -129,6 +132,9 @@ test("should create, display, delete, and persist API key states", async ({
   // Verify description is shown
   const secondDescriptionCell = secondKeyRow.locator("td").nth(1);
   await expect(secondDescriptionCell).toContainText(description);
+
+  const secondExpiresAtCell = secondKeyRow.locator("td").nth(2);
+  await expect(secondExpiresAtCell).toContainText("Never");
 
   // 4. Delete the first key (without description)
   const firstKeyRowToDelete = page.locator("tbody tr").filter({
@@ -408,4 +414,133 @@ test("should paginate API keys with custom limit", async ({ page }) => {
   expect(page.url()).toContain("offset=0");
   await expect(prevButton).toBeDisabled(); // Can't go back
   await expect(nextButton).not.toBeDisabled(); // Can go forward
+});
+
+test("should create API key with custom expiration date and show it in the table", async ({
+  page,
+}) => {
+  await page.goto("/api-keys");
+  await page.waitForLoadState("networkidle");
+
+  await page.getByRole("button", { name: "Generate API Key" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Generate API Key" }),
+  ).toBeVisible();
+
+  // Select "Custom" from the expiration preset dropdown to reveal the DateTimePicker
+  await page.locator("#expiration-preset").click();
+  await page.getByRole("option", { name: "Custom" }).click();
+
+  // Now the DateTimePicker is visible — open it
+  await page.locator("#expires_at").click();
+  await expect(page.getByRole("grid")).toBeVisible();
+
+  // Navigate to next month and pick day 15
+  await page.getByRole("button", { name: "Go to the Next Month" }).click();
+  await page.getByRole("button", { name: /15th/ }).click();
+
+  // Close the popover with the Done button
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("grid")).not.toBeVisible();
+
+  const generateButton = page.getByRole("button", { name: "Generate Key" });
+  await expect(generateButton).toBeVisible();
+  await expect(generateButton).toBeEnabled();
+  await generateButton.click();
+
+  await expect(
+    page.getByRole("heading", { name: "API Key Generated" }),
+  ).toBeVisible();
+
+  const apiKeyPre = page.locator("pre");
+  const apiKeyText = await apiKeyPre.textContent();
+  const publicIdMatch = apiKeyText!.match(/sk-t0-(\w{12})/);
+  const publicIdPart = publicIdMatch ? publicIdMatch[1] : null;
+  expect(publicIdPart).toBeTruthy();
+
+  await page.getByRole("button", { name: "Close" }).first().click();
+  await page.waitForLoadState("networkidle");
+
+  const keyRow = page.locator("tbody tr").filter({ hasText: publicIdPart! });
+  await expect(keyRow).toBeVisible();
+
+  // "Expires" column should show a date, not "Never"
+  const expiresAtCell = keyRow.locator("td").nth(2);
+  await expect(expiresAtCell).not.toContainText("Never");
+
+  // Key should not appear expired/disabled (it expires in the future)
+  await expect(keyRow).not.toHaveClass(/opacity-50/);
+});
+
+test("should create API keys with preset expirations and show correct dates in table", async ({
+  page,
+}) => {
+  // Helper to compute the expected expiry date for each preset (mirrors app logic)
+  function expectedExpiry(preset: "7d" | "30d" | "90d" | "1y"): Date {
+    const days = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 }[preset];
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  const presets: Array<{
+    value: string;
+    label: string;
+    preset: "7d" | "30d" | "90d" | "1y";
+  }> = [
+    { value: "7d", label: "7 days", preset: "7d" },
+    { value: "30d", label: "30 days", preset: "30d" },
+    { value: "90d", label: "90 days", preset: "90d" },
+    { value: "1y", label: "1 year", preset: "1y" },
+  ];
+
+  await page.goto("/api-keys");
+  await page.waitForLoadState("networkidle");
+
+  for (const { label, preset } of presets) {
+    // Record expected date before creating (so timing of test doesn't skew it)
+    const expected = expectedExpiry(preset);
+    const expectedMonth = expected.toLocaleString("en-US", { month: "short" }); // e.g. "Mar"
+    const expectedDay = String(expected.getDate()); // e.g. "19"
+    const expectedYear = String(expected.getFullYear()); // e.g. "2026"
+
+    await page.getByRole("button", { name: "Generate API Key" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Generate API Key" }),
+    ).toBeVisible();
+
+    // Select the preset from the expiration dropdown
+    await page.locator("#expiration-preset").click();
+    await page.getByRole("option", { name: label }).click();
+
+    // Generate the key
+    const generateButton = page.getByRole("button", { name: "Generate Key" });
+    await expect(generateButton).toBeVisible();
+    await expect(generateButton).toBeEnabled();
+    await generateButton.click();
+
+    await expect(
+      page.getByRole("heading", { name: "API Key Generated" }),
+    ).toBeVisible();
+
+    const apiKeyText = await page.locator("pre").textContent();
+    const publicIdMatch = apiKeyText!.match(/sk-t0-(\w{12})/);
+    const publicIdPart = publicIdMatch ? publicIdMatch[1] : null;
+    expect(publicIdPart).toBeTruthy();
+
+    await page.getByRole("button", { name: "Close" }).first().click();
+    await page.waitForLoadState("networkidle");
+
+    const keyRow = page.locator("tbody tr").filter({ hasText: publicIdPart! });
+    await expect(keyRow).toBeVisible();
+
+    const expiresAtCell = keyRow.locator("td").nth(2);
+    await expect(expiresAtCell).not.toContainText("Never");
+
+    // Verify the displayed date matches the expected expiry (month, day, year)
+    await expect(expiresAtCell).toContainText(expectedMonth);
+    await expect(expiresAtCell).toContainText(expectedDay);
+    await expect(expiresAtCell).toContainText(expectedYear);
+
+    // Key should not be disabled — it expires in the future
+    await expect(keyRow).not.toHaveClass(/opacity-50/);
+  }
 });
