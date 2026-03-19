@@ -3,13 +3,23 @@
 Local development helper for TensorZero.
 
 Usage:
-    ./scripts/dev.py up [--proxy]     # Start docker + gateway (logs stream here)
-    ./scripts/dev.py down             # Stop docker containers
+    ./scripts/dev.py up [--proxy] [--seed NAME]  # Start docker + gateway
+    ./scripts/dev.py down                        # Stop docker containers
 
 Options:
-    --proxy   Also start the provider-proxy in read-write mode, and set
-              TENSORZERO_E2E_PROXY so the gateway routes through it.
-              Recorded responses land in ci/provider-proxy-cache/.
+    --proxy       Also start the provider-proxy in read-write mode, and set
+                  TENSORZERO_E2E_PROXY so the gateway routes through it.
+                  Recorded responses land in ci/provider-proxy-cache/.
+    --seed NAME   Run gateway with separate DB names, one per worktree/clone.
+                  The port is derived from the name (3001 + hash % 999).
+                  Auto-detected from directory name if not specified:
+                    tensorzero-black/ -> seed "black"
+                    tensorzero-red/   -> seed "red"
+                  Allows multiple instances side by side:
+                    cd tensorzero-black && ./scripts/dev.py up  # auto: seed black
+                    cd tensorzero-red && ./scripts/dev.py up    # auto: seed red
+                  Plain `tensorzero/` gets no seed (port 3000, default DBs).
+                  Docker containers are shared; only the gateway and DB names differ.
 
 `up` starts ClickHouse + Postgres, loads .env, and runs the gateway in the
 foreground. Ctrl+C stops the gateway. Docker keeps running (use `down`).
@@ -33,6 +43,22 @@ DOCKER_COMPOSE = CRATES / "tensorzero-core" / "tests" / "e2e" / "docker-compose.
 ENV_FILE = ROOT / ".env"
 
 DOCKER_SERVICES = ["clickhouse", "postgres"]
+
+
+def seed_to_port(name):
+    """Derive a deterministic port from a seed name (3001-3999)."""
+    # Use a stable hash (sum of char codes) since Python's hash() is randomized per process
+    h = sum(ord(c) for c in name) % 999
+    return 3001 + h
+
+
+def auto_detect_seed():
+    """Detect seed from repo directory name (e.g. tensorzero-black -> black)."""
+    repo_name = ROOT.name  # e.g. "tensorzero-black"
+    prefix = "tensorzero-"
+    if repo_name.startswith(prefix) and len(repo_name) > len(prefix):
+        return repo_name[len(prefix) :]
+    return None
 
 
 def load_env():
@@ -81,7 +107,13 @@ def proxy_container_healthy():
     """Check if the provider-proxy container is running and healthy via docker."""
     try:
         result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Health.Status}}", "e2e-provider-proxy-1"],
+            [
+                "docker",
+                "inspect",
+                "--format",
+                "{{.State.Health.Status}}",
+                "e2e-provider-proxy-1",
+            ],
             capture_output=True,
             text=True,
             timeout=5,
@@ -91,8 +123,21 @@ def proxy_container_healthy():
         return False
 
 
-def cmd_up(use_proxy=False):
+def cmd_up(use_proxy=False, seed=None):
     services = list(DOCKER_SERVICES)
+
+    # Compute seed-dependent settings
+    if seed:
+        gateway_port = seed_to_port(seed)
+        ch_db = f"tensorzero_e2e_tests_{seed}"
+        pg_db = f"tensorzero-e2e-tests-{seed}"
+    else:
+        gateway_port = 3000
+        ch_db = "tensorzero_e2e_tests"
+        pg_db = "tensorzero-e2e-tests"
+
+    ch_url = f"http://chuser:chpassword@localhost:8123/{ch_db}"
+    pg_url = f"postgres://postgres:postgres@localhost:5432/{pg_db}"
 
     # 1. Start docker (--wait ensures containers are healthy before returning)
     if url_ok("http://localhost:8123/ping"):
@@ -138,11 +183,47 @@ def cmd_up(use_proxy=False):
         os.environ["TENSORZERO_E2E_PROXY"] = "http://localhost:3003"
         print("Provider-proxy enabled — responses will be recorded to ci/provider-proxy-cache/")
 
-    # 2. Load env
+    # 2. Create seed-specific databases if needed
+    if seed:
+        _ensure_clickhouse_db(ch_db)
+        _ensure_postgres_db(pg_db)
+
+    # 3. Set database URLs for the gateway
+    os.environ["TENSORZERO_CLICKHOUSE_URL"] = ch_url
+    os.environ["TENSORZERO_POSTGRES_URL"] = pg_url
+
+    # 4. Load env (API keys etc.)
     load_env()
 
-    # 3. Run gateway in foreground
-    print("\nStarting gateway (Ctrl+C to stop)...")
+    # 5. Run Postgres migrations first (separate step — this flag makes the gateway exit after migrating)
+    if seed:
+        print("Running Postgres migrations...")
+        subprocess.run(
+            [
+                "cargo",
+                "run",
+                "--bin",
+                "gateway",
+                "--features",
+                "e2e_tests",
+                "--",
+                "--run-postgres-migrations",
+                "--config-file",
+                "tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+            ],
+            cwd=CRATES,
+            check=True,
+        )
+
+    # 6. Run gateway in foreground
+    bind_addr = f"0.0.0.0:{gateway_port}"
+    os.environ["TENSORZERO_GATEWAY_BIND_ADDRESS"] = bind_addr
+
+    label = f" [{seed}]" if seed else ""
+    print(f"\nStarting gateway{label} on port {gateway_port} (Ctrl+C to stop)...")
+    print(f"  TENSORZERO_GATEWAY_BIND_ADDRESS={bind_addr}")
+    print(f"  TENSORZERO_CLICKHOUSE_URL={ch_url}")
+    print(f"  TENSORZERO_POSTGRES_URL={pg_url}")
     if use_proxy:
         print(f"  TENSORZERO_E2E_PROXY={os.environ.get('TENSORZERO_E2E_PROXY', '')}")
     print("=" * 60)
@@ -166,10 +247,77 @@ def cmd_up(use_proxy=False):
         print("\nGateway stopped.")
 
 
+def _ensure_clickhouse_db(db_name):
+    """Create a ClickHouse database if it doesn't exist."""
+    try:
+        subprocess.run(
+            [
+                "curl",
+                "-s",
+                "http://chuser:chpassword@localhost:8123/",
+                "--data-binary",
+                f"CREATE DATABASE IF NOT EXISTS {db_name}",
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+        print(f"ClickHouse database `{db_name}` ready.")
+    except Exception as e:
+        print(f"Warning: could not create ClickHouse DB `{db_name}`: {e}")
+
+
+def _ensure_postgres_db(db_name):
+    """Create a Postgres database if it doesn't exist (via docker exec)."""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                "e2e-postgres-1",
+                "psql",
+                "-U",
+                "postgres",
+                "-tc",
+                f"SELECT 1 FROM pg_database WHERE datname = '{db_name}'",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if "1" not in (result.stdout or ""):
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "e2e-postgres-1",
+                    "psql",
+                    "-U",
+                    "postgres",
+                    "-c",
+                    f'CREATE DATABASE "{db_name}"',
+                ],
+                capture_output=True,
+                timeout=10,
+            )
+            print(f"Postgres database `{db_name}` created.")
+        else:
+            print(f"Postgres database `{db_name}` ready.")
+    except Exception as e:
+        print(f"Warning: could not create Postgres DB `{db_name}`: {e}")
+
+
 def cmd_down():
     print("Stopping docker...")
     subprocess.run(
-        ["docker", "compose", "-f", str(DOCKER_COMPOSE), "--profile", "provider-proxy", "down"],
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(DOCKER_COMPOSE),
+            "--profile",
+            "provider-proxy",
+            "down",
+        ],
         cwd=ROOT,
         check=True,
     )
@@ -184,7 +332,19 @@ def main():
     extra = sys.argv[2:]
 
     if cmd == "up":
-        cmd_up(use_proxy="--proxy" in extra)
+        use_proxy = "--proxy" in extra
+        if "--seed" in extra:
+            idx = extra.index("--seed")
+            if idx + 1 < len(extra):
+                seed = extra[idx + 1]
+            else:
+                print("Error: --seed requires a name (e.g. black, red)")
+                sys.exit(1)
+        else:
+            seed = auto_detect_seed()
+            if seed:
+                print(f"Auto-detected seed from directory: {seed}")
+        cmd_up(use_proxy=use_proxy, seed=seed)
     elif cmd == "down":
         cmd_down()
     else:

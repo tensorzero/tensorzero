@@ -1280,7 +1280,7 @@ pub struct AnthropicUsage {
     #[serde(default)]
     cache_creation_input_tokens: Option<u32>,
     /// Number of input tokens read from cache
-    #[serde(default)]
+    #[serde(default, rename = "cache_read_input_tokens")]
     provider_cache_read_input_tokens: Option<u32>,
 }
 
@@ -2698,7 +2698,7 @@ mod tests {
             "input_tokens": 15,
             "output_tokens": 30,
             "cache_creation_input_tokens": 4200,
-            "provider_cache_read_input_tokens": 0
+            "cache_read_input_tokens": 0
         }"#;
         let anthropic_usage: AnthropicUsage = serde_json::from_str(json)
             .expect("should deserialize Anthropic usage with cache tokens");
@@ -2712,7 +2712,7 @@ mod tests {
             "input_tokens": 15,
             "output_tokens": 42,
             "cache_creation_input_tokens": 0,
-            "provider_cache_read_input_tokens": 4200
+            "cache_read_input_tokens": 4200
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize Anthropic usage with cache read");
