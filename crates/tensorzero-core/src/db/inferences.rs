@@ -23,8 +23,8 @@ use crate::inference::types::{
     JsonInferenceOutput, StoredInput,
 };
 use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_u64,
-    serialize_utc_datetime_rfc_3339_with_millis,
+    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+    deserialize_u64, serialize_utc_datetime_rfc_3339_with_millis,
 };
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
@@ -42,8 +42,8 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlockChatOutput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
     #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
@@ -80,7 +80,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             function_name: value.function_name,
             variant_name: value.variant_name,
             input: Some(value.input),
-            output: Some(value.output),
+            output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
             inference_id: value.inference_id,
@@ -105,8 +105,8 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: StoredInput,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<JsonInferenceOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
     #[serde(deserialize_with = "deserialize_json_string")]
@@ -142,7 +142,7 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
             function_name: value.function_name,
             variant_name: value.variant_name,
             input: Some(value.input),
-            output: Some(value.output),
+            output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
             inference_id: value.inference_id,

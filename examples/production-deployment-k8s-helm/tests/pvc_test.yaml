@@ -1,0 +1,38 @@
+suite: PVC tests
+templates:
+  - templates/pvc.yaml
+tests:
+  - it: should create PVC when persistence is enabled
+    set:
+      persistence.enabled: true
+      persistence.size: 10Gi
+      persistence.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-tensorzero-storage
+      - equal:
+          path: spec.resources.requests.storage
+          value: "10Gi"
+
+  - it: should not create PVC when persistence is disabled
+    set:
+      persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should set storage class when provided
+    set:
+      persistence.enabled: true
+      persistence.size: 20Gi
+      persistence.storageClass: fast-ssd
+      persistence.accessModes:
+        - ReadWriteOnce
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd

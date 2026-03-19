@@ -1,0 +1,47 @@
+suite: UI deployment tests
+templates:
+  - templates/ui.yaml
+tests:
+  - it: should create UI deployment when ui.deploy is true
+    set:
+      ui.deploy: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-tensorzero-ui
+
+  - it: should not create UI deployment when ui.deploy is false
+    set:
+      ui.deploy: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should set replica count from values
+    set:
+      ui.deploy: true
+      ui.replicaCount: 2
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: should set service account name when provided
+    set:
+      ui.deploy: true
+      ui.serviceAccountName: ui-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: ui-sa
+
+  - it: should use Chart.AppVersion when image tag is empty
+    set:
+      ui.deploy: true
+      ui.image.tag: ""
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "tensorzero/ui:.+"
