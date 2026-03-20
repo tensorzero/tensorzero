@@ -1,6 +1,7 @@
 import { Markdown } from "~/components/ui/markdown";
 import { cn } from "~/utils/common";
 import type { EventPayloadUserQuestion } from "~/types/tensorzero";
+import { OptionButton } from "./OptionButton";
 
 // Strip interactive elements inside buttons to avoid nested interactive HTML
 const nonInteractiveComponents: React.ComponentProps<
@@ -35,16 +36,11 @@ export function MultipleChoiceStep({
         {question.options.map((option) => {
           const isSelected = selectedValues.has(option.id);
           return (
-            <button
+            <OptionButton
               key={option.id}
-              type="button"
+              isSelected={isSelected}
               onClick={() => onToggle(option.id)}
-              className={cn(
-                "group relative flex cursor-pointer flex-col items-start rounded-lg border px-3 py-2 text-left transition-all",
-                isSelected
-                  ? "border-purple-500 bg-purple-50 ring-1 ring-purple-500 ring-inset dark:border-purple-400 dark:bg-purple-950/40 dark:ring-purple-400"
-                  : "border-border bg-bg-secondary hover:border-purple-300 hover:bg-purple-50/50 dark:hover:border-purple-600 dark:hover:bg-purple-950/20",
-              )}
+              className="group relative flex flex-col items-start"
             >
               <span
                 className={cn(
@@ -67,7 +63,7 @@ export function MultipleChoiceStep({
               >
                 {option.description}
               </Markdown>
-            </button>
+            </OptionButton>
           );
         })}
       </div>

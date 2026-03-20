@@ -117,7 +117,10 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
         </div>
         <div>
           {"content" in query.data ? (
-            <ChatOutputElement output={query.data.content} maxHeight={480} />
+            <ChatOutputElement
+              output={query.data.content}
+              overflow={{ type: "expandable", maxHeight: 480 }}
+            />
           ) : (
             <JsonOutputElement output={query.data.output} maxHeight={480} />
           )}
