@@ -193,7 +193,8 @@ pub async fn build_gateway_client(
 pub fn create_gepa_config_chat() -> GEPAConfig {
     GEPAConfig {
         function_name: "basic_test".to_string(),
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string()]),
         variant_prefix: Some("gepa_test_chat".to_string()),
         batch_size: 5,
@@ -213,7 +214,8 @@ pub fn create_gepa_config_chat() -> GEPAConfig {
 pub fn create_gepa_config_json() -> GEPAConfig {
     GEPAConfig {
         function_name: "json_success".to_string(),
-        evaluation_name: "json_evaluation".to_string(),
+        evaluation_name: Some("json_evaluation".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string()]),
         variant_prefix: Some("gepa_test_json".to_string()),
         batch_size: 5,

@@ -715,7 +715,8 @@ mod tests {
         // Create a test GEPAConfig with specific values
         let gepa_config = GEPAConfig {
             function_name: "test_function".to_string(),
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: Some("test_evaluation".to_string()),
+            evaluator_names: None,
             initial_variants: None,
             variant_prefix: None,
             batch_size: 1,

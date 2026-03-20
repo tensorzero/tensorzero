@@ -247,6 +247,8 @@ async fn execute_gepa(
 
     let init_eval_params = InitEvalStepParams {
         evaluation_name: setup.gepa_config.evaluation_name.clone(),
+        function_name: setup.gepa_config.function_name.clone(),
+        evaluator_names: setup.gepa_config.evaluator_names.clone(),
         datapoint_ids: setup.val_datapoint_ids.clone(),
         variants: setup.original_variants.clone(),
         max_concurrency: setup.gepa_config.max_concurrency,
@@ -347,6 +349,8 @@ async fn execute_gepa(
                 &format!("iter_{iteration}_eval_analyze_mutate"),
                 EvalAnalyzeMutateStepParams {
                     evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    function_name: setup.gepa_config.function_name.clone(),
+                    evaluator_names: setup.gepa_config.evaluator_names.clone(),
                     datapoint_ids: sampled_ids.clone(),
                     variant_name: parent.name.clone(),
                     variant_config: parent.config.clone(),
@@ -395,6 +399,8 @@ async fn execute_gepa(
                 &format!("iter_{iteration}_eval_child"),
                 EvalStepParams {
                     evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    function_name: setup.gepa_config.function_name.clone(),
+                    evaluator_names: setup.gepa_config.evaluator_names.clone(),
                     dataset_name: None,
                     datapoint_ids: Some(sampled_ids),
                     variant_name: mutation.child_name.clone(),
@@ -443,6 +449,8 @@ async fn execute_gepa(
                 &format!("iter_{iteration}_eval_child_val"),
                 EvalStepParams {
                     evaluation_name: setup.gepa_config.evaluation_name.clone(),
+                    function_name: setup.gepa_config.function_name.clone(),
+                    evaluator_names: setup.gepa_config.evaluator_names.clone(),
                     dataset_name: None,
                     datapoint_ids: Some(setup.val_datapoint_ids.clone()),
                     variant_name: mutation.child_name.clone(),
@@ -537,15 +545,10 @@ async fn setup_step(
             .map_err(|e| anyhow::anyhow!("Failed to deserialize config snapshot: {e}"))?;
 
     // Build GEPAConfig from params
-    let evaluation_name = params.evaluation_name.clone().ok_or_else(|| {
-        anyhow::anyhow!(
-            "`evaluation_name` is required (inline `evaluators` mode is not yet supported)"
-        )
-    })?;
-
     let gepa_config = GEPAConfig {
         function_name: params.function_name.clone(),
-        evaluation_name: evaluation_name.clone(),
+        evaluation_name: params.evaluation_name.clone(),
+        evaluator_names: params.evaluators.clone(),
         initial_variants: params.initial_variants.clone(),
         variant_prefix: params.variant_prefix.clone(),
         batch_size: params.batch_size.unwrap_or(5),
@@ -720,6 +723,7 @@ async fn setup_step(
     let resolved_config = ResolvedGEPAConfig {
         function_name: gepa_config.function_name,
         evaluation_name: gepa_config.evaluation_name,
+        evaluator_names: gepa_config.evaluator_names,
         initial_variants: gepa_config.initial_variants,
         variant_prefix: gepa_config.variant_prefix,
         batch_size: gepa_config.batch_size,
@@ -761,10 +765,18 @@ async fn init_eval_step(
             namespace: None,
         };
 
+        let (function_name, evaluator_names) = if params.evaluation_name.is_some() {
+            (None, None)
+        } else {
+            (
+                Some(params.function_name.clone()),
+                params.evaluator_names.clone(),
+            )
+        };
         let eval_params = RunEvaluationParams {
-            evaluation_name: Some(params.evaluation_name.clone()),
-            function_name: None,
-            evaluator_names: None,
+            evaluation_name: params.evaluation_name.clone(),
+            function_name,
+            evaluator_names,
             dataset_name: None,
             datapoint_ids: Some(params.datapoint_ids.clone()),
             variant_name: variant_name.clone(),
@@ -811,10 +823,15 @@ async fn eval_variant_step(
         namespace: None,
     };
 
+    let (function_name, evaluator_names) = if params.evaluation_name.is_some() {
+        (None, None)
+    } else {
+        (Some(params.function_name), params.evaluator_names)
+    };
     let eval_params = RunEvaluationParams {
-        evaluation_name: Some(params.evaluation_name),
-        function_name: None,
-        evaluator_names: None,
+        evaluation_name: params.evaluation_name,
+        function_name,
+        evaluator_names,
         dataset_name: params.dataset_name,
         datapoint_ids: params.datapoint_ids,
         variant_name: params.variant_name.clone(),
@@ -873,10 +890,18 @@ async fn eval_analyze_mutate_step(
         namespace: None,
     };
 
+    let (function_name, evaluator_names) = if params.evaluation_name.is_some() {
+        (None, None)
+    } else {
+        (
+            Some(params.function_name.clone()),
+            params.evaluator_names.clone(),
+        )
+    };
     let eval_params = RunEvaluationParams {
-        evaluation_name: Some(params.evaluation_name.clone()),
-        function_name: None,
-        evaluator_names: None,
+        evaluation_name: params.evaluation_name.clone(),
+        function_name,
+        evaluator_names,
         dataset_name: None,
         datapoint_ids: Some(params.datapoint_ids.clone()),
         variant_name: params.variant_name.clone(),
@@ -1007,6 +1032,7 @@ fn reconstruct_gepa_config(resolved: &ResolvedGEPAConfig) -> GEPAConfig {
     GEPAConfig {
         function_name: resolved.function_name.clone(),
         evaluation_name: resolved.evaluation_name.clone(),
+        evaluator_names: resolved.evaluator_names.clone(),
         initial_variants: resolved.initial_variants.clone(),
         variant_prefix: resolved.variant_prefix.clone(),
         batch_size: resolved.batch_size,

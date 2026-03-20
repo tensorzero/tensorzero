@@ -58,7 +58,9 @@ use crate::model::{
     CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
 };
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
-use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
+use crate::optimization::{
+    OptimizerInfo, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+};
 use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
@@ -2018,6 +2020,7 @@ impl UninitializedConfig {
         self.resolve_clickhouse_config_deprecation()?;
         self.warn_variant_weight_deprecation();
         self.warn_evaluation_evaluators_deprecation();
+        self.warn_gepa_evaluation_name_deprecation()?;
         Ok(())
     }
 
@@ -2080,6 +2083,54 @@ impl UninitializedConfig {
             "Top-level evaluations are deprecated — please migrate them to \
              `[functions.function_name.evaluators]` instead.",
         );
+    }
+
+    fn warn_gepa_evaluation_name_deprecation(&self) -> Result<(), Error> {
+        let mut legacy_gepa_optimizers = Vec::new();
+
+        for (optimizer_name, optimizer) in self.optimizers.iter().flat_map(|m| m.iter()) {
+            let UninitializedOptimizerConfig::GEPA(gepa_config) = &optimizer.inner else {
+                continue;
+            };
+
+            match (
+                gepa_config.evaluation_name.as_ref(),
+                gepa_config.evaluator_names.as_ref(),
+            ) {
+                (Some(_), Some(_)) => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` cannot specify both `evaluation_name` and `evaluator_names`"
+                        ),
+                    }));
+                }
+                (None, None) => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` must specify exactly one of `evaluation_name` or `evaluator_names`"
+                        ),
+                    }));
+                }
+                (None, Some(evaluator_names)) if evaluator_names.is_empty() => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` must specify at least one evaluator name"
+                        ),
+                    }));
+                }
+                (Some(_), None) => legacy_gepa_optimizers.push(optimizer_name.as_str()),
+                (None, Some(_)) => {}
+            }
+        }
+
+        if !legacy_gepa_optimizers.is_empty() {
+            deprecation_warning(&format!(
+                "The `evaluation_name` field on GEPA optimizers is deprecated. Use `evaluator_names` instead. Affected optimizers: {}",
+                legacy_gepa_optimizers.join(", ")
+            ));
+        }
+
+        Ok(())
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`

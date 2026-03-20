@@ -14,9 +14,14 @@ export type GEPAConfig = {
    */
   function_name: string;
   /**
-   * Name of the evaluation used to score candidate variants
+   * Deprecated: name of the evaluation used to score candidate variants.
+   * Prefer `evaluator_names` instead.
    */
-  evaluation_name: string;
+  evaluation_name?: string;
+  /**
+   * Names of function-scoped evaluators used to score candidate variants.
+   */
+  evaluator_names?: Array<string>;
   /**
    * Optional list of variant_names to initialize GEPA with.
    * If None, will use all variants defined for the function.

@@ -31,7 +31,8 @@ pub async fn test_gepa_optimization_chat() {
 
     let gepa_config = GEPAConfig {
         function_name: "basic_test".to_string(),
-        evaluation_name: "test_gepa_pinocchio_chat".to_string(),
+        evaluation_name: Some("test_gepa_pinocchio_chat".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some(variant_prefix.clone()),
         batch_size: 4,
@@ -168,7 +169,8 @@ pub async fn test_gepa_optimization_json() {
 
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
-        evaluation_name: "test_gepa_pinocchio_json".to_string(),
+        evaluation_name: Some("test_gepa_pinocchio_json".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some(variant_prefix.clone()),
         batch_size: 4,
