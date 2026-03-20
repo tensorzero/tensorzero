@@ -224,12 +224,7 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return { description: JSON.stringify(payload.arguments, null, 2) };
     }
     case "tool_call_authorization":
-      return {
-        description:
-          payload.status.type === "rejected"
-            ? payload.status.reason
-            : undefined,
-      };
+      return {};
     case "tool_result":
       if (payload.outcome.type === "success") {
         const description =
@@ -291,6 +286,14 @@ function renderEventTitle(event: GatewayEvent) {
               Tool Call Authorization
               <DotSeparator />
               Approved
+              {payload.tool_call_name && (
+                <>
+                  <DotSeparator />
+                  <span className="font-mono font-medium">
+                    {payload.tool_call_name}
+                  </span>
+                </>
+              )}
             </span>
           );
         case "rejected":
@@ -299,6 +302,14 @@ function renderEventTitle(event: GatewayEvent) {
               Tool Call Authorization
               <DotSeparator />
               Rejected
+              {payload.tool_call_name && (
+                <>
+                  <DotSeparator />
+                  <span className="font-mono font-medium">
+                    {payload.tool_call_name}
+                  </span>
+                </>
+              )}
             </span>
           );
         default:
@@ -310,33 +321,41 @@ function renderEventTitle(event: GatewayEvent) {
             "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
-    case "tool_result":
+    case "tool_result": {
+      const toolName = payload.tool_call_name ? (
+        <>
+          <DotSeparator />
+          <span className="font-mono font-medium">
+            {payload.tool_call_name}
+          </span>
+        </>
+      ) : null;
       switch (payload.outcome.type) {
         case "success":
-          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
               <DotSeparator />
               Success
+              {toolName}
             </span>
           );
         case "failure":
-          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
               <DotSeparator />
               Failure
+              {toolName}
             </span>
           );
         case "rejected":
-          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
               <DotSeparator />
               Rejected
+              {toolName}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -353,12 +372,12 @@ function renderEventTitle(event: GatewayEvent) {
             </span>
           );
         case "missing":
-          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
               <DotSeparator />
               Missing Tool
+              {toolName}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -375,12 +394,12 @@ function renderEventTitle(event: GatewayEvent) {
             </span>
           );
         case "unknown":
-          // TODO: need tool name
           return (
             <span className="inline-flex items-center gap-2">
               Tool Result
               <DotSeparator />
               Unknown
+              {toolName}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -406,6 +425,7 @@ function renderEventTitle(event: GatewayEvent) {
             "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
           );
       }
+    }
     case "error":
       // TODO: handle errors better
       return "Error";
@@ -653,6 +673,71 @@ function AutoEvalLabelingAnswersContent({
   );
 }
 
+type ToolResultPayload = Extract<GatewayEventPayload, { type: "tool_result" }>;
+type ToolCallAuthPayload = Extract<
+  GatewayEventPayload,
+  { type: "tool_call_authorization" }
+>;
+
+function ToolCallArgumentsSection({ arguments: args }: { arguments: unknown }) {
+  if (!args) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-fg-muted text-xs font-medium">Arguments</span>
+      <ReadOnlyCodeBlock code={JSON.stringify(args, null, 2)} language="json" />
+    </div>
+  );
+}
+
+function ToolResultContent({
+  payload,
+  description,
+}: {
+  payload: ToolResultPayload;
+  description: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {payload.tool_call_arguments && (
+        <ToolCallArgumentsSection arguments={payload.tool_call_arguments} />
+      )}
+      <div className="flex flex-col gap-1">
+        <span className="text-fg-muted text-xs font-medium">Result</span>
+        <p
+          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ToolCallAuthorizationContent({
+  payload,
+}: {
+  payload: ToolCallAuthPayload;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {payload.tool_call_arguments && (
+        <ToolCallArgumentsSection arguments={payload.tool_call_arguments} />
+      )}
+      {payload.status.type === "rejected" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">
+            Rejection Reason
+          </span>
+          <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+            {payload.status.reason}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
@@ -692,6 +777,16 @@ function EventItemContent({
     return <AutoEvalLabelingAnswersContent examples={event.payload.examples} />;
   }
 
+  if (event.payload.type === "tool_result" && description) {
+    return (
+      <ToolResultContent payload={event.payload} description={description} />
+    );
+  }
+
+  if (event.payload.type === "tool_call_authorization") {
+    return <ToolCallAuthorizationContent payload={event.payload} />;
+  }
+
   if (!description) return null;
 
   switch (event.payload.type) {
@@ -706,6 +801,9 @@ function EventItemContent({
       return <ReadOnlyCodeBlock code={description} language="json" />;
 
     case "tool_result":
+      // Handled above — this branch is for exhaustiveness only
+      return null;
+
     case "error":
       return (
         <p
@@ -717,7 +815,6 @@ function EventItemContent({
       );
 
     case "status_update":
-    case "tool_call_authorization":
     case "visualization":
     case "auto_eval_example_labeling":
     case "auto_eval_behavior_spec":
@@ -772,7 +869,8 @@ function EventItem({
     event.payload.type === "user_questions_answers" ||
     event.payload.type === "auto_eval_example_labeling_answers" ||
     (event.payload.type === "tool_call_authorization" &&
-      event.payload.status.type === "rejected") ||
+      (event.payload.status.type === "rejected" ||
+        event.payload.tool_call_arguments != null)) ||
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
         event.payload.outcome.type === "failure"));
