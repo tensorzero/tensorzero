@@ -1,7 +1,7 @@
 import json
 from typing import Annotated
 
-from ag2 import AssistantAgent, UserProxyAgent
+from ag2 import ConversableAgent
 
 
 def main():
@@ -15,7 +15,7 @@ def main():
         ],
     }
 
-    assistant = AssistantAgent(
+    assistant = ConversableAgent(
         name="assistant",
         llm_config=llm_config,
         system_message=(
@@ -25,8 +25,9 @@ def main():
         ),
     )
 
-    user = UserProxyAgent(
+    user = ConversableAgent(
         name="user",
+        llm_config=False,
         human_input_mode="ALWAYS",
         code_execution_config=False,
     )
