@@ -201,7 +201,7 @@ It plays nicely with the **[OpenAI SDK](https://www.tensorzero.com/docs/gateway/
 **Is TensorZero production-ready?**
 
 Yes.
-TensorZero is used by companies ranging from frontier AI startups to the Fortune 10 and powers ~1% of the global LLM API spend.
+TensorZero is used by companies ranging from frontier AI startups to the Fortune 10 and powers ~1% of the global LLM API spend today.
 
 Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
 
