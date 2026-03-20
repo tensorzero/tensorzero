@@ -343,7 +343,12 @@ async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
 ) -> anyhow::Result<Result<T::Output, ToolFailure>> {
     let heartbeater = step_state.heartbeater.clone();
     let state = &step_state.state;
-    let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client(), &heartbeater);
+    let simple_ctx = SimpleToolContext::new(
+        state.pool(),
+        state.t0_client(),
+        &heartbeater,
+        state.registry(),
+    );
     let idempotency_key = format!(
         "simple_tool:{}:{}",
         params.tool_name, params.tool_call_event_id
