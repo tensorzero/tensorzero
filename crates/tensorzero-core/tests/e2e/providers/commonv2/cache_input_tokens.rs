@@ -389,40 +389,29 @@ async fn get_streaming_usage(
     payload: &Value,
     variant_name: &str,
 ) -> Option<Value> {
-    let response = client
+    let mut event_source = client
         .post(get_gateway_endpoint("/inference"))
         .json(payload)
-        .send()
+        .eventsource()
         .await
-        .unwrap_or_else(|e| panic!("failed to send streaming request for {variant_name}: {e}"));
-
-    assert_eq!(
-        response.status(),
-        StatusCode::OK,
-        "streaming request for {variant_name} should succeed"
-    );
-
-    let mut chunks = response.eventsource().await.unwrap_or_else(|e| {
-        panic!("failed to create eventsource for {variant_name}: {e}");
-    });
+        .unwrap_or_else(|e| panic!("failed to start streaming for {variant_name}: {e}"));
 
     let mut usage: Option<Value> = None;
 
-    while let Some(chunk) = chunks.next().await {
-        let chunk = chunk.unwrap_or_else(|e| {
-            panic!("stream error for provider {variant_name}: {e}");
-        });
-        let Event::Message(chunk) = chunk else {
+    while let Some(event) = event_source.next().await {
+        let event =
+            event.unwrap_or_else(|e| panic!("stream error for provider {variant_name}: {e}"));
+        let Event::Message(message) = event else {
             continue;
         };
-        if chunk.data == "[DONE]" {
+        if message.data == "[DONE]" {
             break;
         }
 
-        let chunk_json: Value = serde_json::from_str(&chunk.data).unwrap_or_else(|e| {
+        let chunk_json: Value = serde_json::from_str(&message.data).unwrap_or_else(|e| {
             panic!(
                 "Failed to parse chunk as JSON for provider {variant_name}: {e}. Data: {}",
-                chunk.data
+                message.data
             )
         });
 
