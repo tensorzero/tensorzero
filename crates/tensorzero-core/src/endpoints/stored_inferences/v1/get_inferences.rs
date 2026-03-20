@@ -3,8 +3,8 @@ use axum::extract::State;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
-use crate::error::{Error, ErrorDetails};
+use crate::db::inferences::{InferenceQueries, ListInferencesParams};
+use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -28,13 +28,6 @@ pub async fn get_inferences(
     database: &impl InferenceQueries,
     request: GetInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    // Validate output_source parameter
-    if request.output_source == InferenceOutputSource::None {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "Invalid output_source: 'none' is not supported for this endpoint. Use 'inference' or 'demonstration'.".to_string(),
-        }));
-    }
-
     // If no IDs are provided, return an empty response.
     if request.ids.is_empty() {
         return Ok(GetInferencesResponse { inferences: vec![] });
@@ -77,13 +70,6 @@ pub async fn list_inferences(
     database: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    // Validate output_source parameter
-    if request.output_source == InferenceOutputSource::None {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "Invalid output_source: 'none' is not supported for this endpoint. Use 'inference' or 'demonstration'.".to_string(),
-        }));
-    }
-
     let params = request.as_list_inferences_params()?;
     let inferences_storage = database.list_inferences(config, &params).await?;
     let inferences = inferences_storage
@@ -486,14 +472,52 @@ mod tests {
         assert_eq!(result.inferences.len(), 0);
     }
 
+    /// Helper to create a test inference with no output (as the DB would return for output_source: none)
+    fn create_test_inference_database_no_output(id: Uuid) -> StoredInferenceDatabase {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: Some(StoredInput {
+                system: None,
+                messages: vec![],
+            }),
+            output: None,
+            dispreferred_outputs: vec![],
+            timestamp: chrono::Utc::now(),
+            episode_id: Uuid::now_v7(),
+            inference_id: id,
+            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+            tags: HashMap::new(),
+            extra_body: Default::default(),
+            inference_params: Default::default(),
+            processing_time_ms: None,
+            ttft_ms: None,
+            snapshot_hash: None,
+        })
+    }
+
     #[tokio::test]
-    async fn test_get_inferences_rejects_output_source_none() {
+    async fn test_get_inferences_output_source_none() {
         let config = create_test_config();
         let id = Uuid::now_v7();
+        let inference = create_test_inference_database_no_output(id);
 
         let mut mock_clickhouse = MockInferenceQueries::new();
-        // Should NOT call list_inferences when output_source is None
-        mock_clickhouse.expect_list_inferences().times(0);
+        mock_clickhouse
+            .expect_list_inferences()
+            .withf(|_, params| {
+                assert_eq!(
+                    params.output_source,
+                    InferenceOutputSource::None,
+                    "Should pass None output_source to DB"
+                );
+                true
+            })
+            .times(1)
+            .returning(move |_, _| {
+                let inf = inference.clone();
+                Box::pin(async move { Ok(vec![inf]) })
+            });
 
         let request = GetInferencesRequest {
             ids: vec![id],
@@ -501,44 +525,67 @@ mod tests {
             output_source: InferenceOutputSource::None,
         };
 
-        let result = get_inferences(&config, &mock_clickhouse, request).await;
+        let result = get_inferences(&config, &mock_clickhouse, request)
+            .await
+            .expect("output_source: None should succeed");
 
+        assert_eq!(result.inferences.len(), 1);
+        let StoredInference::Chat(ref inference) = result.inferences[0] else {
+            panic!("Expected Chat inference");
+        };
         assert!(
-            result.is_err(),
-            "Expected error for output_source: None, but got Ok"
+            inference.output.is_none(),
+            "Output should be None when output_source is 'none'"
         );
-        let error = result.unwrap_err();
-        let error_message = error.to_string().to_lowercase();
         assert!(
-            error_message.contains("none"),
-            "Error message should mention 'none': {error_message}"
+            inference.dispreferred_outputs.is_empty(),
+            "Dispreferred outputs should be empty when output_source is 'none'"
         );
     }
 
     #[tokio::test]
-    async fn test_list_inferences_rejects_output_source_none() {
+    async fn test_list_inferences_output_source_none() {
         let config = create_test_config();
+        let id = Uuid::now_v7();
+        let inference = create_test_inference_database_no_output(id);
 
         let mut mock_clickhouse = MockInferenceQueries::new();
-        // Should NOT call list_inferences when output_source is None
-        mock_clickhouse.expect_list_inferences().times(0);
+        mock_clickhouse
+            .expect_list_inferences()
+            .withf(|_, params| {
+                assert_eq!(
+                    params.output_source,
+                    InferenceOutputSource::None,
+                    "Should pass None output_source to DB"
+                );
+                true
+            })
+            .times(1)
+            .returning(move |_, _| {
+                let inf = inference.clone();
+                Box::pin(async move { Ok(vec![inf]) })
+            });
 
         let request = ListInferencesRequest {
             output_source: InferenceOutputSource::None,
             ..Default::default()
         };
 
-        let result = list_inferences(&config, &mock_clickhouse, request).await;
+        let result = list_inferences(&config, &mock_clickhouse, request)
+            .await
+            .expect("output_source: None should succeed");
 
+        assert_eq!(result.inferences.len(), 1);
+        let StoredInference::Chat(ref inference) = result.inferences[0] else {
+            panic!("Expected Chat inference");
+        };
         assert!(
-            result.is_err(),
-            "Expected error for output_source: None, but got Ok"
+            inference.output.is_none(),
+            "Output should be None when output_source is 'none'"
         );
-        let error = result.unwrap_err();
-        let error_message = error.to_string().to_lowercase();
         assert!(
-            error_message.contains("none"),
-            "Error message should mention 'none': {error_message}"
+            inference.dispreferred_outputs.is_empty(),
+            "Dispreferred outputs should be empty when output_source is 'none'"
         );
     }
 }

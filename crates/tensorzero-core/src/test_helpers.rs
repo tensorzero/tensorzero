@@ -8,17 +8,37 @@ use crate::db::delegating_connection::PrimaryDatastore;
 /// Returns the glob path for the E2E test configuration files.
 ///
 /// For ClickHouse primary: matches `tensorzero.*.toml` only.
-/// For Postgres primary: also includes `pg.*.toml` which sets `observability.backend = "postgres"`.
+/// For Postgres primary: also includes `postgres.*.toml` which sets `observability.backend = "postgres"`.
+///
+/// If `TENSORZERO_INTERNAL_TEST_CACHE_BACKEND` is set to `"clickhouse"` or `"valkey"`,
+/// the corresponding `cache-{backend}.*.toml` config override is included in the glob.
 pub fn get_e2e_config_path_for_datastore(primary: PrimaryDatastore) -> PathBuf {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    match primary {
-        PrimaryDatastore::ClickHouse | PrimaryDatastore::Disabled => {
-            config_path.push("tests/e2e/config/tensorzero.*.toml");
+
+    let cache_prefix = std::env::var("TENSORZERO_INTERNAL_TEST_CACHE_BACKEND")
+        .ok()
+        .and_then(|v| match v.as_str() {
+            "clickhouse" => Some("cache-clickhouse"),
+            "valkey" => Some("cache-valkey"),
+            _ => None,
+        });
+
+    let glob = match (primary, cache_prefix) {
+        (PrimaryDatastore::ClickHouse | PrimaryDatastore::Disabled, None) => {
+            "tests/e2e/config/tensorzero.*.toml".to_string()
         }
-        PrimaryDatastore::Postgres => {
-            config_path.push("tests/e2e/config/{tensorzero,postgres}.*.toml");
+        (PrimaryDatastore::ClickHouse | PrimaryDatastore::Disabled, Some(cache)) => {
+            format!("tests/e2e/config/{{tensorzero,{cache}}}.*.toml")
         }
-    }
+        (PrimaryDatastore::Postgres, None) => {
+            "tests/e2e/config/{tensorzero,postgres}.*.toml".to_string()
+        }
+        (PrimaryDatastore::Postgres, Some(cache)) => {
+            format!("tests/e2e/config/{{tensorzero,postgres,{cache}}}.*.toml")
+        }
+    };
+
+    config_path.push(glob);
     config_path
 }
 

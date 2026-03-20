@@ -889,9 +889,8 @@ fn build_chat_inferences_query(
 
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
-        InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "io.output, NULL::jsonb as dispreferred_output"
-        }
+        InferenceOutputSource::None => "NULL::jsonb as output, NULL::jsonb as dispreferred_output",
+        InferenceOutputSource::Inference => "io.output, NULL::jsonb as dispreferred_output",
         InferenceOutputSource::Demonstration => {
             "demo_f.value AS output, io.output as dispreferred_output"
         }
@@ -1035,9 +1034,8 @@ fn build_json_inferences_query(
 
     // Build the SELECT clause based on output_source
     let output_select = match params.output_source {
-        InferenceOutputSource::None | InferenceOutputSource::Inference => {
-            "io.output, NULL::jsonb as dispreferred_output"
-        }
+        InferenceOutputSource::None => "NULL::jsonb as output, NULL::jsonb as dispreferred_output",
+        InferenceOutputSource::Inference => "io.output, NULL::jsonb as dispreferred_output",
         InferenceOutputSource::Demonstration => {
             "demo_f.value AS output, io.output as dispreferred_output"
         }
@@ -1368,7 +1366,11 @@ fn build_inferences_union_query(
 
     // Build the SELECT clause based on output_source
     let (chat_output_select, json_output_select) = match params.output_source {
-        InferenceOutputSource::None | InferenceOutputSource::Inference => (
+        InferenceOutputSource::None => (
+            "NULL::jsonb as output, NULL::jsonb as dispreferred_output",
+            "NULL::jsonb as output, NULL::jsonb as dispreferred_output",
+        ),
+        InferenceOutputSource::Inference => (
             "io.output, NULL::jsonb as dispreferred_output",
             "io.output, NULL::jsonb as dispreferred_output",
         ),

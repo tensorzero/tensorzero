@@ -1,0 +1,55 @@
+suite: snapshot tests for full rendered output
+templates:
+  - templates/gateway.yaml
+  - templates/gateway-ingress.yaml
+  - templates/gateway-service.yaml
+  - templates/ui.yaml
+  - templates/ui-ingress.yaml
+  - templates/ui-service.yaml
+  - templates/pvc.yaml
+  - templates/configmap.yaml
+  - templates/gateway-servicemonitor.yaml
+tests:
+  - it: should match snapshot with default values
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with all features enabled
+    set:
+      gateway.replicaCount: 2
+      gateway.ingress.enabled: true
+      gateway.ingress.className: nginx
+      gateway.ingress.annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      gateway.ingress.hosts:
+        - host: gateway.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      gateway.serviceAccountName: gateway-sa
+      persistence.enabled: true
+      persistence.size: 50Gi
+      persistence.storageClass: fast-ssd
+      persistence.mountPath: /app/storage
+      ui.deploy: true
+      ui.replicaCount: 2
+      ui.ingress.enabled: true
+      ui.ingress.className: nginx
+      ui.ingress.hosts:
+        - host: ui.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+      ui.serviceAccountName: ui-sa
+      monitoring.serviceMonitor.enabled: true
+    asserts:
+      - matchSnapshot: {}
+
+  - it: should match snapshot with minimal config (no UI, no ingress, no persistence)
+    set:
+      gateway.ingress.enabled: false
+      ui.deploy: false
+      persistence.enabled: false
+      monitoring.serviceMonitor.enabled: false
+    asserts:
+      - matchSnapshot: {}

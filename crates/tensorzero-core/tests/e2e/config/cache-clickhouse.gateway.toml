@@ -1,0 +1,6 @@
+# Override file for tests that force ClickHouse as the inference cache backend.
+# Include this alongside the tensorzero.*.toml files via a glob like:
+#   {tensorzero,cache-clickhouse}.*.toml
+
+[gateway.cache]
+backend = "clickhouse"
