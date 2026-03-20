@@ -198,30 +198,22 @@ pub struct EventPayloadStatusUpdate {
 }
 
 /// Tool result payload for an event.
+///
+/// Includes enriched fields from the originating tool call and authorization events,
+/// making this payload self-contained for UI rendering.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
-    /// Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
-    /// tool results may not have a corresponding authorization event.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_authorization_source: Option<ToolCallDecisionSource>,
-    /// Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_authorization_status: Option<ToolCallAuthorizationStatus>,
+    pub tool_call_arguments: serde_json::Value,
+    /// Authorization source (Ui/Automatic/Whitelist).
+    pub tool_call_authorization_source: ToolCallDecisionSource,
+    /// Authorization status (Approved/Rejected/NotAvailable).
+    pub tool_call_authorization_status: ToolCallAuthorizationStatus,
 }
 
 /// Internal event payload type - consumers should use `GatewayEventPayload` instead.
@@ -528,15 +520,9 @@ pub struct EventPayloadToolCallAuthorization {
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 /// Minimal input payload for creating a tool call authorization event.
@@ -558,15 +544,9 @@ pub struct GatewayEventPayloadToolCallAuthorization {
     pub tool_call_event_id: Uuid,
     pub status: GatewayToolCallAuthorizationStatus,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallAuthorization {

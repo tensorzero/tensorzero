@@ -970,6 +970,46 @@ export default function EventStream({
     return map;
   }, [events]);
 
+  // Set of event IDs that are superseded by a later "fat" event containing
+  // all the same information. We hide these to avoid redundancy in the stream.
+  //
+  // Sequences collapsed:
+  // - tool_call + tool_call_authorization → hidden when tool_result exists
+  //   (tool_result contains tool_call_name, arguments, and auth status)
+  // - tool_call → hidden when tool_call_authorization exists (but no result yet)
+  // - auto_eval_example_labeling → hidden when answers exist
+  // - auto_eval_behavior_spec → hidden when answers exist
+  const supersededEventIds = useMemo(() => {
+    const ids = new Set<string>();
+    // Track which tool_call_event_ids have an authorization event
+    const authByToolCallId = new Map<string, string>(); // tool_call_event_id → auth event's tool_call_event_id
+    for (const event of events) {
+      const { payload } = event;
+      if (payload.type === "tool_call_authorization") {
+        authByToolCallId.set(payload.tool_call_event_id, event.id);
+      }
+    }
+    for (const event of events) {
+      const { payload } = event;
+      if (payload.type === "tool_result") {
+        // tool_result supersedes both the tool_call and tool_call_authorization
+        ids.add(payload.tool_call_event_id);
+        const authEventId = authByToolCallId.get(payload.tool_call_event_id);
+        if (authEventId) {
+          ids.add(authEventId);
+        }
+      } else if (payload.type === "tool_call_authorization") {
+        // tool_call_authorization supersedes the tool_call
+        ids.add(payload.tool_call_event_id);
+      } else if (payload.type === "auto_eval_example_labeling_answers") {
+        ids.add(payload.auto_eval_example_labeling_event_id);
+      } else if (payload.type === "auto_eval_behavior_spec_answers") {
+        ids.add(payload.auto_eval_behavior_spec_event_id);
+      }
+    }
+    return ids;
+  }, [events]);
+
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
@@ -998,18 +1038,20 @@ export default function EventStream({
         <EventSkeletons count={3} />
       )}
 
-      {events.map((event) => (
-        <EventErrorBoundary key={event.id} eventId={event.id}>
-          <EventItem
-            event={event}
-            questionsMap={questionsMap}
-            isPendingToolCall={pendingToolCallIds?.has(event.id)}
-            isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
-            configApplyEnabled={configApplyEnabled}
-            sessionId={sessionId}
-          />
-        </EventErrorBoundary>
-      ))}
+      {events
+        .filter((event) => !supersededEventIds.has(event.id))
+        .map((event) => (
+          <EventErrorBoundary key={event.id} eventId={event.id}>
+            <EventItem
+              event={event}
+              questionsMap={questionsMap}
+              isPendingToolCall={pendingToolCallIds?.has(event.id)}
+              isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
+              configApplyEnabled={configApplyEnabled}
+              sessionId={sessionId}
+            />
+          </EventErrorBoundary>
+        ))}
 
       {/* Optimistic messages at the end */}
       {optimisticMessages.map((message) => (
