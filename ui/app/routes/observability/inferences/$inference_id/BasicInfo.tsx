@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { Await } from "react-router";
 import type { StoredInference } from "~/types/tensorzero";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import { useFunctionConfig } from "~/context/config";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   BasicInfoLayout,
@@ -18,8 +17,10 @@ import {
   InputIcon,
   Output,
   Cached,
+  Cost,
 } from "~/components/icons/Icons";
 import { toFunctionUrl, toVariantUrl, toEpisodeUrl } from "~/utils/urls";
+import { formatCost } from "~/utils/cost";
 import { formatDateWithSeconds } from "~/utils/date";
 import { TimestampTooltip } from "~/components/ui/TimestampTooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
@@ -28,12 +29,14 @@ import type { ModelInferencesData } from "./inference-data.server";
 
 interface BasicInfoStreamingProps {
   inference: StoredInference;
+  variantType: string;
   promise: Promise<ModelInferencesData>;
   locationKey: string;
 }
 
 export function BasicInfoStreaming({
   inference,
+  variantType,
   promise,
   locationKey,
 }: BasicInfoStreamingProps) {
@@ -46,7 +49,11 @@ export function BasicInfoStreaming({
         }
       >
         {(modelInferences) => (
-          <BasicInfo inference={inference} modelInferences={modelInferences} />
+          <BasicInfo
+            inference={inference}
+            variantType={variantType}
+            modelInferences={modelInferences}
+          />
         )}
       </Await>
     </Suspense>
@@ -55,17 +62,17 @@ export function BasicInfoStreaming({
 
 interface BasicInfoProps {
   inference: StoredInference;
+  variantType: string;
   modelInferences?: ParsedModelInferenceRow[];
 }
 
-export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
+export function BasicInfo({
+  inference,
+  variantType,
+  modelInferences = [],
+}: BasicInfoProps) {
+  const snapshotHash = inference.snapshot_hash;
   const inferenceUsage = getTotalInferenceUsage(modelInferences);
-  const functionConfig = useFunctionConfig(inference.function_name);
-  const variantType =
-    functionConfig?.variants[inference.variant_name]?.inner.type ??
-    (inference.function_name === "tensorzero::default"
-      ? "chat_completion"
-      : "unknown");
 
   const functionIconConfig = getFunctionTypeIcon(inference.type);
   const hasCachedInferences = modelInferences.some((mi) => mi.cached);
@@ -87,7 +94,7 @@ export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
             secondaryLabel={`· ${inference.type}`}
-            link={toFunctionUrl(inference.function_name)}
+            link={toFunctionUrl(inference.function_name, snapshotHash)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -99,7 +106,11 @@ export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
           <Chip
             label={inference.variant_name}
             secondaryLabel={`· ${variantType}`}
-            link={toVariantUrl(inference.function_name, inference.variant_name)}
+            link={toVariantUrl(
+              inference.function_name,
+              inference.variant_name,
+              snapshotHash,
+            )}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -129,6 +140,13 @@ export function BasicInfo({ inference, modelInferences = [] }: BasicInfoProps) {
             label={`${inferenceUsage?.output_tokens ?? ""} tok`}
             tooltip="Output Tokens"
           />
+          {inferenceUsage?.cost != null && (
+            <Chip
+              icon={<Cost className="text-fg-tertiary" />}
+              label={formatCost(inferenceUsage.cost)}
+              tooltip="Cost"
+            />
+          )}
           <Chip
             icon={<Timer className="text-fg-tertiary" />}
             label={`${inference.processing_time_ms} ms`}

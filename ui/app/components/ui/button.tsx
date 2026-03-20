@@ -53,7 +53,8 @@ const ButtonContext = React.createContext<ButtonContextValue | null>(null);
 ButtonContext.displayName = "ButtonContext";
 
 export interface ButtonProps
-  extends React.ComponentPropsWithRef<"button">,
+  extends
+    React.ComponentPropsWithRef<"button">,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   /**
@@ -126,7 +127,8 @@ const buttonIconVariants = cva(null, {
 });
 
 interface ButtonIconProps
-  extends Omit<IconProps, "size">,
+  extends
+    Omit<IconProps, "size">,
     Omit<VariantProps<typeof buttonIconVariants>, "size"> {
   as: React.ElementType<IconProps>;
 }

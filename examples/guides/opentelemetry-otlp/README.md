@@ -11,25 +11,23 @@ Here, we'll export traces to a local instance of Jaeger.
 1. Install Docker.
 2. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 3. Set the `OPENAI_API_KEY` environment variable.
-4. Launch the TensorZero Gateway, ClickHouse, and Jaeger: `docker compose up`
+4. Launch the TensorZero Gateway, Postgres, and Jaeger: `docker compose up`
 
 ### Running the Example
 
 First, let's make an inference request to the gateway.
 
 ```bash
-curl -X POST "http://localhost:3000/inference" \
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "openai::gpt-4o-mini",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ]
   }'
 ```
 

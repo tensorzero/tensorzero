@@ -1,0 +1,15 @@
+[package]
+name = "tensorzero-types-providers"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
+
+[lints]
+workspace = true

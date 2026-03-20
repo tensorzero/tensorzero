@@ -26,7 +26,6 @@ import { TimeGranularitySelector } from "./TimeGranularitySelector";
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
 import type {
@@ -121,20 +120,8 @@ export function FeedbackMeansTimeseries({
   const meanContainerConfig =
     Object.keys(meanChartConfig).length > 0 ? meanChartConfig : chartConfig;
 
-  const meanLegendPayload =
-    variantsWithMeanData.length > 0
-      ? variantsWithMeanData.map((variantName) => ({
-          value: variantName,
-          type: "line" as const,
-          color: chartConfig[variantName].color,
-          dataKey: variantName,
-        }))
-      : variantNames.map((variantName) => ({
-          value: variantName,
-          type: "line" as const,
-          color: chartConfig[variantName].color,
-          dataKey: variantName,
-        }));
+  const legendItems =
+    variantsWithMeanData.length > 0 ? variantsWithMeanData : variantNames;
 
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) =>
@@ -171,7 +158,7 @@ export function FeedbackMeansTimeseries({
         />
       </CardHeader>
       <CardContent>
-        <ChartContainer config={meanContainerConfig} className="h-80 w-full">
+        <ChartContainer config={meanContainerConfig}>
           <ComposedChart accessibilityLayer data={meanChartData}>
             <CartesianGrid vertical={false} />
             <XAxis
@@ -304,10 +291,6 @@ export function FeedbackMeansTimeseries({
                 );
               }}
             />
-            <ChartLegend
-              payload={meanLegendPayload}
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
             {variantsWithMeanData.flatMap((variantName) => {
               const color = chartConfig[variantName].color;
               const meanKey = variantName;
@@ -374,6 +357,10 @@ export function FeedbackMeansTimeseries({
             })}
           </ComposedChart>
         </ChartContainer>
+        <ChartLegend
+          items={legendItems}
+          colors={legendItems.map((name) => chartConfig[name].color)}
+        />
       </CardContent>
     </Card>
   );

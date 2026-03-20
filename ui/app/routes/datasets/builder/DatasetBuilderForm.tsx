@@ -255,6 +255,7 @@ export function DatasetBuilderForm() {
                   <InferenceFilterBuilder
                     inferenceFilter={inferenceFilter}
                     setInferenceFilter={setInferenceFilter}
+                    functionName={functionName}
                   />
                 </div>
               </div>

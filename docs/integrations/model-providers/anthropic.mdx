@@ -19,21 +19,19 @@ type = "chat_completion"
 model = "anthropic::claude-haiku-4-5"
 ```
 
-Additionally, you can set `model_name` in the inference request to use a specific Anthropic model, without having to configure a function and variant in TensorZero.
+Additionally, you can set the `model` parameter in the [OpenAI-compatible inference endpoint](/gateway/api-reference/inference-openai-compatible) to use a specific Anthropic model, without having to configure a function and variant in TensorZero.
 
 ```bash {4}
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "anthropic::claude-haiku-4-5",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::model_name::anthropic::claude-haiku-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -101,7 +99,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY must be set.}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -115,18 +113,16 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```
 
@@ -136,21 +132,22 @@ You can enable [Anthropic's prompt caching capability](https://platform.claude.c
 
 For example, to enable caching on your system prompt:
 
-```bash {14-19}
-curl -X POST "http://localhost:3000/inference" \
+```bash {15-20}
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "anthropic::claude-haiku-4-5",
-    "input": {
-      "system": "... very long prompt ...",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    },
-    "extra_body": [
+    "model": "tensorzero::model_name::anthropic::claude-haiku-4-5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "... very long prompt ..."
+      },
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ],
+    "tensorzero::extra_body": [
         {
             "pointer": "/system/0/cache_control",
             "value": {"type": "ephemeral"}
@@ -161,21 +158,22 @@ curl -X POST "http://localhost:3000/inference" \
 
 Similarly, to enable caching on a message:
 
-```bash {16}
-curl -X POST "http://localhost:3000/inference" \
+```bash {17}
+curl -X POST "http://localhost:3000/openai/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "anthropic::claude-haiku-4-5",
-    "input": {
-      "system": "... very long prompt ...",
-      "messages": [
-        {
-          "role": "user",
-          "content": "Write a haiku about TensorZero."
-        }
-      ]
-    },
-    "extra_body": [
+    "model": "tensorzero::model_name::anthropic::claude-haiku-4-5",
+    "messages": [
+      {
+        "role": "system",
+        "content": "... very long prompt ..."
+      },
+      {
+        "role": "user",
+        "content": "Write a haiku about TensorZero."
+      }
+    ],
+    "tensorzero::extra_body": [
         {
             "pointer": "/messages/0/content/0/cache_control",
             "value": {"type": "ephemeral"}
@@ -186,17 +184,70 @@ curl -X POST "http://localhost:3000/inference" \
 
 <Tip>
 
-You can specify `extra_body` in the [configuration](/gateway/configuration-reference) or at [inference time](/gateway/api-reference/inference).
-If you're using the OpenAI-Compatible Inference API, use `tensorzero::extra_body` instead.
+You can also specify `extra_body` in the [configuration](/gateway/configuration-reference).
+See the [API Reference](/gateway/api-reference/inference-openai-compatible) for more information.
 
 </Tip>
 
 <Tip>
 
-You can retrieve prompt caching usage information with `include_raw_usage`.
-See the [API Reference](/gateway/api-reference/inference) for more information.
+You can retrieve prompt caching usage information with `tensorzero::include_raw_usage`.
+See the [API Reference](/gateway/api-reference/inference-openai-compatible) for more information.
 
 </Tip>
+
+## Enable Anthropic's extended thinking
+
+TensorZero supports two modes of extended thinking for Anthropic models:
+
+### Adaptive thinking (`reasoning_effort`)
+
+Use `reasoning_effort` to enable adaptive thinking, where the model decides how much to think based on the task complexity.
+
+```toml title="config/tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "claude_sonnet_4_6"
+reasoning_effort = "low"  # Accepted values depend on the Anthropic API (e.g. "low", "medium", "high")
+```
+
+You can also set `reasoning_effort` at inference time:
+
+```bash
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ],
+    "tensorzero::params": {
+      "chat_completion": {
+        "reasoning_effort": "low"
+      }
+    }
+  }'
+```
+
+### Manual thinking (`thinking_budget_tokens`)
+
+Use `thinking_budget_tokens` to set an explicit token budget for thinking.
+
+```toml title="config/tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "claude_sonnet_4_6"
+thinking_budget_tokens = 10000
+```
+
+<Warning>
+
+`reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Using both will result in an error.
+
+</Warning>
 
 ## Use Anthropic models on third-party platforms
 
@@ -238,6 +289,21 @@ project_id = "YOUR-PROJECT-ID"  # TODO: set your GCP project ID
 ```
 
 Read more about the [GCP Vertex AI Anthropic model provider](/integrations/model-providers/gcp-vertex-ai-anthropic).
+
+## Extended Thinking
+
+TensorZero supports Anthropic's [Extended Thinking](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) feature.
+You can enable it by setting `thinking_budget_tokens` on your variant:
+
+```toml title="tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+thinking_budget_tokens = 10000
+```
+
+The model's reasoning will be returned as `thought` content blocks in the response.
+For multi-turn reasoning conversations, pass the `signature` field from the response's `thought` blocks back in subsequent requests.
 
 ## Other Features
 

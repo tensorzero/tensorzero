@@ -41,10 +41,17 @@ var (
 	ctx     context.Context
 )
 
+func gatewayURL() string {
+	if url := os.Getenv("TENSORZERO_GATEWAY_URL"); url != "" {
+		return url
+	}
+	return "http://localhost:3000"
+}
+
 func TestMain(m *testing.M) {
 	ctx = context.Background()
 	client = openai.NewClient(
-		option.WithBaseURL("http://127.0.0.1:3000/openai/v1"),
+		option.WithBaseURL(gatewayURL()+"/openai/v1"),
 		option.WithAPIKey("donotuse"),
 	)
 	// Run the tests and exit with the result code
@@ -98,10 +105,10 @@ func overrideUserMessage(t *testing.T, data map[string]interface{}) openai.ChatC
 	return param.Override[openai.ChatCompletionUserMessageParam](json.RawMessage(jsonData))
 }
 
-func sendRequestTzGateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
+func sendRequestT0Gateway(t *testing.T, body map[string]interface{}) (map[string]interface{}, error) {
 	// Send a request to the TensorZero gateway
 	t.Helper()
-	url := "http://127.0.0.1:3000/openai/v1/chat/completions"
+	url := gatewayURL() + "/openai/v1/chat/completions"
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
@@ -399,12 +406,17 @@ func TestBasicInference(t *testing.T) {
 			openai.UserMessage("Hello"),
 		}
 
-		// First request (non-cached)
+		// First request (write_only to populate cache)
 		req := &openai.ChatCompletionNewParams{
 			Model:       "tensorzero::function_name::basic_test",
 			Messages:    messages,
 			Temperature: openai.Float(0.4),
 		}
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		resp, err := client.Chat.Completions.New(ctx, *req)
 		require.NoError(t, err, "Unexpected error while getting completion")
@@ -924,7 +936,7 @@ func TestStreamingInference(t *testing.T) {
 			" pizza.",
 		}
 
-		// First request without cache to populate the cache
+		// First request with write_only cache to populate the cache
 		req := &openai.ChatCompletionNewParams{
 			Model:    "tensorzero::function_name::basic_test",
 			Messages: messages,
@@ -934,6 +946,11 @@ func TestStreamingInference(t *testing.T) {
 			},
 		}
 		addEpisodeIDToRequest(t, req, episodeID)
+		req.SetExtraFields(map[string]any{
+			"tensorzero::cache_options": map[string]any{
+				"enabled": "write_only",
+			},
+		})
 
 		stream := client.Chat.Completions.NewStreaming(ctx, *req)
 		require.NotNil(t, stream, "Streaming response should not be nil")
@@ -1648,7 +1665,7 @@ func TestToolCallingInference(t *testing.T) {
 		}
 
 		// Initial request
-		firstResponse, err := sendRequestTzGateway(t, firstRequestBody)
+		firstResponse, err := sendRequestT0Gateway(t, firstRequestBody)
 		require.NoError(t, err, "First API request failed")
 
 		// Validate the assistant's response
@@ -1692,7 +1709,7 @@ func TestToolCallingInference(t *testing.T) {
 			"tensorzero::variant_name": "openai",
 		}
 
-		secondResponse, err := sendRequestTzGateway(t, secondRequestBody)
+		secondResponse, err := sendRequestT0Gateway(t, secondRequestBody)
 		require.NoError(t, err, "Second request failed")
 
 		finalAssistantMessage := secondResponse["choices"].([]interface{})[0].(map[string]interface{})["message"].(map[string]interface{})
@@ -1823,7 +1840,7 @@ func TestImageInference(t *testing.T) {
 		episodeID, _ := uuid.NewV7()
 
 		// Read image and convert to base64
-		imagePath := "../../../tensorzero-core/tests/e2e/providers/ferris.png"
+		imagePath := "../../../crates/tensorzero-core/tests/e2e/providers/ferris.png"
 		imageData, err := os.ReadFile(imagePath)
 		require.NoError(t, err, "Failed to read image file")
 		imageBase64 := base64.StdEncoding.EncodeToString(imageData)

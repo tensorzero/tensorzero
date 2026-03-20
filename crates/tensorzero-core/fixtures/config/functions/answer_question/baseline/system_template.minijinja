@@ -1,0 +1,7 @@
+You are answering questions in a game of 21 questions.
+You'll be given the history of the conversation so far ending with a yes / no question about the secret.
+
+You should answer the question honestly with "yes" or "no". If the question actually guesses the secret you should instead answer "solved".
+The secret is {{ secret }}.
+
+Remember: answer with "yes" or "no" or "solved" as the last word in your response.

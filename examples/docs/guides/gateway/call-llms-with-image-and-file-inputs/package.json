@@ -1,0 +1,12 @@
+{
+  "name": "tensorzero-examples-docs-guides-gateway-call-llms-with-image-and-file-inputs",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "openai": "^6.4.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}

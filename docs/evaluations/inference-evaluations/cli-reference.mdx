@@ -19,13 +19,13 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       # ... and any other relevant API credentials ...
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
 ```
 
@@ -39,7 +39,7 @@ docker compose run --rm evaluations \
 
 <Accordion title="Building from Source">
 
-You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/evaluations) for instructions.
+You can build the TensorZero Evaluations CLI from source if necessary. See our [GitHub repository](https://github.com/tensorzero/tensorzero/tree/main/crates/evaluations) for instructions.
 
 </Accordion>
 
@@ -52,13 +52,6 @@ Soon, you'll be able to customize this behavior.
 
 ### Environment Variables
 
-#### `TENSORZERO_CLICKHOUSE_URL`
-
-- **Example:** `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/database_name`
-- **Required:** yes
-
-This environment variable specifies the URL of your ClickHouse database.
-
 #### Model Provider Credentials
 
 - **Example:** `OPENAI_API_KEY=sk-...`
@@ -68,6 +61,20 @@ If you're using an external TensorZero Gateway (see `--gateway-url` flag below),
 
 If you're using a built-in gateway (no `--gateway-url` flag), you must provide same credentials the gateway would use.
 See [Integrations](/integrations/model-providers) for more information.
+
+#### `TENSORZERO_CLICKHOUSE_URL`
+
+- **Example:** `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/database_name`
+- **Required:** either ClickHouse or Postgres must be available
+
+This environment variable specifies the URL of your ClickHouse database.
+
+#### `TENSORZERO_POSTGRES_URL`
+
+- **Example:** `TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/mydatabase"`
+- **Required:** either ClickHouse or Postgres must be available
+
+This environment variable specifies the URL of your Postgres database.
 
 ### CLI Flags
 
@@ -84,6 +91,13 @@ Each evaluator's precision threshold should be a positive number.
 
 If adaptive stopping is enabled for all evaluators, then the evaluation will stop once all evaluators have met their targets or all datapoints have been evaluated.
 
+#### `--concurrency N` (`-c`)
+
+- **Example:** `--concurrency 5`
+- **Required:** no (default: `1`)
+
+This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
+
 #### `--config-file PATH`
 
 - **Example:** `--config-file /path/to/tensorzero.toml`
@@ -92,12 +106,21 @@ If adaptive stopping is enabled for all evaluators, then the evaluation will sto
 This flag specifies the path to the TensorZero configuration file.
 You should use the same configuration file for your entire project.
 
-#### `--concurrency N` (`-c`)
+#### `--cutoffs EVALUATOR=CUTOFF[,...]`
 
-- **Example:** `--concurrency 5`
-- **Required:** no (default: `1`)
+- **Example:** `--cutoffs exact_match=0.95,llm_judge=0.8`
+- **Required:** no (default: none)
 
-This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
+Sets a per-evaluator threshold at which the test is passing.
+
+This can be useful for applications where the evaluations are run as an automated test.
+If the average value of this evaluator does not meet the cutoff, the evaluations binary will return a nonzero status code.
+
+- For evaluators with `optimize = "max"`, runs fail when `mean < cutoff`.
+- For evaluators with `optimize = "min"`, runs fail when `mean > cutoff`.
+
+The `cutoff` field in evaluator config is deprecated. Prefer using this CLI `--cutoffs` flag instead.
+If both evaluator-config `cutoff` and CLI `--cutoffs` are provided for the same evaluator, the CLI value is used.
 
 #### `--datapoint-ids ID[,ID,...]`
 
@@ -120,7 +143,7 @@ Use this flag when you want to evaluate a specific subset of datapoints rather t
 - **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
 
 This flag specifies the dataset to use for evaluation.
-The dataset should be stored in your ClickHouse database.
+The dataset should be stored in your database.
 
 <Note>
   This flag is mutually exclusive with `--datapoint-ids`. You must provide
@@ -188,12 +211,12 @@ The variant name should be present in your TensorZero configuration file.
 
 The evaluations process exits with a status code of `0` if the evaluation was successful, and a status code of `1` if the evaluation failed.
 
-If you configure a `cutoff` for any of your evaluators, the evaluation will fail if the average score for any evaluator is below its cutoff.
+If you pass `--cutoffs`, the evaluation will fail if any evaluator violates its cutoff threshold.
 
 <Tip>
 
 The exit status code is helpful for integrating TensorZero Evaluations into your CI/CD pipeline.
 
-You can define sanity checks for your variants with `cutoff` to detect performance regressions early before shipping to production.
+You can define sanity checks for your variants with `--cutoffs` to detect performance regressions early before shipping to production.
 
 </Tip>

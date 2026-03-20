@@ -2,9 +2,9 @@ services:
   clickhouse:
     image: clickhouse:lts
     environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_PASSWORD=chpassword
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     ports:
       - "18123:8123" # ClickHouse HTTP port exposed to local machine on 18123
       - "19000:9000" # ClickHouse native port exposed to local machine on 19000
@@ -24,15 +24,15 @@ services:
     image: tensorzero/gateway
     build:
       context: ../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     command: --config-file /app/config/tensorzero.toml
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+      GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
     env_file:
       - ${ENV_FILE:-.env}
     extra_hosts:
@@ -51,15 +51,12 @@ services:
   ui:
     image: tensorzero/ui
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
     env_file:
       - ${ENV_FILE:-.env}
     ports:
       - "14000:4000" # UI port exposed to local machine on 14000
     depends_on:
-      clickhouse:
-        condition: service_healthy
       gateway:
         condition: service_healthy
 
@@ -70,8 +67,8 @@ services:
       - ./nginx/entrypoint.sh:/entrypoint.sh
       - ./nginx/modify_body.lua:/modify_body.lua
     environment:
-      - API_TOKEN=${API_TOKEN}
-      - USER=${USER}
+      API_TOKEN: ${API_TOKEN}
+      USER: ${USER}
     env_file:
       - ${ENV_FILE:-.env}
     command: /bin/sh -c "/entrypoint.sh openresty -g 'daemon off;'"

@@ -4,13 +4,14 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
   displayInputSchema,
-  displayModelInferenceInputMessageSchema,
-  modelInferenceOutputContentBlockSchema,
   ZodJsonValueSchema,
 } from "./common";
+import type { ZodModelInferenceOutputContentBlock } from "./common";
 import type {
+  InputMessage,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  ModelInference,
   Tool,
 } from "~/types/tensorzero";
 
@@ -184,29 +185,13 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-// TODO(shuyangli): sort out file loading and delete these Zod schemas.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const parsedModelInferenceRowSchema = z.object({
-  id: z.string().uuid(),
-  inference_id: z.string().uuid(),
-  raw_request: z.string(),
-  raw_response: z.string(),
-  model_name: z.string(),
-  model_provider_name: z.string(),
-  input_tokens: z.number().optional(),
-  output_tokens: z.number().optional(),
-  response_time_ms: z.number().nullable(),
-  ttft_ms: z.number().nullable(),
-  timestamp: z.string().datetime(),
-  system: z.string().nullable(),
-  input_messages: z.array(displayModelInferenceInputMessageSchema),
-  output: z.array(modelInferenceOutputContentBlockSchema),
-  cached: z.boolean(),
-});
-
-export type ParsedModelInferenceRow = z.infer<
-  typeof parsedModelInferenceRowSchema
->;
+export type ParsedModelInferenceRow = Omit<
+  ModelInference,
+  "input_messages" | "output"
+> & {
+  input_messages: InputMessage[];
+  output: ZodModelInferenceOutputContentBlock[];
+};
 
 /// Hacky helper to determine if the output is JSON
 // We should continue to refactor our types to avoid stuff like this...

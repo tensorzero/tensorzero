@@ -32,6 +32,8 @@ updates:
       # This schedule does not affect security updates: https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/customizing-dependabot-security-prs#about-customizing-pull-requests-for-security-updates
       interval: "weekly"
     labels: []
+    exclude-paths:
+      - "examples/**/Cargo.lock"
     groups:
       opentelemetry-dependencies:
         patterns:

@@ -1,0 +1,72 @@
+//! Model statistics endpoints.
+//!
+//! These endpoints provide model-related statistics for the UI.
+
+pub mod types;
+
+pub use types::{CountModelsResponse, GetModelLatencyResponse, GetModelUsageResponse};
+
+use axum::Json;
+use axum::extract::{Query, State};
+use tracing::instrument;
+
+use crate::db::model_inferences::ModelInferenceQueries;
+use crate::endpoints::internal::models::types::{
+    GetModelLatencyQueryParams, GetModelUsageQueryParams,
+};
+use crate::error::Error;
+use crate::utils::gateway::{AppState, AppStateData};
+
+/// Handler for `GET /internal/models/count`
+///
+/// Returns the count of distinct models that have been used.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.count", skip_all)]
+pub async fn count_models_handler(
+    State(app_state): AppState,
+) -> Result<Json<CountModelsResponse>, Error> {
+    let database = app_state.get_delegating_database();
+
+    let count = database.count_distinct_models_used().await?;
+
+    Ok(Json(CountModelsResponse { model_count: count }))
+}
+
+/// Handler for `GET /internal/models/usage`
+///
+/// Returns model usage timeseries data (tokens, counts over time).
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.usage", skip_all)]
+pub async fn get_model_usage_handler(
+    State(app_state): AppState,
+    Query(params): Query<GetModelUsageQueryParams>,
+) -> Result<Json<GetModelUsageResponse>, Error> {
+    let database = app_state.get_delegating_database();
+
+    let data = database
+        .get_model_usage_timeseries(params.time_window, params.max_periods)
+        .await?;
+
+    Ok(Json(GetModelUsageResponse { data }))
+}
+
+/// Handler for `GET /internal/models/latency`
+///
+/// Returns model latency quantile distributions.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.latency", skip_all)]
+pub async fn get_model_latency_handler(
+    State(app_state): AppState,
+    Query(params): Query<GetModelLatencyQueryParams>,
+) -> Result<Json<GetModelLatencyResponse>, Error> {
+    let database = app_state.get_delegating_database();
+
+    let quantiles = database
+        .get_model_latency_quantile_function_inputs()
+        .to_vec();
+    let data = database
+        .get_model_latency_quantiles(params.time_window)
+        .await?;
+
+    Ok(Json(GetModelLatencyResponse { quantiles, data }))
+}

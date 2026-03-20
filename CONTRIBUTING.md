@@ -95,7 +95,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v24.13.0) and `npm` [→](https://nodejs.org/en)
-- Install pnpm `npm install -g pnpm@10` [→](https://pnpm.io/installation)
+- Install pnpm `npm install -g pnpm@10.15.0` [→](https://pnpm.io/installation)
 
 **macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
 This ensures the correct Python libraries are available for the build.
@@ -116,23 +116,21 @@ In `pre-commit` and CI, we check that the notebooks match the relevant scripts u
 
 ### Tests
 
-#### Rust
-
-##### Unit Tests
+#### Rust Unit Tests
 
 ```bash
 cargo test-unit
 ```
 
-##### E2E Tests
+#### Rust E2E Tests with ClickHouse
 
-1. Launch the test ClickHouse database
+1. Launch the test containers
 
    ```bash
-   docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+   docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
    ```
 
-2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
 
 3. Launch the gateway in testing mode
 
@@ -150,6 +148,27 @@ cargo test-unit
 > The E2E tests involve every supported model provider, so you need every possible credential to run the entire test suite.
 >
 > If your changes don't affect every provider, you can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
+
+#### Rust E2E Tests with Postgres
+
+1. Launch the test containers
+
+   ```bash
+   docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
+   ```
+
+2. Set the relevant environment variables (`TENSORZERO_CLICKHOUSE_URL` and model provider API keys like `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). See the [credential docs](https://www.tensorzero.com/docs/deployment/tensorzero-gateway#set-up-model-provider-credentials) for the full list.
+
+3. Launch the gateway in testing mode
+
+   ```bash
+   cargo run-e2e-postgres
+   ```
+
+4. Run the E2E tests
+   ```bash
+   TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres cargo test-e2e
+   ```
 
 #### Python
 

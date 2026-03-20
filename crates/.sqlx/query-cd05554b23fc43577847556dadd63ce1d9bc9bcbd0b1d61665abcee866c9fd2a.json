@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    SELECT io.output\n                    FROM tensorzero.json_inferences i\n                    INNER JOIN tensorzero.json_inference_data io ON io.id = i.id AND io.created_at = i.created_at\n                    WHERE i.id = $1\n                      AND i.episode_id = $2\n                      AND i.function_name = $3\n                      AND i.variant_name = $4\n                    LIMIT 1\n                    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "output",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "tensorzero.json_inference_data",
+            "name": "output"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cd05554b23fc43577847556dadd63ce1d9bc9bcbd0b1d61665abcee866c9fd2a"
+}

@@ -9,6 +9,7 @@ interface UseAutopilotEventStreamOptions {
   sessionId: string;
   initialEvents: GatewayEvent[];
   initialPendingToolCalls: GatewayEvent[];
+  initialPendingUserQuestions: GatewayEvent[];
   initialStatus: AutopilotStatus;
   enabled?: boolean;
 }
@@ -16,6 +17,7 @@ interface UseAutopilotEventStreamOptions {
 interface UseAutopilotEventStreamResult {
   events: GatewayEvent[];
   pendingToolCalls: GatewayEvent[];
+  pendingUserQuestions: GatewayEvent[];
   status: AutopilotStatus;
   isConnected: boolean;
   error: string | null;
@@ -24,26 +26,62 @@ interface UseAutopilotEventStreamResult {
 }
 
 const RETRY_DELAY_MS = 5000;
+const WHITELISTED_GRACE_PERIOD_MS = 5000;
+
+/**
+ * Compute which tool calls should be shown immediately (no grace period buffering).
+ * - Tool calls that require approval are always shown immediately.
+ * - Whitelisted tool calls (requires_approval === false) are only shown if they are
+ *   older than the grace period, meaning auto-approval likely failed.
+ */
+function computeImmediateToolCalls(toolCalls: GatewayEvent[]): GatewayEvent[] {
+  const now = Date.now();
+  return toolCalls.filter((tc) => {
+    if (tc.payload.type !== "tool_call") return false;
+    if (tc.payload.requires_approval) return true;
+    // Whitelisted: only show if older than grace period
+    return (
+      now - new Date(tc.created_at).getTime() >= WHITELISTED_GRACE_PERIOD_MS
+    );
+  });
+}
+
+type GraceBufferEntry = {
+  event: GatewayEvent;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
 
 /**
  * Hook that streams autopilot events for a session.
  * Automatically reconnects on error with a 5-second delay.
+ *
+ * Whitelisted tool calls (requires_approval === false) are buffered for a grace
+ * period before being shown. If an authorization/result event arrives during the
+ * grace period, the tool call is silently discarded. Otherwise it becomes visible
+ * for manual approval.
  */
 export function useAutopilotEventStream({
   sessionId,
   initialEvents,
   initialPendingToolCalls,
+  initialPendingUserQuestions,
   initialStatus,
   enabled = true,
 }: UseAutopilotEventStreamOptions): UseAutopilotEventStreamResult {
   const [events, setEvents] = useState<GatewayEvent[]>(initialEvents);
-  const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>(
-    initialPendingToolCalls,
+  const [pendingToolCalls, setPendingToolCalls] = useState<GatewayEvent[]>(() =>
+    computeImmediateToolCalls(initialPendingToolCalls),
   );
+  const [pendingUserQuestions, setPendingUserQuestions] = useState<
+    GatewayEvent[]
+  >(initialPendingUserQuestions);
   const [status, setStatus] = useState<AutopilotStatus>(initialStatus);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+
+  // Grace period buffer for whitelisted tool calls
+  const graceBufferRef = useRef<Map<string, GraceBufferEntry>>(new Map());
 
   // Track the last event ID for reconnection
   const lastEventIdRef = useRef<string | null>(
@@ -60,6 +98,50 @@ export function useAutopilotEventStream({
 
   // Retry timeout ref
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Grace period helpers
+  const clearAllGraceTimers = useCallback(() => {
+    for (const entry of graceBufferRef.current.values()) {
+      clearTimeout(entry.timeoutId);
+    }
+    graceBufferRef.current.clear();
+  }, []);
+
+  const cancelGraceTimer = useCallback((eventId: string) => {
+    const entry = graceBufferRef.current.get(eventId);
+    if (entry) {
+      clearTimeout(entry.timeoutId);
+      graceBufferRef.current.delete(eventId);
+    }
+  }, []);
+
+  const promoteFromGraceBuffer = useCallback((eventId: string) => {
+    const entry = graceBufferRef.current.get(eventId);
+    if (!entry) return;
+    graceBufferRef.current.delete(eventId);
+
+    setPendingToolCalls((prev) => {
+      if (prev.some((e) => e.id === eventId)) return prev;
+      return [...prev, entry.event].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+    });
+  }, []);
+
+  const bufferWhitelistedToolCall = useCallback(
+    (event: GatewayEvent, delayMs: number) => {
+      // Don't buffer if already in buffer or already in pending
+      if (graceBufferRef.current.has(event.id)) return;
+
+      const timeoutId = setTimeout(() => {
+        promoteFromGraceBuffer(event.id);
+      }, delayMs);
+
+      graceBufferRef.current.set(event.id, { event, timeoutId });
+    },
+    [promoteFromGraceBuffer],
+  );
 
   const connect = useCallback(async () => {
     if (!enabled || !isMountedRef.current) return;
@@ -144,10 +226,42 @@ export function useAutopilotEventStream({
                     return newEvents;
                   });
 
-                  // Update pending tool calls based on event type
-                  setPendingToolCalls((prev) => {
-                    if (event.payload.type === "tool_call") {
-                      // Add new tool call if not already present
+                  // Handle authorization/result events: cancel grace timers and remove from pending
+                  if (
+                    event.payload.type === "tool_call_authorization" ||
+                    event.payload.type === "tool_result"
+                  ) {
+                    const toolCallEventId = event.payload.tool_call_event_id;
+                    cancelGraceTimer(toolCallEventId);
+                    setPendingToolCalls((prev) =>
+                      prev.filter((e) => e.id !== toolCallEventId),
+                    );
+                  }
+
+                  // Handle new tool call events
+                  if (event.payload.type === "tool_call") {
+                    if (event.payload.requires_approval) {
+                      // Requires approval: add to pending immediately
+                      setPendingToolCalls((prev) => {
+                        if (prev.some((e) => e.id === event.id)) return prev;
+                        return [...prev, event].sort(
+                          (a, b) =>
+                            new Date(a.created_at).getTime() -
+                            new Date(b.created_at).getTime(),
+                        );
+                      });
+                    } else {
+                      // Whitelisted: buffer with grace period
+                      bufferWhitelistedToolCall(
+                        event,
+                        WHITELISTED_GRACE_PERIOD_MS,
+                      );
+                    }
+                  }
+
+                  // Update pending user questions based on event type
+                  setPendingUserQuestions((prev) => {
+                    if (event.payload.type === "user_questions") {
                       if (prev.some((e) => e.id === event.id)) {
                         return prev;
                       }
@@ -157,13 +271,10 @@ export function useAutopilotEventStream({
                           new Date(b.created_at).getTime(),
                       );
                     }
-                    if (
-                      event.payload.type === "tool_call_authorization" ||
-                      event.payload.type === "tool_result"
-                    ) {
-                      // Remove tool call that was authorized or got a result
-                      const toolCallEventId = event.payload.tool_call_event_id;
-                      return prev.filter((e) => e.id !== toolCallEventId);
+                    if (event.payload.type === "user_questions_answers") {
+                      const questionEventId =
+                        event.payload.user_questions_event_id;
+                      return prev.filter((e) => e.id !== questionEventId);
                     }
                     return prev;
                   });
@@ -213,7 +324,7 @@ export function useAutopilotEventStream({
         }
       }, RETRY_DELAY_MS);
     }
-  }, [sessionId, enabled]);
+  }, [sessionId, enabled, cancelGraceTimer, bufferWhitelistedToolCall]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -232,19 +343,55 @@ export function useAutopilotEventStream({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+
+      clearAllGraceTimers();
     };
-  }, [connect, enabled]);
+  }, [connect, enabled, clearAllGraceTimers]);
 
   // Update events when initialEvents change (e.g., on page refresh)
   useEffect(() => {
+    clearAllGraceTimers();
+
     setEvents(initialEvents);
-    setPendingToolCalls(initialPendingToolCalls);
+    setPendingUserQuestions(initialPendingUserQuestions);
     setStatus(initialStatus);
     lastEventIdRef.current =
       initialEvents.length > 0
         ? initialEvents[initialEvents.length - 1].id
         : null;
-  }, [initialEvents, initialPendingToolCalls, initialStatus]);
+
+    // Process initial pending tool calls with grace period logic
+    const now = Date.now();
+    const immediate: GatewayEvent[] = [];
+
+    for (const tc of initialPendingToolCalls) {
+      if (tc.payload.type !== "tool_call") continue;
+      if (tc.payload.requires_approval) {
+        immediate.push(tc);
+      } else {
+        const age = now - new Date(tc.created_at).getTime();
+        if (age >= WHITELISTED_GRACE_PERIOD_MS) {
+          immediate.push(tc);
+        } else {
+          bufferWhitelistedToolCall(tc, WHITELISTED_GRACE_PERIOD_MS - age);
+        }
+      }
+    }
+
+    setPendingToolCalls(
+      immediate.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
+    );
+  }, [
+    initialEvents,
+    initialPendingToolCalls,
+    initialPendingUserQuestions,
+    initialStatus,
+    clearAllGraceTimers,
+    bufferWhitelistedToolCall,
+  ]);
 
   // Allow prepending older events (for reverse infinite scroll)
   const prependEvents = useCallback((newEvents: GatewayEvent[]) => {
@@ -266,6 +413,7 @@ export function useAutopilotEventStream({
   return {
     events,
     pendingToolCalls,
+    pendingUserQuestions,
     status,
     isConnected,
     error,

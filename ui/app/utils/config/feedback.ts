@@ -87,7 +87,7 @@ export function filterInferenceEvaluationMetrics(metrics: {
 
 export const formatMetricSummaryValue = (
   value: number,
-  metricConfig: MetricConfig,
+  metricConfig: { type: string },
 ) => {
   if (metricConfig.type === "boolean") {
     return `${Math.round(value * 100)}%`;
@@ -103,7 +103,7 @@ export const formatMetricSummaryValue = (
 export const formatConfidenceInterval = (
   lower: number,
   upper: number,
-  metricConfig: MetricConfig,
+  metricConfig: { type: string },
 ): string => {
   if (metricConfig.type === "boolean") {
     // Format as percentages for boolean metrics

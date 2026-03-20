@@ -195,18 +195,6 @@ function SupervisedFineTuningImpl(props: LoaderData) {
 // Renders the fine-tuning form and status info.
 export default function SupervisedFineTuning(props: Route.ComponentProps) {
   const { loaderData } = props;
-  if (loaderData.jobInfo.status === "failed") {
-    return (
-      <PageLayout>
-        <PageHeader heading="Supervised Fine-Tuning" />
-        <SectionLayout>
-          <div className="text-sm text-red-500">
-            {JSON.stringify(loaderData.jobInfo.error, null, 2)}
-          </div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
   return <SupervisedFineTuningImpl {...loaderData} />;
 }
 

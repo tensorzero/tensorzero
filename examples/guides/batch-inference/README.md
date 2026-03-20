@@ -4,7 +4,7 @@ This directory contains the code for the **[Batch Inference](https://www.tensorz
 
 ## Running the Example
 
-1. Launch the TensorZero Gateway and ClickHouse database:
+1. Launch the TensorZero Gateway and Postgres database:
 
 ```bash
 docker compose up

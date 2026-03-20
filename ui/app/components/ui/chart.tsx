@@ -50,7 +50,23 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          "flex h-72 w-full justify-center text-xs",
+
+          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground",
+          "[&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50",
+          "[&_.recharts-reference-line_[stroke='#ccc']]:stroke-border",
+          "[&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border",
+
+          "[&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted",
+          "[&_.recharts-curve.recharts-tooltip-cursor]:stroke-border",
+          "[&_.recharts-radial-bar-background-sector]:fill-muted",
+
+          "[&_.recharts-dot[stroke='#fff']]:stroke-transparent",
+          "[&_.recharts-sector[stroke='#fff']]:stroke-transparent",
+          "[&_.recharts-layer]:outline-hidden",
+          "[&_.recharts-sector]:outline-hidden",
+          "[&_.recharts-surface]:outline-hidden",
+
           className,
         )}
         {...props}
@@ -254,66 +270,6 @@ const ChartTooltipContent = React.forwardRef<
 );
 ChartTooltipContent.displayName = "ChartTooltip";
 
-const ChartLegend = RechartsPrimitive.Legend;
-
-const ChartLegendContent = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean;
-      nameKey?: string;
-    }
->(
-  (
-    { className, hideIcon = false, payload, verticalAlign = "bottom", nameKey },
-    ref,
-  ) => {
-    const { config } = useChart();
-
-    if (!payload?.length) {
-      return null;
-    }
-
-    return (
-      <div
-        ref={ref}
-        className={cn(
-          "flex flex-wrap items-center justify-center gap-4",
-          verticalAlign === "top" ? "pb-3" : "pt-3",
-          className,
-        )}
-      >
-        {payload.map((item) => {
-          const key = `${nameKey || item.dataKey || "value"}`;
-          const itemConfig = getPayloadConfigFromPayload(config, item, key);
-
-          return (
-            <div
-              key={item.value}
-              className={cn(
-                "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3",
-              )}
-            >
-              {itemConfig?.icon && !hideIcon ? (
-                <itemConfig.icon />
-              ) : (
-                <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: item.color,
-                  }}
-                />
-              )}
-              {itemConfig?.label}
-            </div>
-          );
-        })}
-      </div>
-    );
-  },
-);
-ChartLegendContent.displayName = "ChartLegend";
-
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
@@ -353,11 +309,39 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config];
 }
 
+/**
+ * Standalone chart legend rendered outside the chart container.
+ * Prevents layout shift caused by Recharts positioning legends
+ * dynamically inside the chart area.
+ */
+function ChartLegend({
+  items,
+  colors,
+}: {
+  items: string[];
+  colors: readonly string[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 pt-6">
+      {items.map((name, index) => (
+        <div key={name} className="flex items-center gap-1.5">
+          <div
+            className="h-2 w-2 shrink-0 rounded-[2px]"
+            style={{
+              backgroundColor: colors[index % colors.length],
+            }}
+          />
+          <span className="font-mono text-xs">{name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export {
   ChartContainer,
+  ChartLegend,
+  ChartStyle,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  ChartStyle,
 };

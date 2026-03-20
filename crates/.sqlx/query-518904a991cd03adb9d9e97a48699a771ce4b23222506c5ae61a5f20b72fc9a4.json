@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO tensorzero.retention_config (key, value, updated_at)\n                    VALUES ($1, $2, NOW())\n                    ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "518904a991cd03adb9d9e97a48699a771ce4b23222506c5ae61a5f20b72fc9a4"
+}

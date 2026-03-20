@@ -91,7 +91,9 @@ export async function loader({
       });
     }
     const inference = inferences.inferences[0];
-    const resolvedInput = await loadFileDataForStoredInput(inference.input);
+    const resolvedInput = inference.input
+      ? await loadFileDataForStoredInput(inference.input)
+      : undefined;
 
     // Get used variants for default function
     const usedVariants =

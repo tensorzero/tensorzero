@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources";
+import { GATEWAY_URL } from "./helpers";
 
 // Client setup
 let client: OpenAI;
@@ -15,7 +16,7 @@ let client: OpenAI;
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${GATEWAY_URL}/openai/v1`,
   });
 });
 
@@ -75,7 +76,7 @@ describe("JSON Mode Tool", () => {
     expect(
       message.tool_calls === null ||
         message.tool_calls === undefined ||
-        message.tool_calls.length === 0
+        message.tool_calls.length === 0,
     ).toBe(true);
 
     // Verify the text is valid JSON

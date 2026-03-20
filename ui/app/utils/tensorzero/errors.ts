@@ -562,7 +562,7 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.BAD_REQUEST });
     }
   };
-  static ModelProvidersExhausted = class ModelProvidersExhausted extends TensorZeroServerError {
+  static AllModelProvidersFailed = class AllModelProvidersFailed extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.INTERNAL_SERVER_ERROR });
     }
@@ -700,7 +700,7 @@ export function getErrorLabel(type: InfraErrorType): string {
     case InfraErrorType.GatewayUnavailable:
       return "Gateway Connection Error";
     case InfraErrorType.GatewayAuthFailed:
-      return "Auth Error";
+      return "Authentication Required";
     case InfraErrorType.GatewayEndpointNotFound:
       return "Route Error";
     case InfraErrorType.ClickHouseUnavailable:

@@ -10,6 +10,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { ChartContainer, ChartTooltip } from "~/components/ui/chart";
+import { Markdown } from "~/components/ui/markdown";
 import type { TopKEvaluationVisualization } from "~/types/tensorzero";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
@@ -361,6 +362,17 @@ function SeparationLines({
   );
 }
 
+function SummaryText({ text }: { text: string }) {
+  return (
+    <div className="border-border bg-bg-tertiary mt-4 rounded-md border p-4">
+      <div className="text-fg-secondary mb-2 text-xs font-medium">
+        Analysis Summary
+      </div>
+      <Markdown className="prose prose-sm max-w-none text-sm">{text}</Markdown>
+    </div>
+  );
+}
+
 export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
   const chartData = useMemo(() => {
     const entries = Object.entries(data.variant_summaries);
@@ -600,6 +612,8 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
           </Bar>
         </BarChart>
       </ChartContainer>
+
+      {data.summary_text && <SummaryText text={data.summary_text} />}
     </div>
   );
 }

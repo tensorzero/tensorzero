@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
@@ -51,7 +50,7 @@ export function VariantThroughput({
           />
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
+          <ChartContainer config={chartConfig}>
             <AreaChart accessibilityLayer data={data}>
               <CartesianGrid vertical={false} />
               <XAxis
@@ -130,9 +129,6 @@ export function VariantThroughput({
                   );
                 }}
               />
-              <ChartLegend
-                content={<ChartLegendContent className="font-mono text-xs" />}
-              />
               {variantNames.map((variantName) => (
                 <Area
                   key={variantName}
@@ -147,6 +143,7 @@ export function VariantThroughput({
               ))}
             </AreaChart>
           </ChartContainer>
+          <ChartLegend items={variantNames} colors={CHART_COLORS} />
         </CardContent>
       </Card>
     </div>

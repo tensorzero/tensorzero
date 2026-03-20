@@ -16,7 +16,7 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { useFunctionConfig } from "~/context/config";
-import { toEvaluationUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
+import { toEvaluationRunsUrl, toDatasetUrl, toFunctionUrl } from "~/utils/urls";
 
 function EvaluationRunRow({
   evaluationRun,
@@ -34,14 +34,12 @@ function EvaluationRunRow({
       <TableCell className="max-w-[200px]">
         <TableItemShortUuid
           id={evaluationRun.evaluation_run_id}
-          link={toEvaluationUrl(evaluationRun.evaluation_name, {
-            evaluation_run_ids: evaluationRun.evaluation_run_id,
-          })}
+          link={toEvaluationRunsUrl(evaluationRun.evaluation_run_id)}
         />
       </TableCell>
       <TableCell className="max-w-[200px]">
         <Link
-          to={toEvaluationUrl(evaluationRun.evaluation_name)}
+          to={toEvaluationRunsUrl(evaluationRun.evaluation_run_id)}
           className="block no-underline"
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -63,13 +61,17 @@ function EvaluationRunRow({
         <TableItemFunction
           functionName={evaluationRun.function_name}
           functionType={functionType ?? ""}
-          link={toFunctionUrl(evaluationRun.function_name)}
+          link={toFunctionUrl(
+            evaluationRun.function_name,
+            evaluationRun.snapshot_hash,
+          )}
         />
       </TableCell>
       <TableCell>
         <VariantLink
           variantName={evaluationRun.variant_name}
           functionName={evaluationRun.function_name}
+          snapshotHash={evaluationRun.snapshot_hash}
         >
           <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
             {evaluationRun.variant_name}
@@ -77,7 +79,7 @@ function EvaluationRunRow({
         </VariantLink>
       </TableCell>
       <TableCell>
-        <TableItemTime timestamp={evaluationRun.last_inference_timestamp} />
+        <TableItemTime timestamp={evaluationRun.created_at} />
       </TableCell>
     </TableRow>
   );
@@ -98,7 +100,7 @@ export default function EvaluationRunsTable({
             <TableHead>Dataset</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Variant</TableHead>
-            <TableHead>Last Updated</TableHead>
+            <TableHead>Created At</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

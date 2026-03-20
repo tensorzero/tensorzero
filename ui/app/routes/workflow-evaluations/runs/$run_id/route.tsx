@@ -1,14 +1,13 @@
 import type { Route } from "./+types/route";
-import { data, useNavigate, type RouteHandle } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
+import { useLocation, type RouteHandle } from "react-router";
 import {
   PageHeader,
   PageLayout,
-  SectionLayout,
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
-import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
-import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
+import { fetchRunRecord, fetchEpisodesTableData } from "./route.server";
+import { BasicInfoSection } from "./BasicInfoSection";
+import { EpisodesSection } from "./EpisodesSection";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
@@ -24,36 +23,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const limit = parseInt(searchParams.get("limit") || "15");
-  const tensorZeroClient = getTensorZeroClient();
-  const [
-    workflowEvaluationRunsResponse,
-    workflowEvaluationRunEpisodesResponse,
-    count,
-    statisticsResponse,
-  ] = await Promise.all([
-    tensorZeroClient.listWorkflowEvaluationRuns(5, 0, run_id),
-    tensorZeroClient.getWorkflowEvaluationRunEpisodesWithFeedback(
-      run_id,
-      limit,
-      offset,
-    ),
-    tensorZeroClient.countWorkflowEvaluationRunEpisodes(run_id),
-    tensorZeroClient.getWorkflowEvaluationRunStatistics(run_id),
-  ]);
-  const statistics = statisticsResponse.statistics;
-  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
-  if (workflowEvaluationRuns.length != 1) {
-    throw data(`Workflow evaluation run "${run_id}" not found`, {
-      status: 404,
-    });
-  }
-  const workflowEvaluationRun = workflowEvaluationRuns[0];
+
+  const client = getTensorZeroClient();
+  const countPromise = client.countWorkflowEvaluationRunEpisodes(run_id);
+  const runRecordPromise = fetchRunRecord(run_id);
+  const episodesTablePromise = fetchEpisodesTableData(run_id, limit, offset);
+
   return {
-    workflowEvaluationRun,
-    workflowEvaluationRunEpisodes:
-      workflowEvaluationRunEpisodesResponse.episodes,
-    statistics,
-    count,
+    run_id,
+    basicInfoData: Promise.all([runRecordPromise, countPromise]).then(
+      ([workflowEvaluationRun, count]) => ({ workflowEvaluationRun, count }),
+    ),
+    episodesData: Promise.all([episodesTablePromise, countPromise]).then(
+      ([tableData, count]) => ({ ...tableData, count }),
+    ),
     offset,
     limit,
   };
@@ -62,26 +45,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function WorkflowEvaluationRunSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
-  const navigate = useNavigate();
-  const {
-    workflowEvaluationRun,
-    workflowEvaluationRunEpisodes,
-    statistics,
-    count,
-    offset,
-    limit,
-  } = loaderData;
-
-  const handleNextPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - limit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
+  const { run_id, basicInfoData, episodesData, offset, limit } = loaderData;
+  const location = useLocation();
 
   return (
     <PageLayout>
@@ -94,21 +59,18 @@ export default function WorkflowEvaluationRunSummaryPage({
             ]}
           />
         }
-        name={workflowEvaluationRun.id}
+        name={run_id}
       />
-      <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
-      <SectionLayout>
-        <WorkflowEvaluationRunEpisodesTable
-          episodes={workflowEvaluationRunEpisodes}
-          statistics={statistics}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousPage}
-          onNextPage={handleNextPage}
-          disablePrevious={offset <= 0}
-          disableNext={offset + limit >= count}
-        />
-      </SectionLayout>
+      <BasicInfoSection
+        basicInfoData={basicInfoData}
+        locationKey={location.key}
+      />
+      <EpisodesSection
+        episodesData={episodesData}
+        offset={offset}
+        limit={limit}
+        locationKey={location.key}
+      />
     </PageLayout>
   );
 }

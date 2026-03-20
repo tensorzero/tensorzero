@@ -11,6 +11,8 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
+import { ActionBar } from "~/components/layout/ActionBar";
+import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
@@ -181,13 +183,14 @@ export default function DatasetDetailPage({
         name={dataset_name}
         count={countPromise}
       >
-        <div className="flex justify-start">
+        <ActionBar>
           <DeleteButton
             onClick={handleDelete}
             isLoading={fetcher.state === "submitting"}
             disabled={isReadOnly}
           />
-        </div>
+          <AskAutopilotButton message={`Dataset: ${dataset_name}\n\n`} />
+        </ActionBar>
       </PageHeader>
 
       <SectionLayout>

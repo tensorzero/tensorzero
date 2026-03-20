@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { LucideIcon } from "lucide-react";
 import type { ToastActionElement, ToastProps } from "~/components/ui/toast";
 
 export interface ToastState {
@@ -57,6 +58,8 @@ export { ToastContext };
 
 export type ToasterToast = ToastProps & {
   id: string;
+  icon?: LucideIcon;
+  iconClassName?: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;

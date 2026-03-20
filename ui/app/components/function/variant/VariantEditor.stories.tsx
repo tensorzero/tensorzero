@@ -114,6 +114,7 @@ export const FullyPopulated: Story = {
           },
           streaming: {
             ttft_ms: 5000n,
+            total_ms: null,
           },
         },
       }}
@@ -156,6 +157,7 @@ export const MinimalConfig: Story = {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
       }}
@@ -217,6 +219,7 @@ export const WithJsonMode: Story = {
           },
           streaming: {
             ttft_ms: 3000n,
+            total_ms: null,
           },
         },
       }}
@@ -294,6 +297,7 @@ export const WithTemplatesOnly: Story = {
           },
           streaming: {
             ttft_ms: 10000n,
+            total_ms: null,
           },
         },
       }}
@@ -368,6 +372,7 @@ Focus on:
           },
           streaming: {
             ttft_ms: 5000n,
+            total_ms: null,
           },
         },
       }}
@@ -442,6 +447,7 @@ export const UnsupportedVariantType: Story = {
           },
           streaming: {
             ttft_ms: null,
+            total_ms: null,
           },
         },
       }}

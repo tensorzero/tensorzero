@@ -1,14 +1,9 @@
 import type { Route } from "./+types/route";
-import { useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
-import {
-  PageHeader,
-  PageLayout,
-  SectionHeader,
-  SectionLayout,
-} from "~/components/layout/PageLayout";
-import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
-import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
+import { useLocation } from "react-router";
+import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
+import { fetchProjectsTableData, fetchRunsTableData } from "./route.server";
+import { ProjectsSection } from "./ProjectsSection";
+import { RunsSection } from "./RunsSection";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -19,27 +14,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
   const projectLimit = parseInt(searchParams.get("projectLimit") || "15");
 
-  const tensorZeroClient = getTensorZeroClient();
-  const [
-    workflowEvaluationRunsResponse,
-    count,
-    workflowEvaluationProjectsResponse,
-    projectCount,
-  ] = await Promise.all([
-    tensorZeroClient.listWorkflowEvaluationRuns(runLimit, runOffset),
-    tensorZeroClient.countWorkflowEvaluationRuns(),
-    tensorZeroClient.getWorkflowEvaluationProjects(projectLimit, projectOffset),
-    tensorZeroClient.countWorkflowEvaluationProjects(),
-  ]);
-  const workflowEvaluationRuns = workflowEvaluationRunsResponse.runs;
-  const workflowEvaluationProjects =
-    workflowEvaluationProjectsResponse.projects;
+  const client = getTensorZeroClient();
+  const projectCountPromise = client.countWorkflowEvaluationProjects();
+  const runCountPromise = client.countWorkflowEvaluationRuns();
 
   return {
-    workflowEvaluationRuns,
-    count,
-    workflowEvaluationProjects,
-    projectCount,
+    projectCountPromise,
+    projectsData: fetchProjectsTableData(
+      projectLimit,
+      projectOffset,
+      projectCountPromise,
+    ),
+    runCountPromise,
+    runsData: fetchRunsTableData(runLimit, runOffset, runCountPromise),
     runOffset,
     runLimit,
     projectOffset,
@@ -50,67 +37,35 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
-  const navigate = useNavigate();
   const {
-    workflowEvaluationRuns,
-    count,
-    workflowEvaluationProjects,
-    projectCount,
+    projectCountPromise,
+    projectsData,
+    runCountPromise,
+    runsData,
     runOffset,
     runLimit,
     projectOffset,
     projectLimit,
   } = loaderData;
-  const handleNextRunPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset + runLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-  const handlePreviousRunPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("runOffset", String(runOffset - runLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handleNextProjectPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset + projectLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousProjectPage = () => {
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("projectOffset", String(projectOffset - projectLimit));
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
+  const location = useLocation();
 
   return (
     <PageLayout>
       <PageHeader heading="Workflow Evaluations" />
-      <SectionLayout>
-        <SectionHeader heading="Projects" count={projectCount} />
-        <WorkflowEvaluationProjectsTable
-          workflowEvaluationProjects={workflowEvaluationProjects}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousProjectPage}
-          onNextPage={handleNextProjectPage}
-          disablePrevious={projectOffset <= 0}
-          disableNext={projectOffset + projectLimit >= projectCount}
-        />
-      </SectionLayout>
-      <SectionLayout>
-        <SectionHeader heading="Evaluation Runs" count={count} />
-        <WorkflowEvaluationRunsTable
-          workflowEvaluationRuns={workflowEvaluationRuns}
-        />
-        <PageButtons
-          onPreviousPage={handlePreviousRunPage}
-          onNextPage={handleNextRunPage}
-          disablePrevious={runOffset <= 0}
-          disableNext={runOffset + runLimit >= count}
-        />
-      </SectionLayout>
+      <ProjectsSection
+        projectsData={projectsData}
+        countPromise={projectCountPromise}
+        offset={projectOffset}
+        limit={projectLimit}
+        locationKey={location.key}
+      />
+      <RunsSection
+        runsData={runsData}
+        countPromise={runCountPromise}
+        offset={runOffset}
+        limit={runLimit}
+        locationKey={location.key}
+      />
     </PageLayout>
   );
 }

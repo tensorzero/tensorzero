@@ -1,14 +1,20 @@
-import type { SearchEvaluationRunResult } from "~/types/tensorzero";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { Badge } from "../ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 import { cn } from "~/utils/common";
 
+export interface EvaluationRunBadgeInfo {
+  evaluation_run_id: string;
+  variant_name: string;
+  evaluation_name?: string;
+  dataset_name?: string;
+}
+
 interface EvaluationRunBadgeProps {
-  runInfo: SearchEvaluationRunResult;
+  runInfo: EvaluationRunBadgeInfo;
   getColor: (runId: string) => string;
-  lastUpdateDate?: Date;
+  createdAt?: Date;
   onRemove?: (e: React.MouseEvent) => void;
 }
 
@@ -20,7 +26,7 @@ export function getLastUuidSegment(uuid: string): string {
 export default function EvaluationRunBadge({
   runInfo,
   getColor,
-  lastUpdateDate,
+  createdAt,
   onRemove,
 }: EvaluationRunBadgeProps) {
   const runId = runInfo.evaluation_run_id;
@@ -71,9 +77,7 @@ export default function EvaluationRunBadge({
         <p className="text-xs">
           Run ID: <span className="font-mono text-xs">{runId}</span>
           <br />
-          {lastUpdateDate
-            ? `Last Updated: ${formatDate(lastUpdateDate)}`
-            : null}
+          {createdAt ? `Created: ${formatDate(createdAt)}` : null}
         </p>
       </TooltipContent>
     </Tooltip>

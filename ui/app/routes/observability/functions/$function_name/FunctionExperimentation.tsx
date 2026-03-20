@@ -61,7 +61,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
 
   // Transform feedback timeseries data once for both charts
   const shouldShowTimeseries =
-    functionConfig.experimentation.type === "track_and_stop" &&
+    functionConfig.experimentation.base.type === "adaptive" &&
     feedbackTimeseries &&
     feedbackTimeseries.length > 0;
 
@@ -69,10 +69,10 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     ? transformFeedbackTimeseries(feedbackTimeseries!, timeGranularity)
     : { countsData: [], meansData: [], variantNames: [] };
 
-  // Extract metric name for track_and_stop experimentation
+  // Extract metric name for adaptive experimentation
   const metricName =
-    functionConfig.experimentation.type === "track_and_stop"
-      ? functionConfig.experimentation.metric
+    functionConfig.experimentation.base.type === "adaptive"
+      ? functionConfig.experimentation.base.metric
       : "";
 
   // Create a centralized chart config to ensure consistent colors across all panels

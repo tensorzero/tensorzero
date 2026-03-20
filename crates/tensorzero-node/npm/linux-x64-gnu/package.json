@@ -1,0 +1,21 @@
+{
+  "name": "tensorzero-node-linux-x64-gnu",
+  "version": "0.0.0",
+  "license": "MIT",
+  "files": [
+    "tensorzero-node.linux-x64-gnu.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "main": "tensorzero-node.linux-x64-gnu.node",
+  "engines": {
+    "node": ">= 10"
+  }
+}

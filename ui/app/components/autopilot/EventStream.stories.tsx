@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventStream from "./EventStream";
 import type { GatewayEvent } from "~/types/tensorzero";
-import { GlobalToastProvider } from "~/providers/global-toast-provider";
 import { AutopilotSessionProvider } from "~/contexts/AutopilotSessionContext";
 
 const baseTime = new Date("2026-04-12T10:00:00Z").getTime();
@@ -24,6 +23,7 @@ const conversationEvents: GatewayEvent[] = [
         type: "message",
         role: "user",
         content: [{ type: "text", text: "Summarize the deployment status." }],
+        metadata: {},
       },
     },
     0,
@@ -42,6 +42,7 @@ const conversationEvents: GatewayEvent[] = [
             text: "Deployments are healthy across all regions.",
           },
         ],
+        metadata: {},
       },
     },
     1,
@@ -58,6 +59,7 @@ const toolingEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: { query: "TensorZero" },
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
           session_id: sessionId,
@@ -113,6 +115,7 @@ const mixedEvents: GatewayEvent[] = [
         type: "message",
         role: "user",
         content: [{ type: "text", text: "Run a quick session audit." }],
+        metadata: {},
       },
     },
     0,
@@ -139,6 +142,7 @@ const mixedEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: { query: "TensorZero Autopilot" },
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
           session_id: sessionId,
@@ -207,7 +211,10 @@ const mixedEvents: GatewayEvent[] = [
         tool_call_event_id: "rejected-tool-call-event-id",
         outcome: {
           type: "failure",
-          error: { kind: "Validation", message: "Authorization denied" },
+          error: {
+            kind: "tool",
+            error: { kind: "validation", message: "Authorization denied" },
+          },
         },
       },
     },
@@ -259,6 +266,7 @@ const mixedEvents: GatewayEvent[] = [
             text: "Audit complete. One policy block detected and resolved.",
           },
         ],
+        metadata: {},
       },
     },
     9,
@@ -321,6 +329,7 @@ const markdownEvents: GatewayEvent[] = [
         content: [
           { type: "text", text: "Can you give me a project overview?" },
         ],
+        metadata: {},
       },
     },
     0,
@@ -334,6 +343,7 @@ const markdownEvents: GatewayEvent[] = [
         type: "message",
         role: "assistant",
         content: [{ type: "text", text: markdownText }],
+        metadata: {},
       },
     },
     1,
@@ -347,6 +357,7 @@ const markdownEvents: GatewayEvent[] = [
         type: "message",
         role: "user",
         content: [{ type: "text", text: "Thanks! Can you show inline code?" }],
+        metadata: {},
       },
     },
     2,
@@ -365,6 +376,7 @@ const markdownEvents: GatewayEvent[] = [
             text: "Sure! You can use `console.log()` to print values, or run `npm install` to install dependencies.",
           },
         ],
+        metadata: {},
       },
     },
     3,
@@ -398,6 +410,7 @@ const longFormEvents: GatewayEvent[] = [
         type: "message",
         role: "user",
         content: [{ type: "text", text: longText }],
+        metadata: {},
       },
     },
     0,
@@ -411,6 +424,7 @@ const longFormEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "search_wikipedia",
         arguments: JSON.parse(longToolArguments),
+        requires_approval: true,
         side_info: {
           tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
           session_id: sessionId,
@@ -454,6 +468,7 @@ const longFormEvents: GatewayEvent[] = [
             text: `${longText}\n\n${longText}`,
           },
         ],
+        metadata: {},
       },
     },
     3,
@@ -466,9 +481,7 @@ const meta = {
   decorators: [
     (Story) => (
       <AutopilotSessionProvider>
-        <GlobalToastProvider>
-          <Story />
-        </GlobalToastProvider>
+        <Story />
       </AutopilotSessionProvider>
     ),
   ],
@@ -528,6 +541,7 @@ const visualizationEvents: GatewayEvent[] = [
             text: "Run a top-k evaluation on the test variants.",
           },
         ],
+        metadata: {},
       },
     },
     0,
@@ -540,6 +554,7 @@ const visualizationEvents: GatewayEvent[] = [
       payload: {
         type: "tool_call",
         name: "topk_evaluation",
+        requires_approval: true,
         arguments: {
           evaluation_name: "test_topk_evaluation",
           dataset_name: "topk_test_dataset",
@@ -660,6 +675,24 @@ const visualizationEvents: GatewayEvent[] = [
             },
           },
           confident_top_k_sizes: [1, 3],
+          summary_text: `## Overview
+The top-k evaluation tool identifies the best-performing variants from a set of candidates using adaptive evaluation with statistical confidence bounds.
+
+## Chart Description
+The top chart shows the estimated mean performance with final 95% confidence intervals for each variant.
+
+The bottom chart shows the number of evaluations per variant.
+
+## Results
+The algorithm identified the top-1 variant and the top-3 variants.
+
+## Efficiency
+- Total evaluations: 190.
+- Total evaluations that would have been run without adaptive stopping: 300.
+- Savings: (300 - 190) / 300 * 100% = 36.7%.
+
+## Next Steps
+Deploy the "echo" variant to production for improved performance.`,
         },
       },
     },
@@ -679,6 +712,7 @@ const visualizationEvents: GatewayEvent[] = [
             text: 'The top-k evaluation is complete. We can confidently identify "echo" as the top-1 performer (mean: 0.90) and a top-3 set of "echo", "test", and "empty" that statistically outperforms the remaining variants.',
           },
         ],
+        metadata: {},
       },
     },
     5,
@@ -706,6 +740,7 @@ const unknownVisualizationEvents: GatewayEvent[] = [
             text: "Run an analysis on the data.",
           },
         ],
+        metadata: {},
       },
     },
     0,
@@ -743,6 +778,91 @@ const unknownVisualizationEvents: GatewayEvent[] = [
 export const WithUnknownVisualization: Story = {
   args: {
     events: unknownVisualizationEvents,
+  },
+};
+
+// Events demonstrating a whitelisted tool call that skips the authorization step
+const whitelistedToolingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "wt-user-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "text", text: "Look up the current deployment config." },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "wt-tool-call",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "read_config",
+        arguments: { section: "deployment" },
+        requires_approval: false,
+        side_info: {
+          tool_call_event_id: "wt-tool-call",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  // No authorization event — whitelisted tools go straight to result
+  buildEvent(
+    {
+      id: "wt-tool-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "wt-tool-call",
+        outcome: {
+          type: "success",
+          result: "Current deployment: region=us-east-1, replicas=3",
+        },
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "wt-assistant-msg",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "The current deployment is running in us-east-1 with 3 replicas.",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    3,
+  ),
+];
+
+export const WhitelistedTooling: Story = {
+  args: {
+    events: whitelistedToolingEvents,
   },
 };
 

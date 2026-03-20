@@ -4,19 +4,20 @@ set -euo pipefail
 # Load small fixtures into Postgres tables.
 #
 # Table loading status:
-# - "chat_inference_examples.jsonl" (Done)
-# - "json_inference_examples.jsonl" (Done)
+# - "chat_inference_examples.jsonl" -> chat_inferences + chat_inference_data (Done)
+# - "json_inference_examples.jsonl" -> json_inferences + json_inference_data (Done)
+# - "metadata_only_inference_examples.jsonl" -> chat_inferences + json_inferences (Done, metadata only — no data rows)
+# - "model_inference_examples.jsonl" -> model_inferences + model_inference_data (Done)
 # - "boolean_metric_feedback_examples.jsonl" (Done)
 # - "float_metric_feedback_examples.jsonl" (Done)
 # - "demonstration_feedback_examples.jsonl" (Done)
 # - "json_inference_datapoint_examples.jsonl" (Done)
 # - "chat_inference_datapoint_examples.jsonl" (Done)
 # - "comment_feedback_examples.jsonl" (Done)
-# - "model_inference_examples.jsonl" (Done)
-# - "model_inference_cache_e2e.jsonl"
 # - "jaro_winkler_similarity_feedback.jsonl"
 # - "dynamic_evaluation_run_examples.jsonl" (Done)
 # - "dynamic_evaluation_run_episode_examples.jsonl" (Done)
+# - inference_evaluation_runs (Done, backfilled from inference tags)
 #
 # Usage:
 #   ./ui/fixtures/load_fixtures_postgres.sh
@@ -72,6 +73,9 @@ else
 TRUNCATE TABLE tensorzero.chat_inferences CASCADE;
 TRUNCATE TABLE tensorzero.json_inferences CASCADE;
 TRUNCATE TABLE tensorzero.model_inferences CASCADE;
+TRUNCATE TABLE tensorzero.chat_inference_data CASCADE;
+TRUNCATE TABLE tensorzero.json_inference_data CASCADE;
+TRUNCATE TABLE tensorzero.model_inference_data CASCADE;
 -- Feedback tables (Step 2)
 TRUNCATE TABLE tensorzero.boolean_metric_feedback CASCADE;
 TRUNCATE TABLE tensorzero.float_metric_feedback CASCADE;
@@ -80,6 +84,8 @@ TRUNCATE TABLE tensorzero.demonstration_feedback CASCADE;
 -- Datapoint tables
 TRUNCATE TABLE tensorzero.chat_datapoints CASCADE;
 TRUNCATE TABLE tensorzero.json_datapoints CASCADE;
+-- Inference evaluation tables
+TRUNCATE TABLE tensorzero.inference_evaluation_runs CASCADE;
 -- Workflow evaluation tables (Step 5)
 TRUNCATE TABLE tensorzero.workflow_evaluation_run_episodes CASCADE;
 TRUNCATE TABLE tensorzero.workflow_evaluation_runs CASCADE;
@@ -94,7 +100,8 @@ if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixt
    [ ! -f "small-fixtures/chat_inference_datapoint_examples.jsonl" ] || [ ! -f "small-fixtures/json_inference_datapoint_examples.jsonl" ] || \
    [ ! -f "small-fixtures/model_inference_examples.jsonl" ] || \
    [ ! -f "small-fixtures/dynamic_evaluation_run_examples.jsonl" ] || \
-   [ ! -f "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" ]; then
+   [ ! -f "small-fixtures/dynamic_evaluation_run_episode_examples.jsonl" ] || \
+   [ ! -f "small-fixtures/metadata_only_inference_examples.jsonl" ]; then
     echo "Downloading small fixtures..."
     if [ "${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}" = "1" ]; then
         uv run ./download-small-fixtures-http.py
@@ -103,30 +110,42 @@ if [ ! -f "small-fixtures/chat_inference_examples.jsonl" ] || [ ! -f "small-fixt
     fi
 fi
 
-# Chat Inferences
-# Note: input, output, inference_params are JSONB in our schema
-# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
-# NULLIF handles empty strings that would fail jsonb cast
+# Chat Inferences (metadata)
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/chat_inference_examples.jsonl" "tensorzero.chat_inferences" "
 INSERT INTO tensorzero.chat_inferences (
     id, function_name, variant_name, episode_id,
-    input, output, inference_params,
-    processing_time_ms, ttft_ms, tags, extra_body,
-    dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice,
-    parallel_tool_calls, created_at
+    processing_time_ms, ttft_ms, tags,
+    created_at
 )
 SELECT
     (j->>'id')::uuid,
     j->>'function_name',
     j->>'variant_name',
     (j->>'episode_id')::uuid,
-    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
-    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
-    COALESCE(NULLIF(j->>'inference_params', '')::jsonb, '{}'),
     (j->>'processing_time_ms')::integer,
     (j->>'ttft_ms')::integer,
     COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Chat Inference IO
+# Note: input, output, inference_params are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+load_jsonl "small-fixtures/chat_inference_examples.jsonl" "tensorzero.chat_inference_data" "
+INSERT INTO tensorzero.chat_inference_data (
+    id, input, output, inference_params,
+    extra_body, dynamic_tools, dynamic_provider_tools, allowed_tools,
+    tool_choice, parallel_tool_calls, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'inference_params', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
     COALESCE(NULLIF(j->>'dynamic_tools', '')::jsonb, '[]'),
     COALESCE(NULLIF(j->>'dynamic_provider_tools', '')::jsonb, '[]'),
@@ -138,29 +157,41 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
 "
 
-# JSON Inferences
-# Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
-# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
-# NULLIF handles empty strings that would fail jsonb cast
+# JSON Inferences (metadata)
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/json_inference_examples.jsonl" "tensorzero.json_inferences" "
 INSERT INTO tensorzero.json_inferences (
     id, function_name, variant_name, episode_id,
-    input, output, output_schema, inference_params,
-    processing_time_ms, ttft_ms, tags, extra_body, auxiliary_content, created_at
+    processing_time_ms, ttft_ms, tags, created_at
 )
 SELECT
     (j->>'id')::uuid,
     j->>'function_name',
     j->>'variant_name',
     (j->>'episode_id')::uuid,
+    (j->>'processing_time_ms')::integer,
+    (j->>'ttft_ms')::integer,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# JSON Inference IO
+# Note: input, output, output_schema, inference_params, auxiliary_content are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+load_jsonl "small-fixtures/json_inference_examples.jsonl" "tensorzero.json_inference_data" "
+INSERT INTO tensorzero.json_inference_data (
+    id, input, output, output_schema, inference_params,
+    extra_body, auxiliary_content, created_at
+)
+SELECT
+    (j->>'id')::uuid,
     COALESCE(NULLIF(j->>'input', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'output', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'output_schema', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'inference_params', '')::jsonb, '{}'),
-    (j->>'processing_time_ms')::integer,
-    (j->>'ttft_ms')::integer,
-    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
     COALESCE(NULLIF(j->>'extra_body', '')::jsonb, '[]'),
     COALESCE(NULLIF(j->>'auxiliary_content', '')::jsonb, '{}'),
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
@@ -168,26 +199,57 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
 "
 
-# Model Inferences
-# Note: input_messages, output are JSONB in our schema
-# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
-# NULLIF handles empty strings that would fail jsonb cast
+# Metadata-only chat inferences (simulating data retention expiry — no data table rows)
+load_jsonl "small-fixtures/metadata_only_inference_examples.jsonl" "tensorzero.chat_inferences" "
+INSERT INTO tensorzero.chat_inferences (
+    id, function_name, variant_name, episode_id,
+    processing_time_ms, ttft_ms, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'function_name',
+    j->>'variant_name',
+    (j->>'episode_id')::uuid,
+    (j->>'processing_time_ms')::integer,
+    (j->>'ttft_ms')::integer,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+WHERE j->>'inference_type' = 'chat'
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Metadata-only JSON inferences (simulating data retention expiry — no data table rows)
+load_jsonl "small-fixtures/metadata_only_inference_examples.jsonl" "tensorzero.json_inferences" "
+INSERT INTO tensorzero.json_inferences (
+    id, function_name, variant_name, episode_id,
+    processing_time_ms, ttft_ms, tags, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'function_name',
+    j->>'variant_name',
+    (j->>'episode_id')::uuid,
+    (j->>'processing_time_ms')::integer,
+    (j->>'ttft_ms')::integer,
+    COALESCE(NULLIF(j->>'tags', '')::jsonb, '{}'),
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+WHERE j->>'inference_type' = 'json'
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Model Inferences (metadata)
 # created_at is derived from the UUIDv7 id using tensorzero.uuid_v7_to_timestamp()
 load_jsonl "small-fixtures/model_inference_examples.jsonl" "tensorzero.model_inferences" "
 INSERT INTO tensorzero.model_inferences (
-    id, inference_id, raw_request, raw_response, system,
-    input_messages, output, input_tokens, output_tokens,
+    id, inference_id, input_tokens, output_tokens,
     response_time_ms, model_name, model_provider_name,
     ttft_ms, cached, finish_reason, created_at
 )
 SELECT
     (j->>'id')::uuid,
     (j->>'inference_id')::uuid,
-    j->>'raw_request',
-    j->>'raw_response',
-    j->>'system',
-    COALESCE(NULLIF(j->>'input_messages', '')::jsonb, '[]'),
-    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
     (j->>'input_tokens')::integer,
     (j->>'output_tokens')::integer,
     (j->>'response_time_ms')::integer,
@@ -196,6 +258,27 @@ SELECT
     (j->>'ttft_ms')::integer,
     COALESCE((j->>'cached')::boolean, false),
     j->>'finish_reason',
+    tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
+FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
+ON CONFLICT (id, created_at) DO NOTHING;
+"
+
+# Model Inference IO
+# Note: input_messages, output are JSONB in our schema
+# ClickHouse stores these as String (JSON-encoded), so we use ->> to extract text then cast to jsonb
+# NULLIF handles empty strings that would fail jsonb cast
+load_jsonl "small-fixtures/model_inference_examples.jsonl" "tensorzero.model_inference_data" "
+INSERT INTO tensorzero.model_inference_data (
+    id, raw_request, raw_response, system,
+    input_messages, output, created_at
+)
+SELECT
+    (j->>'id')::uuid,
+    j->>'raw_request',
+    j->>'raw_response',
+    j->>'system',
+    COALESCE(NULLIF(j->>'input_messages', '')::jsonb, '[]'),
+    COALESCE(NULLIF(j->>'output', '')::jsonb, '[]'),
     tensorzero.uuid_v7_to_timestamp((j->>'id')::uuid)
 FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (id, created_at) DO NOTHING;
@@ -413,44 +496,97 @@ FROM tmp_jsonl, LATERAL (SELECT data::jsonb AS j) AS parsed
 ON CONFLICT (episode_id) DO NOTHING;
 "
 
-echo "Refreshing materialized views..."
+# =====================================================================
+# Inference Evaluation Runs (backfilled from loaded inference data)
+# =====================================================================
+
+echo "Backfilling inference_evaluation_runs from inference tags..."
+psql -q "$POSTGRES_URL" <<'EOF'
+WITH inference_eval_data AS (
+    -- Only include main function inferences, not evaluator inferences
+    -- (evaluator functions have names like `tensorzero::llm_judge::...`)
+    SELECT
+        (tags->>'tensorzero::evaluation_run_id')::uuid AS run_id,
+        tags->>'tensorzero::evaluation_name' AS evaluation_name,
+        function_name,
+        'chat'::text AS function_type,
+        tags->>'tensorzero::dataset_name' AS dataset_name,
+        variant_name
+    FROM tensorzero.chat_inferences
+    WHERE tags ? 'tensorzero::evaluation_run_id'
+      AND function_name NOT LIKE 'tensorzero::%'
+
+    UNION ALL
+
+    SELECT
+        (tags->>'tensorzero::evaluation_run_id')::uuid AS run_id,
+        tags->>'tensorzero::evaluation_name' AS evaluation_name,
+        function_name,
+        'json'::text AS function_type,
+        tags->>'tensorzero::dataset_name' AS dataset_name,
+        variant_name
+    FROM tensorzero.json_inferences
+    WHERE tags ? 'tensorzero::evaluation_run_id'
+      AND function_name NOT LIKE 'tensorzero::%'
+),
+grouped AS (
+    SELECT
+        run_id,
+        evaluation_name,
+        function_name,
+        function_type,
+        dataset_name,
+        to_jsonb(array_agg(DISTINCT variant_name ORDER BY variant_name)) AS variant_names
+    FROM inference_eval_data
+    GROUP BY run_id, evaluation_name, function_name, function_type, dataset_name
+)
+INSERT INTO tensorzero.inference_evaluation_runs (
+    run_id, evaluation_name, function_name, function_type,
+    dataset_name, variant_names, metrics, source,
+    snapshot_hash, created_at
+)
+SELECT
+    run_id,
+    evaluation_name,
+    function_name,
+    function_type,
+    dataset_name,
+    variant_names,
+    CASE evaluation_name
+        WHEN 'entity_extraction' THEN '[
+            {"name":"tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports","evaluator_name":"count_sports","value_type":"float","optimize":"min"},
+            {"name":"tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match","evaluator_name":"exact_match","value_type":"boolean","optimize":"max"}
+        ]'::jsonb
+        WHEN 'haiku' THEN '[
+            {"name":"tensorzero::evaluation_name::haiku::evaluator_name::exact_match","evaluator_name":"exact_match","value_type":"boolean","optimize":"max"},
+            {"name":"tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f","evaluator_name":"topic_starts_with_f","value_type":"boolean","optimize":"min"}
+        ]'::jsonb
+        ELSE '[]'::jsonb
+    END,
+    'dataset_name',
+    NULL,
+    tensorzero.uuid_v7_to_timestamp(run_id)
+FROM grouped
+ON CONFLICT (run_id) DO NOTHING;
+EOF
+echo "  Done"
+
+echo "Backfilling model provider statistics and latency histograms..."
 psql -q "$POSTGRES_URL" <<EOF
-REFRESH MATERIALIZED VIEW tensorzero.model_provider_statistics;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_hour;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_day;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_week;
-REFRESH MATERIALIZED VIEW tensorzero.model_latency_quantiles_month;
+SELECT tensorzero.refresh_model_provider_statistics_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_minute_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_model_latency_histogram_hour_incremental(
+    full_refresh => TRUE
+);
+SELECT tensorzero.refresh_inference_by_function_statistics_incremental(
+    full_refresh => TRUE
+);
 EOF
 
 
 echo ""
 echo "All fixtures loaded successfully!"
-
-# Print row counts
-echo ""
-echo "Row counts:"
-psql -q "$POSTGRES_URL" <<EOF
-SELECT 'chat_inferences' as table_name, count(*) as count FROM tensorzero.chat_inferences
-UNION ALL
-SELECT 'json_inferences', count(*) FROM tensorzero.json_inferences
-UNION ALL
-SELECT 'model_inferences', count(*) FROM tensorzero.model_inferences
-UNION ALL
-SELECT 'boolean_metric_feedback', count(*) FROM tensorzero.boolean_metric_feedback
-UNION ALL
-SELECT 'float_metric_feedback', count(*) FROM tensorzero.float_metric_feedback
-UNION ALL
-SELECT 'comment_feedback', count(*) FROM tensorzero.comment_feedback
-UNION ALL
-SELECT 'demonstration_feedback', count(*) FROM tensorzero.demonstration_feedback
-UNION ALL
-SELECT 'chat_datapoints', count(*) FROM tensorzero.chat_datapoints
-UNION ALL
-SELECT 'json_datapoints', count(*) FROM tensorzero.json_datapoints
-UNION ALL
-SELECT 'workflow_evaluation_runs', count(*) FROM tensorzero.workflow_evaluation_runs
-UNION ALL
-SELECT 'workflow_evaluation_run_episodes', count(*) FROM tensorzero.workflow_evaluation_run_episodes
-ORDER BY table_name;
-EOF

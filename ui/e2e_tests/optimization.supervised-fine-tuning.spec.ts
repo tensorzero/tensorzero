@@ -61,13 +61,9 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
         await page.getByRole("option", { name: "extract_entities" }).click();
         await page.getByRole("combobox", { name: "Metric" }).click();
         await page.getByText("exact_match", { exact: true }).click();
+        await page.getByPlaceholder("Select variant").click();
         await page
-          .getByRole("combobox")
-          .filter({ hasText: "Select a variant name" })
-          .click();
-        await page
-          .getByLabel("gpt4o_mini_initial_prompt")
-          .getByText("gpt4o_mini_initial_prompt")
+          .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
           .click();
         await page.getByPlaceholder("Select model").click();
         await page.getByRole("option", { name: model }).click();
@@ -103,13 +99,9 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("demonstration", { exact: true }).click();
+    await page.getByPlaceholder("Select variant").click();
     await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page
-      .getByLabel("gpt4o_mini_initial_prompt")
-      .getByText("gpt4o_mini_initial_prompt")
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
       .click();
     await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
@@ -151,11 +143,8 @@ model_name = "mock-finetune-1234"
     await page.getByRole("option", { name: "image_judger" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByRole("option", { name: "None" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page.getByLabel("honest_answer").getByText("honest_answer").click();
+    await page.getByPlaceholder("Select variant").click();
+    await page.getByRole("option", { name: "honest_answer" }).click();
     await page.getByPlaceholder("Select model").click();
     await page.getByRole("option", { name: "gpt-4o-2024-08-06" }).click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
@@ -211,6 +200,31 @@ model_name = "mock-finetune-1234"
     ).toBeVisible();
   });
 
+  test("should reset variant when function changes", async ({ page }) => {
+    await page.goto("/optimization/supervised-fine-tuning");
+
+    // Select first function
+    await page.getByPlaceholder("Select function").click();
+    await page.getByRole("option", { name: "extract_entities" }).click();
+
+    // Select a variant for this function
+    await page.getByPlaceholder("Select variant").click();
+    await page
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
+      .click();
+
+    // Verify variant is selected
+    const variantCombobox = page.getByRole("combobox", { name: "Prompt" });
+    await expect(variantCombobox).toHaveValue("gpt4o_mini_initial_prompt");
+
+    // Switch to a different function
+    await page.getByPlaceholder("Select function").click();
+    await page.getByRole("option", { name: "image_judger" }).click();
+
+    // Verify variant was reset - the combobox value should be empty
+    await expect(variantCombobox).toHaveValue("");
+  });
+
   test("@mock @slow should fine-tune with a mocked GCP Vertex Gemini server", async ({
     page,
   }) => {
@@ -225,13 +239,9 @@ model_name = "mock-finetune-1234"
     await page.getByText("exact_match", { exact: true }).click();
 
     // Select variant
+    await page.getByPlaceholder("Select variant").click();
     await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page
-      .getByLabel("gpt4o_mini_initial_prompt")
-      .getByText("gpt4o_mini_initial_prompt")
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
       .click();
 
     // Select a GCP model from the default list
@@ -273,13 +283,9 @@ test.describe("Error handling", () => {
     await page.getByRole("option", { name: "extract_entities" }).click();
     await page.getByRole("combobox", { name: "Metric" }).click();
     await page.getByText("exact_match", { exact: true }).click();
+    await page.getByPlaceholder("Select variant").click();
     await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page
-      .getByLabel("gpt4o_mini_initial_prompt")
-      .getByText("gpt4o_mini_initial_prompt")
+      .getByRole("option", { name: "gpt4o_mini_initial_prompt" })
       .click();
     const modelInput = page.getByPlaceholder("Select model");
     await modelInput.click();
@@ -291,9 +297,10 @@ test.describe("Error handling", () => {
     // Click on the Start Fine-tuning Job button
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page
-      .getByText("failed because the model is an error model")
-      .waitFor({ timeout: 12000 });
+    await page.getByText("Fine-tuning job failed").waitFor({ timeout: 12000 });
+    await expect(
+      page.getByText("failed because the model is an error model").first(),
+    ).toBeVisible();
   });
 });
 

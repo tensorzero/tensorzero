@@ -51,18 +51,16 @@
               "gateway/configure-functions-and-variants",
               "gateway/create-a-prompt-template",
               "gateway/generate-structured-outputs",
+              "gateway/call-llms-with-image-and-file-inputs",
               "gateway/generate-embeddings",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
               "gateway/guides/inference-caching",
               "gateway/guides/inference-time-optimizations",
               "gateway/guides/metrics-feedback",
-              "gateway/guides/multimodal-inference",
               "gateway/guides/retries-fallbacks",
-              "gateway/guides/streaming-inference",
               "gateway/guides/tool-use",
               "gateway/benchmarks",
-              "gateway/clients",
               "gateway/configuration-reference",
               "gateway/data-model",
               {
@@ -119,7 +117,8 @@
             "group": "Experimentation",
             "pages": [
               "experimentation/run-adaptive-ab-tests",
-              "experimentation/run-static-ab-tests"
+              "experimentation/run-static-ab-tests",
+              "experimentation/scope-experiments-with-namespaces"
             ]
           },
           {
@@ -127,10 +126,11 @@
             "pages": [
               "deployment/tensorzero-gateway",
               "deployment/tensorzero-ui",
-              "deployment/clickhouse",
               "deployment/postgres",
+              "deployment/clickhouse",
               "deployment/valkey-redis",
               "deployment/tensorzero-autopilot",
+              "deployment/upgrade-tensorzero",
               "deployment/optimize-latency-and-throughput"
             ]
           },
@@ -140,6 +140,7 @@
               "operations/manage-credentials",
               "operations/set-up-auth-for-tensorzero",
               "operations/enforce-custom-rate-limits",
+              "operations/track-usage-and-cost",
               "operations/centralize-auth-rate-limits-and-more",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
@@ -373,6 +374,14 @@
       "destination": "/gateway/create-a-prompt-template"
     },
     {
+      "source": "/gateway/guides/multimodal-inference",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
+    },
+    {
+      "source": "/gateway/guides/multimodal-inference/",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
+    },
+    {
       "source": "/evaluations/static-evaluations/cli-reference",
       "destination": "/evaluations/inference-evaluations/cli-reference"
     },
@@ -427,6 +436,22 @@
     {
       "source": "/recipes/",
       "destination": "/optimization"
+    },
+    {
+      "source": "/gateway/guides/streaming-inference",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/guides/streaming-inference/",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/clients",
+      "destination": "/gateway"
+    },
+    {
+      "source": "/gateway/clients/",
+      "destination": "/gateway"
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { HelpTooltip, docsUrl } from "~/components/ui/HelpTooltip";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { EpisodeByIdRow, TableBoundsWithCount } from "~/types/tensorzero";
 import { Suspense } from "react";
@@ -39,7 +40,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     boundsPromise,
   ]).then(([episodes, bounds]) => ({ episodes, bounds }));
 
-  const countPromise = boundsPromise.then((b) => Number(b.count));
+  const countPromise = boundsPromise.then((b) =>
+    b.count != null ? Number(b.count) : undefined,
+  );
 
   return {
     dataPromise,
@@ -98,7 +101,16 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Episodes" count={countPromise} />
+      <PageHeader
+        heading="Episodes"
+        count={countPromise}
+        help={
+          <HelpTooltip link={{ href: docsUrl("gateway/guides/episodes") }}>
+            Episodes group related inferences from multi-step workflows or agent
+            interactions into a single sequence.
+          </HelpTooltip>
+        }
+      />
       <SectionLayout>
         <EpisodeSearchBar />
         <EpisodesTable data={dataPromise} />

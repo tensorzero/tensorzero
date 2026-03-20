@@ -5,9 +5,9 @@ services:
   clickhouse:
     image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
     environment:
-      CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
     ports:
@@ -27,7 +27,7 @@ services:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
       context: ../..
-      dockerfile: gateway/Dockerfile
+      dockerfile: crates/gateway/Dockerfile
       target: gateway
       args:
         PROFILE: dev
@@ -37,12 +37,12 @@ services:
       - ${GCP_CREDENTIALS_PATH:-../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-'/app/config/tensorzero*.toml'}
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       GCP_VERTEX_CREDENTIALS_PATH: /app/gcp_jwt_key.json
       GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       # For mock server during SFT jobs and batch inference (optional, set via host env or .env)
       TENSORZERO_INTERNAL_MOCK_PROVIDER_API: ${TENSORZERO_INTERNAL_MOCK_PROVIDER_API:-}
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
     env_file:
       - .env
       - path: .env-gateway
@@ -72,6 +72,7 @@ services:
       timeout: 1s
 
   fixtures:
+    image: tensorzero/fixtures:${TENSORZERO_FIXTURES_TAG:-latest}
     build:
       context: ../../
       dockerfile: ui/fixtures/Dockerfile
@@ -79,14 +80,14 @@ services:
       - .:/fixtures
       - ~/.aws:/root/.aws
     environment:
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PASSWORD=chpassword
-      - CLICKHOUSE_USER=chuser
-      - TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS
-      - TENSORZERO_SKIP_LARGE_FIXTURES
-      - R2_ACCESS_KEY_ID
-      - R2_SECRET_ACCESS_KEY
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS:-}
+      TENSORZERO_SKIP_LARGE_FIXTURES: ${TENSORZERO_SKIP_LARGE_FIXTURES:-}
     depends_on:
       gateway:
         condition: service_healthy

@@ -18,7 +18,7 @@ For example, you can use this dataset to curate data to fine-tune a custom LLM, 
 Supervised Fine-Tuning (SFT) trains a language model on curated examples of good behavior, resulting in a custom model that performs better on your specific use case.
 
 TensorZero has fine-tuning integrations with OpenAI, GCP Vertex AI, Fireworks AI, and Together AI.
-See the [Supervised Fine-Tuning Guide](/optimization/supervised-fine-tuning) to learn more.
+See the [Supervised Fine-Tuning Guide](/optimization/supervised-fine-tuning-sft) to learn more.
 
 Additionally, we provide recipes for self-hosted fine-tuning with [`axolotl`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/axolotl/), [`torchtune`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/torchtune/), and [`unsloth`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/).
 
@@ -45,16 +45,6 @@ GEPA is an automated prompt optimization method that evolves prompts through ite
 It uses LLMs to analyze inference results and propose prompt improvements, then filters variants using Pareto frontier selection to balance multiple objectives.
 
 See the [GEPA Guide](/optimization/gepa) to learn more.
-
-### MIPRO
-
-MIPRO (Multi-prompt Instruction PRoposal Optimizer) is a method for automatically improving system instructions and few-shot demonstrations in LLM applications — including ones with multiple LLM functions or calls.
-
-![MIPRO Diagram](./index-mipro-diagram.svg)
-
-MIPRO can optimize prompts across an entire LLM pipeline without needing fine-grained labels or gradients. Instead, it uses a Bayesian optimizer to figure out which instructions and demonstrations actually improve end-to-end performance. By combining application-aware prompt proposals and stochastic mini-batch evaluations, MIPRO can improve downstream task performance compared to traditional prompt engineering approaches.
-
-We provide a recipe for [Automated Prompt Engineering with MIPRO](https://github.com/tensorzero/tensorzero/tree/main/recipes/mipro).
 
 ## Inference-Time Optimization
 

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { withRouter } from "storybook-addon-remix-react-router";
 import { ImageMessage } from "./SnippetContent";
 
 async function getBase64File(url: string): Promise<string> {
@@ -22,7 +21,6 @@ const ferrisImageUrl =
 const meta = {
   title: "UI/Message Blocks/ImageMessage",
   component: ImageMessage,
-  decorators: [withRouter],
   parameters: {
     layout: "padded",
   },

@@ -1,5 +1,6 @@
 // Inspired by react-hot-toast library
 import * as React from "react";
+import { AlertTriangle, Check } from "lucide-react";
 import { ToastContext, ToastActionType } from "~/context/toast-context";
 import type {
   Toast,
@@ -116,7 +117,12 @@ export function GlobalToastProvider({
       success: (props) => {
         const { log, ...toastProps } = props;
         logger(props);
-        return emitToast({ ...toastProps, variant: "success" });
+        return emitToast({
+          icon: Check,
+          iconClassName: "text-green-500 dark:text-green-400",
+          ...toastProps,
+          variant: "success",
+        });
       },
       warn: (props) => {
         const { log, ...toastProps } = props;
@@ -126,7 +132,12 @@ export function GlobalToastProvider({
       error: (props) => {
         const { log, ...toastProps } = props;
         logger(props, "error");
-        return emitToast({ ...toastProps, variant: "destructive" });
+        return emitToast({
+          icon: AlertTriangle,
+          iconClassName: "text-red-500 dark:text-red-400",
+          ...toastProps,
+          variant: "destructive",
+        });
       },
       dismiss: (id) =>
         dispatch({ type: "QUEUE_DISMISS_TOAST", id, addToRemoveQueue }),

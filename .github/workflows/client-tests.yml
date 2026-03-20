@@ -1,0 +1,383 @@
+name: Client Tests
+
+on:
+  workflow_call:
+
+env:
+  CARGO_INCREMENTAL: 0
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+  AWS_REGION: "us-east-1"
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY_NEW }}
+  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+  FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  FORCE_COLOR: 1
+  GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+  GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
+  GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+  GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
+  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+  MODAL_KEY: ${{ secrets.MODAL_KEY }}
+  MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+  TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+  XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
+  SQLX_OFFLINE: 1
+  TENSORZERO_E2E_PROXY: http://localhost:3003
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  TENSORZERO_MOCK_PROVIDER_API_TAG: sha-${{ github.sha }}
+  TENSORZERO_CI: 1
+  CARGO_NEXTEST_FLAKY_TESTS: ${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}
+
+jobs:
+  client-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        batch_writes: [true, false]
+      # Don't fail-fast for manual/cron runs, so that we get the full picture of what broke
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Install gdb
+        run: sudo apt-get update && sudo apt-get install -y gdb
+
+      - name: Warm up Modal instances
+        run: |
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
+          # TODO: Re-enable once we can switch to a T4 GPU
+          # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
+
+      - name: Cleanup disk space
+        run: bash ci/free-disk-space.sh
+
+      - name: Restore client-tests provider-proxy cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ./ci/provider-proxy-cache/
+          key: provider-proxy-cache-client-tests-${{ github.run_id }}
+          restore-keys: provider-proxy-cache-client-tests-
+
+      - name: Download client-tests provider-proxy cache
+        # When running as a cron job, don't use the provider-proxy cache.
+        # The cron job is used to gather information about provider flakiness.
+        if: github.event_name != 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/download-provider-proxy-cache.sh
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull container images
+        run: |
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+
+      - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
+        run: |
+          for attempt in 1 2 3; do
+            if rustup show; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust toolchain after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+      # Start testing workload identity federation credentials once the SDK adds support: https://github.com/googleapis/google-cloud-rust/issues/1342
+
+      # - uses: 'google-github-actions/auth@v2'
+      #   with:
+      #     project_id: 'tensozero-public'
+      #     workload_identity_provider: 'projects/454541351720/locations/global/workloadIdentityPools/github/providers/tensorzero'
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        with:
+          version: "0.9.27"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@10.15.0; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install openai-node dependencies
+        working-directory: clients/openai-node
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        with:
+          tool: cargo-nextest
+
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Set up database URLs for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_VALKEY_URL=redis://localhost:6379" >> $GITHUB_ENV
+          echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
+
+      - name: Configure batch writes in tensorzero.toml
+        if: matrix.batch_writes == true
+        run: |
+          echo "[gateway.observability.batch_writes]" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "enabled = true" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "flush_interval_ms = 80" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "__force_allow_embedded_batch_writes = true" >> crates/tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+
+      - name: Launch dependency services for E2E tests
+        run: |
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy up --no-build -d --wait
+
+      - name: Print ClickHouse container logs
+        if: always()
+        run: |
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs -t
+
+      - name: Set up gateway environment file
+        run: |
+          # TensorZero config
+          echo "TENSORZERO_CLICKHOUSE_URL=${TENSORZERO_CLICKHOUSE_URL}" >> gateway.env
+          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${TENSORZERO_CLICKHOUSE_BATCH_WRITES}" >> gateway.env
+          echo "TENSORZERO_POSTGRES_URL=${TENSORZERO_POSTGRES_URL}" >> gateway.env
+          echo "TENSORZERO_VALKEY_URL=${TENSORZERO_VALKEY_URL}" >> gateway.env
+          echo "TENSORZERO_E2E_PROXY=${TENSORZERO_E2E_PROXY}" >> gateway.env
+          echo "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT}" >> gateway.env
+          echo "GCP_VERTEX_CREDENTIALS_PATH=/app/gcp_jwt_key.json" >> gateway.env
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_jwt_key.json" >> gateway.env
+          # Provider API keys
+          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> gateway.env
+          echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}" >> gateway.env
+          echo "AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK}" >> gateway.env
+          echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> gateway.env
+          echo "AWS_REGION=${AWS_REGION}" >> gateway.env
+          echo "AZURE_API_KEY=${AZURE_API_KEY}" >> gateway.env
+          echo "DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}" >> gateway.env
+          echo "FIREWORKS_API_KEY=${FIREWORKS_API_KEY}" >> gateway.env
+          echo "FIREWORKS_ACCOUNT_ID=${FIREWORKS_ACCOUNT_ID}" >> gateway.env
+          echo "GCP_STORAGE_ACCESS_KEY_ID=${GCP_STORAGE_ACCESS_KEY_ID}" >> gateway.env
+          echo "GCP_STORAGE_SECRET_ACCESS_KEY=${GCP_STORAGE_SECRET_ACCESS_KEY}" >> gateway.env
+          echo "GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_AI_STUDIO_API_KEY}" >> gateway.env
+          echo "GROQ_API_KEY=${GROQ_API_KEY}" >> gateway.env
+          echo "HYPERBOLIC_API_KEY=${HYPERBOLIC_API_KEY}" >> gateway.env
+          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> gateway.env
+          echo "MODAL_KEY=${MODAL_KEY}" >> gateway.env
+          echo "MODAL_SECRET=${MODAL_SECRET}" >> gateway.env
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> gateway.env
+          echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" >> gateway.env
+          echo "SGLANG_API_KEY=${SGLANG_API_KEY}" >> gateway.env
+          echo "TGI_API_KEY=${TGI_API_KEY}" >> gateway.env
+          echo "TOGETHER_API_KEY=${TOGETHER_API_KEY}" >> gateway.env
+          echo "VLLM_API_KEY=${VLLM_API_KEY}" >> gateway.env
+          echo "VOYAGE_API_KEY=${VOYAGE_API_KEY}" >> gateway.env
+          echo "XAI_API_KEY=${XAI_API_KEY}" >> gateway.env
+
+      - name: Run postgres migrations
+        run: |
+          docker run --rm --network host \
+            --env-file gateway.env \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --run-postgres-migrations
+
+      - name: Launch the gateway for E2E tests
+        timeout-minutes: 2
+        run: |
+          docker run -d --name gateway-e2e --network host \
+            --env-file gateway.env \
+            -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
+            -v ${{ github.workspace }}/crates/tensorzero-core:/app/tensorzero-core:ro \
+            -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+
+      - name: Install Python 3.10
+        run: |
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: "Python: PyO3 Client: pytest (non-mock tests)"
+        working-directory: crates/tensorzero-python
+        run: |
+          # Start the test in background and capture its PID
+          bash ./test.sh --verbose -n 8 -m "not mock" &
+          TEST_PID=$!
+          echo "Started test.sh with PID: $TEST_PID"
+
+          # Wait for 10 minutes (600 seconds)
+          for i in {1..600}; do
+            if ! kill -0 $TEST_PID 2>/dev/null; then
+              echo "Test completed normally"
+              wait $TEST_PID
+              exit $?
+            fi
+            sleep 1
+          done
+
+          echo "Test has been running for 10 minutes, capturing backtraces..."
+
+          # Get all processes related to our test
+          echo "=== Process tree ==="
+          ps -ef | grep -E "(test\.sh|pytest|python)" | grep -v grep || true
+
+          echo "=== Capturing backtraces with gdb ==="
+          # Find all python processes that might be related to our test
+          PYTHON_PIDS=$(pgrep -f "tensorzero.*python" || true)
+          if [ -n "$PYTHON_PIDS" ]; then
+            for pid in $PYTHON_PIDS; do
+              echo "--- Backtrace for Python process $pid ---"
+              gdb -p $pid --batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt" \
+                -ex "info threads" \
+                -ex "detach" \
+                -ex "quit" 2>&1 || true
+              echo ""
+            done
+          else
+            echo "No Python processes found"
+          fi
+          exit 1
+
+      - name: "Python: PyO3 Client: pytest (mock tests)"
+        working-directory: crates/tensorzero-python
+        env:
+          TENSORZERO_INTERNAL_MOCK_PROVIDER_API: http://localhost:3030
+        run: |
+          bash ./test.sh --verbose -n 8 -m mock
+
+      - name: "Node.js: OpenAI Client: test"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run test
+
+      - name: Install Go
+        uses: actions/setup-go@29694d72cd5e7ef3b09496b39f28a942af47737e
+        with:
+          go-version: "1.24"
+
+      - name: "Go: OpenAI Client: test"
+        working-directory: clients/openai-go/tests
+        run: go test -v
+
+      - name: Print e2e logs
+        if: always()
+        run: docker logs gateway-e2e 2>&1 || echo "No gateway container logs available"
+
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker logs gateway-e2e 2>&1)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
+      - name: Terminate the gateway container
+        if: always()
+        run: |
+          docker stop gateway-e2e || true
+          docker rm gateway-e2e || true
+
+      - name: Print provider-proxy logs
+        if: always()
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
+
+      - name: Print vLLM modal logs
+        if: always()
+        run: cat vllm_modal_logs.txt
+
+      - name: Print SGLang modal logs
+        if: always()
+        run: cat sglang_modal_logs.txt
+
+      - name: Print vLLM GPT-OSS modal logs
+        if: always()
+        continue-on-error: true
+        run: cat vllm_gpt_oss_modal_logs.txt
+
+      - name: Upload client-tests provider-proxy cache
+        # Only upload the cache from trusted runs (merge queue or cron)
+        if: github.event_name == 'merge_group' || github.event_name == 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh

@@ -15,8 +15,6 @@ ui/fixtures/large-fixtures
 /recipes
 gcp_jwt_key.json
 .credentials/
+/clients
 /docs
 /examples
-!/examples/quickstart/package.json
-!/examples/integrations/helicone/package.json
-!/examples/guides/tool-use/package.json

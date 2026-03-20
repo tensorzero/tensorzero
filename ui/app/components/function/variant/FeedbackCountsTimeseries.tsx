@@ -17,7 +17,6 @@ import { TimeGranularitySelector } from "./TimeGranularitySelector";
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
 import type { FeedbackCountsTimeseriesData } from "./FeedbackSamplesTimeseries";
@@ -76,7 +75,7 @@ export function FeedbackCountsTimeseries({
         />
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-80 w-full">
+        <ChartContainer config={chartConfig}>
           <AreaChart accessibilityLayer data={countsDataWithTimestamps}>
             <CartesianGrid vertical={false} />
             <XAxis
@@ -155,9 +154,6 @@ export function FeedbackCountsTimeseries({
                 );
               }}
             />
-            <ChartLegend
-              content={<ChartLegendContent className="font-mono text-xs" />}
-            />
             {variantNames.map((variantName) => (
               <Area
                 key={variantName}
@@ -173,6 +169,10 @@ export function FeedbackCountsTimeseries({
             ))}
           </AreaChart>
         </ChartContainer>
+        <ChartLegend
+          items={variantNames}
+          colors={variantNames.map((name) => chartConfig[name].color)}
+        />
       </CardContent>
     </Card>
   );

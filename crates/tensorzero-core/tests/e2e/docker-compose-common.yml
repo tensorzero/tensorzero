@@ -1,0 +1,196 @@
+services:
+  provider-proxy:
+    profiles: ["provider-proxy"]
+    image: tensorzero/provider-proxy:${TENSORZERO_COMMIT_TAG:-latest}
+    build:
+      context: ../../../..
+      dockerfile: crates/provider-proxy/Dockerfile
+      target: provider-proxy
+    ports:
+      - "3003:3003"
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      # Mount cache directory for downloading cache files separately
+      - ../../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
+    # Cache mode can be overridden via PROVIDER_PROXY_CACHE_MODE environment variable.
+    # Options: read-old-write-new (default), read-only, read-write
+    # See: https://github.com/tensorzero/tensorzero/issues/5380
+    command:
+      [
+        "--cache-path",
+        "/app/ci/provider-proxy-cache",
+        "--mode",
+        "${PROVIDER_PROXY_CACHE_MODE:-read-old-write-new}",
+      ]
+    healthcheck:
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  clickhouse:
+    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-lts}
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+      CLICKHOUSE_USER: chuser
+    volumes:
+      # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
+      # an empty dir will get mounted in the container
+      - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-lts}/users.xml:/etc/clickhouse-server/users.d/users.xml
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  minio:
+    image: bitnamilegacy/minio:2025.7.23
+    ports:
+      - "8000:9000" # API port
+      - "9001:9001" # Console port
+    environment:
+      MINIO_DEFAULT_BUCKETS: tensorzero-e2e-tests
+      MINIO_ROOT_PASSWORD: tensorzero-root
+      MINIO_ROOT_USER: tensorzero-root
+    healthcheck:
+      test: "mc ls local/tensorzero-e2e-tests || exit 1"
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  memcached:
+    image: memcached:1.6.38
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    environment:
+      MEMCACHED_MAX_MEMORY: 64m # Set the maximum memory usage
+      MEMCACHED_THREADS: 4 # Number of threads to use
+
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    command: valkey-server --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
+  redis:
+    image: redis:7
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200" # tempo
+    depends_on:
+      - memcached
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./self-signed-certs/:/self-signed-certs/
+    ports:
+      - 4316:4316 # OTLP gRPC TLS receiver
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 55679:55679 # ZPages
+
+  postgres:
+    image: tensorzero/postgres:14
+    environment:
+      POSTGRES_DB: tensorzero-e2e-tests
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero-e2e-tests"]
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero-e2e-tests"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
+  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
+  # bump this to a locally-built image (or published 'sha' tag)
+  gateway-clickhouse-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../../..
+      dockerfile: crates/gateway/Dockerfile
+      target: gateway
+      args:
+        PROFILE: dev
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-clickhouse-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 72 # Retry for up to 6 minutes
+      start_period: 5s
+
+  # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
+  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
+  # bump this to a locally-built image (or published 'sha' tag)
+  gateway-postgres-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../../..
+      dockerfile: crates/gateway/Dockerfile
+      target: gateway
+      args:
+        PROFILE: dev
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 72 # Retry for up to 6 minutes
+      start_period: 5s
