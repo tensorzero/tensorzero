@@ -1164,6 +1164,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1518,6 +1519,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),
@@ -1650,6 +1652,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let usage1 = Usage {
             input_tokens: Some(10),

@@ -76,11 +76,12 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/live-tests:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/live-tests:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
@@ -180,11 +181,12 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/live-tests:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/live-tests:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 

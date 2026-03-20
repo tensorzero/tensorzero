@@ -28,6 +28,7 @@ import {
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
+  AutoEvalContentBlock,
   AutoEvalLabeledExample,
   AutopilotStatus,
   EventPayloadMessageContent,
@@ -601,24 +602,26 @@ function AutoEvalLabelingAnswersContent({
       {examples.map((example, idx) => (
         <div key={idx} className="flex flex-col gap-2">
           {/* Context blocks */}
-          {example.context.map((block, blockIdx) => (
-            <div key={blockIdx} className="flex flex-col gap-0.5">
-              {block.label && (
-                <span className="text-fg-muted text-xs font-medium">
-                  {block.label}
-                </span>
-              )}
-              {block.type === "markdown" ? (
-                <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-                  {block.text}
-                </p>
-              ) : (
-                <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
-                  {JSON.stringify(block.data, null, 2)}
-                </pre>
-              )}
-            </div>
-          ))}
+          {[example.maybe_excerpted_prompt, example.maybe_excerpted_response]
+            .filter((block): block is AutoEvalContentBlock => block !== null)
+            .map((block, blockIdx) => (
+              <div key={blockIdx} className="flex flex-col gap-0.5">
+                {block.label && (
+                  <span className="text-fg-muted text-xs font-medium">
+                    {block.label}
+                  </span>
+                )}
+                {block.type === "markdown" ? (
+                  <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+                    {block.text}
+                  </p>
+                ) : (
+                  <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
+                    {JSON.stringify(block.data, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
           {/* Label answer */}
           <div className="flex flex-col gap-0.5">
             <span className="text-fg-muted text-xs font-medium">

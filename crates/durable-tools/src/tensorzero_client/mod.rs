@@ -21,7 +21,7 @@ pub use tensorzero::{
 };
 use tensorzero::{
     GetInferencesRequest, GetInferencesResponse, ListEpisodesRequest, ListEpisodesResponse,
-    ListInferencesRequest,
+    ListInferencesRequest, TensorZeroInternalError,
 };
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
@@ -31,6 +31,7 @@ pub use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsPa
 use tensorzero_core::endpoints::feedback::internal::{
     GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
 };
+use tensorzero_core::error::ErrorDetails;
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
@@ -85,6 +86,25 @@ pub enum TensorZeroClientError {
     /// Evaluation error.
     #[error("Evaluation error: {0}")]
     Evaluation(String),
+}
+
+impl TensorZeroClientError {
+    pub fn is_payload_too_large(&self) -> bool {
+        match self {
+            Self::TensorZero(TensorZeroError::Http { status_code, .. })
+            | Self::Autopilot(autopilot_client::AutopilotError::Http { status_code, .. }) => {
+                *status_code == http::StatusCode::PAYLOAD_TOO_LARGE.as_u16()
+            }
+            Self::TensorZero(TensorZeroError::Other {
+                source: TensorZeroInternalError(e),
+            }) => match e.get_details() {
+                ErrorDetails::Autopilot { status_code, .. } => status_code
+                    .is_some_and(|code| code == http::StatusCode::PAYLOAD_TOO_LARGE.as_u16()),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.

@@ -37,7 +37,10 @@ use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},
 };
-use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name};
+use tensorzero_core::evaluations::{
+    EvaluationConfig, EvaluatorConfig, get_evaluator_metric_name,
+    get_function_evaluator_metric_name,
+};
 use tensorzero_core::function::FunctionConfigType;
 use tensorzero_core::inference::types::InputExt;
 use tensorzero_core::utils::gateway::{setup_clickhouse, setup_postgres};
@@ -107,13 +110,17 @@ fn evaluator_value_type(evaluator_config: &EvaluatorConfig) -> &'static str {
 
 fn build_run_metrics_metadata(
     evaluation_name: Option<&str>,
+    function_name: &str,
     evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> Vec<InferenceEvaluationRunMetricMetadata> {
     let mut metrics: Vec<InferenceEvaluationRunMetricMetadata> = evaluators
         .iter()
         .map(
             |(evaluator_name, evaluator_config)| InferenceEvaluationRunMetricMetadata {
-                name: get_evaluator_metric_name(evaluation_name, evaluator_name),
+                name: match evaluation_name {
+                    Some(eval_name) => get_evaluator_metric_name(eval_name, evaluator_name),
+                    None => get_function_evaluator_metric_name(function_name, evaluator_name),
+                },
                 evaluator_name: Some(evaluator_name.clone()),
                 value_type: evaluator_value_type(evaluator_config).to_string(),
                 optimize: Some(evaluator_config.optimize()),
@@ -261,19 +268,19 @@ pub async fn run_evaluation(
             )
         }
         (None, Some(function_name), Some(evaluator_names)) => {
-            // New mode: resolve top-level evaluators by name
-            let function_config = config
+            // Resolve evaluators from the function config
+            let func = config
                 .functions
                 .get(&function_name)
-                .map(|f| EvaluationFunctionConfig::from(f.as_ref()))
                 .ok_or_else(|| anyhow!("function `{function_name}` not found"))?;
+            let function_config = EvaluationFunctionConfig::from(func.as_ref());
+            let function_evaluators = func.evaluators();
             let mut evaluators = HashMap::new();
             for name in &evaluator_names {
-                let evaluator = config
-                    .evaluators
-                    .get(name)
-                    .ok_or_else(|| anyhow!("top-level evaluator `{name}` not found in config"))?;
-                evaluators.insert(name.clone(), (**evaluator).clone());
+                let evaluator = function_evaluators.get(name).ok_or_else(|| {
+                    anyhow!("evaluator `{name}` not found on function `{function_name}`")
+                })?;
+                evaluators.insert(name.clone(), evaluator.clone());
             }
             (function_name, evaluators, function_config, None)
         }
@@ -663,7 +670,11 @@ pub async fn run_evaluation_core_streaming(
             function_type,
             dataset_name: dataset_name.to_string(),
             variant_names,
-            metrics: build_run_metrics_metadata(args.evaluation_name.as_deref(), &args.evaluators),
+            metrics: build_run_metrics_metadata(
+                args.evaluation_name.as_deref(),
+                &args.function_name,
+                &args.evaluators,
+            ),
             source,
             snapshot_hash: None,
         })
@@ -1188,6 +1199,7 @@ pub async fn process_batch(
                         input,
                         evaluators,
                         evaluation_name,
+                        function_name: Arc::new(function_name),
                         clients: clients.clone(),
                         evaluation_run_id,
                         inference_cache,

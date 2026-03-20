@@ -31,3 +31,6 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/write_haiku/better_prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/write_haiku/better_prompt/user_template.minijinja"
 retries = { num_retries = 4, max_delay_s = 10 }
+
+[functions.write_haiku.evaluators.exact_match]
+type = "exact_match"

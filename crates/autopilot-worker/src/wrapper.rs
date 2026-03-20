@@ -160,7 +160,7 @@ async fn publish_result(
     params: PublishResultParams,
     t0_client: &dyn TensorZeroClient,
 ) -> anyhow::Result<()> {
-    t0_client
+    match t0_client
         .create_autopilot_event(
             params.session_id,
             CreateEventGatewayRequest {
@@ -172,9 +172,33 @@ async fn publish_result(
             },
         )
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to publish tool result: {e}"))?;
-
-    Ok(())
+    {
+        Ok(_) => Ok(()),
+        Err(e) if e.is_payload_too_large() => {
+            tracing::error!("Tool result payload too large: {e}");
+            t0_client
+                .create_autopilot_event(
+                    params.session_id,
+                    CreateEventGatewayRequest {
+                        payload: CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
+                            tool_call_event_id: params.tool_call_event_id,
+                            outcome: ToolOutcome::Failure {
+                                error: ToolFailure::PayloadTooLarge {
+                                    message: "Tool result payload too large".to_string(),
+                                },
+                            },
+                        }),
+                        previous_user_message_event_id: None,
+                    },
+                )
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to publish failure for too-large tool result: {e}")
+                })?;
+            Ok(())
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to publish tool result: {e}")),
+    }
 }
 
 /// Wrapper that promotes a [`SimpleTool`] to a [`TaskTool`] with autopilot side info
@@ -319,7 +343,12 @@ async fn execute_simple_tool_step<T: SimpleTool<SideInfo = AutopilotSideInfo>>(
 ) -> anyhow::Result<Result<T::Output, ToolFailure>> {
     let heartbeater = step_state.heartbeater.clone();
     let state = &step_state.state;
-    let simple_ctx = SimpleToolContext::new(state.pool(), state.t0_client(), &heartbeater);
+    let simple_ctx = SimpleToolContext::new(
+        state.pool(),
+        state.t0_client(),
+        &heartbeater,
+        state.registry(),
+    );
     let idempotency_key = format!(
         "simple_tool:{}:{}",
         params.tool_name, params.tool_call_event_id
