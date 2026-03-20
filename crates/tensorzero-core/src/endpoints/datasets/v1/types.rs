@@ -383,11 +383,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from an inference query.
     #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
     #[schema(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
-    InferenceQuery {
-        /// Flattened inference query parameters.
-        #[serde(flatten)]
-        query: Box<ListInferencesRequest>,
-    },
+    InferenceQuery(Box<ListInferencesRequest>),
 }
 
 /// Response from creating datapoints.
@@ -557,4 +553,52 @@ pub struct DatasetMetadata {
 pub struct ListDatasetsResponse {
     /// List of dataset metadata.
     pub datasets: Vec<DatasetMetadata>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use serde_json::json;
+
+    #[gtest]
+    fn create_datapoints_from_inference_query_preserves_flat_json_shape() {
+        let request_json = json!({
+            "type": "inference_query",
+            "function_name": "write_haiku",
+            "variant_name": "better_prompt_haiku_4_5",
+            "output_source": "inference"
+        });
+
+        let request: CreateDatapointsFromInferenceRequestParams =
+            serde_json::from_value(request_json.clone())
+                .expect("request JSON should deserialize into the query variant");
+
+        let serialized =
+            serde_json::to_value(&request).expect("request should serialize back to JSON");
+
+        expect_that!(serialized.get("query"), none());
+        expect_that!(
+            serialized.get("type").and_then(serde_json::Value::as_str),
+            some(eq("inference_query"))
+        );
+        expect_that!(
+            serialized
+                .get("function_name")
+                .and_then(serde_json::Value::as_str),
+            some(eq("write_haiku"))
+        );
+        expect_that!(
+            serialized
+                .get("variant_name")
+                .and_then(serde_json::Value::as_str),
+            some(eq("better_prompt_haiku_4_5"))
+        );
+        expect_that!(
+            serialized
+                .get("output_source")
+                .and_then(serde_json::Value::as_str),
+            some(eq("inference"))
+        );
+    }
 }

@@ -82,7 +82,7 @@ pub async fn create_from_inferences(
             };
             (params, output_source)
         }
-        CreateDatapointsFromInferenceRequestParams::InferenceQuery { query } => {
+        CreateDatapointsFromInferenceRequestParams::InferenceQuery(query) => {
             let mut params = query.as_list_inferences_params()?;
             // If the user didn't specify a limit, default to fetching all matching inferences
             // (the standard list_inferences API defaults to 20, but for dataset creation we want all)
@@ -259,14 +259,14 @@ mod tests {
             .returning(|_| Box::pin(async move { Ok(2) }));
 
         let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                query: Box::new(ListInferencesRequest {
+            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+                ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
                     output_source: InferenceOutputSource::Inference,
                     ..Default::default()
-                }),
-            },
+                },
+            )),
         };
 
         let result = create_from_inferences(
@@ -307,14 +307,14 @@ mod tests {
             .times(0);
 
         let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                query: Box::new(ListInferencesRequest {
+            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+                ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
                     output_source: InferenceOutputSource::Inference,
                     ..Default::default()
-                }),
-            },
+                },
+            )),
         };
 
         let result = create_from_inferences(
@@ -351,14 +351,14 @@ mod tests {
             .times(0);
 
         let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                query: Box::new(ListInferencesRequest {
+            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+                ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: Some(variant_name.to_string()),
                     output_source: InferenceOutputSource::Demonstration,
                     ..Default::default()
-                }),
-            },
+                },
+            )),
         };
 
         create_from_inferences(
@@ -662,15 +662,15 @@ mod tests {
             .returning(|_| Box::pin(async move { Ok(1) }));
 
         let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                query: Box::new(ListInferencesRequest {
+            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+                ListInferencesRequest {
                     function_name: Some(function_name.to_string()),
                     variant_name: None,
                     filters: Some(test_filter),
                     output_source: InferenceOutputSource::Inference,
                     ..Default::default()
-                }),
-            },
+                },
+            )),
         };
 
         let result = create_from_inferences(

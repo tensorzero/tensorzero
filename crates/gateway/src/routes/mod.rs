@@ -70,8 +70,9 @@ pub fn build_internal_openapi_spec() -> OpenApi {
 
 #[cfg(test)]
 mod tests {
-    use super::build_internal_openapi_spec;
+    use super::{build_external_openapi_spec, build_internal_openapi_spec};
     use googletest::prelude::*;
+    use metrics_exporter_prometheus::PrometheusBuilder;
     use serde_json::Value;
 
     fn find_branch_with_title<'a>(branches: &'a [Value], title: &str) -> Option<&'a Value> {
@@ -87,6 +88,10 @@ mod tests {
             .first()?
             .get("$ref")?
             .as_str()
+    }
+
+    fn test_metrics_handle() -> metrics_exporter_prometheus::PrometheusHandle {
+        PrometheusBuilder::new().build_recorder().handle()
     }
 
     #[gtest]
@@ -142,6 +147,28 @@ mod tests {
                     .expect("ToolOutcomeFailure branch should exist"),
             ),
             some(eq("#/components/schemas/ToolOutcomeFailure"))
+        );
+    }
+
+    #[gtest]
+    fn external_openapi_titles_create_datapoints_inference_query_branch() {
+        let openapi = serde_json::to_value(build_external_openapi_spec(test_metrics_handle()))
+            .expect("external OpenAPI should serialize to JSON");
+        let schemas = openapi["components"]["schemas"]
+            .as_object()
+            .expect("OpenAPI components.schemas should be an object");
+        let branches = schemas["CreateDatapointsFromInferenceRequestParams"]["oneOf"]
+            .as_array()
+            .expect("CreateDatapointsFromInferenceRequestParams.oneOf should be an array");
+
+        let branch = find_branch_with_title(
+            branches,
+            "CreateDatapointsFromInferenceRequestParamsInferenceQuery",
+        )
+        .expect("InferenceQuery branch should have a title");
+        expect_that!(
+            first_all_of_ref(branch),
+            some(eq("#/components/schemas/ListInferencesRequest"))
         );
     }
 }

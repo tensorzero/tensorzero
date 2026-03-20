@@ -52,14 +52,14 @@ async fn test_create_from_inference_query_success() {
 
     // Create datapoints using a query
     let request = CreateDatapointsFromInferenceRequest {
-        params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-            query: Box::new(ListInferencesRequest {
+        params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+            ListInferencesRequest {
                 function_name: Some("write_haiku".to_string()),
                 variant_name: Some("better_prompt_haiku_4_5".to_string()),
                 output_source: InferenceOutputSource::Inference,
                 ..Default::default()
-            }),
-        },
+            },
+        )),
     };
 
     let response = client
@@ -172,15 +172,15 @@ async fn test_create_from_inference_with_filters() {
     });
 
     let request = CreateDatapointsFromInferenceRequest {
-        params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-            query: Box::new(ListInferencesRequest {
+        params: CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+            ListInferencesRequest {
                 function_name: Some("write_haiku".to_string()),
                 variant_name: Some("better_prompt_haiku_4_5".to_string()),
                 filters: Some(filter),
                 output_source: InferenceOutputSource::Inference,
                 ..Default::default()
-            }),
-        },
+            },
+        )),
     };
 
     let response = client

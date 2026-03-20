@@ -534,14 +534,14 @@ async fn test_create_datapoints_from_inferences(client: Client) {
     let dataset_name = test_dataset_name("test_from_inferences");
 
     // Create datapoints from an inference query
-    let params = CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-        query: Box::new(ListInferencesRequest {
+    let params = CreateDatapointsFromInferenceRequestParams::InferenceQuery(Box::new(
+        ListInferencesRequest {
             function_name: Some("write_haiku".to_string()),
             variant_name: Some("better_prompt_haiku_4_5".to_string()),
             output_source: InferenceOutputSource::Inference,
             ..Default::default()
-        }),
-    };
+        },
+    ));
 
     let response = client
         .create_datapoints_from_inferences(dataset_name.clone(), params)

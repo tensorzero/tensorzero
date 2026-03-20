@@ -552,12 +552,10 @@
             "allOf": [
               {
                 "$ref": "#/components/schemas/ListInferencesRequest",
-                "description": "Flattened inference query parameters."
+                "description": "Create datapoints from an inference query."
               },
               {
                 "type": "object",
-                "title": "CreateDatapointsFromInferenceRequestParamsInferenceQuery",
-                "description": "Create datapoints from an inference query.",
                 "required": [
                   "type"
                 ],
@@ -571,6 +569,7 @@
                 }
               }
             ],
+            "title": "CreateDatapointsFromInferenceRequestParamsInferenceQuery",
             "description": "Create datapoints from an inference query."
           }
         ],
