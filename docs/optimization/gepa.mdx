@@ -450,14 +450,8 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 
 {/* Evaluation Parameters */}
 
-<ParamField body="evaluation_name" type="string">
-  Name of a configured evaluation to use for scoring. Mutually exclusive with
-  `evaluators`.
-</ParamField>
-
-<ParamField body="evaluators" type="list[string]">
-  Inline list of top-level evaluator names. Mutually exclusive with
-  `evaluation_name`.
+<ParamField body="evaluation_name" type="string" required>
+  Name of a configured evaluation to use for scoring.
 </ParamField>
 
 {/* Optional Parameters */}
@@ -484,8 +478,7 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 </ParamField>
 
 <ParamField body="max_datapoints" type="integer">
-  Maximum number of datapoints to use from the dataset. If not specified, uses
-  all datapoints.
+  Maximum number of datapoints to use from the dataset. Default: 1000.
 </ParamField>
 
 <ParamField body="include_inference_for_mutation" type="boolean">
