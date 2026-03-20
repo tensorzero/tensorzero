@@ -41,7 +41,7 @@ jobs:
 
       - name: Build and push `mock-provider-api` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/tensorzero-core/tests/mock-provider-api/Dockerfile . -t tensorzero/mock-provider-api:sha-${{ github.sha }} --push
+          docker buildx build --sbom=true --provenance=true --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/tensorzero-core/tests/mock-provider-api/Dockerfile . -t tensorzero/mock-provider-api:sha-${{ github.sha }} --push
 
       - name: Wait for image to be available on Docker Hub
         run: |
