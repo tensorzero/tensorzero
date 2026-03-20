@@ -11,8 +11,8 @@ use crate::db::TimeWindow;
 use crate::db::clickhouse::parse_count;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
-    ClickhouseType, JoinRegistry, OrderByTerm, OrderDirection, QueryParameter,
-    generate_order_by_sql,
+    ClickhouseType, InferenceFilterClickhouse, JoinRegistry, OrderByTerm, OrderDirection,
+    QueryParameter, generate_order_by_sql,
 };
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::inferences::{
@@ -813,7 +813,7 @@ pub(crate) fn generate_list_inferences_sql(
                     } else {
                         o.direction
                     };
-                    let direction = effective_direction.to_clickhouse_direction();
+                    let direction = effective_direction.to_sql_direction();
                     order_clauses.push(format!("{column} {direction}"));
                 }
             }
@@ -830,10 +830,8 @@ pub(crate) fn generate_list_inferences_sql(
 
             // For inner queries (chat/json subqueries), use "id" (the actual column name)
             let mut inner_order_by_clauses = order_clauses.clone();
-            inner_order_by_clauses.push(format!(
-                "toUInt128(id) {}",
-                id_direction.to_clickhouse_direction()
-            ));
+            inner_order_by_clauses
+                .push(format!("toUInt128(id) {}", id_direction.to_sql_direction()));
 
             // Push LIMIT down into each subquery before UNION ALL
             // For UNION ALL, we need to fetch (LIMIT + OFFSET) rows from each table
@@ -857,7 +855,7 @@ pub(crate) fn generate_list_inferences_sql(
             let mut outer_order_by_clauses = order_clauses;
             outer_order_by_clauses.push(format!(
                 "toUInt128(inference_id) {}",
-                id_direction.to_clickhouse_direction()
+                id_direction.to_sql_direction()
             ));
 
             let outer_order_by_sql = format!("\nORDER BY {}", outer_order_by_clauses.join(", "));
