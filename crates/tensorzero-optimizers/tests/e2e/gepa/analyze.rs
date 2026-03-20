@@ -280,7 +280,8 @@ pub fn create_custom_template_map(templates: Vec<(&str, &str)>) -> HashMap<Strin
 pub fn create_test_gepa_config() -> GEPAConfig {
     GEPAConfig {
         function_name: "test_function".to_string(),
-        evaluation_name: "test_eval".to_string(),
+        evaluation_name: Some("test_eval".to_string()),
+        evaluator_names: None,
         initial_variants: None,
         variant_prefix: Some("test".to_string()),
         batch_size: 5,
@@ -300,7 +301,8 @@ pub fn create_test_gepa_config() -> GEPAConfig {
 pub fn create_test_gepa_config_echo() -> GEPAConfig {
     GEPAConfig {
         function_name: "test_function".to_string(),
-        evaluation_name: "test_eval".to_string(),
+        evaluation_name: Some("test_eval".to_string()),
+        evaluator_names: None,
         initial_variants: None,
         variant_prefix: Some("test".to_string()),
         batch_size: 5,

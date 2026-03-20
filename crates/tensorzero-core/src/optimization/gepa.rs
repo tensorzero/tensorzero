@@ -10,23 +10,23 @@ use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 // Default functions
-fn default_batch_size() -> usize {
+pub(crate) fn default_batch_size() -> usize {
     5
 }
 
-fn default_max_iterations() -> u32 {
+pub(crate) fn default_max_iterations() -> u32 {
     1
 }
 
-fn default_max_concurrency() -> u32 {
+pub(crate) fn default_max_concurrency() -> u32 {
     10
 }
 
-fn default_timeout() -> u64 {
+pub(crate) fn default_timeout() -> u64 {
     300
 }
 
-fn default_include_inference_for_mutation() -> bool {
+pub(crate) fn default_include_inference_for_mutation() -> bool {
     true
 }
 
@@ -42,8 +42,16 @@ pub struct GEPAConfig {
     /// Name of the function being optimized
     pub function_name: String,
 
-    /// Name of the evaluation used to score candidate variants
-    pub evaluation_name: String,
+    /// Deprecated: name of the evaluation used to score candidate variants.
+    /// Prefer `evaluator_names` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluation_name: Option<String>,
+
+    /// Names of evaluators defined on `function_name`, used to score candidate variants.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluator_names: Option<Vec<String>>,
 
     /// Optional list of variant_names to initialize GEPA with.
     /// If None, will use all variants defined for the function.
@@ -108,7 +116,12 @@ pub struct GEPAConfig {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
     pub function_name: String,
-    pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluation_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluator_names: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub initial_variants: Option<Vec<String>>,
@@ -163,6 +176,7 @@ impl UninitializedGEPAConfig {
         evaluation_name,
         analysis_model,
         mutation_model,
+        evaluator_names=None,
         initial_variants=None,
         variant_prefix=None,
         batch_size=None,
@@ -177,9 +191,10 @@ impl UninitializedGEPAConfig {
     #[expect(clippy::too_many_arguments)]
     fn py_new(
         function_name: String,
-        evaluation_name: String,
+        evaluation_name: Option<String>,
         analysis_model: String,
         mutation_model: String,
+        evaluator_names: Option<Vec<String>>,
         initial_variants: Option<Vec<String>>,
         variant_prefix: Option<String>,
         batch_size: Option<usize>,
@@ -194,6 +209,7 @@ impl UninitializedGEPAConfig {
         Self {
             function_name,
             evaluation_name,
+            evaluator_names,
             initial_variants,
             variant_prefix,
             batch_size: batch_size.unwrap_or_else(default_batch_size),
@@ -212,12 +228,14 @@ impl UninitializedGEPAConfig {
 
     /// Initialize the GEPAConfig.
     ///
-    /// Required parameters: `function_name`, `evaluation_name`, `analysis_model`, `mutation_model`.
+    /// Required parameters: `function_name`, `analysis_model`, `mutation_model`, and exactly one
+    /// of `evaluation_name` or `evaluator_names`.
     ///
     /// :param function_name: Name of the function being optimized.
-    /// :param evaluation_name: Name of the evaluation used to score candidate variants.
+    /// :param evaluation_name: Deprecated named evaluation used to score candidate variants.
     /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5").
     /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5").
+    /// :param evaluator_names: Optional list of function-scoped evaluator names.
     /// :param initial_variants: Optional list of variant names to initialize GEPA with. If None, uses all variants defined for the function.
     /// :param variant_prefix: Prefix for the name of the new optimized variants.
     /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.
@@ -229,13 +247,14 @@ impl UninitializedGEPAConfig {
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
     /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_for_mutation=None, retries=None, max_tokens=None))]
+    #[pyo3(signature = (*, function_name, evaluation_name=None, analysis_model, mutation_model, evaluator_names=None, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
         this: Py<Self>,
         function_name: String,
-        evaluation_name: String,
+        evaluation_name: Option<String>,
         analysis_model: String,
         mutation_model: String,
+        evaluator_names: Option<Vec<String>>,
         initial_variants: Option<Vec<String>>,
         variant_prefix: Option<String>,
         batch_size: Option<usize>,
@@ -260,6 +279,7 @@ impl UninitializedGEPAConfig {
         GEPAConfig {
             function_name: self.function_name,
             evaluation_name: self.evaluation_name,
+            evaluator_names: self.evaluator_names,
             initial_variants: self.initial_variants,
             variant_prefix: self.variant_prefix,
             batch_size: self.batch_size,
@@ -273,6 +293,45 @@ impl UninitializedGEPAConfig {
             retries: self.retries,
             max_tokens: self.max_tokens,
         }
+    }
+}
+
+pub enum GepaEvaluationSource<'a> {
+    Named { evaluation_name: &'a str },
+    EvaluatorNames { evaluator_names: &'a [String] },
+}
+
+impl GEPAConfig {
+    pub fn evaluation_source(&self) -> Result<GepaEvaluationSource<'_>, &'static str> {
+        match (
+            self.evaluation_name.as_deref(),
+            self.evaluator_names.as_deref(),
+        ) {
+            (Some(name), None) => Ok(GepaEvaluationSource::Named {
+                evaluation_name: name,
+            }),
+            (None, Some(names)) if !names.is_empty() => Ok(GepaEvaluationSource::EvaluatorNames {
+                evaluator_names: names,
+            }),
+            (Some(_), Some(_)) => {
+                Err("Provide exactly one of `evaluation_name` or `evaluator_names` in GEPA config")
+            }
+            (None, Some(_)) => Err("`evaluator_names` must not be empty in GEPA config"),
+            (None, None) => {
+                Err("Provide exactly one of `evaluation_name` or `evaluator_names` in GEPA config")
+            }
+        }
+    }
+
+    pub fn evaluation_label(&self) -> String {
+        if let Some(evaluation_name) = &self.evaluation_name {
+            return evaluation_name.clone();
+        }
+
+        self.evaluator_names
+            .as_ref()
+            .map(|names| names.join("__"))
+            .unwrap_or_else(|| "evaluators".to_string())
     }
 }
 
