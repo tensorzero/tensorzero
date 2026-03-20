@@ -72,26 +72,6 @@ model = "anthropic::claude-sonnet-4-5"
 
 You can now call the `answer_customer` function and TensorZero will randomly select one of the two variants for each request.
 
-## Configure evaluators
-
-You can define evaluators on a function to score and compare variant outputs using [TensorZero Evaluations](/evaluations/inference-evaluations/tutorial).
-Evaluators support heuristics (e.g. exact match, regex) and LLM judges.
-
-```toml title="tensorzero.toml"
-[functions.answer_customer.evaluators.is_polite]
-type = "llm_judge"
-output_type = "boolean"
-optimize = "max"
-
-[functions.answer_customer.evaluators.is_polite.variants.gpt_4o_mini_judge]
-type = "chat_completion"
-model = "openai::gpt-4o-mini"
-system_instructions = "functions/answer_customer/evaluators/is_polite/system_instructions.txt"
-json_mode = "strict"
-```
-
-See the [Evaluations Configuration Reference](/evaluations/inference-evaluations/configuration-reference) for the full list of evaluator types and their configuration options.
-
 ## Make inference requests
 
 Once you've configured a function and its variants, you can make inference requests to the TensorZero Gateway.
