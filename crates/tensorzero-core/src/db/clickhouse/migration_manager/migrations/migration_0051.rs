@@ -221,8 +221,22 @@ impl Migration for Migration0051<'_> {
         .await?
             && check_column_exists(
                 self.clickhouse,
+                "ModelInference",
+                "provider_cache_write_input_tokens",
+                MIGRATION_ID,
+            )
+            .await?
+            && check_column_exists(
+                self.clickhouse,
                 "ModelProviderStatistics",
                 "total_provider_cache_read_input_tokens",
+                MIGRATION_ID,
+            )
+            .await?
+            && check_column_exists(
+                self.clickhouse,
+                "ModelProviderStatistics",
+                "total_provider_cache_write_input_tokens",
                 MIGRATION_ID,
             )
             .await?)

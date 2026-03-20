@@ -71,6 +71,12 @@ pub struct Usage {
 }
 
 impl Usage {
+    /// Returns a `Usage` with core fields at zero and cache fields at `None`.
+    ///
+    /// Cache fields start as `None` (meaning "not reported") because not all
+    /// providers support prompt caching. The lenient aggregation helpers
+    /// (`aggregate_usage_across_model_inferences`, `sum_usage_strict`) will
+    /// preserve any `Some` value they encounter rather than contaminating to `None`.
     pub fn zero() -> Usage {
         Usage {
             input_tokens: Some(0),
@@ -85,6 +91,53 @@ impl Usage {
         match (self.input_tokens, self.output_tokens) {
             (Some(input), Some(output)) => Some(input + output),
             _ => None,
+        }
+    }
+}
+
+/// Take the cumulative max of two `Option<u32>` values from streaming chunks.
+///
+/// Returns `acc` unchanged if the chunk is `None`. Warns and retains the higher
+/// value if the chunk is unexpectedly smaller (non-cumulative).
+fn cumulative_max_u32(acc: Option<u32>, chunk: Option<u32>, field_name: &str) -> Option<u32> {
+    match (acc, chunk) {
+        (_, None) => acc,
+        (None, v) => v,
+        (Some(current), Some(new)) => {
+            if current > new {
+                tracing::warn!(
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current} > {new}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                );
+                debug_assert!(
+                    false,
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current} > {new}); using the higher value."
+                );
+            }
+            Some(current.max(new))
+        }
+    }
+}
+
+/// Same as [`cumulative_max_u32`] but for `Decimal` (used for cost).
+fn cumulative_max_decimal(
+    acc: Option<Decimal>,
+    chunk: Option<Decimal>,
+    field_name: &str,
+) -> Option<Decimal> {
+    match (acc, chunk) {
+        (_, None) => acc,
+        (None, v) => v,
+        (Some(current), Some(new)) => {
+            if current > new {
+                tracing::warn!(
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current} > {new}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+                );
+                debug_assert!(
+                    false,
+                    "Unexpected non-cumulative `{field_name}` in streaming response ({current} > {new}); using the higher value."
+                );
+            }
+            Some(current.max(new))
         }
     }
 }
@@ -121,101 +174,21 @@ where
                 cost: chunk_cost,
             } = chunk_usage;
 
-            acc.input_tokens = match (acc.input_tokens, chunk_input_tokens) {
-                (_, None) => acc.input_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            acc.output_tokens = match (acc.output_tokens, chunk_output_tokens) {
-                (_, None) => acc.output_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `output_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            acc.provider_cache_read_input_tokens = match (acc.provider_cache_read_input_tokens, chunk_cache_read) {
-                (_, None) => acc.provider_cache_read_input_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `provider_cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `provider_cache_read_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            acc.provider_cache_write_input_tokens = match (acc.provider_cache_write_input_tokens, chunk_cache_write) {
-                (_, None) => acc.provider_cache_write_input_tokens,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `provider_cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `provider_cache_write_input_tokens` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
-
-            // Cost uses the same max semantics as tokens
-            acc.cost = match (acc.cost, chunk_cost) {
-                (_, None) => acc.cost,
-                (None, chunk_value) => chunk_value,
-                (Some(current_value), Some(chunk_value)) => {
-                    if current_value > chunk_value {
-                        tracing::warn!(
-                            "Unexpected non-cumulative `cost` in streaming response ({current_value} > {chunk_value}); using the higher value. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-                        );
-                        debug_assert!(false, "Unexpected non-cumulative `cost` in streaming response ({current_value} > {chunk_value}); using the higher value.");
-                    }
-
-                    if current_value < chunk_value {
-                        Some(chunk_value)
-                    } else {
-                        Some(current_value)
-                    }
-                }
-            };
+            acc.input_tokens =
+                cumulative_max_u32(acc.input_tokens, chunk_input_tokens, "input_tokens");
+            acc.output_tokens =
+                cumulative_max_u32(acc.output_tokens, chunk_output_tokens, "output_tokens");
+            acc.provider_cache_read_input_tokens = cumulative_max_u32(
+                acc.provider_cache_read_input_tokens,
+                chunk_cache_read,
+                "provider_cache_read_input_tokens",
+            );
+            acc.provider_cache_write_input_tokens = cumulative_max_u32(
+                acc.provider_cache_write_input_tokens,
+                chunk_cache_write,
+                "provider_cache_write_input_tokens",
+            );
+            acc.cost = cumulative_max_decimal(acc.cost, chunk_cost, "cost");
 
             acc
         })
