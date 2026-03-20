@@ -1,0 +1,6 @@
+[project]
+name = "tensorzero-examples-integrations-ag2"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["ag2"]
