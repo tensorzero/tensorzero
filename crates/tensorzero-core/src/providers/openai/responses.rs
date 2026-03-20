@@ -119,6 +119,13 @@ pub struct OpenAIResponsesIncompleteDetails {
 pub struct OpenAIResponsesUsage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    #[serde(default)]
+    pub input_tokens_details: Option<OpenAIResponsesInputTokensDetails>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct OpenAIResponsesInputTokensDetails {
+    pub cached_tokens: Option<u32>,
 }
 
 impl From<OpenAIResponsesUsage> for Usage {
@@ -126,7 +133,9 @@ impl From<OpenAIResponsesUsage> for Usage {
         Usage {
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
-            provider_cache_read_input_tokens: None,
+            provider_cache_read_input_tokens: usage
+                .input_tokens_details
+                .and_then(|d| d.cached_tokens),
             provider_cache_write_input_tokens: None,
             cost: None,
         }
@@ -1452,10 +1461,16 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                     Some(v) => v.as_u64().map(|v| v as u32),
                 };
 
+                let provider_cache_read_input_tokens = u
+                    .get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+
                 Usage {
                     input_tokens,
                     output_tokens,
-                    provider_cache_read_input_tokens: None,
+                    provider_cache_read_input_tokens,
                     provider_cache_write_input_tokens: None,
                     cost: None,
                 }
@@ -1552,10 +1567,16 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                     Some(v) => v.as_u64().map(|v| v as u32),
                 };
 
+                let provider_cache_read_input_tokens = u
+                    .get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+
                 Usage {
                     input_tokens,
                     output_tokens,
-                    provider_cache_read_input_tokens: None,
+                    provider_cache_read_input_tokens,
                     provider_cache_write_input_tokens: None,
                     cost: None,
                 }

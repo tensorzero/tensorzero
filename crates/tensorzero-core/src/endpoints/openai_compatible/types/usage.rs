@@ -30,14 +30,17 @@ impl OpenAICompatibleUsage {
             prompt_tokens: Some(0),
             completion_tokens: Some(0),
             total_tokens: Some(0),
-            provider_cache_read_input_tokens: Some(0),
-            provider_cache_write_input_tokens: Some(0),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             tensorzero_cost: Some(Decimal::ZERO),
         }
     }
 
     /// Sum `OpenAICompatibleUsage` and `Usage` instances.
-    /// `None` contaminates on both sides.
+    ///
+    /// `None` contaminates for core fields (`prompt_tokens`, `completion_tokens`,
+    /// `total_tokens`, `tensorzero_cost`). Cache fields use lenient semantics:
+    /// `None` means not-reported and preserves the known value.
     pub fn sum_usage_strict(&mut self, other: &Usage) {
         self.prompt_tokens = match (self.prompt_tokens, other.input_tokens) {
             (Some(a), Some(b)) => Some(a + b),
@@ -193,6 +196,24 @@ mod tests {
         usage.sum_usage_strict(&other);
         expect_that!(usage.provider_cache_read_input_tokens, none());
         expect_that!(usage.provider_cache_write_input_tokens, none());
+    }
+
+    #[gtest]
+    fn test_from_usage_preserves_cache_tokens() {
+        let usage = Usage {
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            provider_cache_read_input_tokens: Some(80),
+            provider_cache_write_input_tokens: Some(20),
+            cost: Some(Decimal::new(5, 2)),
+        };
+        let compat: OpenAICompatibleUsage = usage.into();
+        expect_that!(compat.prompt_tokens, some(eq(100)));
+        expect_that!(compat.completion_tokens, some(eq(50)));
+        expect_that!(compat.total_tokens, some(eq(150)));
+        expect_that!(compat.provider_cache_read_input_tokens, some(eq(80)));
+        expect_that!(compat.provider_cache_write_input_tokens, some(eq(20)));
+        expect_that!(compat.tensorzero_cost, some(eq(Decimal::new(5, 2))));
     }
 
     #[gtest]

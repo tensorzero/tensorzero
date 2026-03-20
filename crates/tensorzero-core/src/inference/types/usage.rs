@@ -782,6 +782,169 @@ mod tests {
     }
 
     #[test]
+    fn test_aggregate_across_inferences_cache_both_some() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                provider_cache_read_input_tokens: Some(100),
+                provider_cache_write_input_tokens: Some(10),
+                cost: None,
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                provider_cache_read_input_tokens: Some(200),
+                provider_cache_write_input_tokens: Some(20),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.provider_cache_read_input_tokens,
+            Some(300),
+            "cache_read should be summed when both are Some"
+        );
+        assert_eq!(
+            result.provider_cache_write_input_tokens,
+            Some(30),
+            "cache_write should be summed when both are Some"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_across_inferences_cache_mixed_none() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                provider_cache_read_input_tokens: Some(100),
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.provider_cache_read_input_tokens,
+            Some(100),
+            "cache_read should preserve known value when other is None (lenient)"
+        );
+        assert_eq!(
+            result.provider_cache_write_input_tokens, None,
+            "cache_write should stay None when both are None"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_across_inferences_cache_independent_fields() {
+        let usages = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                provider_cache_read_input_tokens: Some(80),
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+            Usage {
+                input_tokens: Some(200),
+                output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: Some(40),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_across_model_inferences(usages);
+        assert_eq!(
+            result.provider_cache_read_input_tokens,
+            Some(80),
+            "cache_read should preserve its own known value independently"
+        );
+        assert_eq!(
+            result.provider_cache_write_input_tokens,
+            Some(40),
+            "cache_write should preserve its own known value independently"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_streaming_cache_first_chunk_only() {
+        // Anthropic pattern: first chunk reports cache tokens, later chunks do not
+        let chunks = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(1),
+                provider_cache_read_input_tokens: Some(4000),
+                provider_cache_write_input_tokens: Some(500),
+                cost: None,
+            },
+            Usage {
+                input_tokens: None,
+                output_tokens: Some(50),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+            Usage {
+                input_tokens: None,
+                output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
+        assert_eq!(
+            result.provider_cache_read_input_tokens,
+            Some(4000),
+            "cache_read from first chunk should be preserved through later None chunks"
+        );
+        assert_eq!(
+            result.provider_cache_write_input_tokens,
+            Some(500),
+            "cache_write from first chunk should be preserved through later None chunks"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_streaming_cache_cumulative() {
+        // Cumulative cache values across streaming chunks — should take max
+        let chunks = vec![
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(10),
+                provider_cache_read_input_tokens: Some(2000),
+                provider_cache_write_input_tokens: Some(300),
+                cost: None,
+            },
+            Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(50),
+                provider_cache_read_input_tokens: Some(4000),
+                provider_cache_write_input_tokens: Some(500),
+                cost: None,
+            },
+        ];
+        let result = aggregate_usage_from_single_streaming_model_inference(chunks);
+        assert_eq!(
+            result.provider_cache_read_input_tokens,
+            Some(4000),
+            "cumulative cache_read should take the max value"
+        );
+        assert_eq!(
+            result.provider_cache_write_input_tokens,
+            Some(500),
+            "cumulative cache_write should take the max value"
+        );
+    }
+
+    #[test]
     fn test_aggregate_across_inferences_cost_none_propagates() {
         let usages = vec![
             Usage {

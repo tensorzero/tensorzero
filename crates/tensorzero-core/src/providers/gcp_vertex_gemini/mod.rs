@@ -3171,7 +3171,7 @@ fn convert_stream_response_with_metadata_to_chunk(
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
                     output_tokens: metadata.output_tokens(),
-                    provider_cache_read_input_tokens: None,
+                    provider_cache_read_input_tokens: metadata.cached_content_token_count,
                     provider_cache_write_input_tokens: None,
                     cost: None,
                 })

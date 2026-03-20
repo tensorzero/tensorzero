@@ -276,6 +276,60 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
 }
 make_db_test!(test_insert_and_read_model_inference);
 
+/// Verify that `Some(0)` cache tokens round-trip correctly.
+/// `Some(0)` means "provider supports caching but no tokens were cached" —
+/// distinct from `None` which means "provider doesn't report cache tokens".
+async fn test_insert_and_read_model_inference_zero_cache_tokens(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference_id = Uuid::now_v7();
+
+    let model_inference = StoredModelInference {
+        id: model_inference_id,
+        inference_id,
+        raw_request: Some(r#"{"model": "test-model"}"#.to_string()),
+        raw_response: Some(r#"{"choices": []}"#.to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(100),
+        output_tokens: Some(50),
+        provider_cache_read_input_tokens: Some(0),
+        provider_cache_write_input_tokens: Some(0),
+        response_time_ms: Some(500),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: None,
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read_inferences.len(), 1);
+    let read = &read_inferences[0];
+    assert_eq!(
+        read.provider_cache_read_input_tokens,
+        Some(0),
+        "Some(0) cache_read should round-trip as Some(0), not None"
+    );
+    assert_eq!(
+        read.provider_cache_write_input_tokens,
+        Some(0),
+        "Some(0) cache_write should round-trip as Some(0), not None"
+    );
+}
+make_db_test!(test_insert_and_read_model_inference_zero_cache_tokens);
+
 async fn test_insert_multiple_model_inferences_for_same_inference(
     conn: impl ModelInferenceQueries,
 ) {
