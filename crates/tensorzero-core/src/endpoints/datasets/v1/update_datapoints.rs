@@ -574,6 +574,7 @@ mod tests {
                 description: None,
                 experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: HashSet::new(),
+                evaluators: HashMap::new(),
             });
 
             // Create fetch context with NO actual object storage info.
@@ -651,6 +652,7 @@ mod tests {
                 description: None,
                 experimentation: ExperimentationConfigWithNamespaces::default(),
                 all_explicit_templates_names: HashSet::new(),
+                evaluators: HashMap::new(),
             });
 
             // Create fetch context with disabled storage
@@ -810,6 +812,7 @@ mod tests {
                     description: None,
                     experimentation: ExperimentationConfigWithNamespaces::default(),
                     all_explicit_templates_names: HashSet::new(),
+                    evaluators: HashMap::new(),
                 })),
             );
 
@@ -830,6 +833,7 @@ mod tests {
                     description: None,
                     experimentation: ExperimentationConfigWithNamespaces::default(),
                     all_explicit_template_names: HashSet::new(),
+                    evaluators: HashMap::new(),
                 })),
             );
 

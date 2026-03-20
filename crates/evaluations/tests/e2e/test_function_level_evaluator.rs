@@ -56,21 +56,21 @@ async fn test_top_level_exact_match_evaluator() {
     assert_eq!(dataset.len(), 2, "Should have loaded at least 2 datapoints");
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
-    // Build evaluators using the top-level evaluator (as the gateway's Named path does)
-    let top_level_evaluator = config
-        .evaluators
-        .get("exact_match")
-        .expect("Top-level `exact_match` evaluator should exist in config");
-
-    let mut evaluators = HashMap::new();
-    evaluators.insert("exact_match".to_string(), (**top_level_evaluator).clone());
-
-    // Look up function config
+    // Look up function config and its evaluators
     let write_haiku_func = config
         .functions
         .get("write_haiku")
         .expect("`write_haiku` function should exist");
     let function_config = EvaluationFunctionConfig::from(write_haiku_func.as_ref());
+
+    // Build evaluators from the function's evaluator config
+    let function_evaluator = write_haiku_func
+        .evaluators()
+        .get("exact_match")
+        .expect("Function-level `exact_match` evaluator should exist on `write_haiku`");
+
+    let mut evaluators = HashMap::new();
+    evaluators.insert("exact_match".to_string(), function_evaluator.clone());
 
     // Build the inference executor using embedded gateway
     let tensorzero_client = make_embedded_gateway().await;
@@ -117,27 +117,28 @@ async fn test_top_level_exact_match_evaluator() {
     db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
 
-    // Verify feedback was written with top-level evaluator metric naming
-    let expected_metric_name = "tensorzero::evaluator::exact_match";
+    // Verify feedback was written with function-level evaluator metric naming
+    let expected_metric_name =
+        "tensorzero::function_name::write_haiku::evaluator_name::exact_match";
     for info in &successes {
         let inference_id = info.response.inference_id();
         let feedback = query_boolean_feedback(&db, inference_id, Some(expected_metric_name))
             .await
-            .expect("Should find boolean feedback for top-level evaluator");
+            .expect("Should find boolean feedback for function-level evaluator");
 
         assert_eq!(
             feedback.metric_name, expected_metric_name,
-            "Metric name should use top-level evaluator naming"
+            "Metric name should use function-level evaluator naming"
         );
         assert_eq!(
             feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(feedback.tags["tensorzero::evaluator_name"], "exact_match");
-        // Top-level evaluators should not have an evaluation_name tag
+        // Function-level evaluators should not have an evaluation_name tag
         assert!(
             !feedback.tags.contains_key("tensorzero::evaluation_name"),
-            "Top-level evaluator feedback should not have evaluation_name tag"
+            "Function-level evaluator feedback should not have evaluation_name tag"
         );
     }
 }

@@ -44,7 +44,7 @@ use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::evaluations::{
     EvaluationConfig, EvaluatorConfig, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
-    get_top_level_evaluator_metric_name, get_top_level_llm_judge_function_name,
+    get_function_evaluator_metric_name, get_function_llm_judge_function_name,
 };
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, get_function};
 #[cfg(feature = "pyo3")]
@@ -129,7 +129,6 @@ pub struct Config {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evaluators: HashMap<String, Arc<EvaluatorConfig>>, // evaluator name => evaluator config (top-level)
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
@@ -965,7 +964,6 @@ struct ProcessedConfigInput {
     models: HashMap<Arc<str>, UninitializedModelConfig>,
     embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>,
     metrics: HashMap<String, MetricConfig>,
-    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     evaluations: HashMap<String, UninitializedEvaluationConfig>,
     provider_types: ProviderTypesConfig,
     optimizers: HashMap<String, UninitializedOptimizerInfo>,
@@ -975,8 +973,8 @@ struct ProcessedConfigInput {
     autopilot: AutopilotConfig,
 
     snapshot: ConfigSnapshot,
-    /// All functions (user-defined + built-in), loaded and ready to use
-    functions: HashMap<String, Arc<FunctionConfig>>,
+    /// All functions (user-defined + built-in), loaded but with evaluator artifacts not yet extracted
+    loaded_functions: HashMap<String, LoadedFunctionConfig>,
     gateway_config: GatewayConfig,
     object_store_info: Option<ObjectStoreInfo>,
 }
@@ -1025,28 +1023,25 @@ async fn process_config_input(
                 functions,
                 metrics,
                 tools,
-                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
                 autopilot,
             } = config.clone();
 
-            // Load ALL functions (user + built-in)
-            let all_functions = functions
-                .into_iter()
-                .map(|(name, func_config)| {
-                    func_config
-                        .load(&name, &metrics)
-                        .map(|c| (name, Arc::new(c)))
-                })
-                .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+            // Load ALL functions (user + built-in), including their evaluators
+            let mut loaded_functions = HashMap::new();
+            for (name, func_config) in functions {
+                let loaded = func_config.load(&name, &metrics)?;
+                loaded_functions.insert(name, loaded);
+            }
 
             let object_store_info = ObjectStoreInfo::new(object_storage)?;
             let gateway_config = gateway.load(object_store_info.as_ref())?;
 
             // Initialize templates from ALL functions (including built-in)
-            let all_template_paths = Config::get_templates(&all_functions)?;
+            // Build a temporary map of just the function configs for template extraction
+            let all_template_paths = Config::get_templates_from_loaded(&loaded_functions)?;
             if gateway_config.template_filesystem_access.enabled {
                 deprecation_warning(
                     "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
@@ -1069,7 +1064,6 @@ async fn process_config_input(
                 models,
                 embedding_models,
                 metrics,
-                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1078,7 +1072,7 @@ async fn process_config_input(
                 rate_limiting,
                 autopilot,
                 snapshot,
-                functions: all_functions,
+                loaded_functions,
                 gateway_config,
                 object_store_info,
             })
@@ -1110,7 +1104,6 @@ async fn process_config_input(
                 functions,
                 metrics,
                 tools,
-                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1139,7 +1132,6 @@ async fn process_config_input(
                 functions: functions.clone(),
                 metrics: metrics.clone(),
                 tools: tools.clone(),
-                evaluators: evaluators.clone(),
                 evaluations: evaluations.clone(),
                 provider_types: provider_types.clone(),
                 optimizers: optimizers.clone(),
@@ -1150,19 +1142,16 @@ async fn process_config_input(
             let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
 
             // Load all functions from the snapshot (built-in functions are already included)
-            let all_functions = functions
-                .into_iter()
-                .map(|(name, func_config)| {
-                    func_config
-                        .load(&name, &metrics)
-                        .map(|c| (name, Arc::new(c)))
-                })
-                .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+            let mut loaded_functions = HashMap::new();
+            for (name, func_config) in functions {
+                let loaded = func_config.load(&name, &metrics)?;
+                loaded_functions.insert(name, loaded);
+            }
 
             // Use the overlay object store info directly instead of creating a new one
             let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
             // Initialize templates from ALL functions (including built-in)
-            let all_template_paths = Config::get_templates(&all_functions)?;
+            let all_template_paths = Config::get_templates_from_loaded(&loaded_functions)?;
             // We don't use these since the extra templates come directly from the snapshot
             // We pass in None for the base path to disable searching the file system
             // for snapshotted configs.
@@ -1174,7 +1163,6 @@ async fn process_config_input(
                 models,
                 embedding_models,
                 metrics,
-                evaluators,
                 evaluations,
                 provider_types,
                 optimizers,
@@ -1184,7 +1172,7 @@ async fn process_config_input(
                 autopilot,
                 // unused
                 snapshot,
-                functions: all_functions,
+                loaded_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
             })
@@ -1363,7 +1351,6 @@ impl Config {
             models,
             embedding_models,
             metrics,
-            evaluators: uninitialized_evaluators,
             evaluations: uninitialized_evaluations,
             provider_types,
             optimizers: uninitialized_optimizers,
@@ -1372,7 +1359,7 @@ impl Config {
             rate_limiting,
             autopilot,
             snapshot,
-            functions,
+            loaded_functions,
             gateway_config,
             object_store_info,
         } = process_config_input(input, &mut templates).await?;
@@ -1459,6 +1446,17 @@ impl Config {
             })
         })?;
 
+        // Split loaded functions into function configs and deferred evaluator artifacts
+        let mut functions = HashMap::new();
+        let mut deferred_evaluator_artifacts = Vec::new();
+        for (name, loaded) in loaded_functions {
+            functions.insert(name, Arc::new(loaded.function_config));
+            if !loaded.evaluator_functions.is_empty() || !loaded.evaluator_metrics.is_empty() {
+                deferred_evaluator_artifacts
+                    .push((loaded.evaluator_functions, loaded.evaluator_metrics));
+            }
+        }
+
         let mut config = Config {
             gateway: gateway_config,
             clickhouse,
@@ -1467,7 +1465,6 @@ impl Config {
             functions,
             metrics,
             tools,
-            evaluators: HashMap::new(),
             evaluations: HashMap::new(),
             templates: Arc::new(templates),
             object_store_info,
@@ -1480,31 +1477,22 @@ impl Config {
             hash: snapshot.hash.clone(),
         };
 
-        // Validate the config
+        // Validate the config (before adding tensorzero:: prefixed evaluator artifacts)
         config.validate().await?;
 
-        // Load top-level evaluators before evaluations, since evaluation presets may reference them
-        for (name, evaluator_config) in uninitialized_evaluators {
-            let (evaluator_config, function_config, metric_config) =
-                evaluator_config.load(None, &name)?;
-            // Register LLM judge function if present
-            if let Some(function_config) = function_config {
-                let function_name = get_top_level_llm_judge_function_name(&name);
-                if config.functions.contains_key(&function_name) {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "Duplicate top-level evaluator function name: `{function_name}` already exists"
-                        ),
-                    }
-                    .into());
-                }
-                let function_config = Arc::new(function_config);
+        // Register function-level evaluator functions and metrics after validation
+        // (they use tensorzero:: prefix which validation would reject for user-defined items)
+        for (evaluator_functions, evaluator_metrics) in deferred_evaluator_artifacts {
+            for (fn_name, fn_config) in evaluator_functions {
+                let fn_config = Arc::new(fn_config);
                 let templates = Arc::get_mut(&mut config.templates).ok_or_else(|| {
                     Error::from(ErrorDetails::Config {
-                        message: format!("Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                        message: format!(
+                            "Internal error: templates Arc has multiple references. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        ),
                     })
                 })?;
-                for variant in function_config.variants().values() {
+                for variant in fn_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         templates.add_template(
                             template.path.get_template_key(),
@@ -1512,30 +1500,19 @@ impl Config {
                         )?;
                     }
                 }
-                function_config
+                fn_config
                     .validate(
                         &config.tools,
                         &config.models,
                         &config.embedding_models,
                         &config.templates,
-                        &function_name,
+                        &fn_name,
                         &config.gateway,
                     )
                     .await?;
-                config.functions.insert(function_name, function_config);
+                config.functions.insert(fn_name, fn_config);
             }
-            // Register canonical metric
-            let metric_name = get_top_level_evaluator_metric_name(&name);
-            if config.metrics.contains_key(&metric_name) {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Duplicate top-level evaluator metric name: `{metric_name}` already exists"
-                    ),
-                }
-                .into());
-            }
-            config.metrics.insert(metric_name, metric_config);
-            config.evaluators.insert(name, Arc::new(evaluator_config));
+            config.metrics.extend(evaluator_metrics);
         }
 
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
@@ -1785,6 +1762,33 @@ impl Config {
         Ok(templates)
     }
 
+    /// Like `get_templates`, but works with `LoadedFunctionConfig` (pre-split).
+    fn get_templates_from_loaded(
+        loaded_functions: &HashMap<String, LoadedFunctionConfig>,
+    ) -> Result<HashMap<String, String>, Error> {
+        let mut templates = HashMap::new();
+        for loaded in loaded_functions.values() {
+            for variant in loaded.function_config.variants().values() {
+                let variant_template_paths = variant.get_all_template_paths();
+                for path in variant_template_paths {
+                    if templates
+                        .insert(path.path.get_template_key(), path.contents.clone())
+                        .is_some()
+                        && !path.path.is_real_path()
+                    {
+                        return Err(Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Duplicate template path: {}. {IMPOSSIBLE_ERROR_MESSAGE}",
+                                path.path.get_template_key()
+                            ),
+                        }));
+                    }
+                }
+            }
+        }
+        Ok(templates)
+    }
+
     pub fn get_evaluation(&self, evaluation_name: &str) -> Result<Arc<EvaluationConfig>, Error> {
         Ok(self
             .evaluations
@@ -1897,8 +1901,6 @@ pub struct UninitializedConfig {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
-    #[serde(default)]
-    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>, // evaluator name => evaluator config (top-level)
     #[serde(default)]
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
@@ -2016,8 +2018,6 @@ struct TomlUninitializedConfig {
     #[serde(default)]
     tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
-    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
-    #[serde(default)]
     evaluations: HashMap<String, UninitializedEvaluationConfig>,
     #[serde(default)]
     provider_types: ProviderTypesConfig,
@@ -2046,7 +2046,6 @@ impl TryFrom<TomlUninitializedConfig> for UninitializedConfig {
             functions: toml_config.functions,
             metrics: toml_config.metrics,
             tools: toml_config.tools,
-            evaluators: toml_config.evaluators,
             evaluations: toml_config.evaluations,
             provider_types: toml_config.provider_types,
             optimizers: toml_config.optimizers,
@@ -2128,6 +2127,8 @@ pub struct UninitializedFunctionConfigChat {
     #[serde(default)]
     pub description: Option<String>,
     pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
+    #[serde(default)]
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2143,6 +2144,8 @@ pub struct UninitializedFunctionConfigJson {
     #[serde(default)]
     pub description: Option<String>,
     pub experimentation: Option<UninitializedExperimentationConfigWithNamespaces>,
+    #[serde(default)]
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -2311,12 +2314,59 @@ fn propagate_timeout_s_to_candidates(
     Ok(())
 }
 
+/// Result of loading a function config, including any generated evaluator functions and metrics.
+pub struct LoadedFunctionConfig {
+    pub function_config: FunctionConfig,
+    /// LLM judge functions generated by evaluators on this function
+    pub evaluator_functions: HashMap<String, FunctionConfig>,
+    /// Metrics generated by evaluators on this function
+    pub evaluator_metrics: HashMap<String, MetricConfig>,
+}
+
+struct LoadedEvaluators {
+    evaluators: HashMap<String, EvaluatorConfig>,
+    generated_functions: HashMap<String, FunctionConfig>,
+    generated_metrics: HashMap<String, MetricConfig>,
+}
+
+/// Load evaluators defined on a function, returning the loaded evaluator configs
+/// plus any generated LLM judge functions and metrics.
+fn load_function_evaluators(
+    function_name: &str,
+    uninitialized_evaluators: HashMap<String, UninitializedEvaluatorConfig>,
+) -> Result<LoadedEvaluators, Error> {
+    let mut evaluators = HashMap::new();
+    let mut generated_functions = HashMap::new();
+    let mut generated_metrics = HashMap::new();
+
+    for (evaluator_name, evaluator_config) in uninitialized_evaluators {
+        let (loaded_evaluator, function_config, metric_config) =
+            evaluator_config.load(None, Some(function_name), &evaluator_name)?;
+
+        if let Some(func) = function_config {
+            let llm_judge_fn_name =
+                get_function_llm_judge_function_name(function_name, &evaluator_name);
+            generated_functions.insert(llm_judge_fn_name, func);
+        }
+
+        let metric_name = get_function_evaluator_metric_name(function_name, &evaluator_name);
+        generated_metrics.insert(metric_name, metric_config);
+        evaluators.insert(evaluator_name, loaded_evaluator);
+    }
+
+    Ok(LoadedEvaluators {
+        evaluators,
+        generated_functions,
+        generated_metrics,
+    })
+}
+
 impl UninitializedFunctionConfig {
     pub fn load(
         self,
         function_name: &str,
         metrics: &HashMap<String, MetricConfig>,
-    ) -> Result<FunctionConfig, Error> {
+    ) -> Result<LoadedFunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(mut params) => {
                 // Propagate deprecated timeout_s to candidate variants before loading
@@ -2372,16 +2422,26 @@ impl UninitializedFunctionConfig {
                         base: ExperimentationConfig::legacy_from_variants_map(&variants),
                         namespaces: std::collections::HashMap::new(),
                     });
-                Ok(FunctionConfig::Chat(FunctionConfigChat {
-                    variants,
-                    schemas: schema_data,
-                    tools: params.tools,
-                    tool_choice: params.tool_choice,
-                    parallel_tool_calls: params.parallel_tool_calls,
-                    description: params.description,
-                    all_explicit_templates_names: all_template_names,
-                    experimentation,
-                }))
+                let LoadedEvaluators {
+                    evaluators: loaded_evaluators,
+                    generated_functions: evaluator_functions,
+                    generated_metrics: evaluator_metrics,
+                } = load_function_evaluators(function_name, params.evaluators)?;
+                Ok(LoadedFunctionConfig {
+                    function_config: FunctionConfig::Chat(FunctionConfigChat {
+                        variants,
+                        schemas: schema_data,
+                        tools: params.tools,
+                        tool_choice: params.tool_choice,
+                        parallel_tool_calls: params.parallel_tool_calls,
+                        description: params.description,
+                        all_explicit_templates_names: all_template_names,
+                        experimentation,
+                        evaluators: loaded_evaluators,
+                    }),
+                    evaluator_functions,
+                    evaluator_metrics,
+                })
             }
             UninitializedFunctionConfig::Json(mut params) => {
                 // Propagate deprecated timeout_s to candidate variants before loading
@@ -2469,15 +2529,25 @@ impl UninitializedFunctionConfig {
                         base: ExperimentationConfig::legacy_from_variants_map(&variants),
                         namespaces: std::collections::HashMap::new(),
                     });
-                Ok(FunctionConfig::Json(FunctionConfigJson {
-                    variants,
-                    schemas: schema_data,
-                    output_schema,
-                    json_mode_tool_call_config,
-                    description: params.description,
-                    all_explicit_template_names: all_template_names,
-                    experimentation,
-                }))
+                let LoadedEvaluators {
+                    evaluators: loaded_evaluators,
+                    generated_functions: evaluator_functions,
+                    generated_metrics: evaluator_metrics,
+                } = load_function_evaluators(function_name, params.evaluators)?;
+                Ok(LoadedFunctionConfig {
+                    function_config: FunctionConfig::Json(FunctionConfigJson {
+                        variants,
+                        schemas: schema_data,
+                        output_schema,
+                        json_mode_tool_call_config,
+                        description: params.description,
+                        all_explicit_template_names: all_template_names,
+                        experimentation,
+                        evaluators: loaded_evaluators,
+                    }),
+                    evaluator_functions,
+                    evaluator_metrics,
+                })
             }
         }
     }
