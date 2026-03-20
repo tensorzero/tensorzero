@@ -122,7 +122,7 @@ export function PendingQuestionCard({
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 px-4 pb-3">
         <div
           ref={contentRef}
-          className="max-h-[40vh] overflow-y-auto transition-[height] duration-300 ease-in-out"
+          className="max-h-[48vh] overflow-y-auto transition-[height] duration-300 ease-in-out"
           style={{ height: contentHeight }}
         >
           <div
