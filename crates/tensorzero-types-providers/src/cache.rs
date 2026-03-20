@@ -35,7 +35,7 @@
 //! |----------|---------------------|----------------------|-----------|
 //! | **Anthropic** | `cache_read_input_tokens` | `cache_creation_input_tokens` | Explicit (`cache_control`) |
 //! | **GCP Vertex Anthropic** | `cache_read_input_tokens` | `cache_creation_input_tokens` | Explicit (`cache_control`) |
-//! | **AWS Bedrock** | `provider_cache_read_input_tokens` | `provider_cache_write_input_tokens` | Explicit (`cachePoint`) |
+//! | **AWS Bedrock** | `cacheReadInputTokenCount` | `cacheWriteInputTokenCount` | Explicit (`cachePoint`) |
 //!
 //! ## Google Gemini providers
 //!
@@ -52,7 +52,8 @@
 //! | **Together** | Transparent backend caching, no token counts in response |
 //! | **Mistral** | No prompt caching support |
 //! | **Hyperbolic** | No prompt caching support |
-//! | **vLLM / SGLang** | Prefix caching exists but token counts not in usage response |
+//! | **vLLM** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
+//! | **SGLang** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
 //!
 //! ## DeepSeek (unique format)
 //!
