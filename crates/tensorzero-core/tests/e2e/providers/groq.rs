@@ -137,7 +137,7 @@ async fn get_providers() -> E2ETestProviders {
                 credentials: HashMap::new(),
             },
         ],
-        cache_input_tokens_inference: standard_providers.clone(), // Groq supports auto-caching via prompt_tokens_details.cached_tokens
+        cache_input_tokens_inference: vec![], // Groq auto-caching doesn't reliably return prompt_tokens_details.cached_tokens
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
