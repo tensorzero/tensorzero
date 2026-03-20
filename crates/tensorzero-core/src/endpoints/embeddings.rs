@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
+use metrics::counter;
+
 use crate::{
     cache::{CacheManager, CacheParamsOptions},
     config::Config,
@@ -81,6 +83,8 @@ pub async fn embeddings(
         }));
     }
 
+    let num_inputs = params.input.num_inputs();
+
     let request = EmbeddingRequest {
         input: params.input,
         dimensions: params.dimensions,
@@ -91,6 +95,22 @@ pub async fn embeddings(
     // we should fix this once the tags are implemented
     let tags = Arc::new(HashMap::default());
     let dryrun = params.dryrun.unwrap_or(false);
+
+    // Increment the request and inference counts if we're not in dryrun mode
+    if !dryrun {
+        counter!(
+            "tensorzero_requests_total",
+            "endpoint" => "embeddings",
+            "model_name" => params.model_name.clone(),
+        )
+        .increment(1);
+        counter!(
+            "tensorzero_inferences_total",
+            "endpoint" => "embeddings",
+            "model_name" => params.model_name.clone(),
+        )
+        .increment(num_inputs as u64);
+    }
     let clients = InferenceClients {
         http_client: http_client.clone(),
         credentials: Arc::new(params.credentials.clone()),
