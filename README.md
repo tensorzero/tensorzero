@@ -1,4 +1,4 @@
-<p><picture><img src="https://github.com/user-attachments/assets/47d67430-386d-4675-82ad-d4734d3262d9" alt="TensorZero Logo" width="128" height="128"></picture></p>
+<p><picture><img src="https://github.com/user-attachments/assets/9d0a93c6-7685-4e57-9737-7cbeb338a218" alt="TensorZero Logo" width="128" height="128"></picture></p>
 
 # TensorZero
 
@@ -201,7 +201,7 @@ It plays nicely with the **[OpenAI SDK](https://www.tensorzero.com/docs/gateway/
 **Is TensorZero production-ready?**
 
 Yes.
-TensorZero is used by companies ranging from frontier AI startups to the Fortune 50.
+TensorZero is used by companies ranging from frontier AI startups to the Fortune 10 and powers ~1% of the global LLM API spend today.
 
 Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
 

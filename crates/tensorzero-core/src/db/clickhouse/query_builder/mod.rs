@@ -29,57 +29,6 @@ pub mod test_util {
     pub use crate::db::test_helpers::*;
 }
 
-impl FloatComparisonOperator {
-    pub fn to_clickhouse_operator(&self) -> &str {
-        match self {
-            FloatComparisonOperator::LessThan => "<",
-            FloatComparisonOperator::LessThanOrEqual => "<=",
-            FloatComparisonOperator::Equal => "=",
-            FloatComparisonOperator::GreaterThan => ">",
-            FloatComparisonOperator::GreaterThanOrEqual => ">=",
-            FloatComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
-
-impl TimeComparisonOperator {
-    pub fn to_clickhouse_operator(&self) -> &str {
-        match self {
-            TimeComparisonOperator::LessThan => "<",
-            TimeComparisonOperator::LessThanOrEqual => "<=",
-            TimeComparisonOperator::Equal => "=",
-            TimeComparisonOperator::GreaterThan => ">",
-            TimeComparisonOperator::GreaterThanOrEqual => ">=",
-            TimeComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
-
-impl TagComparisonOperator {
-    pub fn to_clickhouse_operator(&self) -> &str {
-        match self {
-            TagComparisonOperator::Equal => "=",
-            TagComparisonOperator::NotEqual => "!=",
-        }
-    }
-}
-
-impl OrderDirection {
-    pub fn to_clickhouse_direction(&self) -> &str {
-        match self {
-            OrderDirection::Asc => "ASC",
-            OrderDirection::Desc => "DESC",
-        }
-    }
-
-    pub fn inverted(&self) -> Self {
-        match self {
-            OrderDirection::Asc => OrderDirection::Desc,
-            OrderDirection::Desc => OrderDirection::Asc,
-        }
-    }
-}
-
 #[derive(Hash, Eq, PartialEq, Debug)]
 pub struct JoinKey {
     table: MetricConfigType,
@@ -175,7 +124,18 @@ LEFT JOIN (
 }
 
 // TODO(shuyangli): Extract inference filters into their own file.
-impl InferenceFilter {
+pub trait InferenceFilterClickhouse {
+    fn to_clickhouse_sql(
+        &self,
+        config: &Config,
+        params_map: &mut Vec<QueryParameter>,
+        _select_clauses: &mut Vec<String>,
+        joins: &mut JoinRegistry,
+        param_idx_counter: &mut usize,
+    ) -> Result<String, Error>;
+}
+
+impl InferenceFilterClickhouse for InferenceFilter {
     /// Converts the filter tree to a ClickHouse SQL string.
     ///
     /// The returned string will contain the filter condition that should be added to the WHERE clause.
@@ -188,7 +148,7 @@ impl InferenceFilter {
     /// We may be able to do this more efficiently by using subqueries and CTEs.
     /// We're also doing a join per filter on metric. In principle if there is a subtree of the tree that uses the same joined table,
     /// we could push the condition down into the query before the join
-    pub fn to_clickhouse_sql(
+    fn to_clickhouse_sql(
         &self,
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
@@ -226,7 +186,7 @@ impl InferenceFilter {
                 // 3. return the filter condition
                 // NOTE: The subquery uses Nullable types, so unmatched LEFT JOIN rows have NULL values.
                 // The COALESCE wrapper in AND/OR handles NULL -> false conversion.
-                let comparison_operator = fm_node.comparison_operator.to_clickhouse_operator();
+                let comparison_operator = fm_node.comparison_operator.to_sql_operator();
                 Ok(format!(
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
                 ))
@@ -278,7 +238,7 @@ impl InferenceFilter {
                     add_parameter(key, ClickhouseType::String, params_map, param_idx_counter);
                 let value_placeholder =
                     add_parameter(value, ClickhouseType::String, params_map, param_idx_counter);
-                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                let comparison_operator = comparison_operator.to_sql_operator();
                 // Add mapContains check to ensure the tag exists before comparing.
                 // Without this, a != filter would match rows without the tag (since
                 // accessing a missing key returns empty string, and '' != value is true).
@@ -296,7 +256,7 @@ impl InferenceFilter {
                     params_map,
                     param_idx_counter,
                 );
-                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                let comparison_operator = comparison_operator.to_sql_operator();
                 Ok(format!(
                     "i.timestamp {comparison_operator} parseDateTimeBestEffort({time_placeholder})"
                 ))
@@ -449,7 +409,7 @@ pub fn generate_order_by_sql(
         } else {
             term.direction
         };
-        let direction = effective_direction.to_clickhouse_direction();
+        let direction = effective_direction.to_sql_direction();
         order_by_clauses.push(format!("{sql_expr} {direction} NULLS LAST"));
     }
 

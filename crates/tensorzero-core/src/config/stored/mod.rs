@@ -28,7 +28,7 @@ use crate::config::{
     AutopilotConfig, ClickHouseConfig, MetricConfig, PostgresConfig, UninitializedConfig,
     UninitializedFunctionConfig, UninitializedToolConfig,
 };
-use crate::evaluations::{UninitializedEvaluationConfig, UninitializedEvaluatorConfig};
+use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
 use crate::optimization::UninitializedOptimizerInfo;
@@ -60,8 +60,6 @@ pub struct StoredConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>,
     #[serde(default)]
-    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
-    #[serde(default)]
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>,
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
@@ -75,6 +73,8 @@ pub struct StoredConfig {
     pub embedding_models: HashMap<Arc<str>, StoredEmbeddingModelConfig>,
     #[serde(default)]
     pub autopilot: AutopilotConfig,
+    // The following names should **not** be reused:
+    // - evaluators
 }
 
 impl From<UninitializedConfig> for StoredConfig {
@@ -90,7 +90,6 @@ impl From<UninitializedConfig> for StoredConfig {
             functions,
             metrics,
             tools,
-            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -107,7 +106,6 @@ impl From<UninitializedConfig> for StoredConfig {
             functions,
             metrics,
             tools,
-            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -136,7 +134,6 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             functions,
             metrics,
             tools,
-            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -162,7 +159,6 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             functions,
             metrics,
             tools,
-            evaluators,
             evaluations,
             provider_types,
             optimizers,
@@ -460,13 +456,18 @@ mod tests {
         );
     }
 
-    /// Old snapshots without [evaluators] should load with empty evaluators
+    /// Old snapshots with top-level [evaluators] should still deserialize
+    /// (the field is silently ignored since evaluators now live on functions)
     #[test]
-    fn test_stored_config_without_evaluators() {
-        let toml_str = "";
-        let stored: StoredConfig = toml::from_str(toml_str).expect("empty config should parse");
-        assert!(stored.evaluators.is_empty());
-        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
-        assert!(uninit.evaluators.is_empty());
+    fn test_historical_stored_config_with_top_level_evaluators() {
+        let toml_str = r#"
+[evaluators.exact_match]
+type = "exact_match"
+"#;
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("old config with top-level evaluators should parse");
+        let _uninit: UninitializedConfig = stored
+            .try_into()
+            .expect("should convert to UninitializedConfig");
     }
 }

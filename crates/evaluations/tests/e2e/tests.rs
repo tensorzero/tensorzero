@@ -4,7 +4,7 @@
 )]
 
 mod common;
-mod test_top_level_evaluator;
+mod test_function_level_evaluator;
 
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
@@ -1896,6 +1896,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "happy_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -1914,6 +1915,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "sad_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -1932,6 +1934,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "zero",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -1950,6 +1953,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "one",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -1995,6 +1999,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "happy_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -2090,6 +2095,7 @@ async fn test_run_llm_judge_evaluator_json() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "happy_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -2108,6 +2114,7 @@ async fn test_run_llm_judge_evaluator_json() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "sad_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -2126,6 +2133,7 @@ async fn test_run_llm_judge_evaluator_json() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "zero",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -2144,6 +2152,7 @@ async fn test_run_llm_judge_evaluator_json() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "one",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -2189,6 +2198,7 @@ async fn test_run_llm_judge_evaluator_json() {
         clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: Some("test_evaluation"),
+        function_name: "test_function",
         evaluator_name: "happy_bool",
 
         evaluation_run_id: Uuid::now_v7(),
@@ -3457,29 +3467,27 @@ async fn run_evaluation_with_function_name_and_evaluator_names() {
             "Should have no evaluator errors"
         );
 
-        // Verify feedback was written with top-level evaluator metric naming
+        // Verify feedback was written with function-level evaluator metric naming
+        let expected_metric =
+            "tensorzero::function_name::extract_entities::evaluator_name::exact_match";
         let inference_id = info.response.inference_id();
-        let feedback = query_boolean_feedback(
-            &db,
-            inference_id,
-            Some("tensorzero::evaluator::exact_match"),
-        )
-        .await
-        .expect("Should find boolean feedback for top-level evaluator");
+        let feedback = query_boolean_feedback(&db, inference_id, Some(expected_metric))
+            .await
+            .expect("Should find boolean feedback for function-level evaluator");
 
         assert_eq!(
-            feedback.metric_name, "tensorzero::evaluator::exact_match",
-            "Metric name should use top-level evaluator naming (no evaluation_name prefix)"
+            feedback.metric_name, expected_metric,
+            "Metric name should use function-level evaluator naming"
         );
         assert_eq!(
             feedback.tags["tensorzero::evaluation_run_id"],
             evaluation_run_id.to_string()
         );
         assert_eq!(feedback.tags["tensorzero::evaluator_name"], "exact_match");
-        // Top-level evaluators should not have an evaluation_name tag
+        // Function-level evaluators should not have an evaluation_name tag
         assert!(
             !feedback.tags.contains_key("tensorzero::evaluation_name"),
-            "Top-level evaluator feedback should not have evaluation_name tag"
+            "Function-level evaluator feedback should not have evaluation_name tag"
         );
 
         // Verify the inference is properly tagged (no evaluation_name)

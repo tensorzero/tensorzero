@@ -29,3 +29,6 @@ system_template = "../../../fixtures/config/functions/extract_entities/baseline/
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 0
+
+[functions.extract_entities.evaluators.exact_match]
+type = "exact_match"

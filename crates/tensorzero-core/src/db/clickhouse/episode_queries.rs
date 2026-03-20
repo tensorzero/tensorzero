@@ -3,7 +3,9 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
-use crate::db::clickhouse::query_builder::{ClickhouseType, JoinRegistry, QueryParameter};
+use crate::db::clickhouse::query_builder::{
+    ClickhouseType, InferenceFilterClickhouse, JoinRegistry, QueryParameter,
+};
 use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
