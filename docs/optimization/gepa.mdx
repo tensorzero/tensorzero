@@ -89,8 +89,7 @@ You can also provide separate `train_dataset_name` and `val_dataset_name` for ex
 
 <Step title="Configure an evaluation">
 
-GEPA template refinement is guided by evaluator scores.
-Define an [Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your TensorZero configuration.
+GEPA is guided by evaluator scores, so let's define an [Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your TensorZero configuration.
 To demonstrate that GEPA works even with noisy evaluators, we don't provide demonstrations (labels), only an LLM judge.
 
 <Accordion title="Example: Data Extraction (Named Entity Recognition) — Evaluation">
@@ -208,7 +207,7 @@ task_id = result.task_id
 
 </Tab>
 
-<Tab title="curl">
+<Tab title="HTTP">
 
 ```bash
 curl -X POST http://localhost:3000/v1/optimization/gepa \
@@ -278,7 +277,7 @@ while True:
 
 </Tab>
 
-<Tab title="curl">
+<Tab title="HTTP">
 
 ```bash
 curl http://localhost:3000/v1/optimization/gepa/{task_id}
@@ -405,18 +404,13 @@ You can roll out your new variants with confidence using [adaptive A/B testing](
 
 </Tip>
 
-<Warning>
-
-The `experimental_launch_optimization` and `experimental_poll_optimization` methods with `GEPAConfig` still work but are deprecated.
-We recommend using the dedicated GEPA API (`t0.optimization.gepa.launch` / `t0.optimization.gepa.get`) for new integrations.
-
-</Warning>
-
 ## API Reference
 
 ### `POST /v1/optimization/gepa`
 
 Launch a GEPA optimization task. Returns a task ID for polling.
+
+#### Request
 
 {/* Required Parameters */}
 
@@ -512,11 +506,15 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 
 Poll the status of a GEPA optimization task.
 
+#### Request
+
+The request URL should include the `task_id` you received when launching the GEPA workflow.
+
 #### Response
 
 The response is a tagged union on the `status` field:
 
-**Pending:**
+**Pending**
 
 ```json
 {
@@ -529,7 +527,7 @@ The response is a tagged union on the `status` field:
 }
 ```
 
-**Completed:**
+**Completed**
 
 ```json
 {
@@ -549,7 +547,7 @@ The response is a tagged union on the `status` field:
 }
 ```
 
-**Error:**
+**Error**
 
 ```json
 {
@@ -557,80 +555,3 @@ The response is a tagged union on the `status` field:
   "error": "description of what went wrong"
 }
 ```
-
-## `GEPAConfig` (Deprecated)
-
-<Warning>
-
-`GEPAConfig` is used with the deprecated `experimental_launch_optimization` / `experimental_poll_optimization` methods.
-For new integrations, use the dedicated API described above.
-
-</Warning>
-
-Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
-
-{/* Required Parameters */}
-
-<ParamField body="analysis_model" type="str" required>
-  Model used to analyze inference results (e.g.
-  `"anthropic::claude-sonnet-4-5"`).
-</ParamField>
-
-<ParamField body="evaluation_name" type="str" required>
-  Name of the evaluation used to score candidate variants.
-</ParamField>
-
-<ParamField body="function_name" type="str" required>
-  Name of the TensorZero function to optimize.
-</ParamField>
-
-<ParamField body="mutation_model" type="str" required>
-  Model used to generate prompt mutations (e.g.
-  `"anthropic::claude-sonnet-4-5"`).
-</ParamField>
-
-{/* Optional Parameters */}
-
-<ParamField body="batch_size" type="int" default={5}>
-  Number of training samples to analyze per iteration.
-</ParamField>
-
-<ParamField body="include_inference_for_mutation" type="bool" default={true}>
-  Whether to include inference input/output in the analysis passed to the
-  mutation model. Useful for few-shot examples but can cause context overflow
-  with long conversations or outputs.
-</ParamField>
-
-<ParamField body="initial_variants" type="list[str]">
-  List of variant names to initialize GEPA with. If not specified, uses all
-  variants defined for the function.
-</ParamField>
-
-<ParamField body="max_concurrency" type="int" default={10}>
-  Maximum number of concurrent inference calls.
-</ParamField>
-
-<ParamField body="max_iterations" type="int" default={1}>
-  Maximum number of optimization iterations.
-</ParamField>
-
-<ParamField body="max_tokens" type="int">
-  Maximum tokens for analysis and mutation model calls. Required for Anthropic
-  models.
-</ParamField>
-
-<ParamField body="retries" type="RetryConfig">
-  Retry configuration for inference calls during optimization.
-</ParamField>
-
-<ParamField body="seed" type="int">
-  Random seed for reproducibility.
-</ParamField>
-
-<ParamField body="timeout" type="int" default={300}>
-  Client timeout in seconds for TensorZero gateway operations.
-</ParamField>
-
-<ParamField body="variant_prefix" type="str">
-  Prefix for naming newly generated variants.
-</ParamField>
