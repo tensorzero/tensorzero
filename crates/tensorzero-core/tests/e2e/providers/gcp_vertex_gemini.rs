@@ -164,7 +164,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
-        cache_input_tokens_inference: standard_providers.clone(),
+        cache_input_tokens_inference: standard_providers.clone(), // Gemini 2.5+ supports implicit caching via cachedContentTokenCount
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
