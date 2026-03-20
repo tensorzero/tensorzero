@@ -367,6 +367,14 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
     }
 }
 
+/// Text status update details.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct StatusUpdateText {
+    pub text: String,
+}
+
 /// A status update within a session.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -376,7 +384,8 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
     ts(export, tag = "type", rename_all = "snake_case")
 )]
 pub enum StatusUpdate {
-    Text { text: String },
+    #[schema(title = "StatusUpdateText")]
+    Text(StatusUpdateText),
 }
 
 // =============================================================================
@@ -602,11 +611,30 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ToolCallAuthorizationStatusRejected {
+    pub reason: String,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 pub enum ToolCallAuthorizationStatus {
     Approved,
-    Rejected { reason: String },
+    #[schema(title = "ToolCallAuthorizationStatusRejected")]
+    Rejected(ToolCallAuthorizationStatusRejected),
     NotAvailable,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GatewayToolCallAuthorizationStatusRejected {
+    pub reason: String,
 }
 
 /// Authorization status for tool calls as seen by gateway consumers.
@@ -616,9 +644,14 @@ pub enum ToolCallAuthorizationStatus {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 pub enum GatewayToolCallAuthorizationStatus {
     Approved,
-    Rejected { reason: String },
+    #[schema(title = "GatewayToolCallAuthorizationStatusRejected")]
+    Rejected(GatewayToolCallAuthorizationStatusRejected),
 }
 
 impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus {
@@ -629,8 +662,12 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
             ToolCallAuthorizationStatus::Approved => {
                 Ok(GatewayToolCallAuthorizationStatus::Approved)
             }
-            ToolCallAuthorizationStatus::Rejected { reason } => {
-                Ok(GatewayToolCallAuthorizationStatus::Rejected { reason })
+            ToolCallAuthorizationStatus::Rejected(reason) => {
+                Ok(GatewayToolCallAuthorizationStatus::Rejected(
+                    GatewayToolCallAuthorizationStatusRejected {
+                        reason: reason.reason,
+                    },
+                ))
             }
             ToolCallAuthorizationStatus::NotAvailable => {
                 Err("NotAvailable status should be filtered before conversion")
@@ -641,7 +678,26 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ToolOutcomeRejected {
+    pub reason: String,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct ToolOutcomeFailure {
+    /// Structured error data from the tool.
+    pub error: tensorzero_types::ToolFailure,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export, tag = "type", rename_all = "snake_case")
+)]
 pub enum ToolOutcome {
     #[schema(title = "ToolOutcomeSuccess")]
     Success(AutopilotToolResult),
@@ -651,14 +707,9 @@ pub enum ToolOutcome {
     /// The rejected tool will show in in the events list as `EventPayload::ToolResult`
     /// with `ToolOutcome::Rejected`
     #[schema(title = "ToolOutcomeRejected")]
-    Rejected {
-        reason: String,
-    },
+    Rejected(ToolOutcomeRejected),
     #[schema(title = "ToolOutcomeFailure")]
-    Failure {
-        /// Structured error data from the tool.
-        error: tensorzero_types::ToolFailure,
-    },
+    Failure(ToolOutcomeFailure),
     Missing,
     #[serde(other)]
     #[serde(alias = "other")] // legacy name
@@ -887,6 +938,28 @@ pub struct AutoEvalExplanationQuestion {
     pub question: String,
 }
 
+/// Rendered markdown content in an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalMarkdownContentBlock {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub label: Option<String>,
+}
+
+/// Rendered JSON content in an autoeval example.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct AutoEvalJsonContentBlock {
+    pub data: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub label: Option<String>,
+}
+
 /// A block of rich content displayed alongside an autoeval example.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -897,19 +970,11 @@ pub struct AutoEvalExplanationQuestion {
 )]
 pub enum AutoEvalContentBlock {
     /// Rendered as formatted markdown.
-    Markdown {
-        text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
+    #[schema(title = "AutoEvalContentBlockMarkdown")]
+    Markdown(AutoEvalMarkdownContentBlock),
     /// Rendered as a formatted JSON viewer.
-    Json {
-        data: serde_json::Value,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
+    #[schema(title = "AutoEvalContentBlockJson")]
+    Json(AutoEvalJsonContentBlock),
 }
 
 /// Minimal input payload for submitting autoeval example labeling answers.

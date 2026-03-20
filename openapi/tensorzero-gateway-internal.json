@@ -206,52 +206,52 @@
       "AutoEvalContentBlock": {
         "oneOf": [
           {
-            "type": "object",
-            "description": "Rendered as formatted markdown.",
-            "required": [
-              "text",
-              "type"
-            ],
-            "properties": {
-              "label": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AutoEvalMarkdownContentBlock",
+                "description": "Rendered as formatted markdown."
               },
-              "text": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "markdown"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "markdown"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "AutoEvalContentBlockMarkdown",
+            "description": "Rendered as formatted markdown."
           },
           {
-            "type": "object",
-            "description": "Rendered as a formatted JSON viewer.",
-            "required": [
-              "data",
-              "type"
-            ],
-            "properties": {
-              "data": {},
-              "label": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AutoEvalJsonContentBlock",
+                "description": "Rendered as a formatted JSON viewer."
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "json"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "AutoEvalContentBlockJson",
+            "description": "Rendered as a formatted JSON viewer."
           }
         ],
         "description": "A block of rich content displayed alongside an autoeval example."
@@ -306,6 +306,22 @@
           },
           "question": {
             "type": "string"
+          }
+        }
+      },
+      "AutoEvalJsonContentBlock": {
+        "type": "object",
+        "description": "Rendered JSON content in an autoeval example.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {},
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -382,6 +398,24 @@
           "label_question": {
             "$ref": "#/components/schemas/AutoEvalLabelQuestion",
             "description": "The multiple-choice labeling question for this example."
+          }
+        }
+      },
+      "AutoEvalMarkdownContentBlock": {
+        "type": "object",
+        "description": "Rendered markdown content in an autoeval example.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
           }
         }
       },
@@ -721,10 +755,7 @@
         ],
         "properties": {
           "dataset_name": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
           "evaluation_name": {
             "type": "string"
@@ -738,10 +769,7 @@
             "minimum": 0
           },
           "variant_name": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           }
         }
       },
@@ -832,7 +860,8 @@
         "description": "A message payload specific to autopilot events.\nContent is restricted to Text blocks only.",
         "required": [
           "role",
-          "content"
+          "content",
+          "metadata"
         ],
         "properties": {
           "content": {
@@ -877,6 +906,9 @@
       },
       "EventPayloadMessageMetadata": {
         "type": "object",
+        "required": [
+          "resolved_uuids"
+        ],
         "properties": {
           "resolved_uuids": {
             "type": "array",
@@ -1444,7 +1476,10 @@
         "required": [
           "events",
           "previous_user_message_event_id",
-          "status"
+          "status",
+          "pending_tool_calls",
+          "pending_user_questions",
+          "pending_auto_eval_example_labeling"
         ],
         "properties": {
           "events": {
@@ -1518,25 +1553,40 @@
             }
           },
           {
-            "type": "object",
-            "required": [
-              "reason",
-              "type"
-            ],
-            "properties": {
-              "reason": {
-                "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GatewayToolCallAuthorizationStatusRejected"
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "rejected"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "rejected"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "GatewayToolCallAuthorizationStatusRejected"
           }
         ],
         "description": "Authorization status for tool calls as seen by gateway consumers.\n\nThis is a narrower type than `ToolCallAuthorizationStatus` that excludes\n`NotAvailable` since that status is filtered out before reaching consumers."
+      },
+      "GatewayToolCallAuthorizationStatusRejected": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "GatewayToolCallEvent": {
         "type": "object",
@@ -2219,25 +2269,41 @@
       "StatusUpdate": {
         "oneOf": [
           {
-            "type": "object",
-            "required": [
-              "text",
-              "type"
-            ],
-            "properties": {
-              "text": {
-                "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StatusUpdateText"
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "text"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "StatusUpdateText"
           }
         ],
         "description": "A status update within a session."
+      },
+      "StatusUpdateText": {
+        "type": "object",
+        "description": "Text status update details.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
       },
       "TensorZeroErrorResponse": {
         "type": "object",
@@ -2281,22 +2347,26 @@
             }
           },
           {
-            "type": "object",
-            "required": [
-              "reason",
-              "type"
-            ],
-            "properties": {
-              "reason": {
-                "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallAuthorizationStatusRejected"
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "rejected"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "rejected"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "ToolCallAuthorizationStatusRejected"
           },
           {
             "type": "object",
@@ -2313,6 +2383,17 @@
             }
           }
         ]
+      },
+      "ToolCallAuthorizationStatusRejected": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "ToolCallDecisionSource": {
         "oneOf": [
@@ -2444,44 +2525,50 @@
             "title": "ToolOutcomeSuccess"
           },
           {
-            "type": "object",
-            "title": "ToolOutcomeRejected",
-            "description": "The user rejected the tool call request\nNote that this is currently never directly sent by the client - instead,\n`ToolCallAuthorizationStatus::Rejected` is sent to the server.\nThe rejected tool will show in in the events list as `EventPayload::ToolResult`\nwith `ToolOutcome::Rejected`",
-            "required": [
-              "reason",
-              "type"
-            ],
-            "properties": {
-              "reason": {
-                "type": "string"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolOutcomeRejected",
+                "description": "The user rejected the tool call request\nNote that this is currently never directly sent by the client - instead,\n`ToolCallAuthorizationStatus::Rejected` is sent to the server.\nThe rejected tool will show in in the events list as `EventPayload::ToolResult`\nwith `ToolOutcome::Rejected`"
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "rejected"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "rejected"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "ToolOutcomeRejected",
+            "description": "The user rejected the tool call request\nNote that this is currently never directly sent by the client - instead,\n`ToolCallAuthorizationStatus::Rejected` is sent to the server.\nThe rejected tool will show in in the events list as `EventPayload::ToolResult`\nwith `ToolOutcome::Rejected`"
           },
           {
-            "type": "object",
-            "title": "ToolOutcomeFailure",
-            "required": [
-              "error",
-              "type"
-            ],
-            "properties": {
-              "error": {
-                "$ref": "#/components/schemas/ToolFailure",
-                "description": "Structured error data from the tool."
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolOutcomeFailure"
               },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "failure"
-                ]
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "failure"
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "title": "ToolOutcomeFailure"
           },
           {
             "type": "object",
@@ -2512,6 +2599,29 @@
             }
           }
         ]
+      },
+      "ToolOutcomeFailure": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ToolFailure",
+            "description": "Structured error data from the tool."
+          }
+        }
+      },
+      "ToolOutcomeRejected": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "TopKEvaluationVisualization": {
         "type": "object",

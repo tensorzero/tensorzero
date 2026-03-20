@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
-use autopilot_client::AutopilotToolResult;
+use autopilot_client::{AutopilotToolResult, ToolOutcomeFailure};
 use durable_tools::{
     CreateEventGatewayRequest, CreateEventPayload, CreateEventPayloadToolResult, SimpleTool,
     SimpleToolContext, StepState, TaskTool, TensorZeroClient, ToolAppState, ToolContext,
@@ -126,9 +126,9 @@ where
                 let result_value = serde_json::to_value(&output)?;
                 ToolOutcome::Success(AutopilotToolResult::typed(result_value))
             }
-            Err(e) => ToolOutcome::Failure {
+            Err(e) => ToolOutcome::Failure(ToolOutcomeFailure {
                 error: ToolFailure::Tool { error: e },
-            },
+            }),
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -290,7 +290,7 @@ impl<T: SimpleTool<SideInfo = AutopilotSideInfo>> TaskTool for ClientSimpleToolW
                 let result_value = serde_json::to_value(&output)?;
                 ToolOutcome::Success(AutopilotToolResult::typed(result_value))
             }
-            Err(error) => ToolOutcome::Failure { error },
+            Err(error) => ToolOutcome::Failure(ToolOutcomeFailure { error }),
         };
 
         // Publish result to autopilot API (checkpointed)
@@ -712,11 +712,11 @@ mod tests {
                     &request.payload,
                     CreateEventPayload::ToolResult(CreateEventPayloadToolResult {
                         tool_call_event_id: tceid,
-                        outcome: ToolOutcome::Failure {
+                        outcome: ToolOutcome::Failure(ToolOutcomeFailure {
                             error: ToolFailure::Tool {
                                 error: NonControlToolError::Internal { message },
                             },
-                        },
+                        }),
                     }) if *tceid == expected_tool_call_event_id && message == "Tool execution failed"
                 )
             })
@@ -731,13 +731,13 @@ mod tests {
             session_id,
             tool_call_event_id,
             tool_name: "failing_tool".to_string(),
-            outcome: ToolOutcome::Failure {
+            outcome: ToolOutcome::Failure(ToolOutcomeFailure {
                 error: ToolFailure::Tool {
                     error: NonControlToolError::Internal {
                         message: "Tool execution failed".to_string(),
                     },
                 },
-            },
+            }),
         };
 
         let result = publish_result(params, &mock_client).await;

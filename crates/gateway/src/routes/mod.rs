@@ -67,3 +67,81 @@ pub fn build_internal_openapi_spec() -> OpenApi {
     let (_, openapi) = internal::build_internal_non_otel_enabled_routes().split_for_parts();
     openapi
 }
+
+#[cfg(test)]
+mod tests {
+    use super::build_internal_openapi_spec;
+    use googletest::prelude::*;
+    use serde_json::Value;
+
+    fn find_branch_with_title<'a>(branches: &'a [Value], title: &str) -> Option<&'a Value> {
+        branches
+            .iter()
+            .find(|branch| branch.get("title").and_then(Value::as_str) == Some(title))
+    }
+
+    fn first_all_of_ref(branch: &Value) -> Option<&str> {
+        branch
+            .get("allOf")?
+            .as_array()?
+            .first()?
+            .get("$ref")?
+            .as_str()
+    }
+
+    #[gtest]
+    fn internal_openapi_extracts_named_refs_for_autopilot_event_unions() {
+        let openapi = serde_json::to_value(build_internal_openapi_spec())
+            .expect("internal OpenAPI should serialize to JSON");
+        let schemas = openapi["components"]["schemas"]
+            .as_object()
+            .expect("OpenAPI components.schemas should be an object");
+
+        let status_update_branches = schemas["StatusUpdate"]["oneOf"]
+            .as_array()
+            .expect("StatusUpdate.oneOf should be an array");
+        expect_that!(
+            first_all_of_ref(
+                find_branch_with_title(status_update_branches, "StatusUpdateText")
+                    .expect("StatusUpdateText branch should exist"),
+            ),
+            some(eq("#/components/schemas/StatusUpdateText"))
+        );
+
+        let content_block_branches = schemas["AutoEvalContentBlock"]["oneOf"]
+            .as_array()
+            .expect("AutoEvalContentBlock.oneOf should be an array");
+        expect_that!(
+            first_all_of_ref(
+                find_branch_with_title(content_block_branches, "AutoEvalContentBlockMarkdown")
+                    .expect("AutoEvalContentBlockMarkdown branch should exist"),
+            ),
+            some(eq("#/components/schemas/AutoEvalMarkdownContentBlock"))
+        );
+        expect_that!(
+            first_all_of_ref(
+                find_branch_with_title(content_block_branches, "AutoEvalContentBlockJson")
+                    .expect("AutoEvalContentBlockJson branch should exist"),
+            ),
+            some(eq("#/components/schemas/AutoEvalJsonContentBlock"))
+        );
+
+        let tool_outcome_branches = schemas["ToolOutcome"]["oneOf"]
+            .as_array()
+            .expect("ToolOutcome.oneOf should be an array");
+        expect_that!(
+            first_all_of_ref(
+                find_branch_with_title(tool_outcome_branches, "ToolOutcomeRejected")
+                    .expect("ToolOutcomeRejected branch should exist"),
+            ),
+            some(eq("#/components/schemas/ToolOutcomeRejected"))
+        );
+        expect_that!(
+            first_all_of_ref(
+                find_branch_with_title(tool_outcome_branches, "ToolOutcomeFailure")
+                    .expect("ToolOutcomeFailure branch should exist"),
+            ),
+            some(eq("#/components/schemas/ToolOutcomeFailure"))
+        );
+    }
+}

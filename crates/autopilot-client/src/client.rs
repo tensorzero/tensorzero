@@ -686,7 +686,7 @@ impl AutopilotClient {
             CreateEventPayload::ToolCallAuthorization(auth) => match auth.status {
                 ToolCallAuthorizationStatus::Approved => Some(auth.tool_call_event_id),
                 // Don't start the tool if rejected or not available
-                ToolCallAuthorizationStatus::Rejected { .. }
+                ToolCallAuthorizationStatus::Rejected(_)
                 | ToolCallAuthorizationStatus::NotAvailable => None,
             },
             _ => None,

@@ -52,6 +52,7 @@ reqwest-sse-stream = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
 uuid = { workspace = true }
+googletest = { workspace = true }
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 flate2 = "1.1.8"
 zstd = "0.13.3"

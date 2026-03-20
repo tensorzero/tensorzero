@@ -2737,6 +2737,7 @@ dependencies = [
  "evaluations",
  "flate2",
  "futures",
+ "googletest",
  "http 1.4.0",
  "metrics-exporter-prometheus",
  "mimalloc",
