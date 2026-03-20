@@ -44,6 +44,11 @@
 //! | **GCP Vertex Gemini** | `usageMetadata.cachedContentTokenCount` | — | Implicit (2.5+) / Explicit (CachedContent API) |
 //! | **Google AI Studio Gemini** | `usageMetadata.cachedContentTokenCount` | — | Implicit (2.5+) / Explicit (CachedContent API) |
 //!
+//! Note: GCP Vertex Gemini (`aiplatform.googleapis.com`) returns `cachedContentTokenCount`
+//! on cache hits, but only opportunistically — it's not guaranteed even with identical
+//! prompts. Google AI Studio (`generativelanguage.googleapis.com`) does NOT return this
+//! field at all as of March 2026. Both providers parse the field correctly if present.
+//!
 //! ## Providers with caching NOT yet exposed in JSON responses
 //!
 //! | Provider | Notes |

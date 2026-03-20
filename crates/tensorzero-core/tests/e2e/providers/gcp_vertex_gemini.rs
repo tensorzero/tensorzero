@@ -164,7 +164,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers,
-        cache_input_tokens_inference: vec![], // Gemini implicit caching doesn't reliably return cachedContentTokenCount in live tests
+        cache_input_tokens_inference: vec![], // GCP Vertex Gemini returns cachedContentTokenCount but not reliably in CI live tests
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
