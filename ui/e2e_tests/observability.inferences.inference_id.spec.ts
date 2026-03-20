@@ -227,15 +227,14 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
 
-  // Explicitly wait for the item to be visible before clicking
+  // Select the plain `exact_match` metric and ignore function-level evaluator
+  // metrics whose names are prefixed with `tensorzero::function_name::`.
   const metricItemLocator = page
-    .locator('div[role="dialog"]')
-    .locator('div[cmdk-item=""]')
+    .getByRole("option", { name: "exact_match" })
     .filter({
-      hasText: "exact_match",
+      hasNotText: "tensorzero::function_name::",
     });
   await metricItemLocator.waitFor({ state: "visible" });
-  // Click on the metric in the command list
   await metricItemLocator.click();
 
   // Wait for the radio button to be visible

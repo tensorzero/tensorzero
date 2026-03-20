@@ -18,32 +18,41 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     // Open the launch evaluation modal
     await page.getByText("New Run").click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByPlaceholder("Select evaluation")).toBeVisible();
+    await page.getByRole("tab", { name: "Evaluations (Legacy)" }).click();
+    await expect(
+      page.getByRole("combobox", { name: "Select evaluation" }),
+    ).toBeVisible();
 
     // Select evaluation
-    await page.getByPlaceholder("Select evaluation").click();
+    await page.getByRole("combobox", { name: "Select evaluation" }).click();
     const evaluationOption = page.getByRole("option", {
       name: "entity_extraction",
     });
     await expect(evaluationOption).toBeVisible();
     await evaluationOption.click();
-    await expect(page.getByPlaceholder("Select dataset")).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Select dataset" }),
+    ).toBeVisible();
 
     // Select the dataset we created
-    await page.getByPlaceholder("Select dataset").click();
+    await page.getByRole("combobox", { name: "Select dataset" }).click();
 
     // Type to filter/search for our dataset
-    const datasetInput = page.getByPlaceholder("Select dataset");
+    const datasetInput = page.getByRole("combobox", {
+      name: "Select dataset",
+    });
     await datasetInput.fill(datasetName);
     const datasetOption = page.locator(`[data-dataset-name="${datasetName}"]`);
     await expect(datasetOption).toBeVisible();
 
     // Click on our dataset
     await datasetOption.click();
-    await expect(page.getByPlaceholder("Select variant")).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Select variant" }),
+    ).toBeVisible();
 
     // Select variant
-    await page.getByPlaceholder("Select variant").click();
+    await page.getByRole("combobox", { name: "Select variant" }).click();
     const variantOption = page.getByRole("option", {
       name: "gpt4o_mini_initial_prompt",
     });
@@ -98,18 +107,25 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     // Wait for the dialog to be visible
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
+    await dialog.getByRole("tab", { name: "Evaluations (Legacy)" }).click();
 
     // Verify the evaluation is still selected (from localStorage)
-    const evaluationInput = dialog.getByPlaceholder("Select evaluation");
+    const evaluationInput = dialog.getByRole("combobox", {
+      name: "Select evaluation",
+    });
     await expect(evaluationInput).toHaveValue("entity_extraction");
 
     // Verify the variant is still selected (from localStorage)
-    const variantInput = dialog.getByPlaceholder("Select variant");
+    const variantInput = dialog.getByRole("combobox", {
+      name: "Select variant",
+    });
     await expect(variantInput).toHaveValue("gpt4o_mini_initial_prompt");
 
     // Verify the dataset field is cleared (not showing the deleted dataset)
     // The dataset selector should show empty value (placeholder visible)
-    const datasetSelector = dialog.getByPlaceholder("Select dataset");
+    const datasetSelector = dialog.getByRole("combobox", {
+      name: "Select dataset",
+    });
     await expect(datasetSelector).toHaveValue("");
 
     // Verify our deleted dataset name is NOT visible in the modal

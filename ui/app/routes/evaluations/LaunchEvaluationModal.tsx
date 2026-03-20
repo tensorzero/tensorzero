@@ -287,6 +287,7 @@ function EvaluationForm({
               items={function_names}
               placeholder="Select function"
               emptyMessage="No functions found"
+              ariaLabel="Select function"
             />
           </div>
           <div>
@@ -337,6 +338,7 @@ function EvaluationForm({
               getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
               placeholder="Select evaluation"
               emptyMessage="No evaluations found"
+              ariaLabel="Select evaluation"
             />
           </div>
         </TabsContent>
@@ -362,6 +364,7 @@ function EvaluationForm({
         selected={selectedDatasetName}
         onSelect={(name) => setSelectedDatasetName(name)}
         disabled={!currentFunctionName}
+        ariaLabel="Select dataset"
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
@@ -405,6 +408,7 @@ function EvaluationForm({
         placeholder="Select variant"
         emptyMessage="No variants found"
         disabled={!currentFunctionName}
+        ariaLabel="Select variant"
       />
       <div className="mt-4">
         <div className="mb-1 flex items-center gap-1.5">
