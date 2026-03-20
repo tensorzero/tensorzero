@@ -7,7 +7,6 @@ This example uses OpenAI, which is currently the only supported provider for RFT
 ## Prerequisites
 
 1. Set the `OPENAI_API_KEY` environment variable
-2. Set the `TENSORZERO_CLICKHOUSE_URL` environment variable (e.g., `http://chuser:chpassword@localhost:8123/tensorzero`)
 
 ## Running the Example
 
@@ -31,11 +30,10 @@ This example uses OpenAI, which is currently the only supported provider for RFT
 
 The script will:
 
-1. Run inferences on the NER dataset
-2. Submit metric feedback for tracking
-3. Define an LLM judge grader to evaluate NER quality
-4. Launch an RFT job with OpenAI
-5. Poll until the job completes
-6. Print the configuration needed to use the fine-tuned model
+1. Create datapoints from the NER dataset[^1] in a TensorZero dataset
+2. Define an LLM judge grader to evaluate NER quality
+3. Launch an RFT job with OpenAI
+4. Poll until the job completes
+5. Print the configuration needed to use the fine-tuned model
 
 [^1]: We build off of the [CoNLL++ dataset](https://arxiv.org/abs/1909.01441v1) for the problem setting.

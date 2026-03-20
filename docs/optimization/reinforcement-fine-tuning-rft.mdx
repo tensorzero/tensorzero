@@ -10,7 +10,7 @@ This makes RFT particularly effective for tasks with clear evaluation criteria, 
 
 Here's how it works:
 
-1. You collect examples of LLM inputs (inferences with associated metrics).
+1. You [build a dataset](/gateway/api-reference/datasets-datapoints) of examples with inputs and reference outputs for your function.
 2. You define a grader that scores model outputs (using string matching, NLP metrics, LLM judges, or custom logic).
 3. TensorZero renders these examples using your prompt templates into a training dataset.
 4. TensorZero uploads the dataset with grader configuration and launches a reinforcement fine-tuning job on OpenAI.
@@ -221,91 +221,34 @@ Please return the entities in the following JSON format:
 
 <Step title="Collect your optimization data">
 
-<Tabs>
-
-<Tab title="TensorZero Dataset">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) of examples for the `extract_entities` function you configured.
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway), [build a dataset](/gateway/api-reference/datasets-datapoints) of examples for the `extract_entities` function you configured.
 You can create datapoints from historical inferences or external/synthetic datasets.
 
 ```python
-from tensorzero import ListDatapointsRequest
+import json
 
-datapoints = t0.list_datapoints(
+from tensorzero import CreateDatapointRequestJson, JsonDatapointOutputUpdate
+
+datapoints = [
+    CreateDatapointRequestJson(
+        function_name="extract_entities",
+        input={
+            "messages": [
+                {"role": "user", "content": "...source text..."}
+            ]
+        },
+        output=JsonDatapointOutputUpdate(
+            raw=json.dumps({"person": [...], "organization": [...], ...})
+        ),
+    ),
+    # ... more datapoints
+]
+
+await t0.create_datapoints(
     dataset_name="extract_entities_dataset",
-    request=ListDatapointsRequest(
-        function_name="extract_entities",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=datapoints.datapoints,
-    variants={"extract_entities": "baseline"},
+    requests=datapoints,
 )
 ```
-
-</Tab>
-
-<Tab title="Historical Inferences">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
-TensorZero automatically collects structured data about those inferences, which can later be used as training data for RFT.
-
-Unlike SFT, RFT does not require demonstration feedback (ground truth labels).
-Instead, the grader evaluates model outputs during training.
-You can simply use your historical inferences as-is:
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="inference",  # Use the model's original outputs (no demonstrations needed)
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-<Tip>
-
-You can optionally submit metric feedback to track model performance over time, but these metrics are separate from the grader used for RFT training.
-
-</Tip>
-
-</Tab>
-
-</Tabs>
-
-</Step>
-
-<Step title="Split data for training and validation">
-
-RFT uses a validation set to monitor training progress and prevent overfitting.
-Split your data into training and validation sets:
-
-```python
-import random
-
-random.shuffle(rendered_samples)
-split_idx = int(len(rendered_samples) * 0.8)  # 80% training, 20% validation
-train_samples = rendered_samples[:split_idx]
-val_samples = rendered_samples[split_idx:]
-
-print(f"Training samples: {len(train_samples)}")
-print(f"Validation samples: {len(val_samples)}")
-```
-
-<Tip>
-
-A typical split is 80% training and 20% validation.
-For smaller datasets, you may want to use a larger training proportion (e.g. 90/10).
-
-</Tip>
 
 </Step>
 
@@ -326,7 +269,8 @@ grader = {
             "role": "developer",
             "content": (
                 "You are an impartial grader for a Named Entity Recognition (NER) task.\n"
-                "You will receive **Input** (source text), **Generated Output**, and **Reference Output**.\n"
+                "You will receive the message history, the model's generated output, "
+                "and a reference output.\n"
                 "Compare the generated output against the reference output and return a JSON object "
                 "with a single key `score` whose value is **-1**, **0**, or **1**.\n\n"
                 "# Task Description\n"
@@ -357,7 +301,7 @@ grader = {
         },
         {
             "role": "user",
-            "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_json}}\n\nReference Output:\n{{item.reference_text}}",
+            "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_text}}\n\nReference Output:\n{{item.reference_text}}",
         },
     ],
     "range": [-1.0, 1.0],
@@ -403,10 +347,12 @@ Check your [OpenAI billing and plan details](https://platform.openai.com/setting
 Launch the RFT job using the TensorZero Gateway:
 
 ```python
-job_handle = t0.experimental_launch_optimization(
-    train_samples=train_samples,
-    val_samples=val_samples,
-    optimization_config=optimization_config,
+job_handle = t0.experimental_launch_optimization_workflow(
+    function_name="extract_entities",
+    template_variant_name="baseline",
+    dataset_name="extract_entities_dataset",
+    optimizer_config=optimization_config,
+    val_fraction=0.2,
 )
 
 print(job_handle)

@@ -1,135 +1,70 @@
 import asyncio
-import os
-import random
+import json
 
-import toml
-from ner import Row, compute_exact_match, compute_jaccard_similarity, load_dataset
+from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
-    JsonInferenceResponse,
-    ListInferencesRequest,
+    CreateDatapointRequestJson,
+    JsonDatapointOutputUpdate,
     OpenAIRFTConfig,
     OptimizationJobStatus,
 )
-from tqdm.asyncio import tqdm
 
 FUNCTION_NAME = "extract_entities"
 
-# The variant to use for initial inferences and as a template for fine-tuning examples
+# The variant to use as a template for fine-tuning examples
 BASELINE_VARIANT_NAME = "baseline"
 
 # Fine-tuning configuration
 MODEL_NAME = "o4-mini-2025-04-16"  # OpenAI reasoning model to fine-tune (RFT requires o-series)
-SEED = 42  # Seed for reproducible subsampling of train/val sets
-NUM_TRAIN = 10  # Number of training samples to subsample
-NUM_VAL = 10  # Number of validation samples to subsample
+VAL_FRACTION = 0.2  # 20% of data for validation
 
-NUM_SAMPLES = 500  # Number of inferences to run (we subsample from these for RFT)
-MAX_CONCURRENCY = 50  # lower this value if you get rate limited
+DATASET_NAME = "extract_entities_dataset"
+
+NUM_SAMPLES = 500
 
 
-async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore):
-    """
-    Run inference on a datapoint and submit metric feedback.
-    Unlike SFT, RFT does not require demonstration feedback — the grader
-    evaluates outputs during training.
-    """
-    async with semaphore:
-        try:
-            response = await t0.inference(
-                function_name=FUNCTION_NAME,
-                input={
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": datapoint.input,
-                        }
-                    ]
-                },
-                cache_options={"enabled": "on"},
-            )
-            assert isinstance(response, JsonInferenceResponse)
-        except Exception as e:
-            print(f"Error occurred during inference: {e}")
-            return None
-
-        # Get the predicted output
-        predicted = response.output.parsed if response.output.parsed else {}
-
-        # Compute metrics for tracking (optional, not used by RFT directly)
-        exact_match = compute_exact_match(predicted, datapoint.label)
-        jaccard_similarity = compute_jaccard_similarity(predicted, datapoint.label)
-
-        # Send metric feedback (optional, for tracking performance)
-        await t0.feedback(
-            metric_name="exact_match",
-            value=exact_match,
-            inference_id=response.inference_id,
-        )
-
-        await t0.feedback(
-            metric_name="jaccard_similarity",
-            value=jaccard_similarity,
-            inference_id=response.inference_id,
-        )
-
-        # Note: No demonstration feedback needed for RFT.
-        # The grader will evaluate outputs during training.
-
-        return response
+def make_datapoint(row: Row) -> CreateDatapointRequestJson:
+    """Create a CreateDatapointRequestJson from a dataset row."""
+    return CreateDatapointRequestJson(
+        function_name=FUNCTION_NAME,
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": row.input,
+                }
+            ]
+        },
+        output=JsonDatapointOutputUpdate(raw=json.dumps(row.label)),
+    )
 
 
 async def main():
-    t0 = await AsyncTensorZeroGateway.build_embedded(  # type: ignore[misc]
-        config_file="config/tensorzero.toml",
-        clickhouse_url=os.environ.get("TENSORZERO_CLICKHOUSE_URL"),
+    t0 = await AsyncTensorZeroGateway.build_http(  # type: ignore[misc]
+        gateway_url="http://localhost:3000",
     )
 
-    # Load datapoints
+    # Load datapoints from the NER dataset
     dataset = load_dataset()
-    datapoints = []
+    rows: list[Row] = []
     for i in range(NUM_SAMPLES):
         try:
-            datapoints.append(next(dataset))
+            rows.append(next(dataset))
         except StopIteration:
             print(f"Dataset exhausted after {i} samples")
             break
 
-    print(f"Processing {len(datapoints)} samples...")
+    print(f"Creating {len(rows)} datapoints in dataset `{DATASET_NAME}`...")
 
-    # Run inferences and submit metric feedback in parallel
-    semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-    tasks = [process_datapoint(dp, t0, semaphore) for dp in datapoints]
-    await tqdm.gather(*tasks, desc="Processing samples and submitting metrics")
-
-    # Query inferences (using output_source="inference" since RFT uses graders, not demonstrations)
-    print("\nQuerying inferences...")
-    inferences_response = await t0.list_inferences(
-        request=ListInferencesRequest(
-            function_name=FUNCTION_NAME,
-            output_source="inference",  # Use model's original outputs (no demonstrations needed)
-        ),
+    # Create datapoints in a TensorZero dataset
+    datapoints = [make_datapoint(row) for row in rows]
+    await t0.create_datapoints(
+        dataset_name=DATASET_NAME,
+        requests=datapoints,
     )
 
-    print(f"Found {len(inferences_response.inferences)} inferences")
-
-    # Render samples using the baseline variant as a template
-    # This prepares the data in the format needed for RFT optimization
-    rendered_samples = await t0.experimental_render_samples(
-        stored_samples=inferences_response.inferences,
-        variants={FUNCTION_NAME: BASELINE_VARIANT_NAME},
-    )
-
-    print(f"Rendered {len(rendered_samples)} samples")
-
-    # Subsample training and validation sets from all rendered samples.
-    # We use a fixed seed for reproducibility — adjust the seed if needed.
-    rng = random.Random(SEED)
-    rng.shuffle(rendered_samples)
-    train_samples = rendered_samples[:NUM_TRAIN]
-    val_samples = rendered_samples[NUM_TRAIN : NUM_TRAIN + NUM_VAL]
-
-    print(f"Train samples: {len(train_samples)}, Validation samples: {len(val_samples)}")
+    print(f"Created {len(datapoints)} datapoints")
 
     # Define the grader — the reward function that guides reinforcement fine-tuning.
     # This ScoreModel grader uses an LLM judge to evaluate NER quality.
@@ -142,7 +77,8 @@ async def main():
                 "role": "developer",
                 "content": (
                     "You are an impartial grader for a Named Entity Recognition (NER) task.\n"
-                    "You will receive **Input** (source text), **Generated Output**, and **Reference Output**.\n"
+                    "You will receive the message history, the model's generated output, "
+                    "and a reference output.\n"
                     "Compare the generated output against the reference output and return a JSON object "
                     "with a single key `score` whose value is **-1**, **0**, or **1**.\n\n"
                     "# Task Description\n"
@@ -173,7 +109,7 @@ async def main():
             },
             {
                 "role": "user",
-                "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_json}}\n\nReference Output:\n{{item.reference_text}}",
+                "content": "Message History:\n{{item.messages}}\n\nGenerated Output:\n{{sample.output_text}}\n\nReference Output:\n{{item.reference_text}}",
             },
         ],
         "range": [-1.0, 1.0],
@@ -187,18 +123,18 @@ async def main():
 
     print("\nLaunching RFT optimization...")
     print(f"  - Base model: {MODEL_NAME}")
-    print(f"  - Train samples: {len(train_samples)}")
-    print(f"  - Validation samples: {len(val_samples)}")
+    print(f"  - Validation fraction: {VAL_FRACTION}")
 
-    # Launch the optimization job
-    job_handle = await t0.experimental_launch_optimization(
-        train_samples=train_samples,
-        val_samples=val_samples,
-        optimization_config=optimization_config,
+    # Launch the optimization workflow
+    job_handle = await t0.experimental_launch_optimization_workflow(
+        function_name=FUNCTION_NAME,
+        template_variant_name=BASELINE_VARIANT_NAME,
+        dataset_name=DATASET_NAME,
+        optimizer_config=optimization_config,
+        val_fraction=VAL_FRACTION,
     )
 
-    print("\nJob launched!")
-    print(job_handle)
+    print("Job launched!")
 
     # Poll for completion
     print("\nWaiting for reinforcement fine-tuning to complete...")
@@ -206,7 +142,7 @@ async def main():
 
     job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
 
-    # For long-running jobs, you may want to poll periodically:
+    # For long-running jobs, poll periodically:
     while job_info.status == OptimizationJobStatus.Pending:
         print(f"  Status: {job_info.status}")
         await asyncio.sleep(60)  # wait 1 minute between polls
@@ -222,37 +158,23 @@ async def main():
         fine_tuned_model = job_info.output["routing"][0]
         print(f"\nFine-tuned model: {fine_tuned_model}")
 
-        # Generate the configuration for the fine-tuned model
-        model_name = f"{FUNCTION_NAME}_fine_tuned"
-        config = {
-            "models": {
-                model_name: {
-                    "routing": ["openai"],
-                    "providers": {"openai": {"type": "openai", "model_name": fine_tuned_model}},
-                }
-            },
-            "functions": {
-                FUNCTION_NAME: {
-                    "variants": {
-                        "fine_tuned": {
-                            "type": "chat_completion",
-                            "model": model_name,
-                            "templates": {
-                                "system": {
-                                    "path": f"functions/{FUNCTION_NAME}/initial_prompt/system_template.minijinja"
-                                }
-                            },
-                            "json_mode": "strict",
-                        }
-                    }
-                }
-            },
-        }
-
         print("\n" + "-" * 40)
         print("To use this model, add to your tensorzero.toml:")
         print("-" * 40)
-        print(toml.dumps(config))
+        print(f"""
+[models.{FUNCTION_NAME}_fine_tuned]
+routing = ["openai"]
+
+[models.{FUNCTION_NAME}_fine_tuned.providers.openai]
+type = "openai"
+model_name = "{fine_tuned_model}"
+
+[functions.{FUNCTION_NAME}.variants.fine_tuned]
+type = "chat_completion"
+model = "{FUNCTION_NAME}_fine_tuned"
+templates.system.path = "functions/{FUNCTION_NAME}/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+""")
     else:
         print("RFT Optimization Failed!")
         print("=" * 60)
