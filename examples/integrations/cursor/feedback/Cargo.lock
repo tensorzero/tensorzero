@@ -199,7 +199,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -1418,7 +1418,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=2d69424943b1db91b055154062143457c91e8ee7#2d69424943b1db91b055154062143457c91e8ee7"
+source = "git+https://github.com/tensorzero/durable?rev=2bfe26218458a48d1ab15f22a902536402284cf6#2bfe26218458a48d1ab15f22a902536402284cf6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "async-trait",
  "durable",
@@ -1542,7 +1542,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1553,7 +1553,9 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "tensorzero-core",
+ "tensorzero-derive",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2765,7 +2767,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "minijinja",
  "serde",
@@ -3730,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "async-stream",
  "futures",
@@ -3915,9 +3917,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.8"
+version = "0.103.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ffdfa2f5286e2247234e03f680868ac2815974dc39e00ea15adc445d0aafe52"
+checksum = "df33b2b81ac578cabaf06b89b0631153a3f416b0a886e8a7a1707fb51abbd1ef"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -4661,12 +4663,15 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "async-trait",
+ "evaluations",
  "lazy_static",
  "mime 0.4.0-a.0",
  "reqwest 0.12.28",
+ "reqwest-sse-stream",
+ "serde",
  "serde_json",
  "tempfile",
  "tensorzero-core",
@@ -4680,7 +4685,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "axum",
  "chrono",
@@ -4699,11 +4704,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.3.1"
+version = "2026.3.3"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -4809,10 +4814,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "axum",
  "chrono",
+ "durable-tools-spawn",
  "evaluations",
  "futures",
  "http 1.4.0",
@@ -4820,6 +4826,7 @@ dependencies = [
  "object_store",
  "rand 0.10.0",
  "reqwest 0.12.28",
+ "schemars 1.1.0",
  "secrecy",
  "serde",
  "serde_json",
@@ -4836,14 +4843,16 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "aws-smithy-types",
+ "chrono",
  "infer",
  "mime 0.4.0-a.0",
  "object_store",
  "rust_decimal",
  "schemars 1.1.0",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -4857,7 +4866,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.3.1"
+version = "2026.3.3"
 dependencies = [
  "serde",
  "serde_json",
