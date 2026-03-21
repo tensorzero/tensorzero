@@ -163,9 +163,6 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
             ),
         };
 
-        // count_with_cost operates at (model, provider, minute) bucket granularity,
-        // not per-inference. See #6574 for a proposed fix using COUNT(cost) in the
-        // rollup table.
         let query = format!(
             r"
             SELECT
@@ -175,7 +172,7 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                 SUM(provider_output_tokens) as output_tokens,
                 SUM(provider_count) as count,
                 SUM(provider_cost) as cost,
-                SUM(CASE WHEN provider_cost IS NOT NULL THEN provider_count ELSE 0 END) as count_with_cost
+                SUM(provider_count_with_cost) as count_with_cost
             FROM (
                 SELECT
                     formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
@@ -184,7 +181,8 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                     sumMerge(total_input_tokens) as provider_input_tokens,
                     sumMerge(total_output_tokens) as provider_output_tokens,
                     countMerge(count) as provider_count,
-                    sumMerge(total_cost) as provider_cost
+                    sumMerge(total_cost) as provider_cost,
+                    countMerge(count_with_cost) as provider_count_with_cost
                 FROM ModelProviderStatistics
                 WHERE {time_filter}
                 GROUP BY period_start, model_name, model_provider_name

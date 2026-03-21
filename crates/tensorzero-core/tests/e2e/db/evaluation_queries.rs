@@ -78,8 +78,8 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
         "search result variant_name should be the first variant"
     );
 
-    // Verify via list_evaluation_runs (returns more fields)
-    // Use a larger limit because parallel tests may insert runs with newer v7 UUIDs.
+    // Verify via list_evaluation_runs (returns more fields).
+    // Fetch a page large enough to include our run even when other tests run concurrently.
     let listed = conn
         .list_evaluation_runs(100, 0)
         .await
@@ -87,7 +87,7 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
     let row = listed
         .iter()
         .find(|r| r.evaluation_run_id == run.run_id)
-        .expect("listed results should contain the inserted run");
+        .expect("inserted run should appear in list_evaluation_runs");
     assert_eq!(
         row.evaluation_name, run.evaluation_name,
         "listed evaluation_name should match inserted value"

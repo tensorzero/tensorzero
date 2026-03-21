@@ -1115,5 +1115,17 @@ mod test_helpers_impl {
                 PrimaryDatastore::Disabled => {}
             }
         }
+
+        async fn prepare_model_provider_statistics(&self) {
+            match self.primary {
+                PrimaryDatastore::Postgres => {
+                    self.postgres.prepare_model_provider_statistics().await;
+                }
+                PrimaryDatastore::ClickHouse => {
+                    self.clickhouse.prepare_model_provider_statistics().await;
+                }
+                PrimaryDatastore::Disabled => {}
+            }
+        }
     }
 }
