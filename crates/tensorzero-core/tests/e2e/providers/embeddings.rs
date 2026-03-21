@@ -717,32 +717,18 @@ pub async fn test_batch_token_arrays_semantic_similarity_with_provider(
         })
         .collect();
 
-    // Calculate cosine similarity between embeddings
-    let cosine_similarity = |a: &[f64], b: &[f64]| -> f64 {
-        let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-        let magnitude_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let magnitude_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
-        dot_product / (magnitude_a * magnitude_b)
-    };
+    // Verify embeddings are non-trivial (non-zero magnitude)
+    for (i, embedding) in embeddings.iter().enumerate() {
+        let magnitude: f64 = embedding.iter().map(|x| x * x).sum::<f64>().sqrt();
+        assert!(
+            magnitude > 0.0,
+            "Embedding {i} should have non-zero magnitude"
+        );
+    }
 
-    let sim_dog_cat = cosine_similarity(&embeddings[0], &embeddings[1]);
-    let sim_dog_megumin = cosine_similarity(&embeddings[0], &embeddings[2]);
-    let sim_cat_megumin = cosine_similarity(&embeddings[1], &embeddings[2]);
-
-    println!("Similarity dog-cat: {sim_dog_cat}");
-    println!("Similarity dog-megumin: {sim_dog_megumin}");
-    println!("Similarity cat-megumin: {sim_cat_megumin}");
-
-    // Verify semantic relationships: dog and cat should be more similar to each other
-    // than either is to Megumin
-    assert!(
-        sim_dog_cat > sim_dog_megumin,
-        "Dog-cat similarity ({sim_dog_cat}) should be greater than dog-megumin similarity ({sim_dog_megumin})"
-    );
-    assert!(
-        sim_dog_cat > sim_cat_megumin,
-        "Dog-cat similarity ({sim_dog_cat}) should be greater than cat-megumin similarity ({sim_cat_megumin})"
-    );
+    // Note: We don't assert semantic relationships here because the token arrays
+    // use cl100k_base encoding which may decode to different text on the model's
+    // actual tokenizer. Semantic similarity is tested by text-based embedding tests.
 
     // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {

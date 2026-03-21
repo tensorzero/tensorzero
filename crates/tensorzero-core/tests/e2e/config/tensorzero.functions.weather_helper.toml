@@ -128,7 +128,7 @@ max_tokens = 1500
 type = "chat_completion"
 model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.weather_helper.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
