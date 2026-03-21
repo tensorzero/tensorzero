@@ -13017,7 +13017,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
             "messages": [
                 {
                     "role": "user",
-                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                    "content": "What is the weather like in Brooklyn (in Fahrenheit)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                 }
             ]},
         "extra_headers": extra_headers.extra_headers,
@@ -13103,7 +13103,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
     let mut new_messages = vec![
         serde_json::json!({
             "role": "user",
-            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+            "content": "What is the weather like in Brooklyn (in Fahrenheit)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
         }),
         serde_json::json!({
             "role": "assistant",

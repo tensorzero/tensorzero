@@ -240,6 +240,7 @@ async fn test_list_datasets_with_function_filter() {
 async fn test_list_datasets_with_pagination() {
     let http_client = Client::new();
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let function_name = format!("test_function_pagination_{}", Uuid::now_v7());
 
     // Create multiple datasets to test pagination
     let mut dataset_names = Vec::new();
@@ -251,7 +252,7 @@ async fn test_list_datasets_with_pagination() {
 
         let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
-            function_name: "test_function".to_string(),
+            function_name: function_name.clone(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: None,
@@ -287,7 +288,9 @@ async fn test_list_datasets_with_pagination() {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
-            .get(get_gateway_endpoint("/internal/datasets"))
+            .get(get_gateway_endpoint(&format!(
+                "/internal/datasets?function_name={function_name}",
+            )))
             .send()
             .await
             .unwrap();
@@ -314,7 +317,9 @@ async fn test_list_datasets_with_pagination() {
 
     // Test limit
     let resp = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={function_name}&limit=1",
+        )))
         .send()
         .await
         .unwrap();
@@ -329,13 +334,17 @@ async fn test_list_datasets_with_pagination() {
 
     // Test pagination with offset
     let resp_page_1 = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1&offset=0"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={function_name}&limit=1&offset=0",
+        )))
         .send()
         .await
         .unwrap();
 
     let resp_page_2 = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1&offset=1"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={function_name}&limit=1&offset=1",
+        )))
         .send()
         .await
         .unwrap();
@@ -348,8 +357,16 @@ async fn test_list_datasets_with_pagination() {
 
     assert_eq!(body_page_1.datasets.len(), 1);
     assert_eq!(body_page_2.datasets.len(), 1);
+    assert!(
+        dataset_names.contains(&body_page_1.datasets[0].dataset_name),
+        "First page should only include datasets created by this test"
+    );
+    assert!(
+        dataset_names.contains(&body_page_2.datasets[0].dataset_name),
+        "Second page should only include datasets created by this test"
+    );
 
-    // Pages should have different datasets (they're ordered by last_updated DESC)
+    // Pages should have different datasets when paging through the same filtered dataset set.
     assert_ne!(
         body_page_1.datasets[0].dataset_name, body_page_2.datasets[0].dataset_name,
         "Different pages should return different datasets"
