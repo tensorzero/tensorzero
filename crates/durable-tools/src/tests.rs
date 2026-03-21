@@ -543,6 +543,97 @@ mod registry_tests {
         // Registry should still have only one tool
         assert_eq!(registry.len(), 1);
     }
+
+    /// A SimpleTool with a different `llm_name` than `name`.
+    #[derive(Default)]
+    struct RenamedSimpleTool;
+
+    impl ToolMetadata for RenamedSimpleTool {
+        type SideInfo = ();
+        type Output = EchoOutput;
+        type LlmParams = EchoParams;
+
+        fn name(&self) -> Cow<'static, str> {
+            Cow::Borrowed("echo_simple_v2")
+        }
+
+        fn llm_name(&self) -> Cow<'static, str> {
+            Cow::Borrowed("echo_simple_renamed")
+        }
+
+        fn description(&self) -> Cow<'static, str> {
+            Cow::Borrowed("Echoes the input message (renamed)")
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn llm_params_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
+            tensorzero_ts_types::UNIT
+        }
+
+        #[cfg(feature = "ts-bindings")]
+        fn output_ts_bundle_type_name() -> String {
+            "void".to_string()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SimpleTool for RenamedSimpleTool {
+        async fn execute(
+            llm_params: <Self as ToolMetadata>::LlmParams,
+            _side_info: Self::SideInfo,
+            _ctx: SimpleToolContext<'_>,
+            _idempotency_key: &str,
+        ) -> ToolResult<Self::Output> {
+            Ok(EchoOutput {
+                echoed: llm_params.message,
+            })
+        }
+    }
+
+    #[test]
+    fn resolve_llm_name_returns_registry_name_when_matching() {
+        let mut registry = ToolRegistry::new();
+        registry.register_task_tool_instance(EchoTaskTool).unwrap();
+
+        // When llm_name == name, resolve_llm_name returns the registry name
+        assert_eq!(registry.resolve_llm_name("echo_task"), Some("echo_task"));
+    }
+
+    #[test]
+    fn resolve_llm_name_returns_none_for_unknown() {
+        let registry = ToolRegistry::new();
+        assert_eq!(registry.resolve_llm_name("nonexistent"), None);
+    }
+
+    #[test]
+    fn resolve_llm_name_resolves_different_llm_name() {
+        let mut registry = ToolRegistry::new();
+        registry
+            .register_simple_tool_instance(RenamedSimpleTool)
+            .unwrap();
+
+        // Lookup by registry name should work
+        assert_eq!(
+            registry.resolve_llm_name("echo_simple_v2"),
+            Some("echo_simple_v2")
+        );
+
+        // Lookup by llm_name should resolve to registry name
+        assert_eq!(
+            registry.resolve_llm_name("echo_simple_renamed"),
+            Some("echo_simple_v2")
+        );
+    }
 }
 
 // ============================================================================

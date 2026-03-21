@@ -43,7 +43,7 @@
 //! - `ErrorSimpleTool` - Always returns an error
 //! - `SlowSimpleTool` - Sleeps for configurable duration
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub mod error;
 pub mod fix_strict_tool_schema;
@@ -54,21 +54,22 @@ pub use error::{AutopilotToolError, AutopilotToolResult};
 
 pub use visitor::{ToolNameCollector, ToolVisitor};
 
-/// Collect all available tool names.
+/// Collect all available tool names as a mapping from LLM-visible name to registry name.
 ///
-/// This uses the visitor pattern with `for_each_tool` to derive the set of
-/// tool names from the single source of truth.
+/// This uses the visitor pattern with `for_each_tool` to derive the mapping
+/// from the single source of truth.
 ///
-/// This is used by `AutopilotClient` to know which tools are available
-/// for filtering unknown tool calls.
+/// This is used by `AutopilotClient` to:
+/// - Filter unknown tool calls (check if the LLM name is a key)
+/// - Resolve LLM names to registry names for dispatch
 ///
 /// # Errors
 ///
 /// Returns an error if visiting any tool fails (e.g., lock poisoning).
-pub async fn collect_tool_names() -> Result<HashSet<String>, String> {
+pub async fn collect_tool_names() -> Result<HashMap<String, String>, String> {
     let mut collector = ToolNameCollector::new();
     for_each_tool(&mut collector).await?;
-    Ok(collector.into_names())
+    Ok(collector.into_llm_name_mapping())
 }
 
 /// Returns the default set of tool names that are safe for automatic approval.

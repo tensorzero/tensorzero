@@ -287,15 +287,25 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         side_info: JsonValue,
         options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
-        let registry = &self.app_state.tool_registry;
-        // Validate params before spawning
-        registry.validate_params(tool_name, &llm_params, &side_info)?;
-        let is_durable =
+        // Resolve llm_name → registry name (no-op when they're the same)
+        let resolved_name = {
+            let registry = &self.app_state.tool_registry;
             registry
-                .is_durable(tool_name)
+                .resolve_llm_name(tool_name)
                 .ok_or_else(|| NonControlToolError::ToolNotFound {
                     name: tool_name.to_string(),
-                })?;
+                })?
+                .to_string()
+        };
+
+        let registry = &self.app_state.tool_registry;
+        // Validate params before spawning
+        registry.validate_params(&resolved_name, &llm_params, &side_info)?;
+        let is_durable = registry.is_durable(&resolved_name).ok_or_else(|| {
+            NonControlToolError::ToolNotFound {
+                name: resolved_name.clone(),
+            }
+        })?;
 
         if is_durable {
             // TaskTool: spawn as subtask
@@ -306,15 +316,15 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
                 episode_id: self.episode_id,
             };
             let wrapped_params = serde_json::to_value(wrapped_params)?;
-            let spawn_name = format!("spawn:{tool_name}:{call_id}");
+            let spawn_name = format!("spawn:{resolved_name}:{call_id}");
             let handle: TaskHandle<JsonValue> = self
-                .spawn_subtask_by_name(&spawn_name, tool_name, wrapped_params, options)
+                .spawn_subtask_by_name(&spawn_name, &resolved_name, wrapped_params, options)
                 .await?;
             Ok(ToolHandle::Async(handle))
         } else {
             // SimpleTool: execute immediately (still checkpointed via step)
             let result = self
-                .call_simple_tool(tool_name, llm_params, side_info)
+                .call_simple_tool(&resolved_name, llm_params, side_info)
                 .await?;
             Ok(ToolHandle::Sync(result))
         }

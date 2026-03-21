@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tensorzero::Tool;
 use uuid::Uuid;
 
+use crate::NonControlToolError;
 use crate::context::{DurableClient, ToolAppState};
 use crate::error::ToolError;
 use crate::registry::ToolRegistry;
@@ -124,9 +125,16 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
         side_info: JsonValue,
         episode_id: Uuid,
     ) -> anyhow::Result<SpawnResult> {
+        // Resolve llm_name → registry name (no-op when they're the same)
+        let resolved_name = self.registry.resolve_llm_name(tool_name).ok_or_else(|| {
+            ToolError::from(NonControlToolError::ToolNotFound {
+                name: tool_name.to_string(),
+            })
+        })?;
+
         // Validate params before spawning
         self.registry
-            .validate_params(tool_name, &llm_params, &side_info)?;
+            .validate_params(resolved_name, &llm_params, &side_info)?;
 
         let wrapped_params = TaskToolParams {
             llm_params,
@@ -136,7 +144,7 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
 
         self.durable
             .spawn_by_name(
-                tool_name,
+                resolved_name,
                 serde_json::to_value(wrapped_params)?,
                 SpawnOptions::default(),
             )
@@ -171,9 +179,16 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
     where
         E: Executor<'e, Database = Postgres>,
     {
+        // Resolve llm_name → registry name (no-op when they're the same)
+        let resolved_name = self.registry.resolve_llm_name(tool_name).ok_or_else(|| {
+            ToolError::from(NonControlToolError::ToolNotFound {
+                name: tool_name.to_string(),
+            })
+        })?;
+
         // Validate params before spawning
         self.registry
-            .validate_params(tool_name, &llm_params, &side_info)?;
+            .validate_params(resolved_name, &llm_params, &side_info)?;
 
         let wrapped_params = TaskToolParams {
             llm_params,
@@ -184,7 +199,7 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
         self.durable
             .spawn_by_name_with(
                 executor,
-                tool_name,
+                resolved_name,
                 serde_json::to_value(wrapped_params)?,
                 SpawnOptions::default(),
             )
