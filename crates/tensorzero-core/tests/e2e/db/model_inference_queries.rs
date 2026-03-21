@@ -214,6 +214,8 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
         output: Some(vec![]),
         input_tokens: Some(100),
         output_tokens: Some(50),
+        provider_cache_read_input_tokens: Some(80),
+        provider_cache_write_input_tokens: Some(20),
         response_time_ms: Some(1234),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -259,12 +261,74 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
     assert_eq!(read.ttft_ms, model_inference.ttft_ms);
     assert_eq!(read.cached, model_inference.cached);
     assert_eq!(read.finish_reason, model_inference.finish_reason);
+    assert_eq!(
+        read.provider_cache_read_input_tokens, model_inference.provider_cache_read_input_tokens,
+        "provider_cache_read_input_tokens should round-trip"
+    );
+    assert_eq!(
+        read.provider_cache_write_input_tokens, model_inference.provider_cache_write_input_tokens,
+        "provider_cache_write_input_tokens should round-trip"
+    );
     assert!(
         read.timestamp.is_some(),
         "timestamp should be populated on read"
     );
 }
 make_db_test!(test_insert_and_read_model_inference);
+
+/// Verify that `Some(0)` cache tokens round-trip correctly.
+/// `Some(0)` means "provider supports caching but no tokens were cached" —
+/// distinct from `None` which means "provider doesn't report cache tokens".
+async fn test_insert_and_read_model_inference_zero_cache_tokens(conn: impl ModelInferenceQueries) {
+    let inference_id = Uuid::now_v7();
+    let model_inference_id = Uuid::now_v7();
+
+    let model_inference = StoredModelInference {
+        id: model_inference_id,
+        inference_id,
+        raw_request: Some(r#"{"model": "test-model"}"#.to_string()),
+        raw_response: Some(r#"{"choices": []}"#.to_string()),
+        system: None,
+        input_messages: Some(vec![]),
+        output: Some(vec![]),
+        input_tokens: Some(100),
+        output_tokens: Some(50),
+        provider_cache_read_input_tokens: Some(0),
+        provider_cache_write_input_tokens: Some(0),
+        response_time_ms: Some(500),
+        model_name: "test-model".to_string(),
+        model_provider_name: "test-provider".to_string(),
+        ttft_ms: None,
+        cached: false,
+        cost: None,
+        finish_reason: Some(FinishReason::Stop),
+        snapshot_hash: None,
+        timestamp: None,
+    };
+
+    conn.insert_model_inferences(std::slice::from_ref(&model_inference))
+        .await
+        .unwrap();
+
+    let read_inferences = conn
+        .get_model_inferences_by_inference_id(inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(read_inferences.len(), 1);
+    let read = &read_inferences[0];
+    assert_eq!(
+        read.provider_cache_read_input_tokens,
+        Some(0),
+        "Some(0) cache_read should round-trip as Some(0), not None"
+    );
+    assert_eq!(
+        read.provider_cache_write_input_tokens,
+        Some(0),
+        "Some(0) cache_write should round-trip as Some(0), not None"
+    );
+}
+make_db_test!(test_insert_and_read_model_inference_zero_cache_tokens);
 
 async fn test_insert_multiple_model_inferences_for_same_inference(
     conn: impl ModelInferenceQueries,
@@ -283,6 +347,8 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             output: Some(vec![]),
             input_tokens: Some(100),
             output_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: Some(500),
             model_name: "primary-model".to_string(),
             model_provider_name: "primary-provider".to_string(),
@@ -303,6 +369,8 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
             output: Some(vec![]),
             input_tokens: Some(100),
             output_tokens: Some(25),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: Some(800),
             model_name: "fallback-model".to_string(),
             model_provider_name: "fallback-provider".to_string(),
@@ -367,6 +435,8 @@ async fn test_insert_model_inference_with_all_finish_reasons(conn: impl ModelInf
             output: Some(vec![]),
             input_tokens: None,
             output_tokens: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: None,
             model_name: "test-model".to_string(),
             model_provider_name: "test-provider".to_string(),
@@ -409,6 +479,8 @@ async fn test_insert_model_inference_with_null_finish_reason(conn: impl ModelInf
         output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -450,6 +522,8 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -485,6 +559,8 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
         output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -528,6 +604,8 @@ async fn test_insert_model_inference_cost_non_cached(conn: impl ModelInferenceQu
         output: Some(vec![]),
         input_tokens: Some(500),
         output_tokens: Some(100),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: Some(1000),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -573,6 +651,8 @@ async fn test_insert_model_inference_cost_cached(conn: impl ModelInferenceQuerie
         output: Some(vec![]),
         input_tokens: None,
         output_tokens: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: Some(0),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -615,6 +695,8 @@ async fn test_insert_model_inference_cost_null(conn: impl ModelInferenceQueries)
         output: Some(vec![]),
         input_tokens: Some(200),
         output_tokens: Some(50),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: Some(800),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),
@@ -658,6 +740,8 @@ async fn test_insert_model_inference_cost_high_precision(conn: impl ModelInferen
         output: Some(vec![]),
         input_tokens: Some(10000),
         output_tokens: Some(5000),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: Some(5000),
         model_name: "test-model".to_string(),
         model_provider_name: "test-provider".to_string(),

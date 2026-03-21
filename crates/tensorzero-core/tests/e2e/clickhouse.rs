@@ -620,6 +620,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         output: Some(vec![]),
         input_tokens: Some(100),
         output_tokens: Some(50),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: test_model_name.to_string(),
         model_provider_name: test_provider_name.to_string(),
@@ -640,6 +642,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         output: Some(vec![]),
         input_tokens: Some(200),
         output_tokens: Some(100),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: test_model_name.to_string(),
         model_provider_name: test_provider_name.to_string(),
@@ -759,7 +763,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44
     ]
 );
 
@@ -1054,6 +1058,8 @@ async fn test_clickhouse_migration_manager() {
         output: Some(vec![]),
         input_tokens: Some(123),
         output_tokens: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         response_time_ms: None,
         model_name: String::new(),
         model_provider_name: String::new(),

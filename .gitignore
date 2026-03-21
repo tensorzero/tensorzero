@@ -64,3 +64,9 @@ crates/tensorzero-types/schemas
 
 # Rust ICE logs
 rustc-ice-*.txt
+
+# Local dev scripts and scratch files
+scripts/dev.py
+scripts/test-cache-tokens.sh
+.workbench-objective
+output
