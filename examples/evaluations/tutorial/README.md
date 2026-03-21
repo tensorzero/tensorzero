@@ -9,7 +9,7 @@ This directory contains the code for the **[TensorZero Evaluations Guide](https:
 We provide a configuration file (`./config/tensorzero.toml`) that specifies:
 
 - A `write_haiku` function that generates a haiku, with `gpt_4o` and `gpt_4o_mini` variants.
-- A `haiku_eval` evaluation, with evaluators for exact match and assorted LLM judges.
+- Evaluators for the `write_haiku` function, including exact match and assorted LLM judges.
 
 ### Prerequisites
 
@@ -42,7 +42,8 @@ Let's evaluate our `gpt_4o` variant using the TensorZero Evaluations CLI tool.
 
 ```bash
 docker compose run --rm evaluations \
-    --evaluation-name haiku_eval \
+    --function-name write_haiku \
+    --evaluator-names valid_haiku,metaphor_count,exact_match,compare_haikus \
     --dataset-name haiku_dataset \
     --variant-name gpt_4o \
     --concurrency 5
