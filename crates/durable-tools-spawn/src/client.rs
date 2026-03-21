@@ -314,8 +314,20 @@ impl SpawnClientBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an error if the database connection fails.
+    /// Returns an error if the database connection fails or the queue name
+    /// contains unsafe characters.
     pub async fn build(self) -> Result<SpawnClient, SpawnError> {
+        // Validate queue_name since it is interpolated into SQL table names
+        if !self
+            .queue_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            return Err(SpawnError::MissingConfig(
+                "Queue name must contain only ASCII alphanumeric characters and underscores",
+            ));
+        }
+
         let pool = if let Some(pool) = self.pool {
             pool
         } else {

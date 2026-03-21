@@ -739,7 +739,7 @@ fn build_order_by_clause(
                         name,
                         metric_config.r#type,
                         metric_config.level.clone(),
-                    );
+                    )?;
                     OrderByTermResolved::Column(format!("{alias}.value"))
                 }
                 // TODO(#6441): Implement proper search relevance ordering for Postgres.
