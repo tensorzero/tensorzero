@@ -482,11 +482,11 @@ impl ObservabilityConfig {
     }
 }
 
-fn default_flush_interval_ms() -> u64 {
+pub(crate) fn default_flush_interval_ms() -> u64 {
     100
 }
 
-fn default_max_rows() -> usize {
+pub(crate) fn default_max_rows() -> usize {
     1000
 }
 
@@ -506,6 +506,13 @@ pub struct BatchWritesConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_rows_postgres: Option<usize>,
+    /// Optional capacity for bounded batch writer channels per table type.
+    /// When set, channels are bounded: if full, new rows are dropped and logged
+    /// to protect against out-of-memory crashes.
+    /// When unset (`None`), channels are unbounded (legacy behavior).
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_queue_capacity: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -516,6 +523,7 @@ impl Default for BatchWritesConfig {
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
             max_rows_postgres: None,
+            write_queue_capacity: None,
         }
     }
 }
@@ -1590,6 +1598,13 @@ impl Config {
         {
             return Err(ErrorDetails::Config {
                 message: "Batch writes and async writes cannot be enabled at the same time"
+                    .to_string(),
+            }
+            .into());
+        }
+        if self.gateway.observability.batch_writes.write_queue_capacity == Some(0) {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes `write_queue_capacity` must be greater than 0 when set"
                     .to_string(),
             }
             .into());
