@@ -2717,16 +2717,39 @@ pub(super) fn openai_response_tool_call_to_tensorzero_tool_call(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+/// Raw helper for deserializing both `reasoning` and `reasoning_content` fields.
+/// vLLM >=0.8 sends both fields simultaneously (typically one null), so we
+/// can't use `#[serde(alias)]` which errors on duplicate keys.
+#[derive(Deserialize)]
+struct OpenAIResponseMessageRaw {
+    content: Option<String>,
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) content: Option<String>,
-    // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM) do.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+}
+
+impl<'de> serde::Deserialize<'de> for OpenAIResponseMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = OpenAIResponseMessageRaw::deserialize(deserializer)?;
+        Ok(OpenAIResponseMessage {
+            content: raw.content,
+            reasoning_content: raw.reasoning_content.or(raw.reasoning),
+            tool_calls: raw.tool_calls,
+        })
+    }
 }
 
 impl From<OpenAIFinishReason> for FinishReason {
@@ -2872,17 +2895,38 @@ struct OpenAIToolCallChunk {
     function: OpenAIFunctionCallChunk,
 }
 
+/// Raw helper for deserializing both `reasoning` and `reasoning_content` fields in streaming deltas.
+#[derive(Deserialize)]
+struct OpenAIDeltaRaw {
+    content: Option<String>,
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
+    tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+}
+
 // This doesn't include role
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
-    // OpenAI doesn't currently set this field, but some OpenAI-compatible
-    // providers (e.g. VLLM) do.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
+}
+
+impl<'de> serde::Deserialize<'de> for OpenAIDelta {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = OpenAIDeltaRaw::deserialize(deserializer)?;
+        Ok(OpenAIDelta {
+            content: raw.content,
+            reasoning_content: raw.reasoning_content.or(raw.reasoning),
+            tool_calls: raw.tool_calls,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -3255,6 +3299,7 @@ mod tests {
     use base64::Engine;
     use base64::prelude::*;
     use futures::FutureExt;
+    use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
 
@@ -6237,5 +6282,98 @@ mod tests {
             }
             _ => panic!("expected assistant message"),
         }
+    }
+
+    #[gtest]
+    fn test_openai_response_message_reasoning_field() {
+        // vLLM >=0.8 uses `reasoning` instead of `reasoning_content`.
+        // Verify both field names deserialize correctly.
+        let json_with_reasoning_content = serde_json::json!({
+            "content": "Hello",
+            "reasoning_content": "thinking via reasoning_content"
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_reasoning_content).expect("should deserialize");
+        expect_that!(
+            msg.reasoning_content.as_deref(),
+            some(eq("thinking via reasoning_content"))
+        );
+
+        let json_with_reasoning = serde_json::json!({
+            "content": "Hello",
+            "reasoning": "thinking via reasoning"
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_reasoning).expect("should deserialize");
+        expect_that!(
+            msg.reasoning_content.as_deref(),
+            some(eq("thinking via reasoning"))
+        );
+
+        // vLLM may send both fields simultaneously with one null — must not error.
+        let json_with_both = serde_json::json!({
+            "content": "Hello",
+            "reasoning": null,
+            "reasoning_content": null
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_both).expect("should deserialize with both null");
+        expect_that!(msg.reasoning_content, none());
+
+        // When both are present, `reasoning_content` takes priority.
+        let json_with_both_set = serde_json::json!({
+            "content": "Hello",
+            "reasoning": "from reasoning",
+            "reasoning_content": "from reasoning_content"
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_with_both_set).expect("should deserialize with both set");
+        expect_that!(
+            msg.reasoning_content.as_deref(),
+            some(eq("from reasoning_content"))
+        );
+
+        // When reasoning_content is null but reasoning is set, use reasoning.
+        let json_rc_null_r_set = serde_json::json!({
+            "content": "Hello",
+            "reasoning": "from reasoning",
+            "reasoning_content": null
+        });
+        let msg: OpenAIResponseMessage =
+            serde_json::from_value(json_rc_null_r_set).expect("should deserialize");
+        expect_that!(msg.reasoning_content.as_deref(), some(eq("from reasoning")));
+    }
+
+    #[gtest]
+    fn test_openai_delta_reasoning_field() {
+        // Verify streaming delta also accepts `reasoning` field.
+        let json_with_reasoning = serde_json::json!({
+            "reasoning": "streaming reasoning"
+        });
+        let delta: OpenAIDelta =
+            serde_json::from_value(json_with_reasoning).expect("should deserialize");
+        expect_that!(
+            delta.reasoning_content.as_deref(),
+            some(eq("streaming reasoning"))
+        );
+
+        let json_with_reasoning_content = serde_json::json!({
+            "reasoning_content": "streaming reasoning_content"
+        });
+        let delta: OpenAIDelta =
+            serde_json::from_value(json_with_reasoning_content).expect("should deserialize");
+        expect_that!(
+            delta.reasoning_content.as_deref(),
+            some(eq("streaming reasoning_content"))
+        );
+
+        // Both fields present with one null — must not error.
+        let json_with_both_null = serde_json::json!({
+            "reasoning": null,
+            "reasoning_content": null
+        });
+        let delta: OpenAIDelta =
+            serde_json::from_value(json_with_both_null).expect("should deserialize with both null");
+        expect_that!(delta.reasoning_content, none());
     }
 }
