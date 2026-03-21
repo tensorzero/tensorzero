@@ -6,27 +6,27 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
  * Tool result payload for an event.
+ *
+ * Includes enriched fields from the originating tool call and authorization events,
+ * making this payload self-contained for UI rendering.
  */
 export type EventPayloadToolResult = {
   tool_call_event_id: string;
   outcome: ToolOutcome;
   /**
    * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
    */
-  tool_call_name?: string;
+  tool_call_name: string;
   /**
    * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
    */
-  tool_call_arguments?: JsonValue;
+  tool_call_arguments: JsonValue;
   /**
-   * Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
-   * tool results may not have a corresponding authorization event.
+   * Authorization source (Ui/Automatic/Whitelist).
    */
-  tool_call_authorization_source?: ToolCallDecisionSource;
+  tool_call_authorization_source: ToolCallDecisionSource;
   /**
-   * Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
+   * Authorization status (Approved/Rejected/NotAvailable).
    */
-  tool_call_authorization_status?: ToolCallAuthorizationStatus;
+  tool_call_authorization_status: ToolCallAuthorizationStatus;
 };

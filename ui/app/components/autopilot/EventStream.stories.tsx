@@ -83,6 +83,8 @@ const toolingEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero" },
       },
     },
     1,
@@ -95,6 +97,10 @@ const toolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero" },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Found relevant context.",
@@ -166,6 +172,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
       },
     },
     3,
@@ -178,6 +186,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Found audit notes on recent Autopilot sessions.",
@@ -197,6 +209,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "rejected", reason: "Blocked by policy" },
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "dangerous_tool",
+        tool_call_arguments: {},
       },
     },
     5,
@@ -209,6 +223,13 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "dangerous_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: {
+          type: "rejected" as const,
+          reason: "Blocked by policy",
+        },
         outcome: {
           type: "failure",
           error: {
@@ -229,6 +250,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "missing-tool-call-event-id",
+        tool_call_name: "missing_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "missing",
         },
@@ -245,6 +270,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "other-tool-call-event-id",
+        tool_call_name: "other_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "unknown",
         },
@@ -446,6 +475,10 @@ const longFormEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: JSON.parse(longToolArguments),
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: longToolResult,
@@ -585,6 +618,14 @@ const visualizationEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
       },
     },
     2,
@@ -597,6 +638,16 @@ const visualizationEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: {
+          evaluation_name: "test_topk_evaluation",
+          dataset_name: "topk_test_dataset",
+          variant_names: ["echo", "empty", "empty2", "test", "test2"],
+          k_min: 1,
+          max_datapoints: 100,
+        },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: JSON.stringify(
@@ -831,6 +882,10 @@ const whitelistedToolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "wt-tool-call",
+        tool_call_name: "read_config",
+        tool_call_arguments: { section: "deployment" },
+        tool_call_authorization_source: { type: "whitelist" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Current deployment: region=us-east-1, replicas=3",
@@ -869,5 +924,666 @@ export const WhitelistedTooling: Story = {
 export const MarkdownContent: Story = {
   args: {
     events: markdownEvents,
+  },
+};
+
+// ── Stories covering event superseding / collapsing logic ──
+
+// Scenario: tool_call exists but no auth or result yet → tool_call is visible
+const pendingToolCallEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "pending-tc-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "text", text: "Run a search for me." }],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "pending-tc",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "search_wikipedia",
+        arguments: { query: "pending search" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "pending-tc",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+];
+
+export const SupersedingPendingToolCall: Story = {
+  name: "Superseding / Pending Tool Call (visible)",
+  args: {
+    events: pendingToolCallEvents,
+  },
+};
+
+// Scenario: tool_call + auth (no result yet) → tool_call hidden, auth visible
+const authOnlyEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "auth-only-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run a search (authorized, waiting for result).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "auth-only-tc",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "search_wikipedia",
+        arguments: { query: "auth only search" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "auth-only-tc",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "auth-only-auth",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        status: { type: "approved" },
+        tool_call_event_id: "auth-only-tc",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "auth only search" },
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingAuthOnly: Story = {
+  name: "Superseding / Auth hides Tool Call (no result yet)",
+  args: {
+    events: authOnlyEvents,
+  },
+};
+
+// Scenario: full chain tool_call + auth + result → only result visible
+const fullChainEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "full-chain-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Run a search (full chain — only result should appear).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "full-chain-tc",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "search_wikipedia",
+        arguments: { query: "full chain search" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "full-chain-tc",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "full-chain-auth",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        status: { type: "approved" },
+        tool_call_event_id: "full-chain-tc",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "full chain search" },
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "full-chain-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "full-chain-tc",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "full chain search" },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
+        outcome: {
+          type: "success",
+          result: "Found relevant results for full chain search.",
+        },
+      },
+    },
+    3,
+  ),
+];
+
+export const SupersedingFullChain: Story = {
+  name: "Superseding / Full chain (result hides tool_call + auth)",
+  args: {
+    events: fullChainEvents,
+  },
+};
+
+// Scenario: whitelisted tool — tool_call + result (no auth event) → tool_call hidden
+const whitelistedSupersedingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "wl-sup-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Read config (whitelisted — tool_call hidden by result, no auth event).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "wl-sup-tc",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "read_config",
+        arguments: { section: "network" },
+        requires_approval: false,
+        side_info: {
+          tool_call_event_id: "wl-sup-tc",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "wl-sup-result",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "wl-sup-tc",
+        tool_call_name: "read_config",
+        tool_call_arguments: { section: "network" },
+        tool_call_authorization_source: { type: "whitelist" as const },
+        tool_call_authorization_status: { type: "approved" as const },
+        outcome: {
+          type: "success",
+          result: "network: port=8080, host=0.0.0.0",
+        },
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingWhitelistedTool: Story = {
+  name: "Superseding / Whitelisted tool (result hides tool_call, no auth)",
+  args: {
+    events: whitelistedSupersedingEvents,
+  },
+};
+
+// Scenario: multiple tool chains at different stages in one stream
+const mixedSupersedingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "mix-sup-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Three tools at different stages: pending, authorized, completed.",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  // Tool A: pending (no auth, no result) → visible
+  buildEvent(
+    {
+      id: "mix-tc-a",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "tool_a_pending",
+        arguments: { step: "pending" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "mix-tc-a",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    1,
+  ),
+  // Tool B: authorized (tool_call hidden, auth visible)
+  buildEvent(
+    {
+      id: "mix-tc-b",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "tool_b_authorized",
+        arguments: { step: "authorized" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "mix-tc-b",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    2,
+  ),
+  buildEvent(
+    {
+      id: "mix-auth-b",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        status: { type: "approved" },
+        tool_call_event_id: "mix-tc-b",
+        tool_call_name: "tool_b_authorized",
+        tool_call_arguments: { step: "authorized" },
+      },
+    },
+    3,
+  ),
+  // Tool C: completed (tool_call + auth hidden, result visible)
+  buildEvent(
+    {
+      id: "mix-tc-c",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call",
+        name: "tool_c_completed",
+        arguments: { step: "completed" },
+        requires_approval: true,
+        side_info: {
+          tool_call_event_id: "mix-tc-c",
+          session_id: sessionId,
+          config_snapshot_hash: "abc",
+          optimization: {
+            poll_interval_secs: BigInt(60),
+            max_wait_secs: BigInt(86400),
+          },
+        },
+      },
+    },
+    4,
+  ),
+  buildEvent(
+    {
+      id: "mix-auth-c",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "automatic" },
+        status: { type: "approved" },
+        tool_call_event_id: "mix-tc-c",
+        tool_call_name: "tool_c_completed",
+        tool_call_arguments: { step: "completed" },
+      },
+    },
+    5,
+  ),
+  buildEvent(
+    {
+      id: "mix-result-c",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "mix-tc-c",
+        tool_call_name: "tool_c_completed",
+        tool_call_arguments: { step: "completed" },
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
+        outcome: {
+          type: "success",
+          result: "Tool C completed successfully.",
+        },
+      },
+    },
+    6,
+  ),
+];
+
+export const SupersedingMixedStages: Story = {
+  name: "Superseding / Mixed stages (pending, authorized, completed)",
+  args: {
+    events: mixedSupersedingEvents,
+  },
+};
+
+// Scenario: auto_eval_example_labeling superseded by answers
+const autoEvalExampleLabelingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "ael-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Label these examples (labeling event should be hidden once answers exist).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "ael-labeling",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_example_labeling",
+        examples: [
+          {
+            maybe_excerpted_prompt: {
+              type: "markdown",
+              text: "What is TensorZero?",
+              label: "Prompt",
+            },
+            maybe_excerpted_response: {
+              type: "markdown",
+              text: "TensorZero is an ML optimization platform.",
+              label: "Response",
+            },
+            source: {
+              type: "synthetic",
+              full_prompt: {
+                type: "markdown",
+                text: "What is TensorZero?",
+              },
+              full_response: {
+                type: "markdown",
+                text: "TensorZero is an ML optimization platform.",
+              },
+            },
+            label_question: {
+              id: "q1",
+              header: "Quality",
+              question: "Is this response accurate?",
+              options: [
+                {
+                  id: "yes",
+                  label: "Yes",
+                  description: "The response is accurate",
+                },
+                {
+                  id: "no",
+                  label: "No",
+                  description: "The response is inaccurate",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "ael-answers",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_example_labeling_answers",
+        auto_eval_example_labeling_event_id: "ael-labeling",
+        examples: [
+          {
+            maybe_excerpted_prompt: {
+              type: "markdown",
+              text: "What is TensorZero?",
+              label: "Prompt",
+            },
+            maybe_excerpted_response: {
+              type: "markdown",
+              text: "TensorZero is an ML optimization platform.",
+              label: "Response",
+            },
+            source: {
+              type: "synthetic",
+              full_prompt: {
+                type: "markdown",
+                text: "What is TensorZero?",
+              },
+              full_response: {
+                type: "markdown",
+                text: "TensorZero is an ML optimization platform.",
+              },
+            },
+            label_question: {
+              id: "q1",
+              header: "Quality",
+              question: "Is this response accurate?",
+              options: [
+                {
+                  id: "yes",
+                  label: "Yes",
+                  description: "The response is accurate",
+                },
+                {
+                  id: "no",
+                  label: "No",
+                  description: "The response is inaccurate",
+                },
+              ],
+            },
+            label_answer: {
+              type: "multiple_choice",
+              selected: ["yes"],
+            },
+          },
+        ],
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingAutoEvalExampleLabeling: Story = {
+  name: "Superseding / Auto eval example labeling (answers hide labeling)",
+  args: {
+    events: autoEvalExampleLabelingEvents,
+  },
+};
+
+// Scenario: auto_eval_behavior_spec superseded by answers
+const autoEvalBehaviorSpecEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "abs-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Define behavior spec (spec event should be hidden once answers exist).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "abs-spec",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_behavior_spec",
+        target_behavior: {
+          id: "tb1",
+          header: "Target Behavior",
+          question: "What should the model do?",
+          default_value: "Respond accurately and concisely.",
+        },
+        additional_context: {
+          id: "ac1",
+          header: "Additional Context",
+          question: "Any extra context for evaluation?",
+          default_value: "Focus on factual accuracy.",
+        },
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "abs-answers",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_behavior_spec_answers",
+        auto_eval_behavior_spec_event_id: "abs-spec",
+        target_behavior: {
+          id: "tb1",
+          header: "Target Behavior",
+          question: "What should the model do?",
+          default_value: "Respond accurately and concisely.",
+        },
+        target_behavior_answer: {
+          type: "free_response",
+          text: "Respond accurately and concisely.",
+        },
+        additional_context: {
+          id: "ac1",
+          header: "Additional Context",
+          question: "Any extra context for evaluation?",
+          default_value: "Focus on factual accuracy.",
+        },
+        additional_context_answer: {
+          type: "free_response",
+          text: "Focus on factual accuracy.",
+        },
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingAutoEvalBehaviorSpec: Story = {
+  name: "Superseding / Auto eval behavior spec (answers hide spec)",
+  args: {
+    events: autoEvalBehaviorSpecEvents,
   },
 };

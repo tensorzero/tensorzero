@@ -54,6 +54,8 @@ function buildFeedbackByVariantToolEvents(sessionId: string) {
     tool_call_event_id: toolCallEventId,
     tool_call_name: "get_feedback_by_variant",
     tool_call_arguments: toolCallPayload.arguments,
+    tool_call_authorization_source: { type: "automatic" as const },
+    tool_call_authorization_status: { type: "approved" as const },
     outcome: {
       type: "success" as const,
       result: JSON.stringify(feedbackData),
