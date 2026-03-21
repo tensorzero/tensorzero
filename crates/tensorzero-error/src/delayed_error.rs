@@ -9,7 +9,7 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use crate::error::{Error, ErrorDetails};
+use crate::{Error, ErrorDetails};
 
 pub struct DelayedError {
     inner: Error,
