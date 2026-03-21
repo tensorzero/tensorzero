@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::StreamExt;
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, InferenceOutput, Input, InputMessage, InputMessageContent, Role,
     TensorZeroError,
@@ -181,7 +182,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags_match = HashMap::from([(
         format!("test1_customer_id_{id}"),
         "customer_alpha".to_string(),
@@ -242,7 +243,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags1 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_gamma".to_string())]);
     let tags2 = HashMap::from([(format!("test2_tenant_id_{id}"), "tenant_delta".to_string())]);
     let no_tags = HashMap::new();
@@ -282,7 +283,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags_workspace1 = HashMap::from([(
         format!("test3_workspace_id_{id}"),
         "workspace_epsilon".to_string(),
@@ -342,7 +343,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     // Tags that match BOTH rules - should apply both rules (always + priority)
     let tags_both = HashMap::from([
         (format!("test4_account_id_{id}"), "account_eta".to_string()),
@@ -424,7 +425,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
 
     // Test 1: Request that matches only the highest priority rule (priority=3)
     let tags_highest_only = HashMap::from([(
@@ -482,8 +483,7 @@ scope = [
         backend,
     );
 
-    let client =
-        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
+    let client = Arc::new(make_embedded_gateway_with_config(&config).await);
     let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
 
     // Each request uses 11 input tokens and borrows ~102 tokens upfront
@@ -525,7 +525,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags = HashMap::from([(format!("test_multi_user_id_{id}"), "123".to_string())]);
 
     // Should be limited by model_inferences_per_minute (3) rather than tokens (100)
@@ -561,8 +561,7 @@ scope = [
         backend,
     );
 
-    let client =
-        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
+    let client = Arc::new(make_embedded_gateway_with_config(&config).await);
     let tags = HashMap::from([(format!("user_id_{id}"), "123".to_string())]);
 
     // Launch 10 concurrent requests
@@ -641,8 +640,7 @@ scope = [
         backend,
     );
 
-    let client =
-        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
+    let client = Arc::new(make_embedded_gateway_with_config(&config).await);
 
     // Launch concurrent requests for different users
     let handles: Vec<_> = (0..6)
@@ -708,7 +706,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
 
     let tags_match = HashMap::from([
         (format!("test6_application_id_{id}"), "app1".to_string()),
@@ -758,7 +756,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
 
     let tags_with_required =
         HashMap::from([(format!("test7_required_tag_{id}"), "value".to_string())]);
@@ -804,7 +802,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags = HashMap::from([(format!("test8_user_id_{id}"), "123".to_string())]);
 
     // First request should fail immediately due to zero limit
@@ -845,7 +843,7 @@ model = "dummy"
 "#
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags = HashMap::from([(format!("test9_user_id_{id}"), "123".to_string())]);
 
     // All requests should succeed when rate limiting is disabled
@@ -874,7 +872,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags = HashMap::from([(format!("test10_user_id_{id}"), "123".to_string())]);
 
     // Should be able to make requests up to the capacity (10)
@@ -911,8 +909,7 @@ scope = [
         backend,
     );
 
-    let client =
-        Arc::new(tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await);
+    let client = Arc::new(make_embedded_gateway_with_config(&config).await);
     let tags = HashMap::from([(format!("test11_user_id_{id}"), "123".to_string())]);
 
     // Launch 100 concurrent requests to test large limit handling
@@ -962,7 +959,7 @@ scope = [
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let tags = HashMap::from([(format!("test12_user_id_{id}"), "123".to_string())]);
 
     // Launch 3 concurrent requests - exactly 2 should succeed due to capacity limit
@@ -1008,7 +1005,7 @@ model = "dummy"
 "#
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let id = Uuid::now_v7();
     let tags = HashMap::from([(format!("test13_user_id_{id}"), "123".to_string())]);
 
@@ -1044,7 +1041,7 @@ model = "dummy"
 retries = { num_retries = 3 }
 "#;
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(config).await;
+    let client = make_embedded_gateway_with_config(config).await;
     // First call should succeed (the model works on 1, 3, 5, ...)
     client
         .inference(ClientInferenceParams {
@@ -1107,7 +1104,7 @@ async fn test_rate_limiting_cancelled_stream_return_tokens_postgres() {
         "customer_alpha".to_string(),
     )]);
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
     let res = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::slow_second_chunk".to_string()),
@@ -1191,7 +1188,7 @@ tokens_per_hour = { capacity = 10_000_000, refill_rate = 10_000_000 }",
         backend,
     );
 
-    let client = tensorzero::test_helpers::make_embedded_gateway_with_rate_limiting(&config).await;
+    let client = make_embedded_gateway_with_config(&config).await;
 
     let tags_intern = HashMap::from([(format!("user_id_{id}"), "intern".to_string())]);
     let tags_ceo = HashMap::from([(format!("user_id_{id}"), "ceo".to_string())]);
