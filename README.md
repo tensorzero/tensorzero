@@ -40,6 +40,10 @@ TensorZero is used by companies ranging from frontier AI startups to the Fortune
   <b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference" target="_blank">Configuration Reference</a></b>
 </p>
 
+## Demo
+
+<video src="https://github.com/user-attachments/assets/04a8466e-27d8-4189-b305-e7cecb6881ee"></video>
+
 ## Features
 
 > [!NOTE]
