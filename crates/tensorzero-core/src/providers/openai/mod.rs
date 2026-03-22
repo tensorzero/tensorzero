@@ -872,15 +872,17 @@ impl InferenceProvider for OpenAIProvider {
                 api_type,
             })
         })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}."),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type,
-            })
-        })?;
+        let response: OpenAIBatchResponse = match serde_json::from_str(&text) {
+            Ok(response) => response,
+            Err(_) => {
+                // If we can't parse the response as a batch response (e.g. the batch
+                // was deleted and the API returned an error JSON), treat it as failed.
+                return Ok(PollBatchInferenceResponse::Failed {
+                    raw_request,
+                    raw_response: text,
+                });
+            }
+        };
         let status: BatchStatus = response.status.into();
         let raw_response = text;
         match status {
@@ -889,6 +891,12 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response,
             }),
             BatchStatus::Completed => {
+                if response.error_file_id.is_some() {
+                    return Ok(PollBatchInferenceResponse::Failed {
+                        raw_request,
+                        raw_response,
+                    });
+                }
                 let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Output file ID is missing".to_string(),
@@ -3114,7 +3122,7 @@ struct OpenAIBatchResponse {
     // completion_window: String,
     status: OpenAIBatchStatus,
     output_file_id: Option<String>,
-    // error_file_id: String,
+    error_file_id: Option<String>,
     // created_at: i64,
     // in_progress_at: Option<i64>,
     // expires_at: i64,
