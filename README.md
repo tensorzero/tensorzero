@@ -2,14 +2,14 @@
 
 # TensorZero
 
-<p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="#1 Repository Of The Day"></picture></p>
+<p><picture><img src="https://www.tensorzero.com/github-trending-badge.svg" alt="GitHub Trending - #1 Repository Of The Day"></picture></p>
 
-**TensorZero is an open-source stack for _industrial-grade LLM applications_:**
+**TensorZero is an open-source LLMOps platform that unifies:**
 
 - **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
 - **Observability:** store inferences and feedback in your database, available programmatically or in the UI
-- **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
 - **Evaluation:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
+- **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
 - **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
 
 Take what you need, adopt incrementally, and complement with other tools.
@@ -32,11 +32,11 @@ Take what you need, adopt incrementally, and complement with other tools.
   <br>
   <b><a href="https://www.tensorzero.com/docs/quickstart" target="_blank">Quick Start (5min)</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
+  <b><a href="https://www.tensorzero.com/docs/deployment/tensorzero-gateway" target="_blank">Deployment Guide</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
+  <b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference" target="_blank">Configuration Reference</a></b>
 </p>
 
 ---
@@ -45,8 +45,9 @@ Take what you need, adopt incrementally, and complement with other tools.
 >
 > ### **Coming Soon: TensorZero Autopilot**
 >
-> TensorZero Autopilot is an **automated AI engineer** (powered by the TensorZero Stack) that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests.
-> **[Learn more](https://www.tensorzero.com/)** **[Join the waitlist](https://tensorzero.com/autopilot-waitlist)**
+> TensorZero Autopilot is an **automated AI engineer** powered by TensorZero that analyzes LLM observability data, sets up evals, optimizes prompts and models, and runs A/B tests.
+>
+> **[Learn more →](https://www.tensorzero.com/blog/automated-ai-engineer/)**&emsp;&emsp;**[Join the waitlist →](/autopilot-waitlist)**
 
 ## Features
 
