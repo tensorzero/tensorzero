@@ -27,6 +27,7 @@ use crate::{
         groq::GroqCredentials,
         hyperbolic::HyperbolicCredentials,
         mistral::MistralCredentials,
+        novita::NovitaCredentials,
         openai::OpenAICredentials,
         openrouter::OpenRouterCredentials,
         sglang::SGLangCredentials,
@@ -96,6 +97,7 @@ pub enum ProviderType {
     Groq,
     Hyperbolic,
     Mistral,
+    Novita,
     OpenAI,
     OpenRouter,
     SGLang,
@@ -119,6 +121,7 @@ impl Display for ProviderType {
             ProviderType::Groq => write!(f, "Groq"),
             ProviderType::Hyperbolic => write!(f, "Hyperbolic"),
             ProviderType::Mistral => write!(f, "Mistral"),
+            ProviderType::Novita => write!(f, "Novita"),
             ProviderType::OpenAI => write!(f, "OpenAI"),
             ProviderType::OpenRouter => write!(f, "OpenRouter"),
             ProviderType::SGLang => write!(f, "SGLang"),
@@ -381,6 +384,7 @@ pub struct ProviderTypeDefaultCredentials {
     groq: LazyCredential<GroqCredentials>,
     hyperbolic: LazyCredential<HyperbolicCredentials>,
     mistral: LazyCredential<MistralCredentials>,
+    novita: LazyCredential<NovitaCredentials>,
     openai: LazyCredential<OpenAICredentials>,
     openrouter: LazyCredential<OpenRouterCredentials>,
     sglang: LazyCredential<SGLangCredentials>,
@@ -435,6 +439,11 @@ impl ProviderTypeDefaultCredentials {
             .clone();
         let mistral_location = provider_types_config
             .mistral
+            .defaults
+            .api_key_location
+            .clone();
+        let novita_location = provider_types_config
+            .novita
             .defaults
             .api_key_location
             .clone();
@@ -509,6 +518,9 @@ impl ProviderTypeDefaultCredentials {
             }),
             mistral: LazyCredential::new(move || {
                 load_credential_with_fallback(&mistral_location, ProviderType::Mistral)?.try_into()
+            }),
+            novita: LazyCredential::new(move || {
+                load_credential_with_fallback(&novita_location, ProviderType::Novita)?.try_into()
             }),
             openai: LazyCredential::new(move || {
                 load_credential_with_fallback(&openai_location, ProviderType::OpenAI)?.try_into()
@@ -941,6 +953,22 @@ impl ProviderKind for MistralKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.mistral.get_cloned()
+    }
+}
+
+pub struct NovitaKind;
+
+impl ProviderKind for NovitaKind {
+    type Credential = NovitaCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::Novita
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.novita.get_cloned()
     }
 }
 

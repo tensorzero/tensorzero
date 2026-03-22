@@ -19,8 +19,9 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
-use crate::model_table::{OpenAIKind, OpenRouterKind, ShorthandModelConfig};
+use crate::model_table::{NovitaKind, OpenAIKind, OpenRouterKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
+use crate::providers::novita::NovitaProvider;
 use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
@@ -51,7 +52,7 @@ use crate::providers::dummy::DummyProvider;
 pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 
 impl ShorthandModelConfig for EmbeddingModelConfig {
-    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::", "openrouter::"];
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::", "openrouter::", "novita::"];
     const MODEL_TYPE: &str = "Embedding model";
     async fn from_shorthand(
         provider_type: &str,
@@ -74,6 +75,12 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             "openrouter" => EmbeddingProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "novita" => EmbeddingProviderConfig::Novita(NovitaProvider::new(
+                model_name,
+                NovitaKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),
@@ -618,6 +625,7 @@ pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     Azure(AzureProvider),
     OpenRouter(OpenRouterProvider),
+    Novita(NovitaProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -628,6 +636,7 @@ impl EmbeddingProviderConfig {
             EmbeddingProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
             EmbeddingProviderConfig::Azure(_) => crate::providers::azure::PROVIDER_TYPE,
             EmbeddingProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
+            EmbeddingProviderConfig::Novita(_) => crate::providers::novita::PROVIDER_TYPE,
             #[cfg(any(test, feature = "e2e_tests"))]
             EmbeddingProviderConfig::Dummy(_) => crate::providers::dummy::PROVIDER_TYPE,
         }
@@ -790,6 +799,14 @@ impl UninitializedEmbeddingProviderConfig {
                 extra_headers,
                 cost,
             },
+            ProviderConfig::Novita(provider) => EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::Novita(provider),
+                timeout_ms,
+                provider_name,
+                extra_body,
+                extra_headers,
+                cost,
+            },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
@@ -830,6 +847,11 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                     .await
             }
             EmbeddingProviderConfig::OpenRouter(provider) => {
+                provider
+                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .await
+            }
+            EmbeddingProviderConfig::Novita(provider) => {
                 provider
                     .embed(request, client, dynamic_api_keys, model_provider_data)
                     .await

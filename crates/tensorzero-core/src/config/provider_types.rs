@@ -25,6 +25,8 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub mistral: MistralProviderTypeConfig,
     #[serde(default)]
+    pub novita: NovitaProviderTypeConfig,
+    #[serde(default)]
     pub openai: OpenAIProviderTypeConfig,
     #[serde(default)]
     pub openrouter: OpenRouterProviderTypeConfig,
@@ -453,6 +455,29 @@ impl Default for VLLMDefaults {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "VLLM_API_KEY".to_string(),
+            )),
+        }
+    }
+}
+
+// Novita
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct NovitaProviderTypeConfig {
+    #[serde(default)]
+    pub defaults: NovitaDefaults,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct NovitaDefaults {
+    pub api_key_location: CredentialLocationWithFallback,
+}
+
+impl Default for NovitaDefaults {
+    fn default() -> Self {
+        Self {
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                "NOVITA_API_KEY".to_string(),
             )),
         }
     }

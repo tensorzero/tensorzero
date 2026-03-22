@@ -54,12 +54,13 @@ use crate::inference::types::{
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
-    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
-    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
-    VLLMKind, XAIKind,
+    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, NovitaKind, OpenAIKind,
+    OpenRouterKind, ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind,
+    TogetherKind, VLLMKind, XAIKind,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
+use crate::providers::novita::NovitaProvider;
 use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
@@ -1075,6 +1076,7 @@ impl ModelProvider {
             ProviderConfig::Groq(_) => crate::providers::groq::PROVIDER_TYPE,
             ProviderConfig::Hyperbolic(_) => crate::providers::hyperbolic::PROVIDER_TYPE,
             ProviderConfig::Mistral(_) => crate::providers::mistral::PROVIDER_TYPE,
+            ProviderConfig::Novita(_) => crate::providers::novita::PROVIDER_TYPE,
             ProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
             ProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
             ProviderConfig::Together(_) => crate::providers::together::PROVIDER_TYPE,
@@ -1112,6 +1114,7 @@ impl ModelProvider {
             ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
+            ProviderConfig::Novita(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
             ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
             ProviderConfig::Together(provider) => Some(provider.model_name()),
@@ -1167,6 +1170,7 @@ pub enum ProviderConfig {
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
+    Novita(NovitaProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
     #[serde(rename = "sglang")]
@@ -1219,6 +1223,7 @@ impl ProviderConfig {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
+            ProviderConfig::Novita(_) => Cow::Borrowed(crate::providers::novita::PROVIDER_TYPE),
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
                 Cow::Borrowed(crate::providers::openrouter::PROVIDER_TYPE)
@@ -1262,6 +1267,7 @@ impl ProviderConfig {
             ProviderConfig::Groq(_) => false,
             ProviderConfig::Hyperbolic(_) => false,
             ProviderConfig::Mistral(_) => false,
+            ProviderConfig::Novita(_) => false,
             ProviderConfig::OpenRouter(_) => false,
             ProviderConfig::SGLang(_) => false,
             ProviderConfig::TGI(_) => false,
@@ -1408,6 +1414,11 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
         prompt_mode: Option<String>,
+    },
+    Novita {
+        model_name: String,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     OpenAI {
         model_name: String,
@@ -1712,6 +1723,18 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
                 prompt_mode,
+            )),
+            UninitializedProviderConfig::Novita {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::Novita(NovitaProvider::new(
+                model_name,
+                NovitaKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
@@ -2038,6 +2061,11 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::Novita(provider) => {
+                provider
+                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::OpenAI(provider) => {
                 provider
                     .infer(request, &clients.http_client, &clients.credentials, self)
@@ -2172,6 +2200,11 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::Novita(provider) => {
+                provider
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::OpenAI(provider) => {
                 provider
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
@@ -2293,6 +2326,11 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::Novita(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             ProviderConfig::OpenAI(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -2400,6 +2438,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Mistral(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Novita(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -2750,6 +2793,7 @@ pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "hyperbolic::",
     "groq::",
     "mistral::",
+    "novita::",
     "openai::",
     "openrouter::",
     "together::",
@@ -2868,6 +2912,12 @@ impl ShorthandModelConfig for ModelConfig {
             "together" => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
                 TogetherKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "novita" => ProviderConfig::Novita(NovitaProvider::new(
+                model_name,
+                NovitaKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),
