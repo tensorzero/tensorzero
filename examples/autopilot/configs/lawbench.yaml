@@ -1,0 +1,49 @@
+autopilot_target:
+  kind: prod
+  api_key_env: "TENSORZERO_AUTOPILOT_API_KEY"
+
+interlocutor:
+  config_file: "interlocutor_config/tensorzero.toml"
+
+infra:
+  gateway_binary_path: "/usr/local/bin/gateway"
+  gateway_port: 3000
+  gateway_startup_timeout: 30.0
+  gateway_shutdown_timeout: 10.0
+
+
+environments:
+  - name: "lawbench@1.0"
+    llmgym_env: "harbor_v0"
+    function_name: "harbor_v0::harbor_agent"
+    metric_name: "reward"
+    initial_model: "openai::gpt-5-mini"
+    num_iterations: 1
+    episodes_per_iteration: 100
+    test_episodes_per_iteration: 100
+    episode_concurrency: 10
+    episode_timeout: 900
+    test_episode_concurrency: 20
+    test_episode_timeout: 1200
+    env_config:
+      dataset: "lawbench@1.0"
+      split_ratio: 0.5
+      environment_type: "daytona"
+      environment_kwargs:
+        auto_stop_interval_mins: 15
+        auto_delete_interval_mins: 5
+    task_split: "train"
+    function_description: >
+      Terminal-based coding agent that solves tasks in Docker containers.
+      Uses tools: think, plan, execute_command, submit_solution.
+      The reward metric measures verifier score (0.0-1.0).
+    autopilot_initial_message: "Improve the reward score of this terminal agent. The primary metric is 'reward' which is the mean verifier score across tasks. The 'resolved' metric tracks whether all test components pass."
+    autopilot_max_turns: 70
+    autopilot_session_timeout: 3600
+    available_models:
+      - "anthropic::claude-haiku-4-5"
+      - "openai::gpt-5-mini"
+      - "google_ai_studio_gemini::gemini-3-flash-preview"
+      - "fireworks::fireworks/glm-5"
+      - "fireworks::fireworks/kimi-k2p5"
+      - "fireworks::fireworks/minimax-m2p5"

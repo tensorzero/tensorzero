@@ -1,0 +1,41 @@
+autopilot_target:
+  kind: prod
+  api_key_env: "TENSORZERO_AUTOPILOT_API_KEY"
+
+interlocutor:
+  config_file: "interlocutor_config/tensorzero.toml"
+
+infra:
+  gateway_binary_path: "/usr/local/bin/gateway"
+  gateway_port: 3000
+  gateway_startup_timeout: 30.0
+  gateway_shutdown_timeout: 10.0
+
+
+environments:
+  - name: "tau_bench_retail_v0"
+    function_name: "tau_bench_retail_v0::act"
+    metric_name: "success"
+    initial_model: "openai::gpt-5-mini"
+    num_iterations: 1
+    episodes_per_iteration: 100
+    test_episodes_per_iteration: 100
+    episode_concurrency: 50
+    episode_timeout: 600
+    test_episode_concurrency: 50
+    test_episode_timeout: 900
+    task_split: "train"
+    function_description: >
+      Multi-turn conversational retail customer service agent.
+      Uses tools to interact with backend systems (orders, products, users) to resolve customer requests.
+      The reward metric measures task completion quality (0.0-1.0).
+    autopilot_initial_message: "Improve the success rate of this retail customer service agent. The primary metric is 'success' which tracks whether the task was fully completed. The 'reward' metric measures task completion quality (0.0-1.0)."
+    autopilot_max_turns: 70
+    autopilot_session_timeout: 3600
+    available_models:
+      - "anthropic::claude-haiku-4-5"
+      - "openai::gpt-5-mini"
+      - "google_ai_studio_gemini::gemini-3-flash-preview"
+      - "fireworks::fireworks/glm-5"
+      - "fireworks::fireworks/kimi-k2p5"
+      - "fireworks::fireworks/minimax-m2p5"
