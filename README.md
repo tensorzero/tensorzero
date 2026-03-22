@@ -6,11 +6,11 @@
 
 **TensorZero is an open-source LLMOps platform that unifies:**
 
-- **Gateway:** access every LLM provider through a unified API (<1ms p99 latency)
-- **Observability:** monitor your LLM systems, programmatically or with a UI
-- **Evaluation:** benchmark individual inferences or end-to-end workflows
-- **Optimization:** optimize your prompts, models, and inference strategies
-- **Experimentation:** deploy with built-in A/B testing, fallbacks, etc.
+- **Gateway:** access every LLM provider through a unified API, built for performance (<1ms p99 latency)
+- **Observability:** store inferences and feedback in your database, available programmatically or in the UI
+- **Evaluation:** benchmark individual inferences or end-to-end workflows using heuristics, LLM judges, etc.
+- **Optimization:** collect metrics and human feedback to optimize prompts, models, and inference strategies
+- **Experimentation:** ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.
 
 You can take what you need, adopt incrementally, and complement with other tools.
 It plays nicely with the **OpenAI SDK**, **OpenTelemetry**, and **every major LLM provider**.
