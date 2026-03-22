@@ -74,6 +74,16 @@ jobs:
         run: |
           curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
 
+      - name: Pull gateway image for Postgres migrations
+        run: |
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+
+      - name: Set container image tags
+        run: |
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
         with:
@@ -84,9 +94,15 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
+      - name: Set up database URLs for batch tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
+      - name: Launch Postgres for batch tests
+        run: |
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build -d --wait postgres gateway-postgres-migrations
 
       - name: Launch the gateway for batch tests
         working-directory: crates
