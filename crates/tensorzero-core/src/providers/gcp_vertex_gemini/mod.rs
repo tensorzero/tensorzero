@@ -3247,6 +3247,7 @@ mod tests {
     use crate::jsonschema_util::JSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
+    use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
     use std::sync::Arc;
@@ -5747,5 +5748,28 @@ mod tests {
             }
             _ => panic!("Expected a function call part"),
         }
+    }
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_usage_with_cache_tokens() {
+        let usage_metadata = GCPVertexGeminiUsageMetadata {
+            prompt_token_count: Some(200),
+            candidates_token_count: Some(80),
+            thoughts_token_count: None,
+            cached_content_token_count: Some(150),
+        };
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.output_tokens(),
+            provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+
+        expect_that!(usage.input_tokens, eq(Some(200)));
+        expect_that!(usage.output_tokens, eq(Some(80)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(150)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(None::<u32>));
     }
 }

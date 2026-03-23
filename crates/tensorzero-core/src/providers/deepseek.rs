@@ -841,6 +841,7 @@ impl From<DeepSeekUsage> for Usage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use googletest::prelude::*;
     use std::borrow::Cow;
     use std::time::Duration;
     use uuid::Uuid;
@@ -1482,5 +1483,24 @@ mod tests {
             },
         )];
         assert_eq!(output, expected);
+    }
+
+    #[gtest]
+    fn test_deepseek_usage_with_cache_tokens() {
+        use tensorzero_types_providers::deepseek::DeepSeekUsage;
+
+        let deepseek_usage = DeepSeekUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            prompt_cache_hit_tokens: Some(80),
+            prompt_cache_miss_tokens: Some(20),
+        };
+
+        let usage: Usage = deepseek_usage.into();
+
+        expect_that!(usage.input_tokens, eq(Some(100)));
+        expect_that!(usage.output_tokens, eq(Some(50)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(80)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(Some(20)));
     }
 }
