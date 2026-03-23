@@ -53,6 +53,7 @@ def vllm_inference():
         "qwen3",
         "--dtype",
         "half",
+        "--enforce-eager"
     ]
 
     subprocess.Popen(" ".join(cmd), shell=True)
