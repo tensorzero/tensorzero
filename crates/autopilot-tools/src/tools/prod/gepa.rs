@@ -746,51 +746,68 @@ async fn setup_step(
 }
 
 /// Initial evaluation step: evaluate all initial variants on validation set.
+///
+/// Variants are evaluated concurrently to reduce total wall time.
 async fn init_eval_step(
     params: InitEvalStepParams,
     step_state: StepState<ToolAppState>,
 ) -> anyhow::Result<BTreeMap<VariantName, VariantScores>> {
     let heartbeater: Arc<dyn Heartbeater> = step_state.heartbeater.clone();
     let client = step_state.state.t0_client();
-    let mut all_scores: BTreeMap<VariantName, VariantScores> = BTreeMap::new();
 
-    for (variant_name, variant_config) in &params.variants {
-        let variant_info = UninitializedVariantInfo {
-            inner: UninitializedVariantConfig::ChatCompletion(variant_config.clone()),
-            timeouts: None,
-            namespace: None,
-        };
+    let futs = params
+        .variants
+        .iter()
+        .map(|(variant_name, variant_config)| {
+            let heartbeater = heartbeater.clone();
+            let evaluation_name = params.evaluation_name.clone();
+            let datapoint_ids = params.datapoint_ids.clone();
+            let variant_name = variant_name.clone();
+            let variant_config = variant_config.clone();
+            let max_concurrency = params.max_concurrency;
 
-        let eval_params = RunEvaluationParams {
-            evaluation_name: params.evaluation_name.clone(),
-            dataset_name: None,
-            datapoint_ids: Some(params.datapoint_ids.clone()),
-            variant_name: variant_name.clone(),
-            concurrency: params.max_concurrency as usize,
-            inference_cache: CacheEnabledMode::Off,
-            max_datapoints: None,
-            precision_targets: HashMap::new(),
-            include_datapoint_results: true,
-            tags: HashMap::new(),
-            internal_dynamic_variant_config: Some(variant_info),
-            include_evaluation_infos: false,
-        };
+            let client = &client;
+            async move {
+                let variant_info = UninitializedVariantInfo {
+                    inner: UninitializedVariantConfig::ChatCompletion(variant_config),
+                    timeouts: None,
+                    namespace: None,
+                };
 
-        match client
-            .run_evaluation(eval_params, heartbeater.clone())
-            .await
-        {
-            Ok(response) => {
-                let scores = extract_scores_from_response(&response);
-                if !scores.is_empty() {
-                    all_scores.insert(variant_name.clone(), scores);
+                let eval_params = RunEvaluationParams {
+                    evaluation_name,
+                    dataset_name: None,
+                    datapoint_ids: Some(datapoint_ids),
+                    variant_name: variant_name.clone(),
+                    concurrency: max_concurrency as usize,
+                    inference_cache: CacheEnabledMode::Off,
+                    max_datapoints: None,
+                    precision_targets: HashMap::new(),
+                    include_datapoint_results: true,
+                    tags: HashMap::new(),
+                    internal_dynamic_variant_config: Some(variant_info),
+                    include_evaluation_infos: false,
+                };
+
+                match client.run_evaluation(eval_params, heartbeater).await {
+                    Ok(response) => {
+                        let scores = extract_scores_from_response(&response);
+                        if scores.is_empty() {
+                            None
+                        } else {
+                            Some((variant_name, scores))
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Init eval failed for variant `{variant_name}`: {e}");
+                        None
+                    }
                 }
             }
-            Err(e) => {
-                tracing::warn!("Init eval failed for variant `{variant_name}`: {e}");
-            }
-        }
-    }
+        });
+
+    let results = futures::future::join_all(futs).await;
+    let all_scores: BTreeMap<VariantName, VariantScores> = results.into_iter().flatten().collect();
 
     Ok(all_scores)
 }
