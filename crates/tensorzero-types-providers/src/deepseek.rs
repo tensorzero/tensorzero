@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::openai::{OpenAIFinishReason, OpenAIResponseToolCall, OpenAIUsage};
+use crate::openai::{OpenAIFinishReason, OpenAIResponseToolCall};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -52,11 +52,23 @@ pub struct DeepSeekChatChunkChoice {
     pub finish_reason: Option<OpenAIFinishReason>,
 }
 
+/// DeepSeek usage uses top-level `prompt_cache_hit_tokens` and `prompt_cache_miss_tokens`
+/// instead of the standard OpenAI `prompt_tokens_details.cached_tokens`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct DeepSeekUsage {
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
+    /// Tokens served from DeepSeek's automatic cache.
+    pub prompt_cache_hit_tokens: Option<u32>,
+    /// Tokens not in cache (written for future requests).
+    pub prompt_cache_miss_tokens: Option<u32>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DeepSeekChatChunk {
     pub choices: Vec<DeepSeekChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<OpenAIUsage>,
+    pub usage: Option<DeepSeekUsage>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -81,5 +93,5 @@ pub struct DeepSeekResponseChoice {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct DeepSeekResponse {
     pub choices: Vec<DeepSeekResponseChoice>,
-    pub usage: OpenAIUsage,
+    pub usage: DeepSeekUsage,
 }

@@ -810,8 +810,7 @@ fn mistral_usage_to_tensorzero_usage(usage: MistralUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
-        // Mistral's API does not expose cache token counts in the usage response.
-        provider_cache_read_input_tokens: None,
+        provider_cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
         provider_cache_write_input_tokens: None,
         cost: None,
     }
@@ -1415,6 +1414,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
             },
         };
 
@@ -1513,6 +1513,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1597,6 +1598,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
+                prompt_tokens_details: None,
             },
         };
         let request_body = MistralRequest {
@@ -1651,6 +1653,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
+                prompt_tokens_details: None,
             },
         };
         let request_body = MistralRequest {
@@ -1886,6 +1889,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 30,
+                prompt_tokens_details: None,
             },
         };
 

@@ -49,26 +49,37 @@
 //! prompts. Google AI Studio (`generativelanguage.googleapis.com`) does NOT return this
 //! field at all as of March 2026. Both providers parse the field correctly if present.
 //!
-//! ## Providers with caching NOT yet exposed in JSON responses
-//!
-//! | Provider | Notes |
-//! |----------|-------|
-//! | **Fireworks** | Cache info in HTTP headers (`fireworks-cached-prompt-tokens`), not JSON body |
-//! | **Together** | Transparent backend caching, no token counts in response |
-//! | **Mistral** | No prompt caching support |
-//! | **Hyperbolic** | No prompt caching support |
-//! | **vLLM** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
-//! | **SGLang** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
-//!
 //! ## DeepSeek (unique format)
 //!
 //! | Provider | `cache_read` source | `cache_write` source | Mechanism |
 //! |----------|---------------------|----------------------|-----------|
 //! | **DeepSeek** | `prompt_cache_hit_tokens` | `prompt_cache_miss_tokens` | Automatic |
 //!
-//! Note: DeepSeek uses `OpenAIUsage` which already has `prompt_tokens_details`,
-//! but their actual cache fields are top-level (`prompt_cache_hit_tokens`,
-//! `prompt_cache_miss_tokens`). These are NOT currently parsed — see TODO below.
+//! DeepSeek uses top-level usage fields instead of `prompt_tokens_details`.
+//! Parsed via [`DeepSeekUsage`](super::deepseek::DeepSeekUsage).
+//!
+//! ## Fireworks (HTTP headers)
+//!
+//! | Provider | `cache_read` source | `cache_write` source | Mechanism |
+//! |----------|---------------------|----------------------|-----------|
+//! | **Fireworks** | HTTP header `fireworks-cached-prompt-tokens` | — | Automatic |
+//!
+//! Fireworks returns cache info in HTTP response headers, not in the JSON body.
+//!
+//! ## Mistral
+//!
+//! | Provider | `cache_read` source | `cache_write` source | Mechanism |
+//! |----------|---------------------|----------------------|-----------|
+//! | **Mistral** | `prompt_tokens_details.cached_tokens` | — | Automatic |
+//!
+//! ## Providers with caching NOT yet exposed in JSON responses
+//!
+//! | Provider | Notes |
+//! |----------|-------|
+//! | **Together** | Transparent backend caching, no token counts in response |
+//! | **Hyperbolic** | No prompt caching support |
+//! | **vLLM** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
+//! | **SGLang** | Parsed via `prompt_tokens_details.cached_tokens` (OpenAI-compatible), but not all deployments report it |
 //!
 //! # Adding a new provider
 //!

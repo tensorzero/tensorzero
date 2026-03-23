@@ -921,8 +921,9 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
-- **`provider_cache_read_input_tokens`**: Number of input tokens served from the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
-- **`provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
+- **`prompt_tokens_details`**: Object containing detailed prompt token breakdown (optional). Only present when the provider reports cache metrics.
+  - **`cached_tokens`**: Number of input tokens served from the provider's prompt cache (integer).
+- **`tensorzero_provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
 - **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.
@@ -1015,8 +1016,9 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
-- **`provider_cache_read_input_tokens`**: Number of input tokens served from the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
-- **`provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
+- **`prompt_tokens_details`**: Object containing detailed prompt token breakdown (optional). Only present when the provider reports cache metrics.
+  - **`cached_tokens`**: Number of input tokens served from the provider's prompt cache (integer).
+- **`tensorzero_provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
 - **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.

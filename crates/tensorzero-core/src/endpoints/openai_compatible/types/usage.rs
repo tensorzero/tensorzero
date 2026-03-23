@@ -2,11 +2,23 @@
 //!
 //! This module provides types for token usage reporting in OpenAI-compatible responses,
 //! including prompt tokens, completion tokens, and total token counts.
+//!
+//! Field naming follows OpenAI conventions:
+//! - Standard OpenAI fields (e.g. `prompt_tokens`) keep their original names.
+//! - `prompt_tokens_details.cached_tokens` is the OpenAI-standard field for cache reads.
+//! - Non-standard TensorZero fields use a `tensorzero_` prefix (e.g. `tensorzero_cost`,
+//!   `tensorzero_provider_cache_write_input_tokens`).
 
 use rust_decimal::Decimal;
 use serde::Serialize;
 
 use crate::inference::types::Usage;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct OpenAICompatiblePromptTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u32>,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 pub struct OpenAICompatibleUsage {
@@ -17,9 +29,9 @@ pub struct OpenAICompatibleUsage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_cache_read_input_tokens: Option<u32>,
+    pub prompt_tokens_details: Option<OpenAICompatiblePromptTokensDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_cache_write_input_tokens: Option<u32>,
+    pub tensorzero_provider_cache_write_input_tokens: Option<u32>,
     #[serde(with = "rust_decimal::serde::float_option")]
     pub tensorzero_cost: Option<Decimal>,
 }
@@ -30,10 +42,14 @@ impl OpenAICompatibleUsage {
             prompt_tokens: Some(0),
             completion_tokens: Some(0),
             total_tokens: Some(0),
-            provider_cache_read_input_tokens: None,
-            provider_cache_write_input_tokens: None,
+            prompt_tokens_details: None,
+            tensorzero_provider_cache_write_input_tokens: None,
             tensorzero_cost: Some(Decimal::ZERO),
         }
+    }
+
+    fn cached_tokens(&self) -> Option<u32> {
+        self.prompt_tokens_details.and_then(|d| d.cached_tokens)
     }
 
     /// Sum `OpenAICompatibleUsage` and `Usage` instances.
@@ -59,17 +75,19 @@ impl OpenAICompatibleUsage {
 
         // For cache tokens, None means "not reported by provider" — preserve
         // the known value rather than dropping the entire aggregate.
-        self.provider_cache_read_input_tokens = match (
-            self.provider_cache_read_input_tokens,
-            other.provider_cache_read_input_tokens,
-        ) {
+        let new_cached_tokens = match (self.cached_tokens(), other.provider_cache_read_input_tokens)
+        {
             (Some(a), Some(b)) => Some(a + b),
             (Some(a), None) | (None, Some(a)) => Some(a),
             (None, None) => None,
         };
+        self.prompt_tokens_details =
+            new_cached_tokens.map(|ct| OpenAICompatiblePromptTokensDetails {
+                cached_tokens: Some(ct),
+            });
 
-        self.provider_cache_write_input_tokens = match (
-            self.provider_cache_write_input_tokens,
+        self.tensorzero_provider_cache_write_input_tokens = match (
+            self.tensorzero_provider_cache_write_input_tokens,
             other.provider_cache_write_input_tokens,
         ) {
             (Some(a), Some(b)) => Some(a + b),
@@ -90,8 +108,12 @@ impl From<Usage> for OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
             total_tokens: usage.total_tokens(),
-            provider_cache_read_input_tokens: usage.provider_cache_read_input_tokens,
-            provider_cache_write_input_tokens: usage.provider_cache_write_input_tokens,
+            prompt_tokens_details: usage.provider_cache_read_input_tokens.map(|ct| {
+                OpenAICompatiblePromptTokensDetails {
+                    cached_tokens: Some(ct),
+                }
+            }),
+            tensorzero_provider_cache_write_input_tokens: usage.provider_cache_write_input_tokens,
             tensorzero_cost: usage.cost,
         }
     }
@@ -116,8 +138,11 @@ mod tests {
         expect_that!(usage.prompt_tokens, some(eq(10)));
         expect_that!(usage.completion_tokens, some(eq(20)));
         expect_that!(usage.total_tokens, some(eq(30)));
-        expect_that!(usage.provider_cache_read_input_tokens, some(eq(5)));
-        expect_that!(usage.provider_cache_write_input_tokens, some(eq(3)));
+        expect_that!(usage.cached_tokens(), some(eq(5)));
+        expect_that!(
+            usage.tensorzero_provider_cache_write_input_tokens,
+            some(eq(3))
+        );
     }
 
     #[gtest]
@@ -127,8 +152,10 @@ mod tests {
             prompt_tokens: Some(100),
             completion_tokens: Some(50),
             total_tokens: Some(150),
-            provider_cache_read_input_tokens: Some(80),
-            provider_cache_write_input_tokens: Some(20),
+            prompt_tokens_details: Some(OpenAICompatiblePromptTokensDetails {
+                cached_tokens: Some(80),
+            }),
+            tensorzero_provider_cache_write_input_tokens: Some(20),
             tensorzero_cost: Some(Decimal::new(5, 2)),
         };
         let other = Usage {
@@ -141,12 +168,12 @@ mod tests {
         usage.sum_usage_strict(&other);
         expect_that!(usage.prompt_tokens, some(eq(110)));
         expect_that!(
-            usage.provider_cache_read_input_tokens,
+            usage.cached_tokens(),
             some(eq(80)),
             "None cache should preserve the existing value, not contaminate to None"
         );
         expect_that!(
-            usage.provider_cache_write_input_tokens,
+            usage.tensorzero_provider_cache_write_input_tokens,
             some(eq(20)),
             "None cache should preserve the existing value, not contaminate to None"
         );
@@ -159,8 +186,8 @@ mod tests {
             prompt_tokens: Some(0),
             completion_tokens: Some(0),
             total_tokens: Some(0),
-            provider_cache_read_input_tokens: None,
-            provider_cache_write_input_tokens: None,
+            prompt_tokens_details: None,
+            tensorzero_provider_cache_write_input_tokens: None,
             tensorzero_cost: Some(Decimal::ZERO),
         };
         let other = Usage {
@@ -172,12 +199,12 @@ mod tests {
         };
         usage.sum_usage_strict(&other);
         expect_that!(
-            usage.provider_cache_read_input_tokens,
+            usage.cached_tokens(),
             some(eq(8)),
             "Should pick up cache value from other when accumulator is None"
         );
         expect_that!(
-            usage.provider_cache_write_input_tokens,
+            usage.tensorzero_provider_cache_write_input_tokens,
             some(eq(2)),
             "Should pick up cache value from other when accumulator is None"
         );
@@ -194,8 +221,8 @@ mod tests {
             cost: None,
         };
         usage.sum_usage_strict(&other);
-        expect_that!(usage.provider_cache_read_input_tokens, none());
-        expect_that!(usage.provider_cache_write_input_tokens, none());
+        expect_that!(usage.cached_tokens(), none());
+        expect_that!(usage.tensorzero_provider_cache_write_input_tokens, none());
     }
 
     #[gtest]
@@ -211,8 +238,11 @@ mod tests {
         expect_that!(compat.prompt_tokens, some(eq(100)));
         expect_that!(compat.completion_tokens, some(eq(50)));
         expect_that!(compat.total_tokens, some(eq(150)));
-        expect_that!(compat.provider_cache_read_input_tokens, some(eq(80)));
-        expect_that!(compat.provider_cache_write_input_tokens, some(eq(20)));
+        expect_that!(compat.cached_tokens(), some(eq(80)));
+        expect_that!(
+            compat.tensorzero_provider_cache_write_input_tokens,
+            some(eq(20))
+        );
         expect_that!(compat.tensorzero_cost, some(eq(Decimal::new(5, 2))));
     }
 
