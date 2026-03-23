@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   BarChart3,
   ChevronRight,
+  KeyRound,
+  Loader2,
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -40,6 +42,7 @@ import type {
 } from "~/types/tensorzero";
 import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
 import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
+import { Check, Cross } from "~/components/icons/Icons";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
 import EventVisualization, {
@@ -208,6 +211,94 @@ function formatToolError(error: unknown): string {
   return JSON.stringify(error);
 }
 
+type ToolStatusVariant =
+  | "success"
+  | "failure"
+  | "pending"
+  | "pending_auth"
+  | "warning";
+
+type ToolStatusInfo = {
+  label: string;
+  variant: ToolStatusVariant;
+};
+
+function getToolEventStatus(event: GatewayEvent): ToolStatusInfo | null {
+  const { payload } = event;
+
+  if (payload.type === "tool_call") {
+    return { label: "Pending Approval", variant: "pending_auth" };
+  }
+
+  if (payload.type === "tool_call_authorization") {
+    switch (payload.status.type) {
+      case "approved":
+        return { label: "Pending Execution", variant: "pending" };
+      case "rejected":
+        return { label: "Rejected", variant: "failure" };
+      default: {
+        const _exhaustiveCheck: never = payload.status;
+        return _exhaustiveCheck;
+      }
+    }
+  }
+
+  if (payload.type === "tool_result") {
+    switch (payload.outcome.type) {
+      case "success":
+        return { label: "Success", variant: "success" };
+      case "failure":
+        return { label: "Error", variant: "failure" };
+      case "rejected":
+        return { label: "Rejected", variant: "failure" };
+      case "missing":
+        return { label: "Missing Tool", variant: "failure" };
+      case "unknown":
+        return { label: "Unknown", variant: "warning" };
+      default: {
+        const _exhaustiveCheck: never = payload.outcome;
+        return _exhaustiveCheck;
+      }
+    }
+  }
+
+  return null;
+}
+
+function ToolStatusIcon({ variant }: { variant: ToolStatusVariant }) {
+  switch (variant) {
+    case "success":
+      return <Check className="h-3 w-3 text-green-600 dark:text-green-400" />;
+    case "failure":
+      return <Cross className="h-3 w-3 text-red-400 dark:text-red-400" />;
+    case "pending":
+      return (
+        <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-gray-500" />
+      );
+    case "pending_auth":
+      return (
+        <KeyRound className="h-3 w-3 text-yellow-500 dark:text-yellow-400" />
+      );
+    case "warning":
+      return (
+        <AlertTriangle className="h-3 w-3 text-yellow-500 dark:text-yellow-400" />
+      );
+    default: {
+      const _exhaustiveCheck: never = variant;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+function ToolStatusBadge({ status }: { status: ToolStatusInfo }) {
+  return (
+    <span className="border-border bg-bg-primary text-fg-muted inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium">
+      <ToolStatusIcon variant={status.variant} />
+      {status.label}
+    </span>
+  );
+}
+
 function summarizeEvent(event: GatewayEvent): EventSummary {
   const { payload } = event;
 
@@ -279,48 +370,19 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     case "tool_call_authorization":
-      switch (payload.status.type) {
-        case "approved":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Call Authorization
+      return (
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          {payload.tool_call_name && (
+            <>
               <DotSeparator />
-              Approved
-              {payload.tool_call_name && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">
-                    {payload.tool_call_name}
-                  </span>
-                </>
-              )}
-            </span>
-          );
-        case "rejected":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Call Authorization
-              <DotSeparator />
-              Rejected
-              {payload.tool_call_name && (
-                <>
-                  <DotSeparator />
-                  <span className="font-mono font-medium">
-                    {payload.tool_call_name}
-                  </span>
-                </>
-              )}
-            </span>
-          );
-        default:
-          // This branch should never be reached but we need it to keep ESLint happy...
-          {
-            const _exhaustiveCheck: never = payload.status; // TS compiler should yell if this branch is reachable
-          }
-          throw new Error(
-            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          );
-      }
+              <span className="font-mono font-medium">
+                {payload.tool_call_name}
+              </span>
+            </>
+          )}
+        </span>
+      );
     case "tool_result": {
       const toolName = payload.tool_call_name ? (
         <>
@@ -330,101 +392,12 @@ function renderEventTitle(event: GatewayEvent) {
           </span>
         </>
       ) : null;
-      switch (payload.outcome.type) {
-        case "success":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Success
-              {toolName}
-            </span>
-          );
-        case "failure":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Failure
-              {toolName}
-            </span>
-          );
-        case "rejected":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Rejected
-              {toolName}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Tool rejected"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  {payload.outcome.reason}
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        case "missing":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Missing Tool
-              {toolName}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Missing tool warning"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  The agent requested a tool that your gateway does not support.
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        case "unknown":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Unknown
-              {toolName}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Unknown tool result"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  The Autopilot API returned an unknown event. This likely means
-                  your TensorZero deployment version is outdated.
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        default:
-          // This branch should never be reached but we need it to keep ESLint happy...
-          {
-            const _exhaustiveCheck: never = payload.outcome; // TS compiler should yell if this branch is reachable
-          }
-          throw new Error(
-            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          );
-      }
+      return (
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          {toolName}
+        </span>
+      );
     }
     case "error":
       // TODO: handle errors better
@@ -876,39 +849,43 @@ function EventItem({
         event.payload.outcome.type === "failure"));
   const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
+  const toolStatus = getToolEventStatus(event);
   const label = <span className="text-sm font-medium">{title}</span>;
 
   return (
     <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        {isExpandable ? (
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            aria-label={
-              isExpanded ? "Collapse event details" : "Expand event details"
-            }
-            className="inline-flex cursor-pointer items-center gap-2 text-left"
-            onClick={() => setIsExpanded((current) => !current)}
-          >
-            {label}
-            <span
-              className={cn(
-                "text-fg-muted inline-flex transition-transform duration-200",
-                isExpanded ? "rotate-90" : "rotate-0",
-              )}
+        <div className="flex min-w-0 items-center gap-2">
+          {isExpandable ? (
+            <button
+              type="button"
+              aria-expanded={isExpanded}
+              aria-label={
+                isExpanded ? "Collapse event details" : "Expand event details"
+              }
+              className="inline-flex cursor-pointer items-center gap-2 text-left"
+              onClick={() => setIsExpanded((current) => !current)}
             >
-              <ChevronRight className="h-4 w-4" />
-            </span>
-            {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
-              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
-                Action Required
+              {label}
+              <span
+                className={cn(
+                  "text-fg-muted inline-flex transition-transform duration-200",
+                  isExpanded ? "rotate-90" : "rotate-0",
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
               </span>
-            )}
-          </button>
-        ) : (
-          label
-        )}
+              {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
+                <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                  Action Required
+                </span>
+              )}
+            </button>
+          ) : (
+            label
+          )}
+          {toolStatus && <ToolStatusBadge status={toolStatus} />}
+        </div>
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
           {isConfigWrite && configApplyEnabled && sessionId && (
             <ApplyConfigChangeButton sessionId={sessionId} event={event} />
