@@ -194,6 +194,87 @@ export const MultiQuestion: Story = {
   },
 };
 
+const singleSelectWithOtherPayload: EventPayloadUserQuestions = {
+  questions: [
+    {
+      id: "q1",
+      header: "Deployment strategy",
+      question: "Which deployment strategy should we use for the rollout?",
+      type: "multiple_choice",
+      options: [
+        {
+          id: "blue-green",
+          label: "Blue-green",
+          description:
+            "Run two identical environments and switch traffic all at once.",
+        },
+        {
+          id: "canary",
+          label: "Canary",
+          description:
+            "Gradually shift traffic to the new version while monitoring.",
+        },
+        {
+          id: "rolling",
+          label: "Rolling update",
+          description:
+            "Replace instances one at a time until all are on the new version.",
+        },
+      ],
+      multi_select: false,
+      include_free_response: true,
+    },
+  ],
+};
+
+export const SingleSelectWithOther: Story = {
+  args: {
+    eventId: "evt-005",
+    payload: singleSelectWithOtherPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+const multiSelectWithOtherPayload: EventPayloadUserQuestions = {
+  questions: [
+    {
+      id: "q1",
+      header: "Features",
+      question: "Which features do you want to enable?",
+      type: "multiple_choice",
+      options: [
+        {
+          id: "i18n",
+          label: "Internationalization",
+          description: "Support for multiple languages and locales.",
+        },
+        {
+          id: "tz",
+          label: "Timezone support",
+          description: "Handle dates across different timezones correctly.",
+        },
+        {
+          id: "relative",
+          label: "Relative time",
+          description: 'Display dates as "2 hours ago" or "in 3 days".',
+        },
+      ],
+      multi_select: true,
+      include_free_response: true,
+    },
+  ],
+};
+
+export const MultiSelectWithOther: Story = {
+  args: {
+    eventId: "evt-006",
+    payload: multiSelectWithOtherPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
 export const Loading: Story = {
   args: {
     eventId: "evt-004",

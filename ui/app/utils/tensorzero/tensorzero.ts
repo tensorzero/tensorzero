@@ -1698,9 +1698,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     params: RunEvaluationStreamingParams,
   ): Promise<void> {
     const {
-      evaluationConfig,
-      functionConfig,
-      evaluationName,
       datasetName,
       datapointIds,
       variantName,
@@ -1713,10 +1710,7 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       signal,
     } = params;
 
-    const requestBody: RunEvaluationRequest = {
-      evaluation_config: evaluationConfig,
-      function_config: functionConfig,
-      evaluation_name: evaluationName,
+    const requestBodyBase = {
       dataset_name: datasetName,
       datapoint_ids: datapointIds,
       variant_name: variantName,
@@ -1726,6 +1720,19 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       max_datapoints: maxDatapoints,
       precision_targets: precisionTargets,
     };
+    const requestBody: RunEvaluationRequest =
+      "evaluationConfig" in params
+        ? {
+            ...requestBodyBase,
+            evaluation_config: params.evaluationConfig,
+            function_config: params.functionConfig,
+            evaluation_name: params.evaluationName,
+          }
+        : {
+            ...requestBodyBase,
+            function_name: params.functionName,
+            evaluator_names: params.evaluatorNames,
+          };
 
     const response = await this.fetch("/internal/evaluations/run", {
       method: "POST",
@@ -1877,13 +1884,26 @@ export class TensorZeroClient extends BaseTensorZeroClient {
 /**
  * Parameters for running an evaluation via SSE streaming.
  */
-export interface RunEvaluationStreamingParams {
+type RunEvaluationStreamingNamedParams = {
   /** The evaluation configuration */
   evaluationConfig: EvaluationConfig;
   /** The function configuration for output schema validation */
   functionConfig: EvaluationFunctionConfig;
   /** Name of the evaluation */
   evaluationName: string;
+};
+
+type RunEvaluationStreamingEvaluatorParams = {
+  /** Function name to evaluate */
+  functionName: string;
+  /** Top-level evaluator names to run */
+  evaluatorNames: string[];
+};
+
+export type RunEvaluationStreamingParams = (
+  | RunEvaluationStreamingNamedParams
+  | RunEvaluationStreamingEvaluatorParams
+) & {
   /** Name of the dataset to evaluate (optional) */
   datasetName?: string;
   /** Specific datapoint IDs to evaluate (optional) */
@@ -1904,4 +1924,4 @@ export interface RunEvaluationStreamingParams {
   onEvent: (event: EvaluationRunEvent) => void;
   /** Optional signal to abort the request */
   signal?: AbortSignal;
-}
+};

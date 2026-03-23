@@ -1953,6 +1953,7 @@ impl UninitializedConfig {
     pub(crate) fn warn_on_deprecations(&mut self) -> Result<(), Error> {
         self.resolve_clickhouse_config_deprecation()?;
         self.warn_variant_weight_deprecation();
+        self.warn_evaluation_evaluators_deprecation();
         Ok(())
     }
 
@@ -1997,6 +1998,16 @@ impl UninitializedConfig {
                 functions_with_weight.join(", ")
             ));
         }
+    }
+
+    fn warn_evaluation_evaluators_deprecation(&self) {
+        if self.evaluations.is_empty() {
+            return;
+        }
+        deprecation_warning(
+            "Top-level evaluations are deprecated — please migrate them to \
+             `[functions.function_name.evaluators]` instead.",
+        );
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
