@@ -150,49 +150,8 @@ impl Migration for Migration0051<'_> {
             .run_query_synchronous_no_params(query)
             .await?;
 
-        // 6. Backfill if needed
-        if !clean_start {
-            tokio::time::sleep(view_offset).await;
-
-            let create_table = self
-                .clickhouse
-                .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE ModelProviderStatisticsView".to_string(),
-                )
-                .await?
-                .response;
-
-            let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
-            if !create_table.contains(&view_timestamp_nanos_string) {
-                tracing::warn!(
-                    "Materialized view `ModelProviderStatisticsView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
-                );
-                return Ok(());
-            }
-
-            // Only backfill the new cache token columns. The other columns were already
-            // aggregated by previous migrations. Inserting only cache token columns lets
-            // AggregatingMergeTree merge the new partial row with the existing one.
-            tracing::info!("Running backfill of `ModelProviderStatistics` for cache token columns");
-            let query = format!(
-                r"
-                INSERT INTO ModelProviderStatistics
-                    (model_name, model_provider_name, minute, total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens)
-                SELECT
-                    model_name,
-                    model_provider_name,
-                    toStartOfMinute(timestamp) as minute,
-                    sumState(provider_cache_read_input_tokens) as total_provider_cache_read_input_tokens,
-                    sumState(provider_cache_write_input_tokens) as total_provider_cache_write_input_tokens
-                FROM ModelInference
-                WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                GROUP BY model_name, model_provider_name, minute
-                "
-            );
-            self.clickhouse
-                .run_query_synchronous_no_params(query)
-                .await?;
-        }
+        // No backfill needed: the cache token columns are new, so all
+        // historical rows have NULL — aggregating them would be a no-op.
 
         Ok(())
     }
