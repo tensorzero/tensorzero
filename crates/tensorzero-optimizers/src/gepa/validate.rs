@@ -163,7 +163,7 @@ pub fn validate_gepa_config(
             .get(evaluation_name)
             .ok_or_else(|| {
                 Error::new(ErrorDetails::Config {
-                    message: format!("Evaluation '{evaluation_name}' not found in config"),
+                    message: format!("Evaluation `{evaluation_name}` not found in config"),
                 })
             })?
             .clone(),
@@ -1962,7 +1962,8 @@ mod tests {
             create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
         let tensorzero_core::config::UninitializedFunctionConfig::Chat(function) = uninitialized
             .functions
-            .get_mut("test_function")
+            .as_mut()
+            .and_then(|m| m.get_mut("test_function"))
             .expect("function should exist")
         else {
             panic!("Expected chat function config")
