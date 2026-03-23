@@ -61,11 +61,7 @@ pub struct RawResponseEntry {
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
-    /// `serde(default)` for backward compatibility: existing serialized data
-    /// (e.g. in ClickHouse/Postgres) won't have these fields yet.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_cache_read_input_tokens: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_cache_write_input_tokens: Option<u32>,
     #[serde(default, with = "tensorzero_types::serde_utils::decimal_float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
