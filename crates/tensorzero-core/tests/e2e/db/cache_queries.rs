@@ -127,6 +127,8 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
             input_tokens: Some(10),
             output_tokens: Some(16),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         }
     );
     assert_eq!(*result.model_provider_name, *"test_provider");
@@ -146,6 +148,8 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
             input_tokens: Some(10),
             output_tokens: Some(16),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         }
     );
     assert_eq!(
@@ -235,6 +239,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                 input_tokens: Some(20),
                 output_tokens: Some(40),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: "raw response".to_string(),
@@ -250,6 +256,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                 input_tokens: Some(100),
                 output_tokens: Some(200),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: "raw response 2".to_string(),
@@ -268,6 +276,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
             input_tokens: Some(1),
             output_tokens: Some(2),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         },
         None,
     )
@@ -304,6 +314,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                     input_tokens: Some(20),
                     output_tokens: Some(40),
                     cost: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                 })
             );
         } else {
@@ -313,6 +325,8 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
                     input_tokens: Some(100),
                     output_tokens: Some(200),
                     cost: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                 })
             );
         };
