@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
-use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError};
+use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError, ToolRegistry};
 use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
 use tensorzero::{BooleanMetricFilter, InferenceFilter};
@@ -54,7 +54,10 @@ async fn test_list_episodes_tool_basic(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -107,7 +110,10 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -155,7 +161,10 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -199,7 +208,10 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -251,7 +263,10 @@ async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -319,7 +334,10 @@ async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -383,7 +401,10 @@ async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
 
     let tool = ListEpisodesTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

@@ -4,7 +4,10 @@
 /crates/evaluations/src/cli.rs @GabrielBianconi
 /crates/gateway/src/cli.rs @GabrielBianconi
 /crates/gateway/src/routes/external.rs @GabrielBianconi
-
+/crates/autopilot-client/src/types.rs @virajmehta
+/crates/tensorzero-core/src/endpoints/openai_compatible/types @GabrielBianconi
 /crates/tensorzero-core/src/db/clickhouse/migration_manager @virajmehta @Aaron1011
 /crates/tensorzero-core/src/db/postgres/migrations @virajmehta @Aaron1011
 /crates/tensorzero-auth/src/postgres/migrations @virajmehta @Aaron1011
+
+/docs @GabrielBianconi

@@ -88,6 +88,17 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  redis:
+    image: redis:7
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 10s
+      start_interval: 1s
+      timeout: 1s
+
   tempo:
     image: grafana/tempo:2.8.2
     command: ["-config.file=/etc/tempo.yaml"]
@@ -110,10 +121,7 @@ services:
       - 55679:55679 # ZPages
 
   postgres:
-    build:
-      context: .
-      dockerfile: Dockerfile.postgres
-    image: tensorzero/postgres-dev:14-trixie-slim
+    image: tensorzero/postgres:14
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_PASSWORD: postgres
@@ -176,7 +184,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       [
-        "gateway --run-postgres-migrations --enable-optimization-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
       ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"

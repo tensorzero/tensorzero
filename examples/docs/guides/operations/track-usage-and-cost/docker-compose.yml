@@ -2,30 +2,13 @@
 # For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
 
 services:
-  clickhouse:
-    image: clickhouse:lts
-    environment:
-      CLICKHOUSE_USER: chuser
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_PASSWORD: chpassword
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-    healthcheck:
-      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
   gateway:
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro # You can mount the entire configuration directory...
     command: --config-file /app/config/**/*.toml # ... and provide a glob pattern for them.
     environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
@@ -45,12 +28,15 @@ services:
       start_interval: 1s
       timeout: 1s
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
+      gateway-run-postgres-migrations:
+        condition: service_completed_successfully
 
   ui:
     image: tensorzero/ui
     environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
     ports:
       - "4000:4000"
@@ -58,5 +44,32 @@ services:
       gateway:
         condition: service_healthy
 
+  postgres:
+    image: tensorzero/postgres:17
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # Apply Postgres migrations before the gateway starts
+  gateway-run-postgres-migrations:
+    image: tensorzero/gateway
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["--run-postgres-migrations"]
+
 volumes:
-  clickhouse-data:
+  postgres-data:

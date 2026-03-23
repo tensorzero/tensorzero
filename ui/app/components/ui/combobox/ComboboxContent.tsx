@@ -14,7 +14,9 @@ export const ComboboxContent = forwardRef<HTMLDivElement, ComboboxContentProps>(
   ) {
     return (
       <Command ref={ref} shouldFilter={false}>
-        <CommandList>
+        {/* Stop wheel events from propagating to parent scroll containers
+            (e.g. Radix Dialog's body scroll lock) so the list scrolls correctly. */}
+        <CommandList onWheel={(e) => e.stopPropagation()}>
           {showEmpty && <CommandEmpty>{emptyMessage}</CommandEmpty>}
           {children}
         </CommandList>

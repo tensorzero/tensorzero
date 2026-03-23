@@ -21,7 +21,7 @@ pub use tensorzero::{
 };
 use tensorzero::{
     GetInferencesRequest, GetInferencesResponse, ListEpisodesRequest, ListEpisodesResponse,
-    ListInferencesRequest,
+    ListInferencesRequest, TensorZeroInternalError,
 };
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
@@ -31,6 +31,7 @@ pub use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsPa
 use tensorzero_core::endpoints::feedback::internal::{
     GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse,
 };
+use tensorzero_core::error::ErrorDetails;
 pub use tensorzero_core::optimization::OptimizationJobHandle;
 pub use tensorzero_core::optimization::OptimizationJobInfo;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
@@ -42,9 +43,9 @@ pub use embedded::EmbeddedClient;
 
 // Re-export autopilot types for use by tools
 pub use autopilot_client::{
-    CreateEventResponse, EventPayload, EventPayloadToolResult, GatewayListEventsResponse,
-    ListEventsParams, ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    ToolOutcome,
+    CreateEventPayload, CreateEventPayloadToolResult, CreateEventResponse,
+    GatewayListEventsResponse, ListEventsParams, ListSessionsParams, ListSessionsResponse,
+    S3UploadRequest, S3UploadResponse, ToolOutcome,
 };
 pub use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
@@ -85,6 +86,25 @@ pub enum TensorZeroClientError {
     /// Evaluation error.
     #[error("Evaluation error: {0}")]
     Evaluation(String),
+}
+
+impl TensorZeroClientError {
+    pub fn is_payload_too_large(&self) -> bool {
+        match self {
+            Self::TensorZero(TensorZeroError::Http { status_code, .. })
+            | Self::Autopilot(autopilot_client::AutopilotError::Http { status_code, .. }) => {
+                *status_code == http::StatusCode::PAYLOAD_TOO_LARGE.as_u16()
+            }
+            Self::TensorZero(TensorZeroError::Other {
+                source: TensorZeroInternalError(e),
+            }) => match e.get_details() {
+                ErrorDetails::Autopilot { status_code, .. } => status_code
+                    .is_some_and(|code| code == http::StatusCode::PAYLOAD_TOO_LARGE.as_u16()),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
 }
 
 /// Trait for TensorZero client operations, enabling mocking in tests via mockall.
@@ -195,12 +215,17 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     /// with a specific config version, enabling reproducibility by using the exact
     /// configuration that was active at a previous point in time.
     ///
+    /// The `heartbeater` is threaded through to long-running operations
+    /// (e.g., evaluations) so they can extend the durable task lease.
+    /// Use `Arc::new(NoopHeartbeater)` in non-durable contexts.
+    ///
     /// Returns the appropriate response type based on the action input.
     /// Streaming inference is not supported and will return an error.
     async fn action(
         &self,
         snapshot_hash: SnapshotHash,
         input: ActionInput,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<ActionResponse, TensorZeroClientError>;
 
     /// Get a config snapshot by hash, or the live config if no hash is provided.
@@ -325,6 +350,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
     async fn run_evaluation(
         &self,
         params: RunEvaluationParams,
+        heartbeater: Arc<dyn durable::Heartbeater>,
     ) -> Result<RunEvaluationResponse, TensorZeroClientError>;
 }
 

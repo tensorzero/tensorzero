@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 
@@ -16,7 +17,7 @@ def load_dataset():
     Load the CoNLL++ dataset and yield individual rows.
     We treat this setting as a streaming RL environment, so splits are ignored.
     """
-    df = pd.read_csv("../../experimentation/run-adaptive-ab-tests/data/conllpp.csv")
+    df = pd.read_csv(Path(__file__).parent.parent.parent / "experimentation/run-adaptive-ab-tests/data/conllpp.csv")
     for _, row in df.iterrows():
         yield Row(input=str(row["input"]), label=json.loads(str(row["output"])))
 

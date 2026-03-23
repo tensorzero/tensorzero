@@ -33,6 +33,7 @@ use uuid::Uuid;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
+use crate::evaluations::EvaluatorConfig;
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, System,
@@ -227,6 +228,11 @@ impl FunctionConfigChat {
             parallel_tool_calls: self.parallel_tool_calls,
             description: self.description.clone(),
             experimentation: None,
+            evaluators: self
+                .evaluators
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
         }
     }
 }
@@ -249,6 +255,11 @@ impl FunctionConfigJson {
             )),
             description: self.description.clone(),
             experimentation: None,
+            evaluators: self
+                .evaluators
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_uninitialized()))
+                .collect(),
         }
     }
 }
@@ -413,6 +424,8 @@ pub struct FunctionConfigChat {
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
     pub experimentation: ExperimentationConfigWithNamespaces,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub evaluators: HashMap<String, EvaluatorConfig>,
     // Holds all template names (e.g. 'user', 'my_custom_template'
     // which can be invoked through a `{"type": "template", "name": "..."}` input block)
     // This is used to perform early rejection of a template invocation,
@@ -440,6 +453,8 @@ pub struct FunctionConfigJson {
     pub json_mode_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
     pub experimentation: ExperimentationConfigWithNamespaces,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub evaluators: HashMap<String, EvaluatorConfig>,
     // See `FunctionConfigChat.all_explicit_template_names`.
     #[serde(skip)]
     pub all_explicit_template_names: HashSet<String>,
@@ -450,6 +465,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
             FunctionConfig::Json(params) => &params.variants,
+        }
+    }
+
+    pub fn evaluators(&self) -> &HashMap<String, EvaluatorConfig> {
+        match self {
+            FunctionConfig::Chat(params) => &params.evaluators,
+            FunctionConfig::Json(params) => &params.evaluators,
         }
     }
 
@@ -1545,6 +1567,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1632,6 +1655,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1707,6 +1731,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1782,6 +1807,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1860,6 +1886,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1944,6 +1971,7 @@ mod tests {
             description: Some("A chat function description".to_string()),
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(
@@ -1962,6 +1990,7 @@ mod tests {
             description: Some("A JSON function description".to_string()),
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Json(json_config);
         assert_eq!(
@@ -1979,6 +2008,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         };
         let function_config = FunctionConfig::Chat(chat_config);
         assert_eq!(function_config.description(), None);
@@ -2014,6 +2044,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let raw_request = "raw_request".to_string();
 
@@ -2622,6 +2653,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
@@ -2823,6 +2855,7 @@ mod tests {
             description: None,
             experimentation,
             all_explicit_templates_names: HashSet::new(),
+            evaluators: HashMap::new(),
         })
     }
 

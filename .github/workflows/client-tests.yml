@@ -100,11 +100,12 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
@@ -151,7 +152,8 @@ jobs:
           done
         shell: bash
 
-      - name: Install JS dependencies
+      - name: Install openai-node dependencies
+        working-directory: clients/openai-node
         run: |
           for attempt in 1 2 3; do
             if pnpm install --frozen-lockfile; then

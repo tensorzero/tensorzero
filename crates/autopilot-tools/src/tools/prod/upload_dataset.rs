@@ -256,8 +256,9 @@ impl TaskTool for UploadDatasetTool {
             .step(
                 "get_credentials",
                 (side_info.tool_call_event_id, side_info.session_id),
-                |(tool_call_event_id, session_id), state| async move {
-                    let response = state
+                |(tool_call_event_id, session_id), step_state| async move {
+                    let response = step_state
+                        .state
                         .t0_client()
                         .s3_initiate_upload(session_id, S3UploadRequest { tool_call_event_id })
                         .await
@@ -275,7 +276,7 @@ impl TaskTool for UploadDatasetTool {
             .step(
                 "upload",
                 (credentials.clone(), dataset_name.clone(), row_limit),
-                |params, state| async move {
+                |params, step_state| async move {
                     let (creds, dataset_name, row_limit) = params;
 
                     // Build S3 client with temporary credentials
@@ -311,7 +312,7 @@ impl TaskTool for UploadDatasetTool {
                         &path,
                         &dataset_name,
                         row_limit,
-                        state.t0_client().as_ref(),
+                        step_state.state.t0_client().as_ref(),
                     )
                     .await?;
 

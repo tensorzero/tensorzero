@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use durable::{Durable, SpawnOptions, TaskContext, TaskHandle};
+use durable::{
+    Durable, HeartbeatHandle, Heartbeater, SpawnOptions, StepState, TaskContext, TaskHandle,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use sqlx::PgPool;
@@ -16,7 +18,6 @@ use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
-use tokio::sync::RwLockReadGuard;
 
 /// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
 ///
@@ -42,7 +43,7 @@ pub struct ToolAppState<S = ()> {
     /// Database connection pool for database operations.
     pool: PgPool,
     /// Tool registry for looking up and calling other tools.
-    tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+    tool_registry: Arc<ToolRegistry>,
     /// TensorZero client for calling inference and autopilot operations.
     t0_client: Arc<dyn TensorZeroClient>,
     extra_state: S,
@@ -52,7 +53,7 @@ impl<S> ToolAppState<S> {
     /// Create a new application state.
     pub fn new(
         pool: PgPool,
-        tool_registry: Arc<tokio::sync::RwLock<ToolRegistry>>,
+        tool_registry: Arc<ToolRegistry>,
         t0_client: Arc<dyn TensorZeroClient>,
         extra_state: S,
     ) -> Self {
@@ -74,6 +75,11 @@ impl<S> ToolAppState<S> {
     /// This provides access to inference, autopilot events, and other client operations.
     pub fn t0_client(&self) -> &Arc<dyn TensorZeroClient> {
         &self.t0_client
+    }
+
+    /// Get a reference to the tool registry.
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.tool_registry
     }
 
     /// Get a reference to the extra state.
@@ -109,6 +115,15 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         }
     }
 
+    /// Get the heartbeat handle for extending the task lease.
+    ///
+    /// This returns the real `HeartbeatHandle` from the durable task context.
+    /// Use this in `TaskTool::execute()` when you need to pass a heartbeater
+    /// to non-durable code (e.g., `TensorZeroClient::action()`).
+    pub fn heartbeater(&self) -> HeartbeatHandle {
+        self.task_ctx.heartbeat_handle()
+    }
+
     /// Get the next tool call ID (increments counter).
     fn next_tool_call_id(&mut self) -> u32 {
         self.tool_call_counter += 1;
@@ -139,8 +154,8 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
     ///
     /// ```ignore
     /// // Send a tool result to autopilot (checkpointed)
-    /// ctx.step("send_result", params, |params, state| async move {
-    ///     state.t0_client()
+    /// ctx.step("send_result", params, |params, step_state| async move {
+    ///     step_state.state.t0_client()
     ///         .create_autopilot_event(session_id, request)
     ///         .await
     ///         .map_err(|e| anyhow::anyhow!("{e}"))
@@ -150,21 +165,21 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.app_state.t0_client.clone()
     }
 
-    /// Get a read lock on the tool registry.
+    /// Get a reference to the tool registry.
     ///
     /// Use this to iterate over tools and convert them to TensorZero tool definitions.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let registry = ctx.registry().await;
+    /// let registry = ctx.registry();
     /// let tools: Result<Vec<Tool>, _> = registry.iter()
     ///     .filter(|t| !t.is_durable())
     ///     .map(Tool::try_from)
     ///     .collect();
     /// ```
-    pub async fn registry_read_lock(&self) -> RwLockReadGuard<'_, ToolRegistry> {
-        self.app_state.tool_registry.read().await
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.app_state.tool_registry
     }
 
     /// Get access to the 'extra_side' provided when building the 'DurableClient'
@@ -192,7 +207,7 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         &mut self,
         base_name: &str,
         params: P,
-        f: fn(P, ToolAppState<S>) -> Fut,
+        f: fn(P, StepState<ToolAppState<S>>) -> Fut,
     ) -> ToolResult<T>
     where
         P: Serialize,
@@ -272,16 +287,15 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         side_info: JsonValue,
         options: SpawnOptions,
     ) -> ToolResult<ToolHandle> {
-        let is_durable = {
-            let registry = self.app_state.tool_registry.read().await;
-            // Validate params before spawning
-            registry.validate_params(tool_name, &llm_params, &side_info)?;
+        let registry = &self.app_state.tool_registry;
+        // Validate params before spawning
+        registry.validate_params(tool_name, &llm_params, &side_info)?;
+        let is_durable =
             registry
                 .is_durable(tool_name)
                 .ok_or_else(|| NonControlToolError::ToolNotFound {
                     name: tool_name.to_string(),
-                })?
-        };
+                })?;
 
         if is_durable {
             // TaskTool: spawn as subtask
@@ -359,24 +373,29 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.step(
             &step_name,
             (tool_name, task_id, call_id, llm_params, side_info),
-            |(tool_name, task_id, call_id, llm_params, side_info), state| async move {
+            |(tool_name, task_id, call_id, llm_params, side_info), step_state| async move {
+                let heartbeater = step_state.heartbeater.clone();
+                let state = &step_state.state;
+
                 // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(&state.pool, &state.t0_client);
+                let simple_ctx = SimpleToolContext::new(
+                    &state.pool,
+                    &state.t0_client,
+                    &heartbeater,
+                    &state.tool_registry,
+                );
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
 
                 // Get the simple tool from registry
-                let simple_tool = {
+                let simple_tool =
                     state
                         .tool_registry
-                        .read()
-                        .await
                         .get_simple_tool(&tool_name)
                         .ok_or_else(|| NonControlToolError::ToolNotFound {
                             name: tool_name.clone(),
-                        })?
-                };
+                        })?;
 
                 simple_tool
                     .execute_erased(llm_params, side_info, simple_ctx, &idempotency_key)
@@ -453,6 +472,18 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.task_ctx.uuid7().await.map_err(Into::into)
     }
 
+    /// Extend the task's lease to prevent timeout.
+    ///
+    /// Use this for long-running operations that don't naturally checkpoint.
+    /// Each `step()` call also extends the lease automatically.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the heartbeat fails.
+    pub async fn heartbeat(&self, duration: Option<Duration>) -> ToolResult<()> {
+        self.task_ctx.heartbeat(duration).await.map_err(Into::into)
+    }
+
     /// Call TensorZero inference with full parameter control.
     ///
     /// This is a checkpointed operation - results are cached on restart.
@@ -491,8 +522,9 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         self.step(
             &step_name,
             (params, step_name.clone()),
-            |(params, step_name), state| async move {
-                let response = state
+            |(params, step_name), step_state| async move {
+                let response = step_state
+                    .state
                     .t0_client
                     .inference(params)
                     .await
@@ -546,15 +578,30 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
 /// `SimpleTools` run inside a `TaskTool`'s `step()` checkpoint, so they don't
 /// have access to checkpointing operations themselves. They can access the
 /// database pool for queries and the TensorZero client for inference calls.
+///
+/// A heartbeater is available for long-running operations (e.g., evaluations)
+/// that need to extend the task lease to prevent timeout.
 pub struct SimpleToolContext<'a> {
     pool: &'a PgPool,
     t0_client: &'a Arc<dyn TensorZeroClient>,
+    heartbeater: &'a Arc<dyn Heartbeater>,
+    tool_registry: &'a ToolRegistry,
 }
 
 impl<'a> SimpleToolContext<'a> {
     /// Create a new simple tool context.
-    pub fn new(pool: &'a PgPool, t0_client: &'a Arc<dyn TensorZeroClient>) -> Self {
-        Self { pool, t0_client }
+    pub fn new(
+        pool: &'a PgPool,
+        t0_client: &'a Arc<dyn TensorZeroClient>,
+        heartbeater: &'a Arc<dyn Heartbeater>,
+        tool_registry: &'a ToolRegistry,
+    ) -> Self {
+        Self {
+            pool,
+            t0_client,
+            heartbeater,
+            tool_registry,
+        }
     }
 
     /// Get a reference to the database pool.
@@ -569,6 +616,18 @@ impl<'a> SimpleToolContext<'a> {
     /// are already checkpointed by the outer step.
     pub fn client(&self) -> &Arc<dyn TensorZeroClient> {
         self.t0_client
+    }
+
+    /// Get the heartbeater for extending the task lease during long-running operations.
+    pub fn heartbeater(&self) -> &Arc<dyn Heartbeater> {
+        self.heartbeater
+    }
+
+    /// Get a reference to the tool registry.
+    ///
+    /// Use this to iterate over tools and convert them to TensorZero tool definitions.
+    pub fn registry(&self) -> &ToolRegistry {
+        self.tool_registry
     }
 
     /// Call TensorZero inference.
@@ -623,7 +682,7 @@ struct SerializableEmbeddingsParams {
 
 async fn embeddings_step<S: Send + Sync + 'static>(
     serializable: SerializableEmbeddingsParams,
-    state: ToolAppState<S>,
+    step_state: StepState<ToolAppState<S>>,
 ) -> anyhow::Result<EmbeddingResponse> {
     let params = EmbeddingsParams {
         input: serializable.input,
@@ -635,7 +694,8 @@ async fn embeddings_step<S: Send + Sync + 'static>(
         cache_options: serializable.cache_options,
         include_raw_response: serializable.include_raw_response,
     };
-    state
+    step_state
+        .state
         .t0_client
         .embeddings(params)
         .await

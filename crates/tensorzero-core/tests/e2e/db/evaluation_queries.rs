@@ -47,7 +47,13 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
 
     // Verify via search_evaluation_runs (queries the runs table by evaluation_name)
     let search_results = conn
-        .search_evaluation_runs(&run.evaluation_name, Some(&run.function_name), "", 10, 0)
+        .search_evaluation_runs(
+            Some(&run.evaluation_name),
+            Some(&run.function_name),
+            "",
+            10,
+            0,
+        )
         .await
         .expect("search_evaluation_runs should succeed");
     assert_eq!(
@@ -60,22 +66,28 @@ async fn test_insert_inference_evaluation_run(conn: impl EvaluationQueries + Tes
         "search result run_id should match inserted value"
     );
     assert_eq!(
+        search_results[0].evaluation_name, run.evaluation_name,
+        "search result evaluation_name should match inserted value"
+    );
+    assert_eq!(
+        search_results[0].dataset_name, run.dataset_name,
+        "search result dataset_name should match inserted value"
+    );
+    assert_eq!(
         search_results[0].variant_name, "variant_a",
         "search result variant_name should be the first variant"
     );
 
     // Verify via list_evaluation_runs (returns more fields)
-    // Since run_id is a v7 UUID (timestamp-based), the newly inserted run will be first.
+    // Use a larger limit because parallel tests may insert runs with newer v7 UUIDs.
     let listed = conn
-        .list_evaluation_runs(1, 0)
+        .list_evaluation_runs(100, 0)
         .await
         .expect("list_evaluation_runs should succeed");
-    assert_eq!(listed.len(), 1, "list should return at least one run");
-    let row = &listed[0];
-    assert_eq!(
-        row.evaluation_run_id, run.run_id,
-        "listed run_id should match inserted value"
-    );
+    let row = listed
+        .iter()
+        .find(|r| r.evaluation_run_id == run.run_id)
+        .expect("listed results should contain the inserted run");
     assert_eq!(
         row.evaluation_name, run.evaluation_name,
         "listed evaluation_name should match inserted value"
@@ -1126,7 +1138,13 @@ make_db_test!(test_get_evaluation_results_json_datapoint_details);
 /// Test that search_evaluation_runs returns all runs for an evaluation with an empty query.
 async fn test_search_evaluation_runs_empty_query(conn: impl EvaluationQueries) {
     let results = conn
-        .search_evaluation_runs("entity_extraction", Some("extract_entities"), "", 100, 0)
+        .search_evaluation_runs(
+            Some("entity_extraction"),
+            Some("extract_entities"),
+            "",
+            100,
+            0,
+        )
         .await
         .unwrap();
 
@@ -1143,7 +1161,7 @@ async fn test_search_evaluation_runs_by_variant_name(conn: impl EvaluationQuerie
     // "mini" should only match the gpt4o_mini_initial_prompt variant
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("extract_entities"),
             "mini",
             100,
@@ -1165,7 +1183,7 @@ async fn test_search_evaluation_runs_common_variant_substring(conn: impl Evaluat
     // "gpt4o" should match both variants
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("extract_entities"),
             "gpt4o",
             100,
@@ -1185,7 +1203,7 @@ make_db_test!(test_search_evaluation_runs_common_variant_substring);
 async fn test_search_evaluation_runs_case_insensitive(conn: impl EvaluationQueries) {
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("extract_entities"),
             "GPT4O_MINI",
             100,
@@ -1207,7 +1225,7 @@ async fn test_search_evaluation_runs_by_run_id(conn: impl EvaluationQueries) {
     // "19bd" is a substring of "0196368f-19bd-7082-a677-1c0bf346ff24" but not of the other run ID
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("extract_entities"),
             "19bd",
             100,
@@ -1232,7 +1250,7 @@ make_db_test!(test_search_evaluation_runs_by_run_id);
 async fn test_search_evaluation_runs_no_match(conn: impl EvaluationQueries) {
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("extract_entities"),
             "zzz_nonexistent_zzz",
             100,
@@ -1253,7 +1271,7 @@ make_db_test!(test_search_evaluation_runs_no_match);
 async fn test_search_evaluation_runs_wrong_evaluation_name(conn: impl EvaluationQueries) {
     let results = conn
         .search_evaluation_runs(
-            "nonexistent_evaluation",
+            Some("nonexistent_evaluation"),
             Some("extract_entities"),
             "",
             100,
@@ -1274,7 +1292,7 @@ make_db_test!(test_search_evaluation_runs_wrong_evaluation_name);
 async fn test_search_evaluation_runs_wrong_function_name(conn: impl EvaluationQueries) {
     let results = conn
         .search_evaluation_runs(
-            "entity_extraction",
+            Some("entity_extraction"),
             Some("nonexistent_function"),
             "",
             100,
@@ -1294,7 +1312,7 @@ make_db_test!(test_search_evaluation_runs_wrong_function_name);
 /// Test that search_evaluation_runs works without a function_name filter.
 async fn test_search_evaluation_runs_no_function_name(conn: impl EvaluationQueries) {
     let results = conn
-        .search_evaluation_runs("entity_extraction", None, "", 100, 0)
+        .search_evaluation_runs(Some("entity_extraction"), None, "", 100, 0)
         .await
         .unwrap();
 
@@ -1309,10 +1327,58 @@ async fn test_search_evaluation_runs_no_function_name(conn: impl EvaluationQueri
 }
 make_db_test!(test_search_evaluation_runs_no_function_name);
 
+/// Test that search_evaluation_runs works with only a function_name filter.
+async fn test_search_evaluation_runs_function_only(conn: impl EvaluationQueries) {
+    let results = conn
+        .search_evaluation_runs(None, Some("extract_entities"), "", 100, 0)
+        .await
+        .unwrap();
+
+    assert!(
+        results.len() > 1,
+        "Should return results when filtering only by function_name"
+    );
+    assert!(
+        results
+            .iter()
+            .all(|result| !result.evaluation_name.is_empty()),
+        "Stored runs should always have a human-readable evaluation_name"
+    );
+}
+make_db_test!(test_search_evaluation_runs_function_only);
+
+/// Test that search_evaluation_runs can match evaluation_name and dataset_name substrings.
+async fn test_search_evaluation_runs_by_evaluation_or_dataset_name(conn: impl EvaluationQueries) {
+    let evaluation_name_results = conn
+        .search_evaluation_runs(None, Some("extract_entities"), "entity_extraction", 100, 0)
+        .await
+        .unwrap();
+    let dataset_name_results = conn
+        .search_evaluation_runs(None, Some("extract_entities"), "entity_extraction", 100, 0)
+        .await
+        .unwrap();
+
+    assert!(
+        !evaluation_name_results.is_empty(),
+        "Expected evaluation_name substring search to return results"
+    );
+    assert!(
+        !dataset_name_results.is_empty(),
+        "Expected dataset_name substring search to return results"
+    );
+}
+make_db_test!(test_search_evaluation_runs_by_evaluation_or_dataset_name);
+
 /// Test that search_evaluation_runs respects the limit parameter.
 async fn test_search_evaluation_runs_with_limit(conn: impl EvaluationQueries) {
     let results = conn
-        .search_evaluation_runs("entity_extraction", Some("extract_entities"), "", 1, 0)
+        .search_evaluation_runs(
+            Some("entity_extraction"),
+            Some("extract_entities"),
+            "",
+            1,
+            0,
+        )
         .await
         .unwrap();
 
@@ -1323,7 +1389,13 @@ make_db_test!(test_search_evaluation_runs_with_limit);
 /// Test that search_evaluation_runs respects the offset parameter.
 async fn test_search_evaluation_runs_with_offset(conn: impl EvaluationQueries) {
     let results = conn
-        .search_evaluation_runs("entity_extraction", Some("extract_entities"), "", 100, 1)
+        .search_evaluation_runs(
+            Some("entity_extraction"),
+            Some("extract_entities"),
+            "",
+            100,
+            1,
+        )
         .await
         .unwrap();
 
@@ -1337,7 +1409,13 @@ make_db_test!(test_search_evaluation_runs_with_offset);
 /// Test that search_evaluation_runs returns empty when offset is beyond all results.
 async fn test_search_evaluation_runs_offset_beyond_results(conn: impl EvaluationQueries) {
     let results = conn
-        .search_evaluation_runs("entity_extraction", Some("extract_entities"), "", 100, 100)
+        .search_evaluation_runs(
+            Some("entity_extraction"),
+            Some("extract_entities"),
+            "",
+            100,
+            100,
+        )
         .await
         .unwrap();
 

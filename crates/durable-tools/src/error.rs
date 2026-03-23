@@ -209,14 +209,27 @@ impl From<DurableError> for ToolError {
             DurableError::InvalidEventName { reason } => {
                 ToolError::NonControl(NonControlToolError::InvalidEventName { reason })
             }
-            DurableError::InvalidTaskParams { message, .. } => {
-                ToolError::NonControl(NonControlToolError::InvalidParams { message })
+            DurableError::InvalidTaskParams { task_name, message } => {
+                ToolError::NonControl(NonControlToolError::InvalidParams {
+                    message: format!("invalid task parameters for `{task_name}`: {message}"),
+                })
             }
             DurableError::InvalidState { state } => {
                 ToolError::NonControl(NonControlToolError::Internal {
                     message: format!("invalid task state: {state}"),
                 })
             }
+            DurableError::InvalidScheduleName { name, reason } => {
+                ToolError::NonControl(NonControlToolError::Internal {
+                    message: format!("invalid schedule name `{name}`: {reason}"),
+                })
+            }
+            DurableError::ScheduleNotFound {
+                schedule_name,
+                queue_name,
+            } => ToolError::NonControl(NonControlToolError::Internal {
+                message: format!("schedule `{schedule_name}` not found in queue `{queue_name}`"),
+            }),
         }
     }
 }

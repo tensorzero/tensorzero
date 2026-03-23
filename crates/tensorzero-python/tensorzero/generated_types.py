@@ -1092,7 +1092,7 @@ class InferenceFilterTime(TimeFilter):
 @dataclass(kw_only=True)
 class InferenceParams:
     """
-    InferenceParams is the top-level struct for inference parameters.
+    Top-level struct for inference parameters.
     We backfill these from the configs given in the variants used and ultimately write them to the database.
     """
 
@@ -1642,11 +1642,6 @@ class UpdateChatDatapointRequestInternal:
     """
     Datapoint input. If omitted, it will be left unchanged.
     """
-    metadata: DatapointMetadataUpdate | None = None
-    """
-    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
-    Moving forward, don't nest these fields.
-    """
     name: str | None | OmitType = OMIT
     """
     Datapoint name.
@@ -1687,11 +1682,6 @@ class UpdateChatDatapointRequestInternal:
     If omitted (which uses the default value `OMIT`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
     tool choice). If specified as a value, it will be set to the provided value.
     """
-    tool_params: UpdateDynamicToolParamsRequest | None = None
-    """
-    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
-    Moving forward, don't nest these fields.
-    """
 
 
 @dataclass(kw_only=True)
@@ -1716,11 +1706,6 @@ class UpdateJsonDatapointRequestInternal:
     input: Input | None = None
     """
     Datapoint input. If omitted, it will be left unchanged.
-    """
-    metadata: DatapointMetadataUpdate | None = None
-    """
-    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
-    Moving forward, don't nest these fields.
     """
     name: str | None | OmitType = OMIT
     """

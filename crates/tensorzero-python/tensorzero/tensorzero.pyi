@@ -15,6 +15,7 @@ from typing import (
 from uuid import UUID
 
 import uuid_utils
+from typing_extensions import deprecated
 
 # PyO3
 from tensorzero import (
@@ -334,6 +335,80 @@ class GEPAConfig:
         retries: Optional[Dict[str, Any]] = None,
         max_tokens: Optional[int] = None,
     ) -> None: ...
+
+@final
+class GepaLaunchResponse:
+    task_id: str
+
+@final
+class GepaProgress:
+    current_iteration: int
+    max_iterations: int
+    current_step: str
+
+@final
+class GepaEvaluatorStats:
+    mean: float
+    stdev: float
+    count: int
+
+@final
+class _GepaNamespace:
+    def launch(
+        self,
+        *,
+        function_name: str,
+        analysis_model: str,
+        mutation_model: str,
+        max_iterations: int,
+        dataset_name: Optional[str] = None,
+        train_dataset_name: Optional[str] = None,
+        val_dataset_name: Optional[str] = None,
+        evaluation_name: Optional[str] = None,
+        evaluators: Optional[List[str]] = None,
+        initial_variants: Optional[List[str]] = None,
+        variant_prefix: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        seed: Optional[int] = None,
+        include_inference_for_mutation: Optional[bool] = None,
+        max_concurrency: Optional[int] = None,
+        max_datapoints: Optional[int] = None,
+    ) -> GepaLaunchResponse: ...
+    def get(self, *, task_id: str) -> Dict[str, Any]: ...
+
+@final
+class _AsyncGepaNamespace:
+    async def launch(
+        self,
+        *,
+        function_name: str,
+        analysis_model: str,
+        mutation_model: str,
+        max_iterations: int,
+        dataset_name: Optional[str] = None,
+        train_dataset_name: Optional[str] = None,
+        val_dataset_name: Optional[str] = None,
+        evaluation_name: Optional[str] = None,
+        evaluators: Optional[List[str]] = None,
+        initial_variants: Optional[List[str]] = None,
+        variant_prefix: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        seed: Optional[int] = None,
+        include_inference_for_mutation: Optional[bool] = None,
+        max_concurrency: Optional[int] = None,
+        max_datapoints: Optional[int] = None,
+    ) -> GepaLaunchResponse: ...
+    async def get(self, *, task_id: str) -> Dict[str, Any]: ...
+
+@final
+class _OptimizationNamespace:
+    @property
+    def gepa(self) -> _GepaNamespace: ...
+
+@final
+class _AsyncOptimizationNamespace:
+    @property
+    def gepa(self) -> _AsyncGepaNamespace: ...
 
 @final
 class TogetherSFTConfig:
@@ -768,6 +843,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    @deprecated(
+        "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     def experimental_render_samples(
         self,
         *,
@@ -794,6 +872,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    @deprecated(
+        "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     def experimental_launch_optimization(
         self,
         *,
@@ -862,7 +943,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def experimental_run_evaluation(
         self,
         *,
-        evaluation_name: str,
+        evaluation_name: Optional[str] = None,
+        function_name: Optional[str] = None,
+        evaluator_names: Optional[List[str]] = None,
         dataset_name: Optional[str] = None,
         datapoint_ids: Optional[List[str]] = None,
         variant_name: Optional[str] = None,
@@ -874,9 +957,13 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
-        :param evaluation_name: The name of the evaluation to run
+        Specify either `evaluation_name` (to use a configured evaluation) or
+        `function_name` + `evaluator_names` (to use top-level evaluators directly).
+
+        :param evaluation_name: The name of a configured evaluation (mutually exclusive with function_name/evaluator_names)
+        :param function_name: The name of the function to evaluate (requires evaluator_names, mutually exclusive with evaluation_name)
+        :param evaluator_names: List of top-level evaluator names to use (requires function_name, mutually exclusive with evaluation_name)
         :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)
         :param datapoint_ids: Specific datapoint IDs to evaluate (mutually exclusive with dataset_name)
         :param variant_name: The name of the variant to evaluate
@@ -889,6 +976,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    @property
+    def optimization(self) -> _OptimizationNamespace: ...
     def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -1227,6 +1316,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `GetInferencesResponse` object.
         """
 
+    @deprecated(
+        "`experimental_render_samples` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     async def experimental_render_samples(
         self,
         *,
@@ -1252,6 +1344,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A list of rendered samples.
         """
 
+    @deprecated(
+        "`experimental_launch_optimization` will be removed in a future release (2026.6+ / #6745). Please use `experimental_launch_optimization_workflow` instead."
+    )
     async def experimental_launch_optimization(
         self,
         *,
@@ -1320,7 +1415,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def experimental_run_evaluation(
         self,
         *,
-        evaluation_name: str,
+        evaluation_name: Optional[str] = None,
+        function_name: Optional[str] = None,
+        evaluator_names: Optional[List[str]] = None,
         dataset_name: Optional[str] = None,
         datapoint_ids: Optional[List[str]] = None,
         variant_name: Optional[str] = None,
@@ -1332,9 +1429,13 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset or specific datapoints.
-        This function is only available in EmbeddedGateway mode.
 
-        :param evaluation_name: The name of the evaluation to run
+        Specify either `evaluation_name` (to use a configured evaluation) or
+        `function_name` + `evaluator_names` (to use top-level evaluators directly).
+
+        :param evaluation_name: The name of a configured evaluation (mutually exclusive with function_name/evaluator_names)
+        :param function_name: The name of the function to evaluate (requires evaluator_names, mutually exclusive with evaluation_name)
+        :param evaluator_names: List of top-level evaluator names to use (requires function_name, mutually exclusive with evaluation_name)
         :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)
         :param datapoint_ids: Specific datapoint IDs to evaluate (mutually exclusive with dataset_name)
         :param variant_name: The name of the variant to evaluate
@@ -1347,6 +1448,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         ...
 
+    @property
+    def optimization(self) -> _AsyncOptimizationNamespace: ...
     async def close(self) -> None:
         """
         Close the connection to the TensorZero gateway.
@@ -1393,6 +1496,9 @@ __all__ = [
     "FunctionsConfig",
     "GCPVertexGeminiSFTConfig",
     "GEPAConfig",
+    "GepaEvaluatorStats",
+    "GepaLaunchResponse",
+    "GepaProgress",
     "LocalHttpGateway",
     "MixtureOfNConfig",
     "OpenAIRFTConfig",

@@ -54,6 +54,7 @@ pub fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router
         .merge(build_observability_routes())
         .merge(build_datasets_routes())
         .merge(build_optimization_routes())
+        .merge(build_gepa_routes())
         .merge(build_evaluations_routes())
         .merge(build_meta_observability_routes(metrics_handle))
 }
@@ -123,6 +124,21 @@ fn build_optimization_routes() -> Router<AppStateData> {
         .route(
             "/experimental_optimization/{job_handle}",
             get(tensorzero_optimizers::endpoints::poll_optimization_handler),
+        )
+}
+
+/// This function builds the public routes for GEPA optimization.
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
+fn build_gepa_routes() -> Router<AppStateData> {
+    Router::new()
+        .route(
+            "/v1/optimization/gepa",
+            post(tensorzero_optimizers::endpoints::gepa_launch_handler),
+        )
+        .route(
+            "/v1/optimization/gepa/{task_id}",
+            get(tensorzero_optimizers::endpoints::gepa_get_handler),
         )
 }
 

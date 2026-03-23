@@ -43,7 +43,7 @@ echo "==> Database recreated"
 export TENSORZERO_POSTGRES_URL="postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT/$DB_NAME"
 echo "==> Running migrations..."
 
-SQLX_OFFLINE=1 cargo run --package gateway --bin gateway -- --run-postgres-migrations
+cd crates && cargo run --package gateway --bin gateway -- --run-postgres-migrations && cd ..
 
 ./ui/fixtures/load_fixtures_postgres.sh
 

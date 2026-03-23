@@ -1,5 +1,6 @@
 # Rust
 
+- The Cargo workspace root is `crates/`. Run all `cargo` commands from that directory (e.g. `cd crates && cargo check`).
 - Use `cargo check` for quick verification, restrict further (e.g. `cargo check --package tensorzero-core`) if appropriate. For complex changes, you might want to run `cargo check --all-targets --all-features`. Test suite compilation is slow.
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
@@ -15,6 +16,7 @@
 ## Rust Testing
 
 - Run tests with `cargo nextest`.
+- Use `googletest` for new Rust tests.
 - Annotate new tests with `#[gtest]` (googletest crate).
 - Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
 - Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.

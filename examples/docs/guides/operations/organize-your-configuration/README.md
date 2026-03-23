@@ -9,7 +9,7 @@ The example shows how to:
 
 ## Running the Example
 
-1. Launch the TensorZero Gateway, TensorZero UI, and ClickHouse with `docker compose up`.
+1. Launch the TensorZero Gateway, TensorZero UI, and Postgres with `docker compose up`.
 2. Run an inference:
    ```bash
    curl -X POST "http://localhost:3000/openai/v1/chat/completions" \

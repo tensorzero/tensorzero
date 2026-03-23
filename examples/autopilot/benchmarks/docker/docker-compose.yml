@@ -1,0 +1,79 @@
+name: autopilot-benchmarks
+
+services:
+  eval:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        GATEWAY_TAG: ${GATEWAY_TAG:-latest}
+    env_file:
+      - path: ../.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      test-postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      - TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/tensorzero
+      - TENSORZERO_TEST_POSTGRES_URL=postgres://postgres:postgres@test-postgres:5432/tensorzero_test
+      - DAYTONA_API_KEY=${DAYTONA_API_KEY:-}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_AI_STUDIO_API_KEY:-}}
+    volumes:
+      - ../output:/app/output
+      - ../configs:/app/configs
+      - ../snapshots:/app/snapshots
+    networks:
+      - eval-net
+
+  postgres:
+    image: tensorzero/postgres:17
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tensorzero
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eval-net
+
+  test-postgres:
+    image: tensorzero/postgres:17
+    command: ["postgres", "-c", "cron.database_name=tensorzero_test"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tensorzero_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eval-net
+
+  valkey:
+    image: valkey/valkey:latest
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - eval-net
+
+networks:
+  eval-net:

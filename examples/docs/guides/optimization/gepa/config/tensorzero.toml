@@ -13,22 +13,6 @@ templates.system.path = "functions/extract_entities/initial_prompt/system_templa
 json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  METRICS                                   │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-# These metrics are not used by GEPA but can be used for other purposes.
-
-[metrics.exact_match]
-type = "boolean"
-level = "inference"
-optimize = "max"
-
-[metrics.jaccard_similarity]
-type = "float"
-level = "inference"
-optimize = "max"
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 EVALUATIONS                                │
 # └────────────────────────────────────────────────────────────────────────────┘
 

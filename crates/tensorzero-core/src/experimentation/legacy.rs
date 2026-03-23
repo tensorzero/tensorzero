@@ -159,6 +159,7 @@ mod tests {
                     Arc::new(VariantInfo {
                         inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
                         timeouts: TimeoutsConfig::default(),
+                        namespace: None,
                     }),
                 ),
                 (
@@ -166,6 +167,7 @@ mod tests {
                     Arc::new(VariantInfo {
                         inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
                         timeouts: TimeoutsConfig::default(),
+                        namespace: None,
                     }),
                 ),
                 (
@@ -173,6 +175,7 @@ mod tests {
                     Arc::new(VariantInfo {
                         inner: VariantConfig::ChatCompletion(ChatCompletionConfig::default()),
                         timeouts: TimeoutsConfig::default(),
+                        namespace: None,
                     }),
                 ),
             ]);

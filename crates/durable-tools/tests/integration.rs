@@ -16,7 +16,7 @@ use durable::WorkerOptions;
 use durable_tools::{
     ErasedSimpleTool, MockTensorZeroClient, NonControlToolError, SimpleTool, SimpleToolContext,
     TaskTool, TensorZeroClient, TensorZeroClientError, ToolContext, ToolExecutor, ToolMetadata,
-    ToolResult,
+    ToolRegistry, ToolResult,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ fn mock_client_with_response(response: InferenceResponse) -> MockTensorZeroClien
         let r = response.clone();
         Box::pin(async move { Ok(r) })
     });
-    mock.expect_action().returning(move |_, _| {
+    mock.expect_action().returning(move |_, _, _| {
         let r = response_clone.clone();
         Box::pin(async move { Ok(durable_tools::ActionResponse::Inference(r)) })
     });
@@ -395,7 +395,10 @@ async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> s
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"message": "hello"});
     // Unit type () deserializes from null, not {}
     let side_info = serde_json::json!(null);
@@ -414,7 +417,10 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
     // Missing required "message" field
     let llm_params = serde_json::json!({"wrong_field": "hello"});
     let side_info = serde_json::json!(null);
@@ -438,20 +444,15 @@ async fn tool_executor_registers_and_lists_tools(pool: PgPool) -> sqlx::Result<(
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
         .t0_client(t0_client)
+        .register_simple_tool_instance(EchoSimpleTool)
+        .unwrap()
+        .register_task_tool_instance(EchoTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
 
-    executor
-        .register_simple_tool_instance(EchoSimpleTool)
-        .await
-        .unwrap();
-    executor
-        .register_task_tool_instance(EchoTaskTool)
-        .await
-        .unwrap();
-
-    let definitions = executor.tool_definitions().await.unwrap();
+    let definitions = executor.tool_definitions().unwrap();
     assert_eq!(definitions.len(), 2);
 
     let names: Vec<&str> = definitions
@@ -476,6 +477,8 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(EchoTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -486,11 +489,6 @@ async fn tool_executor_spawns_task_tool(pool: PgPool) -> sqlx::Result<()> {
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(EchoTaskTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -521,6 +519,8 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(EchoTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -531,11 +531,6 @@ async fn spawn_tool_by_name_works(pool: PgPool) -> sqlx::Result<()> {
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(EchoTaskTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -712,6 +707,10 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_simple_tool_instance(KeyCapturingSimpleTool)
+        .unwrap()
+        .register_task_tool_instance(MultiCallTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -721,16 +720,6 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    // Register both tools
-    executor
-        .register_simple_tool_instance(KeyCapturingSimpleTool)
-        .await
-        .unwrap();
-    executor
-        .register_task_tool_instance(MultiCallTaskTool)
-        .await
-        .unwrap();
 
     // Spawn the task
     let episode_id = Uuid::now_v7();
@@ -790,7 +779,10 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"prompt": "Say hello"});
     let side_info = serde_json::json!(null);
 
@@ -809,7 +801,10 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
     let tool = InferenceSimpleTool;
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"prompt": "This will fail"});
     let side_info = serde_json::json!(null);
 
@@ -830,16 +825,13 @@ async fn task_tool_with_inference_can_be_registered(pool: PgPool) -> sqlx::Resul
         .pool(pool)
         .queue_name(format!("test_queue_{}", Uuid::now_v7()))
         .t0_client(t0_client)
+        .register_task_tool_instance(InferenceTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
 
-    executor
-        .register_task_tool_instance(InferenceTaskTool)
-        .await
-        .unwrap();
-
-    let definitions = executor.tool_definitions().await.unwrap();
+    let definitions = executor.tool_definitions().unwrap();
     let names: Vec<&str> = definitions
         .iter()
         .filter_map(|d| match d {
@@ -865,6 +857,8 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
         .pool(pool)
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(InferenceTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -875,11 +869,6 @@ async fn task_tool_with_inference_can_be_spawned(pool: PgPool) -> sqlx::Result<(
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(InferenceTaskTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let result = executor
@@ -970,6 +959,8 @@ async fn task_tool_inference_fails_on_empty_chat_response(pool: PgPool) -> sqlx:
         .pool(pool.clone())
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(InferenceTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -979,11 +970,6 @@ async fn task_tool_inference_fails_on_empty_chat_response(pool: PgPool) -> sqlx:
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(InferenceTaskTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let spawn_result = executor
@@ -1049,6 +1035,8 @@ async fn task_tool_inference_fails_on_empty_json_response(pool: PgPool) -> sqlx:
         .pool(pool.clone())
         .queue_name(&queue_name)
         .t0_client(t0_client)
+        .register_task_tool_instance(InferenceTaskTool)
+        .unwrap()
         .build()
         .await
         .expect("Failed to build executor");
@@ -1058,11 +1046,6 @@ async fn task_tool_inference_fails_on_empty_json_response(pool: PgPool) -> sqlx:
         .create_queue(None)
         .await
         .expect("Failed to create queue");
-
-    executor
-        .register_task_tool_instance(InferenceTaskTool)
-        .await
-        .unwrap();
 
     let episode_id = Uuid::now_v7();
     let spawn_result = executor

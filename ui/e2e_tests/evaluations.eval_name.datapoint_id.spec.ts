@@ -4,7 +4,7 @@ test("should show the evaluation result datapoint detail page", async ({
   page,
 }) => {
   await page.goto(
-    "/evaluations/entity_extraction/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24%2C0196368e-53a8-7e82-a88d-db7086926d81",
+    "/evaluations/results/01939a16-b258-71e1-a467-183001c1952c?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24%2C0196368e-53a8-7e82-a88d-db7086926d81",
   );
 
   // Verify breadcrumb shows "Results" for evaluation datapoint page
@@ -24,7 +24,7 @@ test("should be able to add float feedback from the evaluation datapoint result 
   page,
 }) => {
   await page.goto(
-    "/evaluations/entity_extraction/0193994e-5560-7610-a3a0-45fdd59338aa?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063%2C0196367b-c0bb-7f90-b651-f90eb9fba8f3",
+    "/evaluations/results/0193994e-5560-7610-a3a0-45fdd59338aa?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063%2C0196367b-c0bb-7f90-b651-f90eb9fba8f3",
   );
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
@@ -61,7 +61,7 @@ test("should be able to add bool feedback from the evaluation datapoint result p
   page,
 }) => {
   await page.goto(
-    "/evaluations/haiku/01945256-c5b0-7b40-8840-caf0ee0c2c49?evaluation_run_ids=0196367a-702c-75f3-b676-d6ffcc7370a1",
+    "/evaluations/results/01945256-c5b0-7b40-8840-caf0ee0c2c49?evaluation_run_ids=0196367a-702c-75f3-b676-d6ffcc7370a1",
   );
 
   // Wait for the page to load
@@ -98,7 +98,7 @@ test("should be able to add a datapoint from the evaluation page", async ({
   page,
 }) => {
   await page.goto(
-    "/evaluations/entity_extraction/0193994e-5560-7610-a3a0-45fdd59338aa?evaluation_run_ids=0196374c-2b06-7f50-b187-80c15cec5a1f",
+    "/evaluations/results/0193994e-5560-7610-a3a0-45fdd59338aa?evaluation_run_ids=0196374c-2b06-7f50-b187-80c15cec5a1f",
   );
 
   // Generate a dataset name

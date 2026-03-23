@@ -8,7 +8,7 @@ use std::sync::Arc;
 use durable::MIGRATOR;
 use durable_tools::{
     ActionInput, ActionResponse, CacheEnabledMode, DatapointResult, ErasedSimpleTool,
-    RunEvaluationResponse, SimpleToolContext,
+    RunEvaluationResponse, SimpleToolContext, ToolRegistry,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -35,6 +35,7 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
         num_errors: 5,
         stats,
         datapoint_results: None,
+        evaluation_infos: None,
     }
 }
 
@@ -73,7 +74,7 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_action()
-        .withf(move |snapshot_hash, input| {
+        .withf(move |snapshot_hash, input, _| {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
@@ -86,12 +87,15 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
                 && params.max_datapoints == Some(50)
                 && params.precision_targets.is_empty()
         })
-        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -143,7 +147,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let expected_session_id = session_id;
     mock_client
         .expect_action()
-        .withf(move |_snapshot_hash, input| {
+        .withf(move |_snapshot_hash, input, _| {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
@@ -160,12 +164,15 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
                 && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
                 && params.tags.get("tensorzero::autopilot") == Some(&"true".to_string())
         })
-        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -224,7 +231,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let expected_session_id = session_id;
     mock_client
         .expect_action()
-        .withf(move |_snapshot_hash, input| {
+        .withf(move |_snapshot_hash, input, _| {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
@@ -240,12 +247,15 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
                 && params.tags.get("tensorzero::autopilot::config_snapshot_hash") == Some(&"1234567".to_string())
                 && params.tags.get("tensorzero::autopilot") == Some(&"true".to_string())
         })
-        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -300,7 +310,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_action()
-        .withf(move |_snapshot_hash, input| {
+        .withf(move |_snapshot_hash, input, _| {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
@@ -314,12 +324,15 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
                 // Verify inference_cache is passed through correctly
                 && params.inference_cache == CacheEnabledMode::ReadOnly
         })
-        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -363,7 +376,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
 
     // Create mock client that returns an error
     let mut mock_client = MockTensorZeroClient::new();
-    mock_client.expect_action().returning(|_, _| {
+    mock_client.expect_action().returning(|_, _, _| {
         Err(durable_tools::TensorZeroClientError::Evaluation(
             "Evaluation 'nonexistent_evaluation' not found in config".to_string(),
         ))
@@ -372,7 +385,10 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool - should fail
     let result = tool
@@ -462,6 +478,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         num_errors: 1,
         stats,
         datapoint_results: Some(datapoint_results),
+        evaluation_infos: None,
     };
     let expected_response = mock_response.clone();
 
@@ -492,7 +509,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let mut mock_client = MockTensorZeroClient::new();
     mock_client
         .expect_action()
-        .withf(move |_snapshot_hash, input| {
+        .withf(move |_snapshot_hash, input, _| {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
@@ -502,12 +519,15 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
                 // Verify include_datapoint_results is passed through correctly
                 && params.include_datapoint_results
         })
-        .returning(move |_, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
 
     // Create the tool and context
     let tool = RunEvaluationTool;
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
-    let ctx = SimpleToolContext::new(&pool, &t0_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool

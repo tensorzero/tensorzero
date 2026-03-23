@@ -1,0 +1,97 @@
+# Guide: Multimodal Inference
+
+This directory contains the code for the **[Call LLMs with image & file inputs](https://www.tensorzero.com/docs/gateway/call-llms-with-image-and-file-inputs)** guide.
+
+## Running the Example
+
+1. Set the `OPENAI_API_KEY` environment variable:
+
+```bash
+export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
+```
+
+2. Launch the TensorZero Gateway, Postgres, and MinIO (a local S3-compatible object storage service):
+
+```bash
+docker compose up
+```
+
+> [!TIP]
+>
+> You can use any S3-compatible object storage service (e.g. AWS S3, GCP Storage, Cloudflare R2).
+> We use a local MinIO instance in this example for convenience.
+
+3. Run the example:
+
+<details>
+<summary><b>Python</b></summary>
+
+a. Install the Python dependencies. We recommend using [`uv`](https://github.com/astral-sh/uv):
+
+```bash
+uv sync
+```
+
+b. Run the example:
+
+```bash
+uv run openai_sdk.py
+```
+
+</details>
+
+<details>
+<summary><b>Node</b></summary>
+
+a. Install the Node dependencies:
+
+```bash
+pnpm install
+```
+
+b. Run the example:
+
+```bash
+pnpm tsx openai_sdk.ts
+```
+
+</details>
+
+<details>
+<summary><b>HTTP</b></summary>
+
+Run the following commands to make a multimodal inference request to the TensorZero Gateway.
+The first image is a remote image of Ferris the crab, and the second image is a one-pixel orange image encoded as a base64 string.
+
+```bash
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tensorzero::model_name::openai::gpt-4o-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Do the images share any common features?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png"
+            }
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII="
+            }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+</details>

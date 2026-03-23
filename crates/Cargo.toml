@@ -32,7 +32,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2026.3.1"
+version = "2026.3.3"
 rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -117,7 +117,7 @@ schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.14", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "43d73ea835f1e528462105250ce01822af09d7fc" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "2bfe26218458a48d1ab15f22a902536402284cf6" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }

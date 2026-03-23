@@ -33,7 +33,7 @@ from tensorzero.util import uuid7
 
 
 def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",
@@ -259,7 +259,7 @@ def test_sync_render_samples_nonexistent_function(
 ):
     """Test that render_samples throws if the function does not exist at all."""
     with pytest.raises(Exception) as excinfo:
-        embedded_sync_client.experimental_render_samples(
+        embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="non_existent_function",
@@ -294,7 +294,7 @@ def test_sync_render_samples_unspecified_function(
 ):
     """Test that render_samples throws if the function is not specified in the variants map."""
     with pytest.raises(Exception) as excinfo:
-        embedded_sync_client.experimental_render_samples(
+        embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="non_existent_function",
@@ -327,7 +327,7 @@ def test_sync_render_samples_unspecified_function(
 def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway):
     """Test that render_samples drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        embedded_sync_client.experimental_render_samples(
+        embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="basic_test",  # This function exists in the config
@@ -361,7 +361,7 @@ def test_sync_render_samples_missing_variable(
     embedded_sync_client: TensorZeroGateway,
 ):
     """Test that render_samples drops an example if a template variable is missing."""
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",  # Uses assistant_name in system prompt
@@ -397,7 +397,7 @@ def test_sync_render_samples_missing_variable(
 async def test_async_render_samples_success(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    rendered_samples = await embedded_async_client.experimental_render_samples(
+    rendered_samples = await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",
@@ -624,7 +624,7 @@ async def test_async_render_samples_nonexistent_function(
 ):
     """Test that render_samples throws if the function does not exist at all."""
     with pytest.raises(Exception) as excinfo:
-        await embedded_async_client.experimental_render_samples(
+        await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="non_existent_function",
@@ -660,7 +660,7 @@ async def test_async_render_samples_unspecified_function(
 ):
     """Test that render_samples throws if the function is not specified in the variants map."""
     with pytest.raises(Exception) as excinfo:
-        await embedded_async_client.experimental_render_samples(
+        await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="non_existent_function",
@@ -694,7 +694,7 @@ def test_sync_render_samples_skips_none_input(
     embedded_sync_client: TensorZeroGateway,
 ):
     """Test that render_samples skips inferences with None input (e.g. TTLed data)."""
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",
@@ -717,7 +717,7 @@ def test_sync_render_samples_with_none_output(
     embedded_sync_client: TensorZeroGateway,
 ):
     """Test that render_samples renders successfully when input is present but output is None."""
-    rendered_samples = embedded_sync_client.experimental_render_samples(
+    rendered_samples = embedded_sync_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",
@@ -751,7 +751,7 @@ async def test_async_render_samples_no_variant(
 ):
     """Test that render_samples drops an example if the variant is not found and logs a warning."""
     with pytest.raises(Exception) as excinfo:
-        await embedded_async_client.experimental_render_samples(
+        await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
             stored_samples=[
                 StoredInferenceChat(
                     function_name="basic_test",  # This function exists in the config
@@ -786,7 +786,7 @@ async def test_async_render_samples_missing_variable(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
     """Test that render_samples drops an example if a template variable is missing."""
-    rendered_samples = await embedded_async_client.experimental_render_samples(
+    rendered_samples = await embedded_async_client.experimental_render_samples(  # pyright: ignore[reportDeprecated]
         stored_samples=[
             StoredInferenceChat(
                 function_name="basic_test",  # Uses assistant_name in system prompt

@@ -14,10 +14,7 @@ use crate::{
     config::{Config, MetricConfig, UninitializedConfig},
     db::ConfigQueries,
     error::{Error, ErrorDetails},
-    evaluations::{
-        EvaluationConfig, get_top_level_evaluator_metric_name,
-        get_top_level_llm_judge_function_name,
-    },
+    evaluations::EvaluationConfig,
     function::FunctionConfig,
     tool::StaticToolConfig,
     utils::gateway::{AppState, AppStateData},
@@ -83,7 +80,6 @@ impl UiConfig {
             functions,
             metrics,
             tools,
-            evaluators,
             evaluations,
             gateway: _,
             clickhouse: _,
@@ -96,30 +92,22 @@ impl UiConfig {
         } = uninit_config;
 
         // Load functions (sync, no FS/network — file data embedded in ResolvedTomlPathData)
-        let loaded_functions: HashMap<String, Arc<FunctionConfig>> = functions
-            .into_iter()
-            .map(|(name, func)| func.load(&name, &metrics).map(|c| (name, Arc::new(c))))
-            .collect::<Result<_, _>>()?;
+        let mut all_functions = HashMap::new();
+        let mut all_metrics = metrics;
+        for (name, func) in functions {
+            let loaded = func.load(&name, &all_metrics)?;
+            for (fn_name, fn_config) in loaded.evaluator_functions {
+                all_functions.insert(fn_name, Arc::new(fn_config));
+            }
+            all_metrics.extend(loaded.evaluator_metrics);
+            all_functions.insert(name, Arc::new(loaded.function_config));
+        }
 
         // Load tools (sync, same reason)
         let loaded_tools: HashMap<String, Arc<StaticToolConfig>> = tools
             .into_iter()
             .map(|(name, tool)| tool.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<_, _>>()?;
-
-        // Load top-level evaluators — generates metrics (and optional functions for LLM judges)
-        let mut all_functions = loaded_functions;
-        let mut all_metrics = metrics;
-        for (name, evaluator_config) in evaluators {
-            let (_evaluator, function_config, metric_config) =
-                evaluator_config.load(None, &name)?;
-            let metric_name = get_top_level_evaluator_metric_name(&name);
-            all_metrics.insert(metric_name, metric_config);
-            if let Some(func) = function_config {
-                let function_name = get_top_level_llm_judge_function_name(&name);
-                all_functions.insert(function_name, Arc::new(func));
-            }
-        }
 
         // Load evaluations (sync, needs loaded functions)
         // Also collects generated evaluation functions and metrics
@@ -196,6 +184,7 @@ mod tests {
             description: Some("Test function".to_string()),
             experimentation: Default::default(),
             all_explicit_templates_names: Default::default(),
+            evaluators: HashMap::new(),
         });
 
         let metric_config = MetricConfig {
@@ -250,6 +239,7 @@ mod tests {
             description: Some("My function".to_string()),
             experimentation: Default::default(),
             all_explicit_templates_names: Default::default(),
+            evaluators: HashMap::new(),
         });
 
         // Create a metric config

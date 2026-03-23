@@ -13,4 +13,8 @@ export type MultipleChoiceQuestion = {
    * Set to true to allow the user to select multiple options instead of just one.
    */
   multi_select: boolean;
+  /**
+   * Set to true to show a free-text textarea below the options for additional context.
+   */
+  include_free_response?: boolean;
 };

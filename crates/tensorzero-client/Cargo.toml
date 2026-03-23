@@ -12,7 +12,9 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 async-trait = { workspace = true }
+evaluations = { path = "../evaluations" }
 reqwest = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 tokio-stream = { workspace = true }
@@ -26,6 +28,7 @@ mime = { workspace = true }
 tempfile = { workspace = true }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }
+reqwest-sse-stream = { workspace = true }
 
 [lints]
 workspace = true

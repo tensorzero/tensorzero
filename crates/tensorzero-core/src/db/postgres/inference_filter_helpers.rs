@@ -81,7 +81,7 @@ fn apply_float_metric_filter(
         MetricConfigLevel::Inference => "i.id",
         MetricConfigLevel::Episode => "i.episode_id",
     };
-    let operator = fm.comparison_operator.to_postgres_operator();
+    let operator = fm.comparison_operator.to_sql_operator();
 
     // Use EXISTS subquery to filter by metric value
     query_builder
@@ -173,7 +173,7 @@ fn apply_tag_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, tag: &TagF
 }
 
 fn apply_time_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, time: &TimeFilter) {
-    let operator = time.comparison_operator.to_postgres_operator();
+    let operator = time.comparison_operator.to_sql_operator();
 
     query_builder.push("i.created_at ");
     query_builder.push(operator);

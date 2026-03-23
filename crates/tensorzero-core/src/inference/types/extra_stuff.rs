@@ -152,6 +152,7 @@ mod tests {
             "variant1".to_string(),
             Arc::new(VariantInfo {
                 timeouts: Default::default(),
+                namespace: None,
                 inner: crate::variant::VariantConfig::ChatCompletion(Default::default()),
             }),
         );
@@ -159,6 +160,7 @@ mod tests {
             "variant2".to_string(),
             Arc::new(VariantInfo {
                 timeouts: Default::default(),
+                namespace: None,
                 inner: crate::variant::VariantConfig::ChatCompletion(Default::default()),
             }),
         );
@@ -171,6 +173,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: Default::default(),
+            evaluators: HashMap::new(),
         })
     }
 

@@ -195,6 +195,8 @@ impl SimpleTool for RunEvaluationTool {
             precision_targets: llm_params.precision_targets,
             include_datapoint_results: llm_params.include_datapoint_results,
             tags: side_info.to_tags(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         };
 
         // Since autopilot sessions always have a config snapshot hash set, we use the action
@@ -213,7 +215,11 @@ impl SimpleTool for RunEvaluationTool {
 
         let response = ctx
             .client()
-            .action(snapshot_hash, ActionInput::RunEvaluation(Box::new(params)))
+            .action(
+                snapshot_hash,
+                ActionInput::RunEvaluation(Box::new(params)),
+                ctx.heartbeater().clone(),
+            )
             .await
             .map_err(|e| AutopilotToolError::client_error("run_evaluation", e))?;
 

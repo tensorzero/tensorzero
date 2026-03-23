@@ -4,8 +4,6 @@ use itertools::izip;
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -14,6 +12,7 @@ use tokio::time::error::Elapsed;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config::namespace::Namespace;
 use crate::config::{
     PathWithContents, TimeoutsConfig, UninitializedVariantConfig, UninitializedVariantInfo,
 };
@@ -65,6 +64,9 @@ pub mod mixture_of_n;
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub namespace: Option<Namespace>,
 }
 
 impl VariantInfo {
@@ -76,6 +78,7 @@ impl VariantInfo {
         UninitializedVariantInfo {
             inner: self.inner.as_uninitialized(),
             timeouts: Some(self.timeouts.clone()),
+            namespace: self.namespace.clone(),
         }
     }
 }
@@ -124,21 +127,7 @@ pub struct ChainOfThoughtConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
-/// This type is used to determine how to enforce JSON mode for a given variant.
-/// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
-/// we support coercing tool calls into JSON mode.
-/// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum JsonMode {
-    Off,
-    On,
-    Strict,
-    #[serde(alias = "implicit_tool")] // Legacy name (stored in CH --> permanent alias)
-    Tool,
-}
+pub use tensorzero_types::inference_params::JsonMode;
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
@@ -1195,6 +1184,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1244,6 +1234,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let json_mode = JsonMode::On;
@@ -1419,6 +1410,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1536,6 +1528,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1747,6 +1740,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1911,6 +1905,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         // Create an input message
@@ -2080,6 +2075,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })));
 
         let request_messages = vec![RequestMessage {

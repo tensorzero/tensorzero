@@ -58,7 +58,7 @@ def test_sync_openai_rft(
         n_epochs=1,
         reasoning_effort="low",
     )
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=mixed_rendered_samples,
         optimization_config=optimization_config,
@@ -82,7 +82,7 @@ def test_sync_dicl_chat(
         "function_name": "basic_test",
         "append_to_existing_variants": True,
     }
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=chat_function_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -109,7 +109,7 @@ def test_sync_dicl_json(
         k=None,
         model=None,
     )
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=json_function_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -130,7 +130,7 @@ def test_sync_openai_sft(
         "type": "openai_sft",
         "model": "gpt-4o-mini",
     }
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -151,7 +151,7 @@ def test_sync_fireworks_sft(
         model="gpt-4o-mini",
         epochs=1,
     )
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -175,7 +175,7 @@ def test_sync_together_sft(
         "training_type": {"type": "Lora", "lora_r": 8, "lora_alpha": 16},
         "batch_size": "max",
     }
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -200,7 +200,7 @@ def test_sync_gepa_chat(
         initial_variants=["anthropic"],
     )
 
-    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
+    optimization_job_handle = embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=chat_function_rendered_samples,
         val_samples=chat_function_rendered_samples,
         optimization_config=optimization_config,
@@ -255,7 +255,7 @@ async def test_async_openai_rft(
         "n_epochs": 1,
         "reasoning_effort": "low",
     }
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=mixed_rendered_samples,
         optimization_config=optimization_config,
@@ -284,7 +284,7 @@ async def test_async_dicl_chat(
         model=None,
         append_to_existing_variants=True,
     )
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=chat_function_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -308,7 +308,7 @@ async def test_async_dicl_json(
         "variant_name": f"test_dicl_json_{uuid7()}",
         "function_name": "json_success",
     }
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=json_function_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -327,7 +327,7 @@ async def test_async_openai_sft(
     mixed_rendered_samples: List[RenderedSample],
 ):
     optimization_config = OpenAISFTConfig(model="gpt-4o-mini")
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -349,7 +349,7 @@ async def test_async_fireworks_sft(
         "model": "gpt-4o-mini",
         "epochs": 1,
     }
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -373,7 +373,7 @@ async def test_async_together_sft(
         training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
         batch_size="max",
     )
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=mixed_rendered_samples,
         val_samples=None,
         optimization_config=optimization_config,
@@ -399,7 +399,7 @@ async def test_async_gepa_json(
         initial_variants=["anthropic", "openai"],
     )
 
-    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
+    optimization_job_handle = await embedded_async_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
         train_samples=json_function_rendered_samples,
         val_samples=json_function_rendered_samples,
         optimization_config=optimization_config,
@@ -422,7 +422,7 @@ def test_invalid_config_missing_type(
         "api_base": "http://localhost:3030/openai/",
     }
     with pytest.raises(Exception) as exc_info:
-        embedded_sync_client.experimental_launch_optimization(
+        embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
             train_samples=mixed_rendered_samples,
             val_samples=None,
             optimization_config=optimization_config,  # type: ignore
@@ -442,7 +442,7 @@ def test_invalid_config_wrong_type(
         "model": "gpt-4o-mini",
     }
     with pytest.raises(Exception) as exc_info:
-        embedded_sync_client.experimental_launch_optimization(
+        embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
             train_samples=mixed_rendered_samples,
             val_samples=None,
             optimization_config=optimization_config,  # type: ignore
@@ -461,7 +461,7 @@ def test_invalid_config_missing_required_field(
         # Missing required 'model' field
     }
     with pytest.raises(Exception) as exc_info:
-        embedded_sync_client.experimental_launch_optimization(
+        embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
             train_samples=mixed_rendered_samples,
             val_samples=None,
             optimization_config=optimization_config,  # type: ignore
@@ -476,7 +476,7 @@ def test_invalid_config_wrong_object_type(
 ):
     """Test that passing a completely wrong type produces a helpful error message."""
     with pytest.raises(Exception) as exc_info:
-        embedded_sync_client.experimental_launch_optimization(
+        embedded_sync_client.experimental_launch_optimization(  # pyright: ignore[reportDeprecated]
             train_samples=mixed_rendered_samples,
             val_samples=None,
             optimization_config="not_a_valid_config",  # type: ignore

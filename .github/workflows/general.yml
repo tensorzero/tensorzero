@@ -25,7 +25,8 @@ jobs:
       pull-requests: read
     runs-on: ubuntu-latest
     outputs:
-      clickhouse-tests: ${{ steps.filter.outputs.clickhouse-tests || 'true' }}
+      clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
+      clickhouse-tests-pr: ${{ steps.filter.outputs.clickhouse-tests-pr || 'true' }}
       client-tests: ${{ steps.filter.outputs.client-tests || 'true' }}
       code: ${{ steps.filter.outputs.code || 'true' }}
       docs: ${{ steps.filter.outputs.docs || 'true' }}
@@ -39,13 +40,10 @@ jobs:
         with:
           predicate-quantifier: "every"
           filters: |
-            clickhouse-tests:
-              - '**'
-              - '!**/README.md'
-              - '!docs/**'
-              - '!examples/**'
-              - '!recipes/**'
-              - '!ui/**'
+            clickhouse-tests-merge-queue:
+              - 'crates/**'
+            clickhouse-tests-pr:
+              - 'crates/tensorzero-core/src/db/**'
             client-tests:
               - '**'
               - '!**/README.md'
@@ -135,8 +133,9 @@ jobs:
 
       - name: Pull and retag `gateway` and `ui` containers
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:latest
 
@@ -805,18 +804,62 @@ jobs:
         working-directory: crates
         run: cargo fmt --all --check
 
+      - name: "Node.js: Install openai-node dependencies"
+        working-directory: clients/openai-node
+        run: pnpm install --frozen-lockfile
+
       - name: "Node.js: Run oxfmt"
-        run: pnpm --filter=openai-node run format
+        working-directory: clients/openai-node
+        run: pnpm run format
 
       - name: "Node.js: OpenAI Client: typecheck"
-        run: pnpm --filter=openai-node run typecheck
+        working-directory: clients/openai-node
+        run: pnpm run typecheck
 
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
-        run: pnpm --filter=openai-node run lint
+        run: pnpm run lint
 
       - name: Lint Helm charts
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
+
+      - name: Install kubeconform
+        run: |
+          curl -sSLo kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          rm kubeconform.tar.gz
+
+      - name: Validate Helm templates with kubeconform (default values)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Validate Helm templates with kubeconform (ingress + persistence + UI)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            --set gateway.ingress.enabled=true \
+            --set persistence.enabled=true \
+            --set ui.deploy=true \
+            --set ui.ingress.enabled=true \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Validate Helm templates with kubeconform (minimal - no UI, no ingress)
+        run: |
+          helm template test-release examples/production-deployment-k8s-helm/ \
+            --set gateway.ingress.enabled=false \
+            --set ui.deploy=false \
+            --set persistence.enabled=false \
+            | kubeconform -strict -summary -kubernetes-version 1.30.0 \
+              -ignore-missing-schemas
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v0.7.2
+
+      - name: Run Helm unit tests
+        run: helm unittest examples/production-deployment-k8s-helm/
 
   # This job is intentionally NOT included in check-all-general-jobs-passed
   # It runs as an optional check that shows up in the PR but doesn't block merging
@@ -846,7 +889,14 @@ jobs:
         build-mock-provider-api-container,
         build-fixtures-container,
       ]
-    if: ${{ needs.detect-changes.outputs.clickhouse-tests == 'true' && (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: >-
+      ${{
+        (
+          (github.event_name == 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-merge-queue == 'true') ||
+          (github.event_name != 'merge_group' && needs.detect-changes.outputs.clickhouse-tests-pr == 'true')
+        ) &&
+        (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
+      }}
     permissions:
       contents: read
       actions: read
@@ -913,8 +963,9 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
@@ -1000,9 +1051,10 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
@@ -1117,8 +1169,9 @@ jobs:
 
       - name: Download container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
@@ -1160,7 +1213,7 @@ jobs:
 
   build-gateway-e2e-container:
     needs: [detect-changes]
-    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    if: ${{ github.event_name == 'merge_group' || (needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))) }}
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1208,7 +1261,7 @@ jobs:
 
   build-ui-container:
     needs: [detect-changes]
-    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    if: ${{ github.event_name == 'merge_group' || (needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))) }}
     uses: ./.github/workflows/build-ui-container.yml
     permissions:
       # Permission to checkout the repository
@@ -1304,7 +1357,8 @@ jobs:
 
       - name: Pull and retag gateway container
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
 
       - name: Launch ClickHouse container for E2E tests
@@ -1313,24 +1367,24 @@ jobs:
 
       - name: Set up .env file for production deployment tests
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> ci/check-production-deployment-docker-compose/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> ci/check-production-deployment-docker-compose/.env
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
+        run: ci/check-production-deployment-docker-compose/run.sh
 
       - name: Print Docker compose logs
         if: always()
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml logs -t
 
       - name: Take down docker compose for production deployment tests
         run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f ci/check-production-deployment-docker-compose/docker-compose.yml down
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml down
 
   live-tests:
@@ -1350,6 +1404,21 @@ jobs:
     uses: ./.github/workflows/live-tests.yml
     secrets: inherit
 
+  inference-cache-tests:
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    needs:
+      [
+        detect-changes,
+        build-gateway-container,
+        build-live-tests-container,
+        build-provider-proxy-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/inference-cache-tests.yml
+    secrets: inherit
+
   client-tests:
     if: ${{ needs.detect-changes.outputs.client-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     needs:
@@ -1367,11 +1436,11 @@ jobs:
     uses: ./.github/workflows/client-tests.yml
     secrets: inherit
 
-  minikube:
+  k3d:
     needs: [build-gateway-container, build-ui-container]
     permissions:
       contents: read
-    uses: ./.github/workflows/minikube.yml
+    uses: ./.github/workflows/k3d.yml
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1387,28 +1456,12 @@ jobs:
   autopilot-e2e:
     permissions:
       contents: read
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [build-gateway-e2e-container, publish-dev-docker-hub-images]
+    if: needs.detect-changes.outputs.code == 'true' && github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [detect-changes, build-gateway-e2e-container, build-ui-container]
     uses: ./.github/workflows/dispatch-autopilot-e2e.yml
     secrets:
       AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
       AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
-
-  publish-dev-docker-hub-images:
-    needs: [detect-changes]
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group' && needs.detect-changes.outputs.code == 'true'
-    permissions:
-      contents: read
-      actions: read
-      attestations: write
-      id-token: write
-      packages: write
-    uses: ./.github/workflows/docker-hub-publish.yml
-    with:
-      is_dev: true
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   check-docs-broken-links:
     needs: [detect-changes]
@@ -1438,9 +1491,10 @@ jobs:
           done
 
       - name: Install dependencies
+        working-directory: docs
         run: |
           for attempt in 1 2 3; do
-            if pnpm install --frozen-lockfile --filter tensorzero-docs; then
+            if pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1455,8 +1509,15 @@ jobs:
         run: pnpm exec mint broken-links --check-anchors
 
   # See 'ci/README.md' at the repository root for more details.
+  # This job queries the GitHub API for all jobs in this workflow run and asserts
+  # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
+  # lists defined in ci/check-all-general-jobs-passed.sh.
+  # The `needs` list below is for scheduling only (so this job waits for others
+  # to finish). The actual pass/fail logic is in the script.
   check-all-general-jobs-passed:
-    permissions: {}
+    permissions:
+      actions: read
+      contents: read
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -1480,13 +1541,13 @@ jobs:
         clickhouse-tests,
         client-tests,
         endpoint-tests,
+        inference-cache-tests,
         lint-rust,
         live-tests,
-        minikube,
+        k3d,
         mock-optimization-tests,
         mocked-batch-tests,
         postgres-tests,
-        publish-dev-docker-hub-images,
         rust-build,
         rust-test,
         ui-tests,
@@ -1497,11 +1558,11 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - name: Print all job results
-        run: |
-          echo "'needs': ${{ toJson(needs) }}"
-          echo "github.event_name: ${{ github.event_name }}"
-      # Jobs may be intentionally skipped by the detect-changes path filter (e.g. docs-only or code-only changes).
-      # We only fail on actual failures or cancellations.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          sparse-checkout: ci/check-all-general-jobs-passed.sh
+          sparse-checkout-cone-mode: false
+      - name: Check all jobs passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/check-all-general-jobs-passed.sh

@@ -120,6 +120,8 @@ impl TensorZeroApiKey {
 pub enum TensorZeroAuthError {
     #[error("Invalid format for TensorZero API key: {0}")]
     InvalidKeyFormat(&'static str),
+    #[error("Invalid `expires_at` value: {0}")]
+    InvalidExpiresAt(String),
     #[error("Database error: {0}")]
     Sqlx(Arc<sqlx::Error>),
     #[error("Migration error: {message}")]
