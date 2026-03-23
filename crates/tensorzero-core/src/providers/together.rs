@@ -5,7 +5,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{ContentBlock, RequestMessage, Role};
-use crate::providers::openai::OpenAIMessagesConfig;
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
@@ -465,6 +465,7 @@ impl<'a> TogetherRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -2242,6 +2243,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2278,6 +2280,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2329,6 +2332,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2360,6 +2364,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2390,6 +2395,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let result = tensorzero_to_together_assistant_message(Cow::Owned(content), config).await;
         assert!(result.is_err(), "should error on unknown reasoning_format");

@@ -32,7 +32,6 @@ use crate::inference::types::{
 use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
-use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
     OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
@@ -40,6 +39,7 @@ use crate::providers::openai::{
     openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
     tensorzero_to_openai_messages,
 };
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
 use tensorzero_types_providers::deepseek::{
@@ -449,6 +449,7 @@ impl<'a> DeepSeekRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -816,6 +817,7 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
                     content: combined_content,
                     tool_calls: combined_tool_calls,
                     reasoning_content: combined_reasoning_content,
+                    reasoning: None,
                 });
                 result.remove(i + 1);
             }
@@ -1116,6 +1118,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -1132,6 +1135,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -1184,6 +1188,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -1231,6 +1236,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -1263,6 +1269,7 @@ mod tests {
             content: content.map(|c| vec![OpenAIContentBlock::Text { text: c.into() }]),
             tool_calls,
             reasoning_content: None,
+            reasoning: None,
         })
     }
     fn tool_message<'a>(content: &'a str, tool_call_id: &'a str) -> OpenAIRequestMessage<'a> {
@@ -1375,6 +1382,7 @@ mod tests {
                 content: Some(content),
                 tool_calls: Some(vec![tool_call1.clone(), tool_call2.clone()]),
                 reasoning_content: None,
+                reasoning: None,
             },
         )];
         assert_eq!(output, expected);
@@ -1435,6 +1443,7 @@ mod tests {
                 ]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
         assert_eq!(output, expected);
@@ -1455,6 +1464,7 @@ mod tests {
                 ]),
                 tool_calls: Some(vec![tool_call1.clone()]),
                 reasoning_content: None,
+                reasoning: None,
             },
         )];
         assert_eq!(output, expected);

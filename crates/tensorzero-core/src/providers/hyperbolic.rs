@@ -18,7 +18,7 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::OpenAIMessagesConfig;
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
@@ -413,6 +413,7 @@ impl<'a> HyperbolicRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
