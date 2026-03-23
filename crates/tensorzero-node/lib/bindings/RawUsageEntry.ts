@@ -5,7 +5,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * A single entry in the raw usage array, representing usage data from one model inference.
  * This preserves the original provider-specific usage object for fields that TensorZero
- * normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
+ * normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `provider_cache_read_input_tokens`).
  */
 export type RawUsageEntry = {
   model_inference_id: string;
