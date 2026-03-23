@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Popover,
   PopoverContent,
@@ -13,6 +13,10 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import { ComboboxMenuItems } from "~/components/ui/combobox/ComboboxMenuItems";
+import {
+  DEFAULT_VIRTUALIZE_THRESHOLD,
+  useVirtualizedNavigation,
+} from "~/components/ui/use-virtualized-navigation";
 import clsx from "clsx";
 
 export interface ButtonSelectRenderTriggerProps {
@@ -64,6 +68,12 @@ export interface ButtonSelectProps {
   align?: "start" | "center" | "end";
   /** Additional className for the popover menu */
   menuClassName?: string;
+  /**
+   * Number of items at which virtualization is enabled.
+   * Set to 0 to always virtualize, or Infinity to never virtualize.
+   * Default: 100
+   */
+  virtualizeThreshold?: number;
 }
 
 export function ButtonSelect({
@@ -88,6 +98,7 @@ export function ButtonSelect({
   creatable = false,
   align = "start",
   menuClassName,
+  virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
 }: ButtonSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -99,6 +110,8 @@ export function ButtonSelect({
     const search = searchValue.toLowerCase().trim();
     return items.filter((item) => item.toLowerCase().includes(search));
   }, [items, searchValue, searchable]);
+
+  const shouldVirtualize = filteredItems.length >= virtualizeThreshold;
 
   const showCreateOption =
     searchable &&
@@ -118,6 +131,34 @@ export function ButtonSelect({
     },
     [onSelect],
   );
+
+  // Virtualized navigation hook
+  const {
+    highlightedIndex,
+    handleKeyDown: virtualizedHandleKeyDown,
+    resetHighlight,
+  } = useVirtualizedNavigation({
+    itemCount: filteredItems.length,
+    enabled: shouldVirtualize,
+    onSelect: (index) => {
+      const item = filteredItems[index];
+      if (item) {
+        handleSelectItem(item, false);
+      }
+    },
+    onClose: () => setOpen(false),
+    hasCreateOption: showCreateOption,
+    onSelectCreate: () => {
+      handleSelectItem(searchValue.trim(), true);
+    },
+  });
+
+  // Reset highlight when dropdown opens or search changes
+  useEffect(() => {
+    if (open) {
+      resetHighlight();
+    }
+  }, [open, searchValue, resetHighlight]);
 
   const triggerContent =
     typeof trigger === "function" ? trigger({ open }) : trigger;
@@ -149,7 +190,10 @@ export function ButtonSelect({
         )}
         align={align}
       >
-        <Command shouldFilter={false}>
+        <Command
+          shouldFilter={false}
+          onKeyDown={shouldVirtualize ? virtualizedHandleKeyDown : undefined}
+        >
           {searchable && (
             <CommandInput
               placeholder={placeholder}
@@ -185,6 +229,8 @@ export function ButtonSelect({
                 getPrefix={getPrefix}
                 getSuffix={getSuffix}
                 getItemDataAttributes={getItemDataAttributes}
+                virtualize={shouldVirtualize}
+                highlightedIndex={highlightedIndex}
               />
             </CommandList>
           )}
