@@ -310,14 +310,16 @@ impl GEPAConfig {
             (Some(name), None) => Ok(GepaEvaluationSource::Named {
                 evaluation_name: name,
             }),
-            (None, Some(names)) if !names.is_empty() => Ok(GepaEvaluationSource::EvaluatorNames {
-                evaluator_names: names,
-            }),
-            (Some(_), Some(_)) => {
-                Err("Provide exactly one of `evaluation_name` or `evaluator_names` in GEPA config")
+            (None, Some(names)) => {
+                if names.is_empty() {
+                    Err("`evaluator_names` must not be empty in GEPA config")
+                } else {
+                    Ok(GepaEvaluationSource::EvaluatorNames {
+                        evaluator_names: names,
+                    })
+                }
             }
-            (None, Some(_)) => Err("`evaluator_names` must not be empty in GEPA config"),
-            (None, None) => {
+            _ => {
                 Err("Provide exactly one of `evaluation_name` or `evaluator_names` in GEPA config")
             }
         }

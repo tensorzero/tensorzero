@@ -209,6 +209,30 @@ pub fn create_gepa_config_chat() -> GEPAConfig {
     }
 }
 
+/// Helper function to create a GEPA config using function-scoped evaluator_names
+pub fn create_gepa_config_chat_evaluator_names() -> GEPAConfig {
+    GEPAConfig {
+        function_name: "basic_test".to_string(),
+        evaluation_name: None,
+        evaluator_names: Some(vec![
+            "validate_nose_growth".to_string(),
+            "answer_aligns_with_persona".to_string(),
+        ]),
+        initial_variants: Some(vec!["openai".to_string()]),
+        variant_prefix: Some("gepa_test_evalnames".to_string()),
+        batch_size: 5,
+        max_iterations: 1,
+        max_concurrency: 5,
+        analysis_model: "openai::gpt-4.1-nano".to_string(),
+        mutation_model: "openai::gpt-4.1-nano".to_string(),
+        seed: None,
+        timeout: 300,
+        include_inference_for_mutation: true,
+        retries: RetryConfig::default(),
+        max_tokens: Some(16_384),
+    }
+}
+
 /// Helper function to create a GEPA config for JSON function tests
 pub fn create_gepa_config_json() -> GEPAConfig {
     GEPAConfig {

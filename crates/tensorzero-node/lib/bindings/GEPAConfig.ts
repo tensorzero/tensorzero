@@ -19,7 +19,7 @@ export type GEPAConfig = {
    */
   evaluation_name?: string;
   /**
-   * Names of function-scoped evaluators used to score candidate variants.
+   * Names of evaluators defined on `function_name`, used to score candidate variants.
    */
   evaluator_names?: Array<string>;
   /**

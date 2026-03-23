@@ -1010,3 +1010,30 @@ model = "dummy::llm_judge::true"
 active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
+
+# Function-scoped evaluators (same as test_gepa_pinocchio_chat evaluation)
+[functions.basic_test.evaluators.validate_nose_growth]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+description = "Validates that the nose growth pattern aligns correctly with the assistant's persona. Returns True if Pinocchio includes 'nose grows' OR if non-Pinocchio assistants do NOT include 'nose grows', False otherwise."
+
+[functions.basic_test.evaluators.validate_nose_growth.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/validate_nose_growth/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.0
+
+[functions.basic_test.evaluators.answer_aligns_with_persona]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+description = "Validates whether the answer exhibits correct factual accuracy for the given assistant persona. Returns TRUE if Pinocchio provides a factually incorrect answer (lie) OR if Dr. Mehta (or other assistants) provide factually correct answers (truth). Returns FALSE if the persona's expected behavior is violated."
+
+[functions.basic_test.evaluators.answer_aligns_with_persona.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4.1-mini"
+system_instructions = "../../../fixtures/config/evaluations/test_gepa_pinocchio/answer_aligns_with_persona/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.0
