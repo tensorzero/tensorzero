@@ -1660,8 +1660,12 @@ pub struct OpenAIAssistantRequestMessage<'a> {
     pub content: Option<Vec<OpenAIContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    /// Used by OpenAI and most providers (the original field name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<Cow<'a, str>>,
+    /// Used by vLLM >=0.8 (the renamed field).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1693,6 +1697,7 @@ impl OpenAIRequestMessage<'_> {
                 content,
                 tool_calls,
                 reasoning_content: _,
+                reasoning: _,
             }) => content.is_none() && tool_calls.is_none(),
             OpenAIRequestMessage::Tool(_) => false,
         }
@@ -1758,6 +1763,18 @@ impl<'a> SystemOrDeveloper<'a> {
     }
 }
 
+/// Controls which field name to use for reasoning content in request messages.
+///
+/// vLLM >=0.8 renamed `reasoning_content` to `reasoning`. This enum lets each
+/// provider choose which field name to serialize when sending assistant messages
+/// back in multi-turn conversations.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub enum ReasoningFieldName {
+    #[default]
+    ReasoningContent,
+    Reasoning,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct OpenAIMessagesConfig<'a> {
     pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
@@ -1765,6 +1782,7 @@ pub struct OpenAIMessagesConfig<'a> {
     pub fetch_and_encode_input_files_before_inference: bool,
     #[doc(hidden)]
     pub content_type_overrides: Option<&'a HashMap<String, ContentBlockType>>,
+    pub reasoning_field_name: ReasoningFieldName,
 }
 
 fn supports_detail_parameter(provider_type: &str) -> bool {
@@ -2309,10 +2327,16 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
         None
     };
 
+    let (reasoning_content_field, reasoning_field) = match messages_config.reasoning_field_name {
+        ReasoningFieldName::ReasoningContent => (reasoning_content, None),
+        ReasoningFieldName::Reasoning => (None, reasoning_content),
+    };
+
     let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
         content,
         tool_calls,
-        reasoning_content,
+        reasoning_content: reasoning_content_field,
+        reasoning: reasoning_field,
     });
 
     Ok(message)
@@ -2638,6 +2662,7 @@ impl<'a> OpenAIRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 content_type_overrides,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -4169,6 +4194,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4198,6 +4224,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4236,6 +4263,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4557,6 +4585,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4581,6 +4610,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
         let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
@@ -4608,6 +4638,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::Developer(
@@ -4654,6 +4685,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
@@ -4678,6 +4710,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             }),
         ];
 
@@ -4817,6 +4850,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4842,6 +4876,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4874,6 +4909,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -4901,6 +4937,7 @@ mod tests {
             content_type_overrides: None,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let dummy_storage_path = StoragePath {
             kind: StorageKind::Disabled,
@@ -4960,6 +4997,7 @@ mod tests {
             content_type_overrides: None,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let dummy_storage_path = StoragePath {
             kind: StorageKind::Disabled,
@@ -5015,6 +5053,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5055,6 +5094,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5092,6 +5132,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5129,6 +5170,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5167,6 +5209,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5378,6 +5421,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -5422,6 +5466,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -5467,6 +5512,7 @@ mod tests {
                 content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -5487,6 +5533,7 @@ mod tests {
                 content_type_overrides: Some(&overrides),
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await
@@ -5540,6 +5587,7 @@ mod tests {
                     content_type_overrides: None,
                     json_mode: None,
                     provider_type: PROVIDER_TYPE,
+                    reasoning_field_name: ReasoningFieldName::ReasoningContent,
                 },
             )
             .await
@@ -6158,6 +6206,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6203,6 +6252,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6254,6 +6304,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6296,6 +6347,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6341,6 +6393,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6368,6 +6421,7 @@ mod tests {
             }]),
             tool_calls: None,
             reasoning_content: Some(Cow::Borrowed("I'm thinking...")),
+            reasoning: None,
         });
 
         let serialized =
@@ -6393,6 +6447,7 @@ mod tests {
                 }]),
                 tool_calls: None,
                 reasoning_content: None,
+                reasoning: None,
             });
 
         let serialized =
@@ -6426,6 +6481,7 @@ mod tests {
             provider_type: "deepseek",
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result =
@@ -6471,6 +6527,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = tensorzero_to_openai_messages(&message, messages_config)
@@ -6580,6 +6637,68 @@ mod tests {
         // This combination should NOT trigger the Failed path — output is still usable.
     }
 
+    #[tokio::test]
+    async fn test_tensorzero_to_openai_messages_assistant_with_thought_reasoning_field() {
+        // When reasoning_field_name is Reasoning (vLLM >=0.8), the serialized request
+        // should use `reasoning` instead of `reasoning_content`.
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Text(Text {
+                    text: "Here's the answer.".to_string(),
+                }),
+                ContentBlock::Thought(Thought {
+                    text: Some("Let me reason about this...".to_string()),
+                    signature: None,
+                    summary: None,
+                    provider_type: Some("vllm".to_string()),
+                    extra_data: None,
+                }),
+            ],
+        };
+
+        let messages_config = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: "vllm",
+            fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::Reasoning,
+        };
+
+        let result = tensorzero_to_openai_messages(&message, messages_config)
+            .await
+            .expect("failed to convert messages");
+
+        assert_eq!(result.len(), 1, "should produce one assistant message");
+
+        match &result[0] {
+            OpenAIRequestMessage::Assistant(msg) => {
+                assert!(msg.content.is_some(), "content should be present");
+                assert_eq!(
+                    msg.reasoning.as_deref(),
+                    Some("Let me reason about this..."),
+                    "reasoning should be extracted from Thought block"
+                );
+                assert!(
+                    msg.reasoning_content.is_none(),
+                    "reasoning_content should not be set when using Reasoning field name"
+                );
+
+                // Verify the JSON serialization uses `reasoning` not `reasoning_content`
+                let serialized = serde_json::to_string(&result[0]).expect("failed to serialize");
+                assert!(
+                    serialized.contains("\"reasoning\""),
+                    "serialized request should include reasoning field"
+                );
+                assert!(
+                    !serialized.contains("\"reasoning_content\""),
+                    "serialized request should NOT include reasoning_content field"
+                );
+            }
+            _ => panic!("expected assistant message"),
+        }
+    }
+
     #[gtest]
     fn test_openai_response_message_reasoning_field() {
         // vLLM >=0.8 uses `reasoning` instead of `reasoning_content`.
@@ -6671,6 +6790,5 @@ mod tests {
         let delta: OpenAIDelta =
             serde_json::from_value(json_with_both_null).expect("should deserialize with both null");
         expect_that!(delta.reasoning_content, none());
-    }
     }
 }

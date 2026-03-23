@@ -33,7 +33,8 @@ use crate::{
     },
     providers::openai::{
         OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
-        SystemOrDeveloper, prepare_file_message, prepare_system_or_developer_message_helper,
+        ReasoningFieldName, SystemOrDeveloper, prepare_file_message,
+        prepare_system_or_developer_message_helper,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -577,6 +578,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
                     fetch_and_encode_input_files_before_inference: request
                         .fetch_and_encode_input_files_before_inference,
                     content_type_overrides: None,
+                    reasoning_field_name: ReasoningFieldName::ReasoningContent,
                 },
             )
             .await?,

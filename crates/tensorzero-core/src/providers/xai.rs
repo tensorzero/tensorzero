@@ -37,8 +37,9 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::{
-    OpenAIMessagesConfig, OpenAIResponseChoice, StreamOptions, get_chat_url, handle_openai_error,
-    openai_response_tool_call_to_tensorzero_tool_call, prepare_file_message, stream_openai,
+    OpenAIMessagesConfig, OpenAIResponseChoice, ReasoningFieldName, StreamOptions, get_chat_url,
+    handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call, prepare_file_message,
+    stream_openai,
 };
 use uuid::Uuid;
 
@@ -685,6 +686,7 @@ impl<'a> XAIRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -1172,6 +1174,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1210,6 +1213,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1249,6 +1253,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1287,6 +1292,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1378,6 +1384,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = prepare_xai_messages(system, &messages, messages_config)
@@ -1421,6 +1428,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
 
         let result = prepare_xai_messages(system, &messages, messages_config)

@@ -2,7 +2,7 @@ use std::{borrow::Cow, time::Duration};
 
 use crate::{
     http::{TensorZeroEventSource, TensorzeroHttpClient},
-    providers::openai::OpenAIMessagesConfig,
+    providers::openai::{OpenAIMessagesConfig, ReasoningFieldName},
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -778,6 +778,7 @@ impl<'a> MistralRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
             prompt_mode.is_some(),
         )
