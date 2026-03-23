@@ -7,7 +7,7 @@ response = client.chat.completions.create(
     messages=[
         {
             "role": "user",
-            "content": "Write a haiku about TensorZero.",
+            "content": "Share a fun fact about TensorZero.",
         }
     ],
 )
