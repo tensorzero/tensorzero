@@ -17,6 +17,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::Usage;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
@@ -35,15 +36,15 @@ use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolC
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::providers::openai::{
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
-    SystemOrDeveloper, get_chat_url, handle_openai_error,
-    openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
-    tensorzero_to_openai_messages,
+    OpenAISystemRequestMessage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
 use tensorzero_types_providers::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
+    DeepSeekUsage,
 };
 use uuid::Uuid;
 
@@ -554,7 +555,7 @@ fn deepseek_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(OpenAIUsage::into);
+    let usage = chunk.usage.map(DeepSeekUsage::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -825,6 +826,18 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
     result
 }
 
+impl From<DeepSeekUsage> for Usage {
+    fn from(usage: DeepSeekUsage) -> Self {
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
+            provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
+            provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
+            cost: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -841,7 +854,6 @@ mod tests {
     };
     use crate::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
@@ -1012,9 +1024,11 @@ mod tests {
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
             }],
-            usage: OpenAIUsage {
+            usage: DeepSeekUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_cache_hit_tokens: Some(5),
+                prompt_cache_miss_tokens: Some(5),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1075,6 +1089,16 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
+        assert_eq!(
+            inference_response.usage.provider_cache_read_input_tokens,
+            Some(5),
+            "DeepSeek prompt_cache_hit_tokens should map to provider_cache_read_input_tokens"
+        );
+        assert_eq!(
+            inference_response.usage.provider_cache_write_input_tokens,
+            Some(5),
+            "DeepSeek prompt_cache_miss_tokens should map to provider_cache_write_input_tokens"
+        );
         assert_eq!(
             inference_response.provider_latency,
             Latency::NonStreaming {

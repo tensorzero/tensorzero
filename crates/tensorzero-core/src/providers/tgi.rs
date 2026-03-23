@@ -694,6 +694,7 @@ impl From<TGIUsage> for Usage {
         Usage {
             input_tokens: Some(usage.prompt_tokens),
             output_tokens: Some(usage.completion_tokens),
+            // TGI does not report cache token counts.
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
             cost: None,

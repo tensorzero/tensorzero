@@ -1011,6 +1011,9 @@ struct GeminiUsageMetadata {
     candidates_token_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thoughts_token_count: Option<u32>,
+    /// Gemini reports cached content tokens as `cachedContentTokenCount`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cached_content_token_count: Option<u32>,
 }
 
 impl From<GeminiUsageMetadata> for Usage {
@@ -1028,7 +1031,7 @@ impl From<GeminiUsageMetadata> for Usage {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens,
-            provider_cache_read_input_tokens: None,
+            provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
             provider_cache_write_input_tokens: None,
             cost: None,
         }
@@ -1304,6 +1307,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -1723,6 +1727,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1779,9 +1784,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -1830,6 +1835,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1897,9 +1903,9 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -1969,6 +1975,7 @@ mod tests {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2028,9 +2035,9 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -2282,6 +2289,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2349,6 +2357,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2420,6 +2429,7 @@ mod tests {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2481,6 +2491,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2539,6 +2550,7 @@ mod tests {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2588,6 +2600,7 @@ mod tests {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2669,6 +2682,7 @@ mod tests {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
                     thoughts_token_count: None,
+                    cached_content_token_count: None,
                 }),
             };
 
