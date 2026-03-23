@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_core::config::MetricConfig;
 use tensorzero_core::evaluations::EvaluatorConfig;
 use tensorzero_core::optimization::gepa::GepaEvaluatorStats;
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -100,6 +101,9 @@ pub struct SetupResult {
     /// Generated from the user's seed or OS randomness, then checkpointed
     /// so that task resumption produces identical RNG state.
     pub rng_seed: u64,
+    /// Cached metric configs from the config snapshot at setup time.
+    /// Avoids re-fetching the full config snapshot on every GEPA iteration.
+    pub metrics: HashMap<String, MetricConfig>,
 }
 
 /// Resolved GEPA config fields (extracted from GepaToolParams with defaults applied).
@@ -161,6 +165,8 @@ pub struct EvalAnalyzeMutateStepParams {
     pub gepa_config: ResolvedGEPAConfig,
     pub iteration: u32,
     pub max_concurrency: u32,
+    /// Cached metric configs from setup, avoids re-fetching config snapshot per iteration.
+    pub metrics: HashMap<String, MetricConfig>,
 }
 
 // ── Step result types ───────────────────────────────────────────────────

@@ -354,6 +354,7 @@ async fn execute_gepa(
                     gepa_config: setup.gepa_config.clone(),
                     iteration: iteration as u32,
                     max_concurrency: setup.gepa_config.max_concurrency,
+                    metrics: setup.metrics.clone(),
                 },
                 eval_analyze_mutate_step,
             )
@@ -742,6 +743,7 @@ async fn setup_step(
         run_id,
         gepa_config: resolved_config,
         rng_seed,
+        metrics: uninitialized_config.metrics,
     })
 }
 
@@ -914,21 +916,9 @@ async fn eval_analyze_mutate_step(
     // ── 2. Reconstruct GEPAConfig and FunctionContext ────────────
     let gepa_config = reconstruct_gepa_config(&params.gepa_config);
 
-    let config_response = client
-        .get_config_snapshot(None)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get config: {e}"))?;
-
-    let uninitialized_config: UninitializedConfig =
-        serde_json::from_value(config_response.config.clone())
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize config snapshot: {e}"))?;
-
     let function_context = params
         .function_context
-        .load(
-            &params.gepa_config.function_name,
-            &uninitialized_config.metrics,
-        )
+        .load(&params.gepa_config.function_name, &params.metrics)
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
 
     // ── 3. Analyze inferences ───────────────────────────────────
