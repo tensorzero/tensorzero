@@ -1,7 +1,39 @@
 use std::future::Future;
 use std::time::Duration;
 
-use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
+use tokio::sync::mpsc;
+
+/// Wraps either a bounded or unbounded mpsc receiver.
+///
+/// This allows [`process_channel_with_capacity_and_timeout`] to work with both
+/// bounded and unbounded channels without duplicating the flushing logic.
+pub(crate) enum ChannelReceiver<T> {
+    Bounded(mpsc::Receiver<T>),
+    Unbounded(mpsc::UnboundedReceiver<T>),
+}
+
+impl<T> ChannelReceiver<T> {
+    fn is_closed(&self) -> bool {
+        match self {
+            ChannelReceiver::Bounded(rx) => rx.is_closed(),
+            ChannelReceiver::Unbounded(rx) => rx.is_closed(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            ChannelReceiver::Bounded(rx) => rx.is_empty(),
+            ChannelReceiver::Unbounded(rx) => rx.is_empty(),
+        }
+    }
+
+    async fn recv_many(&mut self, buffer: &mut Vec<T>, limit: usize) -> usize {
+        match self {
+            ChannelReceiver::Bounded(rx) => rx.recv_many(buffer, limit).await,
+            ChannelReceiver::Unbounded(rx) => rx.recv_many(buffer, limit).await,
+        }
+    }
+}
 
 /// Shared channel flushing logic for batch writers (used by both ClickHouse and Postgres).
 ///
@@ -12,7 +44,7 @@ use tokio::sync::mpsc::{Receiver, UnboundedReceiver};
 /// The `flush` callback takes ownership of the buffer and returns it, so we can
 /// avoid reallocating between batches while keeping the callback `Send`.
 pub(crate) async fn process_channel_with_capacity_and_timeout<T, F, Fut>(
-    mut channel: UnboundedReceiver<T>,
+    mut channel: ChannelReceiver<T>,
     max_rows: usize,
     flush_interval: Duration,
     mut flush: F,
@@ -44,43 +76,6 @@ pub(crate) async fn process_channel_with_capacity_and_timeout<T, F, Fut>(
                 Err(elapsed) => {
                     // Compile-time assertion that this is actually an Elapsed error.
                     // We hit our deadline, so we should submit our current batch
-                    let _: tokio::time::error::Elapsed = elapsed;
-                    break;
-                }
-            }
-        }
-        if !buffer.is_empty() {
-            buffer = flush(buffer).await;
-            buffer.clear();
-        }
-    }
-}
-
-/// Same as [`process_channel_with_capacity_and_timeout`] but for bounded channels.
-///
-/// Used by the Postgres batch writer to provide backpressure: when a bounded channel
-/// fills up, senders get `TrySendError::Full` and can drop + log instead of buffering
-/// without limit.
-pub(crate) async fn process_bounded_channel_with_capacity_and_timeout<T, F, Fut>(
-    mut channel: Receiver<T>,
-    max_rows: usize,
-    flush_interval: Duration,
-    mut flush: F,
-) where
-    T: Send + 'static,
-    F: FnMut(Vec<T>) -> Fut + Send + 'static,
-    Fut: Future<Output = Vec<T>> + Send + 'static,
-{
-    let mut buffer = Vec::with_capacity(max_rows);
-    while !channel.is_closed() || !channel.is_empty() {
-        let deadline = tokio::time::Instant::now() + flush_interval;
-        while buffer.len() < max_rows {
-            let remaining = max_rows - buffer.len();
-            match tokio::time::timeout_at(deadline, channel.recv_many(&mut buffer, remaining)).await
-            {
-                Ok(0) => break,
-                Ok(_) => {}
-                Err(elapsed) => {
                     let _: tokio::time::error::Elapsed = elapsed;
                     break;
                 }

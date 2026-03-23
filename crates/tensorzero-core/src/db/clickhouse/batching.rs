@@ -9,9 +9,7 @@ use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
-use crate::db::batching::{
-    process_bounded_channel_with_capacity_and_timeout, process_channel_with_capacity_and_timeout,
-};
+use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};
 
@@ -22,13 +20,7 @@ enum ChannelSender {
     Unbounded(mpsc::UnboundedSender<String>),
 }
 
-/// Wraps either a bounded or unbounded mpsc receiver.
-enum ChannelReceiver {
-    Bounded(mpsc::Receiver<String>),
-    Unbounded(mpsc::UnboundedReceiver<String>),
-}
-
-fn create_channel_pair(capacity: Option<usize>) -> (ChannelSender, ChannelReceiver) {
+fn create_channel_pair(capacity: Option<usize>) -> (ChannelSender, ChannelReceiver<String>) {
     match capacity {
         Some(cap) => {
             let (tx, rx) = mpsc::channel(cap);
@@ -157,7 +149,7 @@ impl BatchSender {
 }
 
 pub struct BatchWriter {
-    channels: EnumMap<TableName, ChannelReceiver>,
+    channels: EnumMap<TableName, ChannelReceiver<String>>,
 }
 
 impl BatchWriter {
@@ -181,30 +173,10 @@ impl BatchWriter {
                     buffer
                 }
             };
-            match channel {
-                ChannelReceiver::Bounded(rx) => {
-                    join_set.spawn(async move {
-                        process_bounded_channel_with_capacity_and_timeout(
-                            rx,
-                            max_rows,
-                            batch_timeout,
-                            flush,
-                        )
-                        .await;
-                    });
-                }
-                ChannelReceiver::Unbounded(rx) => {
-                    join_set.spawn(async move {
-                        process_channel_with_capacity_and_timeout(
-                            rx,
-                            max_rows,
-                            batch_timeout,
-                            flush,
-                        )
-                        .await;
-                    });
-                }
-            }
+            join_set.spawn(async move {
+                process_channel_with_capacity_and_timeout(channel, max_rows, batch_timeout, flush)
+                    .await;
+            });
         }
         while let Some(result) = join_set.join_next().await {
             if let Err(e) = result {

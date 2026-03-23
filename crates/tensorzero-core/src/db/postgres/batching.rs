@@ -8,9 +8,7 @@ use tokio::task::JoinSet;
 
 use crate::config::BatchWritesConfig;
 use crate::db::BatchWriterHandle;
-use crate::db::batching::{
-    process_bounded_channel_with_capacity_and_timeout, process_channel_with_capacity_and_timeout,
-};
+use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
@@ -77,12 +75,6 @@ impl<T> ChannelSender<T> {
             }
         }
     }
-}
-
-/// Wraps either a bounded or unbounded mpsc receiver.
-enum ChannelReceiver<T> {
-    Bounded(mpsc::Receiver<T>),
-    Unbounded(mpsc::UnboundedReceiver<T>),
 }
 
 fn create_channel_pair<T>(capacity: Option<usize>) -> (ChannelSender<T>, ChannelReceiver<T>) {
@@ -165,90 +157,49 @@ struct PostgresBatchWriter {
     model_inferences_rx: ChannelReceiver<StoredModelInference>,
 }
 
-/// Helper macro to spawn a flush task for either bounded or unbounded receivers.
-/// Avoids duplicating the flush callback for each channel variant.
+/// Helper macro to spawn a flush task for a [`ChannelReceiver`].
 macro_rules! spawn_flush_task {
     ($join_set:expr, $channel_rx:expr, $pool:expr, $max_rows:expr, $batch_timeout:expr,
      $build_meta:expr, $build_data:expr, $meta_err:literal, $data_err:literal,
-     $meta_build_err:literal, $data_build_err:literal) => {
-        match $channel_rx {
-            ChannelReceiver::Bounded(channel) => {
-                let pool = $pool.clone();
-                $join_set.spawn(async move {
-                    process_bounded_channel_with_capacity_and_timeout(
-                        channel,
-                        $max_rows,
-                        $batch_timeout,
-                        move |buffer| {
-                            let pool = pool.clone();
-                            async move {
-                                // TODO: if this errors, should we retry?
-                                match $build_meta(&buffer) {
-                                    Ok(mut qb) => {
-                                        if let Err(e) = qb.build().execute(&pool).await {
-                                            tracing::error!(concat!($meta_err, ": {e}"), e = e);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(concat!($meta_build_err, ": {e}"), e = e);
-                                    }
+     $meta_build_err:literal, $data_build_err:literal) => {{
+        let pool = $pool.clone();
+        let channel = $channel_rx;
+        $join_set.spawn(async move {
+            process_channel_with_capacity_and_timeout(
+                channel,
+                $max_rows,
+                $batch_timeout,
+                move |buffer| {
+                    let pool = pool.clone();
+                    async move {
+                        // TODO: if this errors, should we retry?
+                        match $build_meta(&buffer) {
+                            Ok(mut qb) => {
+                                if let Err(e) = qb.build().execute(&pool).await {
+                                    tracing::error!(concat!($meta_err, ": {e}"), e = e);
                                 }
-                                match $build_data(&buffer) {
-                                    Ok(mut qb) => {
-                                        if let Err(e) = qb.build().execute(&pool).await {
-                                            tracing::error!(concat!($data_err, ": {e}"), e = e);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(concat!($data_build_err, ": {e}"), e = e);
-                                    }
-                                }
-                                buffer
                             }
-                        },
-                    )
-                    .await;
-                });
-            }
-            ChannelReceiver::Unbounded(channel) => {
-                let pool = $pool.clone();
-                $join_set.spawn(async move {
-                    process_channel_with_capacity_and_timeout(
-                        channel,
-                        $max_rows,
-                        $batch_timeout,
-                        move |buffer| {
-                            let pool = pool.clone();
-                            async move {
-                                match $build_meta(&buffer) {
-                                    Ok(mut qb) => {
-                                        if let Err(e) = qb.build().execute(&pool).await {
-                                            tracing::error!(concat!($meta_err, ": {e}"), e = e);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(concat!($meta_build_err, ": {e}"), e = e);
-                                    }
-                                }
-                                match $build_data(&buffer) {
-                                    Ok(mut qb) => {
-                                        if let Err(e) = qb.build().execute(&pool).await {
-                                            tracing::error!(concat!($data_err, ": {e}"), e = e);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(concat!($data_build_err, ": {e}"), e = e);
-                                    }
-                                }
-                                buffer
+                            Err(e) => {
+                                tracing::error!(concat!($meta_build_err, ": {e}"), e = e);
                             }
-                        },
-                    )
-                    .await;
-                });
-            }
-        }
-    };
+                        }
+                        match $build_data(&buffer) {
+                            Ok(mut qb) => {
+                                if let Err(e) = qb.build().execute(&pool).await {
+                                    tracing::error!(concat!($data_err, ": {e}"), e = e);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(concat!($data_build_err, ": {e}"), e = e);
+                            }
+                        }
+                        buffer
+                    }
+                },
+            )
+            .await;
+        });
+    }};
 }
 
 impl PostgresBatchWriter {
