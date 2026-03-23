@@ -1,0 +1,15 @@
+# Minimal TensorZero config for the interlocutor function.
+# The interlocutor answers questions that autopilot asks during sessions.
+
+[gateway]
+[gateway.observability]
+enabled = false
+
+[functions.interlocutor]
+type = "chat"
+
+[functions.interlocutor.variants.default]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-6"
+max_tokens = 4096
+system_template = "system.minijinja"

@@ -289,9 +289,9 @@ export async function action({ request }: Route.ActionArgs) {
     case "addMultipleToDataset": {
       const dataset = formData.get("dataset");
       const selectedItemsJson = formData.get("selectedItems");
-      const evaluation_name = formData.get("evaluation_name");
+      const function_name = formData.get("function_name");
 
-      if (!dataset || !selectedItemsJson || !evaluation_name) {
+      if (!dataset || !selectedItemsJson || !function_name) {
         return data(
           { error: "Missing required fields", success: false },
           { status: 400 },
@@ -303,7 +303,7 @@ export async function action({ request }: Route.ActionArgs) {
         return await handleBulkAddToDataset(
           dataset.toString(),
           selectedItems,
-          evaluation_name.toString(),
+          function_name.toString(),
         );
       } catch (error) {
         logger.error("Error processing bulk add to dataset:", error);
@@ -529,7 +529,7 @@ export default function EvaluationRunsPage({
     const formData = new FormData();
     formData.append("_action", "addMultipleToDataset");
     formData.append("dataset", dataset);
-    formData.append("evaluation_name", evaluation_name);
+    formData.append("function_name", function_name);
     formData.append("selectedItems", JSON.stringify(selectedData));
 
     fetcher.submit(formData, { method: "post" });

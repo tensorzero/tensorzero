@@ -4267,6 +4267,34 @@ Multiple timeouts can be active simultaneously.
 
 </Accordion>
 
+## `[functions.function_name.evaluators.evaluator_name]`
+
+Evaluators are defined as part of a function's configuration and specify how to evaluate the function's outputs.
+You can define multiple evaluators by including multiple `[functions.function_name.evaluators.evaluator_name]` sections.
+
+Evaluators are used by [TensorZero Evaluations](/evaluations/inference-evaluations/tutorial) to score and compare variants.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-exact]
+type = "exact_match"
+
+[functions.draft-email.evaluators.check-signature]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[functions.draft-email.evaluators.check-signature.variants.claude_sonnet_4_5]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+system_instructions = "./functions/draft-email/evaluators/check-signature/system_instructions.txt"
+```
+
+<Tip>
+
+See the [Evaluations Configuration Reference](/evaluations/inference-evaluations/configuration-reference) for the full list of evaluator types and their configuration options.
+
+</Tip>
+
 ## `[functions.function_name.experimentation]`
 
 This section configures experimentation (A/B testing) over a set of variants in a function.
