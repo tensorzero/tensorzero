@@ -21,6 +21,7 @@ use crate::{
         azure::AzureCredentials,
         deepseek::DeepSeekCredentials,
         fireworks::FireworksCredentials,
+        minimax::MiniMaxCredentials,
         gcp_vertex_anthropic::make_gcp_sdk_credentials,
         gcp_vertex_gemini::{GCPVertexCredentials, build_gcp_non_sdk_credentials},
         google_ai_studio_gemini::GoogleAIStudioCredentials,
@@ -95,6 +96,7 @@ pub enum ProviderType {
     GoogleAIStudioGemini,
     Groq,
     Hyperbolic,
+    MiniMax,
     Mistral,
     OpenAI,
     OpenRouter,
@@ -118,6 +120,7 @@ impl Display for ProviderType {
             ProviderType::GoogleAIStudioGemini => write!(f, "GoogleAIStudioGemini"),
             ProviderType::Groq => write!(f, "Groq"),
             ProviderType::Hyperbolic => write!(f, "Hyperbolic"),
+            ProviderType::MiniMax => write!(f, "MiniMax"),
             ProviderType::Mistral => write!(f, "Mistral"),
             ProviderType::OpenAI => write!(f, "OpenAI"),
             ProviderType::OpenRouter => write!(f, "OpenRouter"),
@@ -380,6 +383,7 @@ pub struct ProviderTypeDefaultCredentials {
     google_ai_studio_gemini: LazyCredential<GoogleAIStudioCredentials>,
     groq: LazyCredential<GroqCredentials>,
     hyperbolic: LazyCredential<HyperbolicCredentials>,
+    minimax: LazyCredential<MiniMaxCredentials>,
     mistral: LazyCredential<MistralCredentials>,
     openai: LazyCredential<OpenAICredentials>,
     openrouter: LazyCredential<OpenRouterCredentials>,
@@ -430,6 +434,11 @@ impl ProviderTypeDefaultCredentials {
         let groq_location = provider_types_config.groq.defaults.api_key_location.clone();
         let hyperbolic_location = provider_types_config
             .hyperbolic
+            .defaults
+            .api_key_location
+            .clone();
+        let minimax_location = provider_types_config
+            .minimax
             .defaults
             .api_key_location
             .clone();
@@ -506,6 +515,9 @@ impl ProviderTypeDefaultCredentials {
             hyperbolic: LazyCredential::new(move || {
                 load_credential_with_fallback(&hyperbolic_location, ProviderType::Hyperbolic)?
                     .try_into()
+            }),
+            minimax: LazyCredential::new(move || {
+                load_credential_with_fallback(&minimax_location, ProviderType::MiniMax)?.try_into()
             }),
             mistral: LazyCredential::new(move || {
                 load_credential_with_fallback(&mistral_location, ProviderType::Mistral)?.try_into()
@@ -925,6 +937,22 @@ impl ProviderKind for HyperbolicKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.hyperbolic.get_cloned()
+    }
+}
+
+pub struct MiniMaxKind;
+
+impl ProviderKind for MiniMaxKind {
+    type Credential = MiniMaxCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::MiniMax
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.minimax.get_cloned()
     }
 }
 

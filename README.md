@@ -79,6 +79,7 @@ TensorZero is used by companies ranging from frontier AI startups to the Fortune
 **[Google AI Studio (Gemini API)](https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini)**,
 **[Groq](https://www.tensorzero.com/docs/gateway/guides/providers/groq)**,
 **[Hyperbolic](https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic)**,
+**[MiniMax](https://www.minimax.io)**,
 **[Mistral](https://www.tensorzero.com/docs/gateway/guides/providers/mistral)**,
 **[OpenAI](https://www.tensorzero.com/docs/gateway/guides/providers/openai)**,
 **[OpenRouter](https://www.tensorzero.com/docs/gateway/guides/providers/openrouter)**,

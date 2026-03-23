@@ -54,9 +54,9 @@ use crate::inference::types::{
 };
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
-    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
-    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
-    VLLMKind, XAIKind,
+    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MiniMaxKind, MistralKind, OpenAIKind,
+    OpenRouterKind, ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind,
+    TogetherKind, VLLMKind, XAIKind,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
@@ -79,7 +79,7 @@ use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
+    groq::GroqProvider, minimax::MiniMaxProvider, mistral::MistralProvider, openai::OpenAIProvider,
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
@@ -1074,6 +1074,7 @@ impl ModelProvider {
             }
             ProviderConfig::Groq(_) => crate::providers::groq::PROVIDER_TYPE,
             ProviderConfig::Hyperbolic(_) => crate::providers::hyperbolic::PROVIDER_TYPE,
+            ProviderConfig::MiniMax(_) => crate::providers::minimax::PROVIDER_TYPE,
             ProviderConfig::Mistral(_) => crate::providers::mistral::PROVIDER_TYPE,
             ProviderConfig::OpenAI(_) => crate::providers::openai::PROVIDER_TYPE,
             ProviderConfig::OpenRouter(_) => crate::providers::openrouter::PROVIDER_TYPE,
@@ -1111,6 +1112,7 @@ impl ModelProvider {
             ProviderConfig::GoogleAIStudioGemini(provider) => Some(provider.model_name()),
             ProviderConfig::Groq(provider) => Some(provider.model_name()),
             ProviderConfig::Hyperbolic(provider) => Some(provider.model_name()),
+            ProviderConfig::MiniMax(provider) => Some(provider.model_name()),
             ProviderConfig::Mistral(provider) => Some(provider.model_name()),
             ProviderConfig::OpenAI(provider) => Some(provider.model_name()),
             ProviderConfig::OpenRouter(provider) => Some(provider.model_name()),
@@ -1166,6 +1168,7 @@ pub enum ProviderConfig {
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Groq(GroqProvider),
     Hyperbolic(HyperbolicProvider),
+    MiniMax(MiniMaxProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     OpenRouter(OpenRouterProvider),
@@ -1218,6 +1221,7 @@ impl ProviderConfig {
             ProviderConfig::Hyperbolic(_) => {
                 Cow::Borrowed(crate::providers::hyperbolic::PROVIDER_TYPE)
             }
+            ProviderConfig::MiniMax(_) => Cow::Borrowed(crate::providers::minimax::PROVIDER_TYPE),
             ProviderConfig::Mistral(_) => Cow::Borrowed(crate::providers::mistral::PROVIDER_TYPE),
             ProviderConfig::OpenAI(_) => Cow::Borrowed(crate::providers::openai::PROVIDER_TYPE),
             ProviderConfig::OpenRouter(_) => {
@@ -1261,6 +1265,7 @@ impl ProviderConfig {
             ProviderConfig::GoogleAIStudioGemini(_) => false,
             ProviderConfig::Groq(_) => false,
             ProviderConfig::Hyperbolic(_) => false,
+            ProviderConfig::MiniMax(_) => false,
             ProviderConfig::Mistral(_) => false,
             ProviderConfig::OpenRouter(_) => false,
             ProviderConfig::SGLang(_) => false,
@@ -1402,6 +1407,11 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         parse_think_blocks: Option<bool>,
+    },
+    MiniMax {
+        model_name: String,
+        #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocationWithFallback>,
     },
     Mistral {
         model_name: String,
@@ -1693,6 +1703,18 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
                 HyperbolicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
+            UninitializedProviderConfig::MiniMax {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::MiniMax(MiniMaxProvider::new(
+                model_name,
+                MiniMaxKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
                         provider_type_default_credentials,
@@ -2033,6 +2055,11 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::MiniMax(provider) => {
+                provider
+                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider
                     .infer(request, &clients.http_client, &clients.credentials, self)
@@ -2167,6 +2194,11 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::MiniMax(provider) => {
+                provider
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
@@ -2288,6 +2320,11 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::MiniMax(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -2395,6 +2432,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::MiniMax(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -2749,6 +2791,7 @@ pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "gcp_vertex_anthropic::",
     "hyperbolic::",
     "groq::",
+    "minimax::",
     "mistral::",
     "openai::",
     "openrouter::",
@@ -2824,6 +2867,12 @@ impl ShorthandModelConfig for ModelConfig {
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
                 model_name,
                 HyperbolicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "minimax" => ProviderConfig::MiniMax(MiniMaxProvider::new(
+                model_name,
+                MiniMaxKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),

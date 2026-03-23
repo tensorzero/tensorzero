@@ -5,6 +5,7 @@
 pub mod aws_bedrock;
 pub mod deepseek;
 pub mod fireworks;
+pub mod minimax;
 pub mod groq;
 pub mod mistral;
 pub mod openai;

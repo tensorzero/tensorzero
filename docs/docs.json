@@ -167,6 +167,7 @@
               "integrations/model-providers/google-ai-studio-gemini",
               "integrations/model-providers/groq",
               "integrations/model-providers/hyperbolic",
+              "integrations/model-providers/minimax",
               "integrations/model-providers/mistral",
               "integrations/model-providers/openai-compatible",
               "integrations/model-providers/openai",

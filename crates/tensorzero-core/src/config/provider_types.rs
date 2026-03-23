@@ -23,6 +23,8 @@ pub struct ProviderTypesConfig {
     #[serde(default)]
     pub hyperbolic: HyperbolicProviderTypeConfig,
     #[serde(default)]
+    pub minimax: MiniMaxProviderTypeConfig,
+    #[serde(default)]
     pub mistral: MistralProviderTypeConfig,
     #[serde(default)]
     pub openai: OpenAIProviderTypeConfig,
@@ -276,6 +278,29 @@ impl Default for HyperbolicDefaults {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "HYPERBOLIC_API_KEY".to_string(),
+            )),
+        }
+    }
+}
+
+// MiniMax
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct MiniMaxProviderTypeConfig {
+    #[serde(default)]
+    pub defaults: MiniMaxDefaults,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MiniMaxDefaults {
+    pub api_key_location: CredentialLocationWithFallback,
+}
+
+impl Default for MiniMaxDefaults {
+    fn default() -> Self {
+        Self {
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                "MINIMAX_API_KEY".to_string(),
             )),
         }
     }

@@ -792,7 +792,7 @@ Separately, you can set a global timeout for the entire inference request using 
 
 Defines the types of the provider. See [Integrations &raquo; Model Providers](/gateway/api-reference/inference/#content-block) for details.
 
-The supported provider types are `anthropic`, `aws_bedrock`, `aws_sagemaker`, `azure`, `deepseek`, `fireworks`, `gcp_vertex_anthropic`, `gcp_vertex_gemini`, `google_ai_studio_gemini`, `groq`, `hyperbolic`, `mistral`, `openai`, `openrouter`, `sglang`, `tgi`, `together`, `vllm`, and `xai`.
+The supported provider types are `anthropic`, `aws_bedrock`, `aws_sagemaker`, `azure`, `deepseek`, `fireworks`, `gcp_vertex_anthropic`, `gcp_vertex_gemini`, `google_ai_studio_gemini`, `groq`, `hyperbolic`, `minimax`, `mistral`, `openai`, `openrouter`, `sglang`, `tgi`, `together`, `vllm`, and `xai`.
 
 The other fields in the provider sub-section depend on the provider type.
 
@@ -1712,6 +1712,48 @@ See [Hyperbolic's documentation](https://app.hyperbolic.xyz/models) for the list
 # ...
 type = "hyperbolic"
 model_name = "openai/gpt-oss-20b"
+# ...
+```
+
+</Accordion>
+
+<Accordion title='type: "minimax"'>
+
+##### `api_key_location`
+
+- **Type:** string or object
+- **Required:** no (default: `env::MINIMAX_API_KEY` unless otherwise set in `provider_type.minimax.defaults.api_key_location`)
+
+Defines the location of the API key for the MiniMax provider.
+
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+
+```toml title="tensorzero.toml"
+[models.minimax_m27.providers.minimax]
+# ...
+type = "minimax"
+api_key_location = "dynamic::minimax_api_key"
+# api_key_location = "env::ALTERNATE_MINIMAX_API_KEY"
+# api_key_location = { default = "dynamic::minimax_api_key", fallback = "env::MINIMAX_API_KEY" }
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the MiniMax API.
+
+See [MiniMax's documentation](https://platform.minimaxi.com/document/Models) for the list of available model names.
+
+```toml title="tensorzero.toml"
+[models.minimax_m27.providers.minimax]
+# ...
+type = "minimax"
+model_name = "MiniMax-M2.7"
 # ...
 ```
 
@@ -2737,6 +2779,29 @@ api_key_location = "dynamic::hyperbolic_api_key"
 
 </Accordion>
 
+<Accordion title="[provider_types.minimax]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string or object
+- **Required:** no (default: `env::MINIMAX_API_KEY`)
+
+Defines the location of the API key for the MiniMax provider.
+
+This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.minimax.defaults]
+# ...
+api_key_location = "dynamic::minimax_api_key"
+# api_key_location = { default = "dynamic::minimax_api_key", fallback = "env::MINIMAX_API_KEY" }
+# ...
+```
+
+</Accordion>
+
 <Accordion title="[provider_types.mistral]">
 
 ##### `defaults.api_key_location`
@@ -3423,7 +3488,7 @@ The name of the model to call.
 
 <Tip>
 
-The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `minimax`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
 
 </Tip>
 
@@ -3907,7 +3972,7 @@ The name of the embedding model to call.
 
 <Tip>
 
-The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `minimax`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
 
 </Tip>
 
@@ -4154,7 +4219,7 @@ The name of the model to call.
 
 <Tip>
 
-The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
+The following model providers support short-hand model names: `anthropic`, `deepseek`, `fireworks`, `google_ai_studio_gemini`, `gcp_vertex_gemini`, `gcp_vertex_anthropic`, `hyperbolic`, `groq`, `minimax`, `mistral`, `openai`, `openrouter`, `together`, and `xai`.
 
 </Tip>
 
