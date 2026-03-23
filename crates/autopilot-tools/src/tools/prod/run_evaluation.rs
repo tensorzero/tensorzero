@@ -185,7 +185,9 @@ impl SimpleTool for RunEvaluationTool {
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         let params = RunEvaluationParams {
-            evaluation_name: llm_params.evaluation_name,
+            evaluation_name: Some(llm_params.evaluation_name),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: llm_params.dataset_name,
             datapoint_ids: llm_params.datapoint_ids,
             variant_name: llm_params.variant_name,
