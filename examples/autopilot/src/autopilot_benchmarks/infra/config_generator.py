@@ -57,17 +57,13 @@ def parse_env_config(
     if env_name.startswith("verifiers_v0"):
         parts = env_name.split("::")
         if len(parts) < 2:
-            raise ValueError(
-                f"{env_name} is not a properly formatted verifiers environment"
-            )
+            raise ValueError(f"{env_name} is not a properly formatted verifiers environment")
         if len(parts) == 2:
             env_name, verifiers_env_id = parts
             env_config["env_id"] = verifiers_env_id
         elif len(parts) == 3:
             if "tau2-bench" not in parts[1]:
-                raise ValueError(
-                    f"domain specification is only supported for tau2-bench, got {parts[1]}"
-                )
+                raise ValueError(f"domain specification is only supported for tau2-bench, got {parts[1]}")
             env_name, verifiers_env_id, domain = parts
             env_config["env_id"] = verifiers_env_id
             env_config["verifiers_env_args"] = {"domain": domain}
@@ -101,9 +97,7 @@ def write_initial_env_config(
     Returns:
         Path to the created config directory.
     """
-    parsed_env_name, env_config = parse_env_config(
-        env_name, env_config_extra=env_config_extra
-    )
+    parsed_env_name, env_config = parse_env_config(env_name, env_config_extra=env_config_extra)
 
     env = llmgym.make(parsed_env_name, config=env_config)
 

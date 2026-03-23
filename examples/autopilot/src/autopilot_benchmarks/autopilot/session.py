@@ -12,7 +12,6 @@ Manages the lifecycle of an autopilot session:
 import asyncio
 import json
 import logging
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -43,6 +42,7 @@ class AutopilotSessionManager:
         {
             "server_side_processing",
             "waiting_for_tool_execution",
+            "waiting_for_retry",
         }
     )
 
@@ -104,9 +104,7 @@ class AutopilotSessionManager:
             try:
                 while turns < self.max_turns:
                     # Poll until actionable status
-                    status, session_data = await self._poll_until_actionable(
-                        client, session_id
-                    )
+                    status, session_data = await self._poll_until_actionable(client, session_id)
                     turns += 1
 
                     logger.info(
@@ -118,17 +116,12 @@ class AutopilotSessionManager:
 
                     if status == "idle":
                         # Check if autopilot has produced config writes yet
-                        config_writes, raw_config_writes = (
-                            await self._fetch_config_writes_response(client, session_id)
-                        )
-                        has_variants, has_routing = self._check_config_writes(
-                            config_writes
-                        )
+                        config_writes, raw_config_writes = await self._fetch_config_writes_response(client, session_id)
+                        has_variants, has_routing = self._check_config_writes(config_writes)
 
                         if has_variants and has_routing:
                             logger.info(
-                                "Session %s is idle with %d config writes "
-                                "(variants=%s, routing=%s) — done",
+                                "Session %s is idle with %d config writes (variants=%s, routing=%s) — done",
                                 session_id,
                                 len(config_writes),
                                 has_variants,
@@ -163,10 +156,8 @@ class AutopilotSessionManager:
 
                     elif status == "waiting_for_tool_call_authorization":
                         await self._approve_all(client, session_id, session_data)
-                    elif status == "user_questions":
-                        await self._handle_user_questions(
-                            client, session_id, session_data
-                        )
+                    elif status == "waiting_for_user_questions_answers":
+                        await self._handle_user_questions(client, session_id, session_data)
                     elif status in {"failed", "error"}:
                         final_status = status
                         break
@@ -185,9 +176,7 @@ class AutopilotSessionManager:
                     final_status = "interrupted"
 
                 # Fetch config writes (for non-idle exits like interrupted/error)
-                config_writes, raw_config_writes = (
-                    await self._fetch_config_writes_response(client, session_id)
-                )
+                config_writes, raw_config_writes = await self._fetch_config_writes_response(client, session_id)
 
                 return AutopilotSessionResult(
                     session_id=session_id,
@@ -201,9 +190,7 @@ class AutopilotSessionManager:
                 logger.error("Session %s failed: %s", session_id, e, exc_info=True)
                 # Try to salvage config writes even on error
                 try:
-                    config_writes, raw_config_writes = (
-                        await self._fetch_config_writes_response(client, session_id)
-                    )
+                    config_writes, raw_config_writes = await self._fetch_config_writes_response(client, session_id)
                 except Exception:
                     config_writes = []
                     raw_config_writes = []
@@ -237,9 +224,7 @@ class AutopilotSessionManager:
         data = resp.json()
         return data["session_id"]
 
-    async def _poll_until_actionable(
-        self, client: httpx.AsyncClient, session_id: str
-    ) -> tuple[str, dict]:
+    async def _poll_until_actionable(self, client: httpx.AsyncClient, session_id: str) -> tuple[str, dict]:
         """Poll the session status until it reaches a state that requires action.
 
         Returns a tuple of (status_string, full_session_data).
@@ -283,10 +268,7 @@ class AutopilotSessionManager:
             self.timeout,
             last_status or "unknown",
         )
-        raise TimeoutError(
-            "session polling timed out while still in background status "
-            f"{last_status or 'unknown'}"
-        )
+        raise TimeoutError(f"session polling timed out while still in background status {last_status or 'unknown'}")
 
     def _log_session_events(self, session_id: str, session_data: dict) -> None:
         """Log a summary of session events for debugging."""
@@ -302,9 +284,7 @@ class AutopilotSessionManager:
                 text = ""
                 if isinstance(content, list):
                     text = " ".join(
-                        block.get("text", "")
-                        for block in content
-                        if isinstance(block, dict) and "text" in block
+                        block.get("text", "") for block in content if isinstance(block, dict) and "text" in block
                     )
                 elif isinstance(content, str):
                     text = content
@@ -333,9 +313,7 @@ class AutopilotSessionManager:
             elif evt_type == "tool_result":
                 name = payload.get("name", "?")
                 result = payload.get("result", "")
-                result_str = (
-                    json.dumps(result) if not isinstance(result, str) else result
-                )
+                result_str = json.dumps(result) if not isinstance(result, str) else result
                 preview = result_str[:2000] + ("..." if len(result_str) > 2000 else "")
                 logger.info(
                     "[session %s] event %s: tool_result name=%s result=%s",
@@ -353,9 +331,7 @@ class AutopilotSessionManager:
                     evt_type,
                 )
 
-    async def _approve_all(
-        self, client: httpx.AsyncClient, session_id: str, session_data: dict
-    ) -> None:
+    async def _approve_all(self, client: httpx.AsyncClient, session_id: str, session_data: dict) -> None:
         """Auto-approve all pending tool calls."""
         # Extract the last pending tool call event ID
         pending = session_data.get("pending_tool_calls", [])
@@ -395,9 +371,7 @@ class AutopilotSessionManager:
             last_tool_call_id,
         )
 
-    async def _handle_user_questions(
-        self, client: httpx.AsyncClient, session_id: str, session_data: dict
-    ) -> None:
+    async def _handle_user_questions(self, client: httpx.AsyncClient, session_id: str, session_data: dict) -> None:
         """Handle user questions by delegating to the interlocutor."""
         # Extract questions from events in session_data
         events = session_data.get("events", [])
@@ -478,9 +452,7 @@ class AutopilotSessionManager:
         # Build a specific nudge based on what's missing
         parts = []
         if not has_variants:
-            parts.append(
-                "write new variant(s) with improved prompts using the write_config tool"
-            )
+            parts.append("write new variant(s) with improved prompts using the write_config tool")
         if not has_routing:
             parts.append(
                 "set up an experimentation config using the "
@@ -507,16 +479,11 @@ class AutopilotSessionManager:
             logger.info("Interlocutor nudge: %s", answer[:500])
             await self._send_message(client, session_id, answer)
         else:
-            fallback = (
-                f"You still need to: {action}. "
-                f"Please use the write_config tool to make these changes now."
-            )
+            fallback = f"You still need to: {action}. Please use the write_config tool to make these changes now."
             logger.info("Sending default nudge: %s", fallback)
             await self._send_message(client, session_id, fallback)
 
-    async def _send_message(
-        self, client: httpx.AsyncClient, session_id: str, content: str
-    ) -> None:
+    async def _send_message(self, client: httpx.AsyncClient, session_id: str, content: str) -> None:
         """Send a user message to the session."""
         url = f"{self.base}/sessions/{session_id}/events"
         payload = {
@@ -536,9 +503,7 @@ class AutopilotSessionManager:
         resp.raise_for_status()
         logger.info("Interrupted session %s", session_id)
 
-    async def _fetch_config_writes(
-        self, client: httpx.AsyncClient, session_id: str
-    ) -> list[dict[str, Any]]:
+    async def _fetch_config_writes(self, client: httpx.AsyncClient, session_id: str) -> list[dict[str, Any]]:
         """Fetch and flatten config writes from the completed session."""
         edits, _ = await self._fetch_config_writes_response(client, session_id)
         return edits

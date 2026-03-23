@@ -57,9 +57,7 @@ async def apply_config_writes(
 
     if proc.returncode != 0:
         error_msg = stderr.decode(errors="replace").strip()
-        raise RuntimeError(
-            f"config-applier-cli exited with code {proc.returncode}: {error_msg}"
-        )
+        raise RuntimeError(f"config-applier-cli exited with code {proc.returncode}: {error_msg}")
 
     written_paths: list[str] = json.loads(stdout.decode())
     logger.info("Config applier wrote %d files: %s", len(written_paths), written_paths)

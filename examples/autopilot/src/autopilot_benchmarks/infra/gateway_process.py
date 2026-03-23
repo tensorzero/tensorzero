@@ -1,10 +1,10 @@
 """Manage the TensorZero gateway as a subprocess."""
 
 import asyncio
-from datetime import datetime, timezone
 import logging
 import os
 import signal
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
@@ -102,9 +102,7 @@ class GatewayProcess:
                 )
                 await migrate_proc.wait()
                 if migrate_proc.returncode != 0:
-                    raise RuntimeError(
-                        f"Gateway {migration_flag} failed (code {migrate_proc.returncode})"
-                    )
+                    raise RuntimeError(f"Gateway {migration_flag} failed (code {migrate_proc.returncode})")
                 logger.info("Gateway %s complete", migration_flag)
 
             # Now start the gateway for real
@@ -177,9 +175,7 @@ class GatewayProcess:
             while asyncio.get_event_loop().time() < deadline:
                 # Check if process died
                 if self._process is not None and self._process.returncode is not None:
-                    raise RuntimeError(
-                        f"Gateway process exited with code {self._process.returncode}"
-                    )
+                    raise RuntimeError(f"Gateway process exited with code {self._process.returncode}")
 
                 try:
                     resp = await client.get(health_url, timeout=2.0)
@@ -192,9 +188,7 @@ class GatewayProcess:
 
                 await asyncio.sleep(0.5)
 
-        raise TimeoutError(
-            f"Gateway did not become healthy within {self.startup_timeout}s"
-        )
+        raise TimeoutError(f"Gateway did not become healthy within {self.startup_timeout}s")
 
     def _open_log_handles(self) -> None:
         if self.log_dir is None or self._stdout_handle is not None:
@@ -220,10 +214,7 @@ class GatewayProcess:
 
     def _write_log_banner(self, stage: str) -> None:
         timestamp = datetime.now(timezone.utc).isoformat()
-        banner = (
-            f"\n=== [{timestamp}] {stage} "
-            f"(config={self.config_path}, port={self.port}) ===\n"
-        ).encode()
+        banner = (f"\n=== [{timestamp}] {stage} (config={self.config_path}, port={self.port}) ===\n").encode()
 
         if self._stdout_handle is not None:
             self._stdout_handle.write(banner)

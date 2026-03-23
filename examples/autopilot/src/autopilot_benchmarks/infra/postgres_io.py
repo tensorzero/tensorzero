@@ -312,9 +312,7 @@ async def import_all_tables(
     skipped = 0
     for schema, table, df in import_items:
         if (schema, table) not in existing_tables:
-            logger.debug(
-                "Skipping %s.%s — table does not exist in target DB", schema, table
-            )
+            logger.debug("Skipping %s.%s — table does not exist in target DB", schema, table)
             skipped += 1
             continue
         valid_items.append((schema, table, df))

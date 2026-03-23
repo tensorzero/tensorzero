@@ -30,9 +30,10 @@ RUN chown -R gateway:gateway /app
 USER gateway
 
 COPY --chown=gateway:gateway pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev || uv sync --no-dev
+RUN uv sync --frozen --no-dev --no-install-project || uv sync --no-dev --no-install-project
 
 COPY --chown=gateway:gateway src/ src/
+RUN uv sync --frozen --no-dev || uv sync --no-dev
 COPY --chown=gateway:gateway interlocutor_config/ interlocutor_config/
 COPY --chown=gateway:gateway configs/ configs/
 

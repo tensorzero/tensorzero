@@ -118,10 +118,7 @@ def run(
     if effective_iterations is None and snapshot is not None:
         effective_iterations = 1
     if effective_iterations is not None:
-        environments = [
-            e.model_copy(update={"num_iterations": effective_iterations})
-            for e in environments
-        ]
+        environments = [e.model_copy(update={"num_iterations": effective_iterations}) for e in environments]
 
     # Apply episodes override
     if episodes is not None:
@@ -168,9 +165,7 @@ async def _run_async(
     run_ids: list[uuid.UUID] = []
 
     for env_config in environments:
-        env_work_dir = (
-            work_dir / env_config.name / f"{run_timestamp}{seed_suffix}"
-        )
+        env_work_dir = work_dir / env_config.name / f"{run_timestamp}{seed_suffix}"
         env_work_dir.mkdir(parents=True, exist_ok=True)
 
         recorder = JsonResultRecorder(env_work_dir)
@@ -250,9 +245,7 @@ def snapshot(
         [e.name for e in environments],
     )
 
-    asyncio.run(
-        _snapshot_all_async(environments, config, Path(work_dir), Path(snapshot_dir))
-    )
+    asyncio.run(_snapshot_all_async(environments, config, Path(work_dir), Path(snapshot_dir)))
 
 
 async def _snapshot_all_async(

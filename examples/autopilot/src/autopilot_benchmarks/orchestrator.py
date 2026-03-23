@@ -20,21 +20,21 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from tensorzero.util import uuid7
 from typing import Any, Optional
 from urllib.parse import quote, urlparse, urlunparse
 
 import asyncpg
 import httpx
 from tensorzero import AsyncTensorZeroGateway
+from tensorzero.util import uuid7
 
 from autopilot_benchmarks.autopilot.config_applier import apply_config_writes
 from autopilot_benchmarks.autopilot.interlocutor import Interlocutor
 from autopilot_benchmarks.autopilot.session import AutopilotSessionManager
 from autopilot_benchmarks.config import EnvironmentConfig, EvalConfig
 from autopilot_benchmarks.infra.config_generator import write_initial_env_config
-from autopilot_benchmarks.infra.postgres_io import import_all_tables
 from autopilot_benchmarks.infra.gateway_process import GatewayProcess
+from autopilot_benchmarks.infra.postgres_io import import_all_tables
 from autopilot_benchmarks.results.recorder import JsonResultRecorder
 from autopilot_benchmarks.rollout.runner import run_rollout
 from autopilot_benchmarks.snapshot import (
@@ -80,8 +80,7 @@ def _filter_available_models(models: list[str]) -> list[str]:
             filtered.append(model)
         else:
             logger.warning(
-                "Dropping model %s from available_models: "
-                "none of %s are set in the environment",
+                "Dropping model %s from available_models: none of %s are set in the environment",
                 model,
                 required_keys,
             )
@@ -102,9 +101,7 @@ def _build_initial_message(env_config: EnvironmentConfig) -> str:
         parts.append(f"\nYou have access to the following models:\n{model_list}")
         model_notes = _build_model_notes(models)
         if model_notes:
-            parts.append(
-                "\nModel-specific constraints:\n" + "\n".join(model_notes)
-            )
+            parts.append("\nModel-specific constraints:\n" + "\n".join(model_notes))
 
     parts.append(
         "\nYou should create many variant candidates using different models"
@@ -128,7 +125,6 @@ def _build_initial_message(env_config: EnvironmentConfig) -> str:
                 "delta": 0.1 // this can be high
               }
             }"""
-
     )
 
     return "\n".join(parts)
@@ -220,9 +216,7 @@ def _build_primary_gateway_urls(run_id: uuid.UUID) -> dict[str, str]:
 def _build_test_gateway_urls(primary_pg_url: str, run_id: uuid.UUID) -> dict[str, str]:
     """Build isolated per-run database URLs for persisted test rollouts."""
     base_test_pg_url = os.environ.get("TENSORZERO_TEST_POSTGRES_URL") or (
-        _replace_database_name(
-            primary_pg_url, f"{_database_name_from_url(primary_pg_url)}_test"
-        )
+        _replace_database_name(primary_pg_url, f"{_database_name_from_url(primary_pg_url)}_test")
     )
 
     if not _should_scope_db():
@@ -593,9 +587,7 @@ async def run_environment(
                 episode_timeout=env_config.episode_timeout,
                 seed=seed,
             )
-            train_metrics = await _collect_metrics(
-                gateway_proc.url, env_config.metric_name, env_config.function_name
-            )
+            train_metrics = await _collect_metrics(gateway_proc.url, env_config.metric_name, env_config.function_name)
 
             logger.info(
                 "Running baseline test rollout (%d episodes)",
@@ -644,13 +636,9 @@ async def run_environment(
 
         # 5. Set up interlocutor
         try:
-            interlocutor = await Interlocutor.create(
-                eval_config.interlocutor.config_file
-            )
+            interlocutor = await Interlocutor.create(eval_config.interlocutor.config_file)
         except FileNotFoundError:
-            logger.warning(
-                "Interlocutor config not found, running without interlocutor"
-            )
+            logger.warning("Interlocutor config not found, running without interlocutor")
 
         # 7. Iteration loop
         for iteration in range(1, env_config.num_iterations + 1):
@@ -701,14 +689,9 @@ async def run_environment(
             # d. Run post-autopilot rollouts. For snapshot-backed single-iteration
             # runs, skip the non-dryrun train rollout because there is no later
             # iteration that would consume the newly written observability data.
-            skip_post_autopilot_train = (
-                snapshot_path is not None and env_config.num_iterations == 1
-            )
+            skip_post_autopilot_train = snapshot_path is not None and env_config.num_iterations == 1
             if skip_post_autopilot_train:
-                logger.info(
-                    "Skipping post-autopilot train rollout for snapshot-backed "
-                    "single-iteration run"
-                )
+                logger.info("Skipping post-autopilot train rollout for snapshot-backed single-iteration run")
                 rollout_train = {
                     "total": 0,
                     "succeeded": 0,
@@ -916,9 +899,7 @@ async def run_snapshot(
             env_config_extra=env_config.env_config or None,
             episode_timeout=env_config.episode_timeout,
         )
-        train_metrics = await _collect_metrics(
-            gateway_proc.url, env_config.metric_name, env_config.function_name
-        )
+        train_metrics = await _collect_metrics(gateway_proc.url, env_config.metric_name, env_config.function_name)
 
         # 6. Run baseline test rollout
         logger.info(
@@ -944,12 +925,8 @@ async def run_snapshot(
         snap_path = snapshot_dir / env_config.name / timestamp
 
         # Strip non-serializable episode_results before persisting
-        serializable_train_stats = {
-            k: v for k, v in train_stats.items() if k != "episode_results"
-        }
-        serializable_test_stats = {
-            k: v for k, v in test_stats.items() if k != "episode_results"
-        }
+        serializable_train_stats = {k: v for k, v in train_stats.items() if k != "episode_results"}
+        serializable_test_stats = {k: v for k, v in test_stats.items() if k != "episode_results"}
 
         result = await create_snapshot(
             snapshot_dir=snap_path,
@@ -985,9 +962,7 @@ def _build_gateway_env(
     env: dict[str, str] = {}
 
     # Postgres URL for gateway (not eval results)
-    pg_url = postgres_url if postgres_url is not None else os.environ.get(
-        "TENSORZERO_POSTGRES_URL", ""
-    )
+    pg_url = postgres_url if postgres_url is not None else os.environ.get("TENSORZERO_POSTGRES_URL", "")
     if pg_url:
         env["TENSORZERO_POSTGRES_URL"] = pg_url
 
@@ -1027,9 +1002,7 @@ def _log_run_summary(
             ap_turns = s.get("autopilot_turns", "?")
             ap_writes = s.get("autopilot_config_writes", "?")
             ap_status = s.get("autopilot_status", "?")
-            header += (
-                f"  [autopilot: {ap_turns} turns, {ap_writes} writes, {ap_status}]"
-            )
+            header += f"  [autopilot: {ap_turns} turns, {ap_writes} writes, {ap_status}]"
         lines.append("")
         lines.append(header)
         lines.append(f"  Variants: {variants}")
@@ -1046,12 +1019,9 @@ def _log_run_summary(
                     vs = variant_stats[vname]
                     mean = vs.get("mean", 0)
                     n_ep = vs.get("n_episodes", vs.get("n", "?"))
-                    std = vs.get("std", 0)
                     ci = vs.get("ci_error")
                     ci_str = f" +/-{ci:.3f}" if ci is not None else ""
-                    lines.append(
-                        f"    {vname:30s}  {mean:.3f}{ci_str}  ({n_ep} episodes)"
-                    )
+                    lines.append(f"    {vname:30s}  {mean:.3f}{ci_str}  ({n_ep} episodes)")
             else:
                 lines.append("    (no variant data)")
         else:
@@ -1068,12 +1038,9 @@ def _log_run_summary(
                     vs = variant_stats[vname]
                     mean = vs.get("mean", 0)
                     n_ep = vs.get("n_episodes", vs.get("n", "?"))
-                    std = vs.get("std", 0)
                     ci = vs.get("ci_error")
                     ci_str = f" +/-{ci:.3f}" if ci is not None else ""
-                    lines.append(
-                        f"    {vname:30s}  {mean:.3f}{ci_str}  ({n_ep} episodes)"
-                    )
+                    lines.append(f"    {vname:30s}  {mean:.3f}{ci_str}  ({n_ep} episodes)")
             else:
                 lines.append("    (no variant data)")
         else:
@@ -1098,9 +1065,7 @@ async def _reset_gateway_postgres(postgres_url: str) -> None:
     try:
         # Terminate existing connections to the target database
         await conn.execute(
-            "SELECT pg_terminate_backend(pid) "
-            "FROM pg_stat_activity "
-            "WHERE datname = $1 AND pid <> pg_backend_pid()",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
             db_name,
         )
         await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
@@ -1147,9 +1112,7 @@ async def _collect_metrics(
 
         performances = data.get("performances", [])
         if not performances:
-            logger.info(
-                "No variant performances found for %s/%s", function_name, metric_name
-            )
+            logger.info("No variant performances found for %s/%s", function_name, metric_name)
             return {metric_name: {"variants": {}, "n": 0}}
 
         variants: dict[str, Any] = {}

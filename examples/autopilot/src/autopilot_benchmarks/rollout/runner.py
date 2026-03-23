@@ -7,19 +7,19 @@ import asyncio
 import json
 import logging
 import math
+import random
 import time
 import traceback
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-import random
 from random import SystemRandom
 from typing import Any, Optional
 
 import llmgym
 from llmgym.agents import TensorZeroAgent
-from tensorzero import AsyncTensorZeroGateway, TensorZeroError, TensorZeroInternalError
+from tensorzero import AsyncTensorZeroGateway, TensorZeroInternalError
 
 from autopilot_benchmarks.infra.config_generator import parse_env_config
 
@@ -100,9 +100,7 @@ class _InferenceTracker:
                     await asyncio.sleep(delay)
                 else:
                     self.progress.record_inference_duration(duration_seconds)
-                    self.progress.mark(
-                        event=f"inference:{function_name}:error:{type(exc).__name__}"
-                    )
+                    self.progress.mark(event=f"inference:{function_name}:error:{type(exc).__name__}")
                     logger.warning(
                         "Episode %d step %d inference %d failed after %d attempts (%.2fs): %s: %s",
                         self.episode_num,
@@ -118,9 +116,7 @@ class _InferenceTracker:
                 # Non-transient errors (e.g. TensorZeroError / 4xx) — fail immediately
                 duration_seconds = time.perf_counter() - started_at
                 self.progress.record_inference_duration(duration_seconds)
-                self.progress.mark(
-                    event=f"inference:{function_name}:error:{type(exc).__name__}"
-                )
+                self.progress.mark(event=f"inference:{function_name}:error:{type(exc).__name__}")
                 logger.warning(
                     "Episode %d step %d inference %d failed after %.2fs: %s: %s",
                     self.episode_num,
@@ -206,15 +202,11 @@ class EpisodeProgress:
 
     def record_inference_duration(self, duration_seconds: float) -> None:
         self.total_inference_seconds += duration_seconds
-        self.slowest_inference_seconds = max(
-            self.slowest_inference_seconds, duration_seconds
-        )
+        self.slowest_inference_seconds = max(self.slowest_inference_seconds, duration_seconds)
 
     def record_agent_act_duration(self, duration_seconds: float) -> None:
         self.total_agent_act_seconds += duration_seconds
-        self.slowest_agent_act_seconds = max(
-            self.slowest_agent_act_seconds, duration_seconds
-        )
+        self.slowest_agent_act_seconds = max(self.slowest_agent_act_seconds, duration_seconds)
 
     def record_env_step_duration(
         self,
@@ -224,9 +216,7 @@ class EpisodeProgress:
         tool_name: Optional[str],
     ) -> None:
         self.total_env_step_seconds += duration_seconds
-        self.slowest_env_step_seconds = max(
-            self.slowest_env_step_seconds, duration_seconds
-        )
+        self.slowest_env_step_seconds = max(self.slowest_env_step_seconds, duration_seconds)
         if action_kind == "tool_call" and tool_name == "execute_command":
             self.total_execute_command_seconds += duration_seconds
         elif action_kind == "tool_call" and tool_name == "submit_solution":
@@ -280,11 +270,7 @@ def _summarize_action(action: Any) -> dict[str, Any]:
             "command_preview": None,
         }
 
-    tool_calls = [
-        content
-        for content in action
-        if hasattr(content, "name") and hasattr(content, "arguments")
-    ]
+    tool_calls = [content for content in action if hasattr(content, "name") and hasattr(content, "arguments")]
     text_blocks = [content for content in action if hasattr(content, "content")]
 
     if len(tool_calls) == 1 and len(action) == 1:
@@ -312,9 +298,7 @@ def _summarize_action(action: Any) -> dict[str, Any]:
         }
 
     if tool_calls:
-        tool_names = ",".join(
-            str(getattr(tool_call, "name", "<unknown>")) for tool_call in tool_calls
-        )
+        tool_names = ",".join(str(getattr(tool_call, "name", "<unknown>")) for tool_call in tool_calls)
         return {
             "kind": "mixed",
             "tool_name": tool_names,
@@ -456,10 +440,7 @@ async def run_episode(
             obs = step_data.observation
             done = step_data.terminated or step_data.truncated
             progress.mark(
-                event=(
-                    "env_step:complete:"
-                    f"terminated={step_data.terminated}:truncated={step_data.truncated}"
-                ),
+                event=(f"env_step:complete:terminated={step_data.terminated}:truncated={step_data.truncated}"),
                 step_num=step_num,
             )
             logger.info(
@@ -616,9 +597,7 @@ async def run_rollout(
             num_episodes = actual_episodes
             task_indices = list(range(num_episodes))
         else:
-            logger.info(
-                "unique_tasks: env has no num_tasks, falling back to random sampling"
-            )
+            logger.info("unique_tasks: env has no num_tasks, falling back to random sampling")
         probe_env.close()
 
     async def _run_with_timeout(
@@ -674,10 +653,7 @@ async def run_rollout(
             return await coro
 
     if task_indices is not None:
-        tasks = [
-            _run_with_timeout(i + 1, task_idx=task_indices[i])
-            for i in range(num_episodes)
-        ]
+        tasks = [_run_with_timeout(i + 1, task_idx=task_indices[i]) for i in range(num_episodes)]
     else:
         tasks = [_run_with_timeout(i + 1) for i in range(num_episodes)]
 
@@ -699,11 +675,7 @@ async def run_rollout(
                     success=False,
                     error_type=type(result).__name__,
                     error_message=str(result),
-                    stack_trace="".join(
-                        traceback.format_exception(
-                            type(result), result, result.__traceback__
-                        )
-                    ),
+                    stack_trace="".join(traceback.format_exception(type(result), result, result.__traceback__)),
                     timestamp=datetime.now(timezone.utc).isoformat(),
                 )
             )
@@ -895,9 +867,7 @@ def _log_summary(
                 error_counts[failure.error_type] += 1
         logger.info("-" * 60)
         logger.info("Error breakdown:")
-        for error_type, count in sorted(
-            error_counts.items(), key=lambda x: x[1], reverse=True
-        ):
+        for error_type, count in sorted(error_counts.items(), key=lambda x: x[1], reverse=True):
             logger.info("  %s: %d", error_type, count)
 
     logger.info("=" * 60)

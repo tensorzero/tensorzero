@@ -39,7 +39,6 @@ class InfraConfig(BaseModel):
     gateway_shutdown_timeout: float = 10.0
 
 
-
 class EnvironmentConfig(BaseModel):
     """Configuration for a single evaluation environment.
 

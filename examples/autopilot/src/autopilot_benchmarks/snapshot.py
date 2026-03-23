@@ -87,15 +87,11 @@ async def create_snapshot(
 
     # Write baseline metrics
     metrics_path = snapshot_dir / "baseline_metrics.json"
-    metrics_path.write_text(
-        json.dumps({"train": train_metrics, "test": test_metrics}, indent=2)
-    )
+    metrics_path.write_text(json.dumps({"train": train_metrics, "test": test_metrics}, indent=2))
 
     # Write baseline stats
     stats_path = snapshot_dir / "baseline_stats.json"
-    stats_path.write_text(
-        json.dumps({"train": train_stats, "test": test_stats}, indent=2)
-    )
+    stats_path.write_text(json.dumps({"train": train_stats, "test": test_stats}, indent=2))
 
     # Write metadata
     metadata = SnapshotMetadata(
@@ -150,22 +146,14 @@ def validate_snapshot(
     # snapshots created before the llmgym_env split (where harbor envs all
     # stored env_name="harbor_v0").
     if metadata.env_name != env_config.name and metadata.env_name != env_config.effective_llmgym_env:
-        mismatches.append(
-            f"env_name: snapshot={metadata.env_name}, config={env_config.name}"
-        )
+        mismatches.append(f"env_name: snapshot={metadata.env_name}, config={env_config.name}")
     if metadata.function_name != env_config.function_name:
-        mismatches.append(
-            f"function_name: snapshot={metadata.function_name}, config={env_config.function_name}"
-        )
+        mismatches.append(f"function_name: snapshot={metadata.function_name}, config={env_config.function_name}")
     if metadata.metric_name != env_config.metric_name:
-        mismatches.append(
-            f"metric_name: snapshot={metadata.metric_name}, config={env_config.metric_name}"
-        )
+        mismatches.append(f"metric_name: snapshot={metadata.metric_name}, config={env_config.metric_name}")
 
     if mismatches:
-        raise ValueError(
-            f"Snapshot does not match environment config: {'; '.join(mismatches)}"
-        )
+        raise ValueError(f"Snapshot does not match environment config: {'; '.join(mismatches)}")
 
     logger.info("Snapshot validated: %s", snapshot_dir)
 
@@ -209,9 +197,7 @@ def load_baseline_data(
     """
     metrics = json.loads((snapshot_dir / "baseline_metrics.json").read_text())
     stats = json.loads((snapshot_dir / "baseline_stats.json").read_text())
-    metadata = SnapshotMetadata.from_json(
-        (snapshot_dir / "snapshot_metadata.json").read_text()
-    )
+    metadata = SnapshotMetadata.from_json((snapshot_dir / "snapshot_metadata.json").read_text())
 
     logger.info(
         "Loaded baseline data from snapshot: env=%s, created=%s",
