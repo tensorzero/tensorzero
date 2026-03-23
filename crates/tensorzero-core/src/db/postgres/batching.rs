@@ -6,6 +6,8 @@ use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
+use sqlx::QueryBuilder;
+
 use crate::config::BatchWritesConfig;
 use crate::db::BatchWriterHandle;
 use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
@@ -157,49 +159,57 @@ struct PostgresBatchWriter {
     model_inferences_rx: ChannelReceiver<StoredModelInference>,
 }
 
-/// Helper macro to spawn a flush task for a [`ChannelReceiver`].
-macro_rules! spawn_flush_task {
-    ($join_set:expr, $channel_rx:expr, $pool:expr, $max_rows:expr, $batch_timeout:expr,
-     $build_meta:expr, $build_data:expr, $meta_err:literal, $data_err:literal,
-     $meta_build_err:literal, $data_build_err:literal) => {{
-        let pool = $pool.clone();
-        let channel = $channel_rx;
-        $join_set.spawn(async move {
-            process_channel_with_capacity_and_timeout(
-                channel,
-                $max_rows,
-                $batch_timeout,
-                move |buffer| {
-                    let pool = pool.clone();
-                    async move {
-                        // TODO: if this errors, should we retry?
-                        match $build_meta(&buffer) {
-                            Ok(mut qb) => {
-                                if let Err(e) = qb.build().execute(&pool).await {
-                                    tracing::error!(concat!($meta_err, ": {e}"), e = e);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(concat!($meta_build_err, ": {e}"), e = e);
-                            }
-                        }
-                        match $build_data(&buffer) {
-                            Ok(mut qb) => {
-                                if let Err(e) = qb.build().execute(&pool).await {
-                                    tracing::error!(concat!($data_err, ": {e}"), e = e);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::error!(concat!($data_build_err, ": {e}"), e = e);
+/// Spawn a flush task that periodically drains `channel` and executes two insert queries
+/// (one for metadata, one for data) built from each batch.
+#[expect(clippy::too_many_arguments)]
+fn spawn_flush_task<T: Send + 'static>(
+    join_set: &mut JoinSet<()>,
+    channel: ChannelReceiver<T>,
+    pool: PgPool,
+    max_rows: usize,
+    batch_timeout: Duration,
+    build_meta: fn(&[T]) -> Result<QueryBuilder<sqlx::Postgres>, Error>,
+    build_data: fn(&[T]) -> Result<QueryBuilder<sqlx::Postgres>, Error>,
+    meta_err: &'static str,
+    data_err: &'static str,
+    meta_build_err: &'static str,
+    data_build_err: &'static str,
+) {
+    join_set.spawn(async move {
+        process_channel_with_capacity_and_timeout(
+            channel,
+            max_rows,
+            batch_timeout,
+            move |buffer| {
+                let pool = pool.clone();
+                async move {
+                    // TODO: if this errors, should we retry?
+                    match build_meta(&buffer) {
+                        Ok(mut qb) => {
+                            if let Err(e) = qb.build().execute(&pool).await {
+                                tracing::error!("{meta_err}: {e}");
                             }
                         }
-                        buffer
+                        Err(e) => {
+                            tracing::error!("{meta_build_err}: {e}");
+                        }
                     }
-                },
-            )
-            .await;
-        });
-    }};
+                    match build_data(&buffer) {
+                        Ok(mut qb) => {
+                            if let Err(e) = qb.build().execute(&pool).await {
+                                tracing::error!("{data_err}: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("{data_build_err}: {e}");
+                        }
+                    }
+                    buffer
+                }
+            },
+        )
+        .await;
+    });
 }
 
 impl PostgresBatchWriter {
@@ -209,10 +219,10 @@ impl PostgresBatchWriter {
         let max_rows = config.max_rows_postgres.unwrap_or(config.max_rows);
 
         // Chat inferences flush task
-        spawn_flush_task!(
-            join_set,
+        spawn_flush_task(
+            &mut join_set,
             self.chat_inferences_rx,
-            pool,
+            pool.clone(),
             max_rows,
             batch_timeout,
             build_insert_chat_inferences_query,
@@ -220,14 +230,14 @@ impl PostgresBatchWriter {
             "Error writing chat inferences to Postgres",
             "Error writing chat inference IO to Postgres",
             "Error building chat inferences query",
-            "Error building chat inference IO query"
+            "Error building chat inference IO query",
         );
 
         // JSON inferences flush task
-        spawn_flush_task!(
-            join_set,
+        spawn_flush_task(
+            &mut join_set,
             self.json_inferences_rx,
-            pool,
+            pool.clone(),
             max_rows,
             batch_timeout,
             build_insert_json_inferences_query,
@@ -235,12 +245,12 @@ impl PostgresBatchWriter {
             "Error writing json inferences to Postgres",
             "Error writing json inference IO to Postgres",
             "Error building json inferences query",
-            "Error building json inference IO query"
+            "Error building json inference IO query",
         );
 
         // Model inferences flush task
-        spawn_flush_task!(
-            join_set,
+        spawn_flush_task(
+            &mut join_set,
             self.model_inferences_rx,
             pool,
             max_rows,
@@ -250,7 +260,7 @@ impl PostgresBatchWriter {
             "Error writing model inferences to Postgres",
             "Error writing model inference IO to Postgres",
             "Error building model inferences query",
-            "Error building model inference IO query"
+            "Error building model inference IO query",
         );
 
         while let Some(result) = join_set.join_next().await {
