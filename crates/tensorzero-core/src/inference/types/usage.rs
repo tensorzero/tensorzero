@@ -61,7 +61,10 @@ pub struct RawResponseEntry {
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    // Omit from serialized output when None (per AGENTS.md convention for optional fields).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_cache_read_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_cache_write_input_tokens: Option<u32>,
     #[serde(default, with = "tensorzero_types::serde_utils::decimal_float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
