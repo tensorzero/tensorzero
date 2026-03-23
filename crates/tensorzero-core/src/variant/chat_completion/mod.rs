@@ -1744,9 +1744,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -1831,9 +1831,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -1932,9 +1932,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2039,9 +2039,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2175,9 +2175,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2304,9 +2304,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2646,9 +2646,9 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
-                        cost: None,
                         provider_cache_read_input_tokens: None,
                         provider_cache_write_input_tokens: None,
+                        cost: None,
                     })
                 );
                 break;
