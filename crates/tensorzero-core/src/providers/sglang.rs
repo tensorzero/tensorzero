@@ -32,7 +32,7 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
 use crate::tool::ToolCallChunk;
 use uuid::Uuid;
 
@@ -709,6 +709,7 @@ impl<'a> SGLangRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;

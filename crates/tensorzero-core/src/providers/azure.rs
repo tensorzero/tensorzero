@@ -35,7 +35,7 @@ use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::OpenAIMessagesConfig;
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use uuid::Uuid;
 
 use super::chat_completions::{
@@ -730,6 +730,7 @@ impl<'a> AzureRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
