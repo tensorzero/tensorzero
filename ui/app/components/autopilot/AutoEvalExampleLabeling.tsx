@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
-import { ExpandableElement } from "~/components/input_output/ExpandableElement";
+import { ScrollFadeContainer } from "~/components/input_output/ScrollFadeContainer";
 import {
   Tooltip,
   TooltipContent,
@@ -18,7 +18,6 @@ import type {
 } from "~/types/tensorzero";
 
 const MAX_TEXTAREA_ROWS = 3;
-const CONTEXT_MAX_HEIGHT = 200;
 
 function JsonBlock({ data }: { data: unknown }) {
   const formatted = useFormattedJson(
@@ -65,11 +64,7 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
           {block.label}
         </span>
       )}
-      <div className="border-l-2 border-purple-200 pl-2">
-        <ExpandableElement maxHeight={CONTEXT_MAX_HEIGHT}>
-          {content}
-        </ExpandableElement>
-      </div>
+      <div className="border-l-2 border-purple-200 pl-2">{content}</div>
     </div>
   );
 }
@@ -253,7 +248,9 @@ export function AutoEvalExampleLabelingCard({
       }
     >
       <div className="flex flex-col gap-4">
-        <ContextGrid blocks={example.context} />
+        <ScrollFadeContainer maxHeight="60vh">
+          <ContextGrid blocks={example.context} />
+        </ScrollFadeContainer>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-fg-primary text-sm font-medium">

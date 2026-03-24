@@ -242,6 +242,8 @@ async fn test_list_datasets_with_pagination() {
     let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
 
     // Create multiple datasets to test pagination
+    // Use a unique function_name so pagination queries are isolated from other concurrent tests
+    let unique_function = format!("test_paginate_fn_{}", Uuid::now_v7());
     let mut dataset_names = Vec::new();
     let mut datapoints = Vec::new();
 
@@ -251,7 +253,7 @@ async fn test_list_datasets_with_pagination() {
 
         let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: dataset_name.clone(),
-            function_name: "test_function".to_string(),
+            function_name: unique_function.clone(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: None,
@@ -287,7 +289,9 @@ async fn test_list_datasets_with_pagination() {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
-            .get(get_gateway_endpoint("/internal/datasets"))
+            .get(get_gateway_endpoint(&format!(
+                "/internal/datasets?function_name={unique_function}"
+            )))
             .send()
             .await
             .unwrap();
@@ -312,9 +316,11 @@ async fn test_list_datasets_with_pagination() {
         "All {num_datasets} test datasets should appear in list",
     );
 
-    // Test limit
+    // Test limit (filtered by our unique function to avoid interference from other tests)
     let resp = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={unique_function}&limit=1"
+        )))
         .send()
         .await
         .unwrap();
@@ -327,15 +333,19 @@ async fn test_list_datasets_with_pagination() {
         "Should return exactly 1 dataset with limit=1"
     );
 
-    // Test pagination with offset
+    // Test pagination with offset (filtered by our unique function)
     let resp_page_1 = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1&offset=0"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={unique_function}&limit=1&offset=0"
+        )))
         .send()
         .await
         .unwrap();
 
     let resp_page_2 = http_client
-        .get(get_gateway_endpoint("/internal/datasets?limit=1&offset=1"))
+        .get(get_gateway_endpoint(&format!(
+            "/internal/datasets?function_name={unique_function}&limit=1&offset=1"
+        )))
         .send()
         .await
         .unwrap();
@@ -349,7 +359,7 @@ async fn test_list_datasets_with_pagination() {
     assert_eq!(body_page_1.datasets.len(), 1);
     assert_eq!(body_page_2.datasets.len(), 1);
 
-    // Pages should have different datasets (they're ordered by last_updated DESC)
+    // Pages should have different datasets (they're ordered by last_updated DESC, dataset_name ASC)
     assert_ne!(
         body_page_1.datasets[0].dataset_name, body_page_2.datasets[0].dataset_name,
         "Different pages should return different datasets"

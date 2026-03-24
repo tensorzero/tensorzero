@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "~/utils/common";
 
 interface ScrollFadeContainerProps {
-  maxHeight: number;
+  maxHeight: number | string;
   children: React.ReactNode;
   className?: string;
   contentClassName?: string;

@@ -676,7 +676,7 @@ const meta = {
   title: "Autopilot/AutoEvalExampleLabeling",
   component: AutoEvalExampleLabelingCard,
   render: (args) => (
-    <div className="w-[800px] p-4">
+    <div className="w-full max-w-5xl p-4">
       <AutoEvalExampleLabelingCard {...args} />
     </div>
   ),
@@ -769,7 +769,7 @@ function InteractiveLabeling() {
   > | null>(null);
 
   return (
-    <div className="flex w-[800px] flex-col gap-4 p-4">
+    <div className="flex w-full max-w-5xl flex-col gap-4 p-4">
       <AutoEvalExampleLabelingCard
         payload={multiExamplePayload}
         isLoading={false}
