@@ -1645,6 +1645,9 @@ impl Config {
                 }
                 .into());
             }
+            // Metric names are interpolated into SQL in some query paths (e.g. LATERAL JOINs),
+            // so we validate they contain only safe characters.
+            crate::db::postgres::validate_safe_sql_name(metric_name, "Metric name")?;
         }
 
         // Validate each model
