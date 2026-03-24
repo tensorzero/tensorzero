@@ -562,7 +562,7 @@ async fn test_invalid_json_assistant_input_template_no_schema() {
 }
 
 #[gtest]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_named_system_template_no_schema() {
     let config_dir = tempfile::tempdir().unwrap();
     let config_path = config_dir.path().join("tensorzero.toml");

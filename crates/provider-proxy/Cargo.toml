@@ -15,7 +15,7 @@ bytes = { version = "1.10.0", features = ["serde"] }
 clap = { version = "4.5.60", features = ["derive"] }
 hex = "0.4.3"
 http = "1.4.0"
-http-body-util = "0.1.2"
+http-body-util = { workspace = true }
 http-serde-ext = "1.0.2"
 hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
 hyper-util = "0.1.19"

@@ -32,6 +32,7 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 async-stream = { workspace = true }
+http-body-util = { workspace = true }
 
 [lints]
 workspace = true
