@@ -112,6 +112,18 @@ pub struct EvaluationStatisticsRow {
     pub ci_upper: Option<f64>,
 }
 
+/// Database struct for deserializing evaluation usage statistics.
+/// Contains aggregated usage metrics for an evaluation run.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct EvaluationUsageStatisticsRow {
+    pub evaluation_run_id: Uuid,
+    pub inference_count: u32,
+    pub avg_input_tokens: Option<f64>,
+    pub avg_output_tokens: Option<f64>,
+    pub avg_cost: Option<f64>,
+    pub avg_processing_time_ms: Option<f64>,
+}
+
 /// Result of checking for existing human feedback for an inference evaluation.
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
@@ -418,6 +430,14 @@ pub trait EvaluationQueries {
         metric_names: &[String],
         evaluation_run_ids: &[Uuid],
     ) -> Result<Vec<EvaluationStatisticsRow>, Error>;
+
+    /// Gets aggregated usage statistics (tokens, cost, processing time) for specified evaluation runs.
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error>;
 
     /// Gets paginated evaluation results across all datapoints for one or more evaluation runs.
     ///

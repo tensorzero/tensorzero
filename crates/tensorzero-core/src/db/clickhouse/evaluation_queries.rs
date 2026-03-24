@@ -14,6 +14,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::EvaluationUsageStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
 use crate::db::evaluation_queries::InferenceEvaluationRunMetadata;
@@ -646,6 +647,79 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             .into_iter()
             .map(|row| row.into_evaluation_statistics_row())
             .collect())
+    }
+
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let inference_table_name = function_type.table_name();
+
+        let eval_run_ids_str: Vec<String> = evaluation_run_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect();
+        let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
+
+        let sql_query = format!(
+            r"WITH filtered_inference AS (
+                SELECT
+                    id,
+                    tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+                    processing_time_ms
+                FROM {inference_table_name}
+                WHERE id IN (
+                    SELECT DISTINCT inference_id
+                    FROM TagInference
+                    WHERE key = 'tensorzero::evaluation_run_id'
+                    AND function_name = {{function_name:String}}
+                    AND value IN ({{evaluation_run_ids:Array(String)}})
+                )
+                AND function_name = {{function_name:String}}
+            ),
+            inference_usage AS (
+                SELECT
+                    fi.id as inference_id,
+                    fi.evaluation_run_id,
+                    fi.processing_time_ms,
+                    sum(mi.input_tokens) as total_input_tokens,
+                    sum(mi.output_tokens) as total_output_tokens,
+                    if(
+                        count() = countIf(mi.cost IS NOT NULL),
+                        sum(mi.cost),
+                        NULL
+                    ) as total_cost
+                FROM filtered_inference fi
+                INNER JOIN ModelInference mi ON mi.inference_id = fi.id
+                GROUP BY fi.id, fi.evaluation_run_id, fi.processing_time_ms
+            )
+            SELECT
+                evaluation_run_id,
+                toUInt32(count()) as inference_count,
+                avg(total_input_tokens) as avg_input_tokens,
+                avg(total_output_tokens) as avg_output_tokens,
+                avg(total_cost) as avg_cost,
+                avg(processing_time_ms) as avg_processing_time_ms
+            FROM inference_usage
+            GROUP BY evaluation_run_id
+            ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let function_name_str = function_name.to_string();
+        let mut params: HashMap<&str, &str> = HashMap::new();
+        params.insert("function_name", function_name_str.as_str());
+        params.insert("evaluation_run_ids", eval_run_ids_joined.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
     }
 
     async fn get_evaluation_results(
@@ -2547,5 +2621,171 @@ mod tests {
             feedback.value,
             serde_json::json!({"score": 0.8, "reason": "good"})
         );
+    }
+
+    // ============================================================================
+    // get_evaluation_usage_statistics tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_chat_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "FROM ChatInference");
+                assert_query_contains(query, "ModelInference");
+                assert_query_contains(query, "avg(total_input_tokens)");
+                assert_query_contains(query, "avg(total_output_tokens)");
+                assert_query_contains(query, "avg(total_cost)");
+                assert_query_contains(query, "avg(processing_time_ms)");
+                assert_eq!(params.get("function_name"), Some(&"test_func"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","inference_count":10,"avg_input_tokens":100.5,"avg_output_tokens":50.2,"avg_cost":0.001,"avg_processing_time_ms":500.0}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_usage_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].inference_count, 10);
+        assert!((result[0].avg_input_tokens.unwrap() - 100.5).abs() < 0.001);
+        assert!((result[0].avg_output_tokens.unwrap() - 50.2).abs() < 0.001);
+        assert!((result[0].avg_cost.unwrap() - 0.001).abs() < 0.0001);
+        assert!((result[0].avg_processing_time_ms.unwrap() - 500.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_json_function() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                assert_query_contains(query, "FROM JsonInference");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","inference_count":5,"avg_input_tokens":200.0,"avg_output_tokens":100.0,"avg_cost":null,"avg_processing_time_ms":300.0}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_usage_statistics(
+                "test_func",
+                FunctionConfigType::Json,
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].inference_count, 5);
+        assert!((result[0].avg_input_tokens.unwrap() - 200.0).abs() < 0.001);
+        assert!(result[0].avg_cost.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_multiple_runs() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|_query, params| {
+                assert_eq!(
+                    params.get("evaluation_run_ids"),
+                    Some(&"['0196ee9c-d808-74f3-8000-02ec7409b95d','0196ee9c-d808-74f3-8000-02ec7409b95e']")
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","inference_count":10,"avg_input_tokens":100.0,"avg_output_tokens":50.0,"avg_cost":0.001,"avg_processing_time_ms":500.0}
+{"evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","inference_count":8,"avg_input_tokens":120.0,"avg_output_tokens":60.0,"avg_cost":0.002,"avg_processing_time_ms":600.0}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_usage_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &[
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap(),
+                    Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap(),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_empty_run_ids() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_usage_statistics("test_func", FunctionConfigType::Chat, &[])
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_empty_response() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_usage_statistics(
+                "nonexistent_func",
+                FunctionConfigType::Json,
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
     }
 }

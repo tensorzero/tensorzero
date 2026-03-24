@@ -7,9 +7,9 @@ use uuid::Uuid;
 
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
-    EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    InferenceEvaluationRunInsert, InferenceEvaluationRunMetadata,
-    InferenceEvaluationRunMetricMetadata, RawEvaluationResultRow,
+    EvaluationRunSearchResult, EvaluationStatisticsRow, EvaluationUsageStatisticsRow,
+    InferenceEvaluationHumanFeedbackRow, InferenceEvaluationRunInsert,
+    InferenceEvaluationRunMetadata, InferenceEvaluationRunMetricMetadata, RawEvaluationResultRow,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
@@ -18,6 +18,30 @@ use crate::serde_util::serialize_with_sorted_keys;
 use crate::statistics_util::{wald_confint, wilson_confint};
 
 use super::PostgresConnectionInfo;
+
+/// Raw usage statistics row from Postgres (uses i32 for count since Postgres INT maps to i32).
+#[derive(sqlx::FromRow)]
+struct RawEvaluationUsageStatisticsRow {
+    evaluation_run_id: Uuid,
+    inference_count: i32,
+    avg_input_tokens: Option<f64>,
+    avg_output_tokens: Option<f64>,
+    avg_cost: Option<f64>,
+    avg_processing_time_ms: Option<f64>,
+}
+
+impl RawEvaluationUsageStatisticsRow {
+    fn into_usage_statistics_row(self) -> EvaluationUsageStatisticsRow {
+        EvaluationUsageStatisticsRow {
+            evaluation_run_id: self.evaluation_run_id,
+            inference_count: self.inference_count as u32,
+            avg_input_tokens: self.avg_input_tokens,
+            avg_output_tokens: self.avg_output_tokens,
+            avg_cost: self.avg_cost,
+            avg_processing_time_ms: self.avg_processing_time_ms,
+        }
+    }
+}
 
 /// Raw statistics row from Postgres before CI computation.
 #[derive(sqlx::FromRow)]
@@ -274,6 +298,29 @@ impl EvaluationQueries for PostgresConnectionInfo {
         Ok(raw_rows
             .into_iter()
             .map(|row| row.into_evaluation_statistics_row())
+            .collect())
+    }
+
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let pool = self.get_pool_result()?;
+        let mut qb = build_get_evaluation_usage_statistics_query(
+            function_name,
+            function_type,
+            evaluation_run_ids,
+        );
+        let raw_rows: Vec<RawEvaluationUsageStatisticsRow> =
+            qb.build_query_as().fetch_all(pool).await?;
+        Ok(raw_rows
+            .into_iter()
+            .map(RawEvaluationUsageStatisticsRow::into_usage_statistics_row)
             .collect())
     }
 
@@ -599,6 +646,55 @@ fn build_get_evaluation_statistics_query(
         UNION ALL
         SELECT * FROM boolean_stats
         ORDER BY evaluation_run_id DESC, metric_name ASC
+        ",
+    );
+
+    qb
+}
+
+fn build_get_evaluation_usage_statistics_query(
+    function_name: &str,
+    function_type: FunctionConfigType,
+    evaluation_run_ids: &[Uuid],
+) -> QueryBuilder<sqlx::Postgres> {
+    let inference_table = function_type.postgres_table_name();
+    let run_id_strings: Vec<String> = evaluation_run_ids.iter().map(|id| id.to_string()).collect();
+
+    let mut qb = QueryBuilder::new(
+        "WITH filtered_inference AS (SELECT id, tags->>'tensorzero::evaluation_run_id' as evaluation_run_id, processing_time_ms FROM ",
+    );
+    qb.push(inference_table);
+    qb.push(" WHERE tags->>'tensorzero::evaluation_run_id' = ANY(");
+    qb.push_bind(run_id_strings);
+    qb.push(") AND function_name = ");
+    qb.push_bind(function_name.to_string());
+    qb.push(
+        r"),
+        inference_usage AS (
+            SELECT
+                fi.id as inference_id,
+                fi.evaluation_run_id,
+                fi.processing_time_ms,
+                SUM(mi.input_tokens)::DOUBLE PRECISION as total_input_tokens,
+                SUM(mi.output_tokens)::DOUBLE PRECISION as total_output_tokens,
+                CASE
+                    WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                    ELSE NULL
+                END as total_cost
+            FROM filtered_inference fi
+            INNER JOIN tensorzero.model_inferences mi ON mi.inference_id = fi.id
+            GROUP BY fi.id, fi.evaluation_run_id, fi.processing_time_ms
+        )
+        SELECT
+            evaluation_run_id::UUID as evaluation_run_id,
+            COUNT(*)::INT as inference_count,
+            AVG(total_input_tokens)::DOUBLE PRECISION as avg_input_tokens,
+            AVG(total_output_tokens)::DOUBLE PRECISION as avg_output_tokens,
+            AVG(total_cost)::DOUBLE PRECISION as avg_cost,
+            AVG(processing_time_ms::DOUBLE PRECISION) as avg_processing_time_ms
+        FROM inference_usage
+        GROUP BY evaluation_run_id
+        ORDER BY evaluation_run_id DESC
         ",
     );
 
@@ -958,6 +1054,68 @@ mod tests {
             FROM tensorzero.inference_evaluation_human_feedback
             WHERE metric_name = $1 AND datapoint_id = $2 AND output = $3 LIMIT 1
             ",
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_usage_statistics_query_chat() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_usage_statistics_query(
+            "test_func",
+            FunctionConfigType::Chat,
+            &[run_id],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            WITH filtered_inference AS (SELECT id, tags->>'tensorzero::evaluation_run_id' as evaluation_run_id, processing_time_ms FROM tensorzero.chat_inferences WHERE tags->>'tensorzero::evaluation_run_id' = ANY($1) AND function_name = $2),
+                inference_usage AS (
+                    SELECT
+                        fi.id as inference_id,
+                        fi.evaluation_run_id,
+                        fi.processing_time_ms,
+                        SUM(mi.input_tokens)::DOUBLE PRECISION as total_input_tokens,
+                        SUM(mi.output_tokens)::DOUBLE PRECISION as total_output_tokens,
+                        CASE
+                            WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                            ELSE NULL
+                        END as total_cost
+                    FROM filtered_inference fi
+                    INNER JOIN tensorzero.model_inferences mi ON mi.inference_id = fi.id
+                    GROUP BY fi.id, fi.evaluation_run_id, fi.processing_time_ms
+                )
+                SELECT
+                    evaluation_run_id::UUID as evaluation_run_id,
+                    COUNT(*)::INT as inference_count,
+                    AVG(total_input_tokens)::DOUBLE PRECISION as avg_input_tokens,
+                    AVG(total_output_tokens)::DOUBLE PRECISION as avg_output_tokens,
+                    AVG(total_cost)::DOUBLE PRECISION as avg_cost,
+                    AVG(processing_time_ms::DOUBLE PRECISION) as avg_processing_time_ms
+                FROM inference_usage
+                GROUP BY evaluation_run_id
+                ORDER BY evaluation_run_id DESC
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_usage_statistics_query_json() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_usage_statistics_query(
+            "test_func",
+            FunctionConfigType::Json,
+            &[run_id],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // Verify it uses json_inferences table
+        assert!(
+            sql.contains("tensorzero.json_inferences"),
+            "Expected query to use json_inferences table"
         );
     }
 }

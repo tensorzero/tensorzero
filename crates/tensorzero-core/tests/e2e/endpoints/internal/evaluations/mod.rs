@@ -17,7 +17,8 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsResponse,
 };
 use tensorzero_core::endpoints::internal::evaluations::types::{
-    GetEvaluationStatisticsResponse, SearchEvaluationRunResult, SearchEvaluationRunsResponse,
+    GetEvaluationStatisticsResponse, GetEvaluationUsageStatisticsResponse,
+    SearchEvaluationRunResult, SearchEvaluationRunsResponse,
 };
 use tensorzero_core::endpoints::internal::evaluations::{
     GetEvaluationResultsResponse, GetEvaluationRunInfosResponse,
@@ -1830,6 +1831,157 @@ async fn test_get_human_feedback_missing_parameters() {
     assert!(
         resp.status().is_client_error(),
         "Expected client error for empty body, got status={:?}",
+        resp.status()
+    );
+}
+
+// ==================== Get Evaluation Usage Statistics Tests ====================
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_endpoint() {
+    let http_client = Client::new();
+
+    let evaluation_run_id = ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI;
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + &format!(
+            "?function_name=extract_entities&function_type=json&evaluation_run_ids={evaluation_run_id}"
+        );
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_usage_statistics request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationUsageStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.usage_statistics.len(),
+        1,
+        "Expected exactly one usage statistics entry"
+    );
+
+    let stats = &response.usage_statistics[0];
+    assert_eq!(
+        stats.evaluation_run_id,
+        Uuid::parse_str(evaluation_run_id).unwrap()
+    );
+    assert!(stats.inference_count > 0, "Expected at least one inference");
+    assert!(
+        stats.avg_input_tokens.is_some(),
+        "Expected avg_input_tokens to be present"
+    );
+    assert!(
+        stats.avg_output_tokens.is_some(),
+        "Expected avg_output_tokens to be present"
+    );
+    assert!(
+        stats.avg_processing_time_ms.is_some(),
+        "Expected avg_processing_time_ms to be present"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_multiple_runs() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + &format!(
+            "?function_name=extract_entities&function_type=json&evaluation_run_ids={ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI},{ENTITY_EXTRACTION_RUN_ID_GPT4O}"
+        );
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_usage_statistics multiple runs request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationUsageStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.usage_statistics.len(),
+        2,
+        "Expected usage statistics for both runs"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_empty_run_ids() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&evaluation_run_ids=";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_usage_statistics empty run_ids request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationUsageStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.usage_statistics.len(),
+        0,
+        "Expected 0 usage statistics for empty run_ids"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_nonexistent_run() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&evaluation_run_ids=00000000-0000-0000-0000-000000000000";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "get_evaluation_usage_statistics nonexistent run request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetEvaluationUsageStatisticsResponse = resp.json().await.unwrap();
+
+    assert_eq!(
+        response.usage_statistics.len(),
+        0,
+        "Expected 0 usage statistics for nonexistent run"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_invalid_function_type() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + &format!(
+            "?function_name=extract_entities&function_type=invalid&evaluation_run_ids={ENTITY_EXTRACTION_RUN_ID_GPT4O_MINI}"
+        );
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "get_evaluation_usage_statistics invalid function_type should fail: status={:?}",
+        resp.status()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_evaluation_usage_statistics_invalid_uuid() {
+    let http_client = Client::new();
+
+    let url = get_gateway_endpoint("/internal/evaluations/usage_statistics").to_string()
+        + "?function_name=extract_entities&function_type=json&evaluation_run_ids=not-a-uuid";
+
+    let resp = http_client.get(&url).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "get_evaluation_usage_statistics invalid UUID should fail: status={:?}",
         resp.status()
     );
 }
