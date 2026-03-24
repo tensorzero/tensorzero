@@ -23,6 +23,7 @@ use tensorzero_core::{
 };
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tower_http::decompression::RequestDecompressionLayer;
+use tracing::Instrument;
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.
@@ -109,6 +110,10 @@ async fn possibly_prevent_request_cancellation(
 
     let deferred_tasks = state.deferred_tasks.clone();
 
+    // Capture the current tracing span so that the spawned task inherits the span context.
+    // This is critical for the `OverheadTimingLayer`, which relies on span parent-child
+    // relationships to detect external spans and subtract their time from the overhead metric.
+    let span = tracing::Span::current();
     let task = async move {
         let resp = next.run(request).await;
         let (parts, body) = resp.into_parts();
@@ -119,19 +124,24 @@ async fn possibly_prevent_request_cancellation(
         // on the other end).
         // This ensures that the stream will always be driven to completion, even if the client closes the connection early.
         let (send, recv) = tokio::sync::mpsc::channel(1);
-        deferred_tasks.spawn(async move {
-            while let Some(chunk) = stream.next().await {
-                // We deliberately ignore errors here - even if the receiver is dropped
-                // (due to the client closing the connection early), we still want to
-                // drive the original stream to completion, which will finish executing
-                // all of the tensorzero stream logic (e.g. writing the collected chunks
-                // to the database, handling rate limiting, etc.)
-                let _ = send.send(chunk).await;
+        let inner_span = tracing::Span::current();
+        deferred_tasks.spawn(
+            async move {
+                while let Some(chunk) = stream.next().await {
+                    // We deliberately ignore errors here - even if the receiver is dropped
+                    // (due to the client closing the connection early), we still want to
+                    // drive the original stream to completion, which will finish executing
+                    // all of the tensorzero stream logic (e.g. writing the collected chunks
+                    // to the database, handling rate limiting, etc.)
+                    let _ = send.send(chunk).await;
+                }
             }
-        });
+            .instrument(inner_span),
+        );
         let spawned_stream = axum::body::Body::new(StreamBody::new(ReceiverStream::new(recv)));
         Response::from_parts(parts, spawned_stream)
-    };
+    }
+    .instrument(span);
     // Our 'task' includes the call to 'next.run(request)', which ensures that the request handler
     // will still be executed to completion, even if the client closes the connection early.
     // The 'task' future includes additional handling for streaming responses
