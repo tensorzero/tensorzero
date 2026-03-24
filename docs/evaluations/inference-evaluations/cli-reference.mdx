@@ -31,7 +31,8 @@ services:
 
 ```bash
 docker compose run --rm evaluations \
-    --evaluation-name haiku_eval \
+    --function-name write_haiku \
+    --evaluator-names valid_haiku,exact_match \
     --dataset-name haiku_dataset \
     --variant-name gpt_4o \
     --concurrency 5
@@ -150,12 +151,21 @@ The dataset should be stored in your database.
   either `--dataset-name` or `--datapoint-ids`, but not both.
 </Note>
 
-#### `--evaluation-name NAME` (`-e`)
+#### `--function-name NAME`
 
-- **Example:** `--evaluation-name my_evaluation`
+- **Example:** `--function-name my_function`
 - **Required:** yes
 
-This flag specifies the name of the evaluation to run, as defined in your TensorZero configuration file.
+This flag specifies the name of the function to evaluate.
+The function should be defined in your TensorZero configuration file.
+
+#### `--evaluator-names NAME[,NAME,...]`
+
+- **Example:** `--evaluator-names exact_match,valid_haiku`
+- **Required:** yes
+
+This flag specifies which evaluators to run, as a comma-separated list.
+The evaluators should be defined under the function's configuration in your TensorZero configuration file.
 
 #### `--format FORMAT` (`-f`)
 

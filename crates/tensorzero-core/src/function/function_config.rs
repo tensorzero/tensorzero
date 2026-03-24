@@ -2055,6 +2055,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2126,6 +2128,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2183,6 +2187,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2243,6 +2249,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2300,6 +2308,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2357,6 +2367,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(0),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2432,6 +2444,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2483,6 +2497,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2542,6 +2558,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2598,6 +2616,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2661,6 +2681,8 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(10),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),

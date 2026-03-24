@@ -16,17 +16,17 @@
     "format": "oxfmt \"**/*.{js,jsx,ts,tsx,json}\""
   },
   "dependencies": {
-    "openai": "^6.4.0",
+    "openai": "^6.29.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.30.1",
-    "@types/node": "^22.16.0",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.19.15",
     "@types/uuid": "^10.0.0",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "oxfmt": "^0.35.0",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.36.0",
-    "vitest": "^4.0.8"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.1",
+    "vitest": "^4.1.0"
   }
 }
