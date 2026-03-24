@@ -87,7 +87,7 @@ const Button: React.FC<ButtonProps> = ({
 
   return (
     <Comp
-      className={buttonVariants({ variant, size, className })}
+      className={cn(buttonVariants({ variant, size, className }))}
       disabled={isDisabled}
       {...props}
     >
