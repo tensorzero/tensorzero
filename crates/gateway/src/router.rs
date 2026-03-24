@@ -138,7 +138,7 @@ async fn possibly_prevent_request_cancellation(
     match state.deferred_tasks.spawn(task).await {
         Ok(resp) => resp,
         Err(e) => Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to join task in prevent_post_request_cancellation: {e:?}"),
+            message: format!("Failed to join task in possibly_prevent_request_cancellation: {e:?}"),
         })
         .into_response(),
     }
