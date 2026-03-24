@@ -6,25 +6,50 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use enum_map::EnumMap;
 use futures::{FutureExt, TryFutureExt};
 use tokio::runtime::{Handle, RuntimeFlavor};
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
-use crate::db::batching::process_channel_with_capacity_and_timeout;
+use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::error::{Error, ErrorDetails};
 
+/// Wraps either a bounded or unbounded mpsc sender.
+#[derive(Debug)]
+enum ChannelSender {
+    Bounded(mpsc::Sender<String>),
+    Unbounded(mpsc::UnboundedSender<String>),
+}
+
+fn create_channel_pair(capacity: Option<usize>) -> (ChannelSender, ChannelReceiver<String>) {
+    match capacity {
+        Some(cap) => {
+            let (tx, rx) = mpsc::channel(cap);
+            (ChannelSender::Bounded(tx), ChannelReceiver::Bounded(rx))
+        }
+        None => {
+            let (tx, rx) = mpsc::unbounded_channel();
+            (ChannelSender::Unbounded(tx), ChannelReceiver::Unbounded(rx))
+        }
+    }
+}
+
 /// A `BatchSender` is used to submit entries to the batch writer, which aggregates
 /// and submits them to ClickHouse on a schedule defined by a `BatchWritesConfig`.
+///
+/// By default, channels are unbounded (no data is dropped). If `write_queue_capacity` is set,
+/// channels are bounded: when full, new rows are dropped and logged rather than buffering
+/// without limit.
+///
 /// When a `BatchSender` is dropped, it blocks until the batch writer finishes
 /// processing all outstanding batches.
 #[derive(Debug)]
 pub struct BatchSender {
     // This needs to be an `Option`, so that we can drop it
-    // (in particular, the `UnboundedSender`) from our `Drop` impl.
+    // (in particular, the sender) from our `Drop` impl.
     // This signals to the writer tasks that the channel is closed,
     // and that they should exit after they finish processing all messages
-    // currently in the channell.
-    channels: Option<EnumMap<TableName, UnboundedSender<String>>>,
+    // currently in the channel.
+    channels: Option<EnumMap<TableName, ChannelSender>>,
     pub writer_handle: BatchWriterHandle,
 }
 
@@ -42,9 +67,10 @@ impl BatchSender {
                     .to_string(),
             }));
         }
+        let capacity = config.write_queue_capacity;
         let mut channels: EnumMap<TableName, _> = enum_map::enum_map! {
             _ => {
-                let (tx, rx) = mpsc::unbounded_channel();
+                let (tx, rx) = create_channel_pair(capacity);
                 (Some(tx), Some(rx))
             }
         };
@@ -92,10 +118,30 @@ impl BatchSender {
         };
         let channel = &channels[table_name];
         for row in rows {
-            if let Err(e) = channel.send(row) {
-                tracing::error!(
-                    "Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
-                );
+            match channel {
+                ChannelSender::Bounded(tx) => match tx.try_send(row) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        tracing::error!(
+                            table = ?table_name,
+                            "ClickHouse batch channel full — dropping row. \
+                             Increase `write_queue_capacity` or check ClickHouse performance."
+                        );
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        tracing::error!(
+                            table = ?table_name,
+                            "ClickHouse batch writer has shut down — dropping row."
+                        );
+                    }
+                },
+                ChannelSender::Unbounded(tx) => {
+                    if let Err(e) = tx.send(row) {
+                        tracing::error!(
+                            "Error sending row to batch channel: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"
+                        );
+                    }
+                }
             }
         }
         Ok(())
@@ -103,35 +149,33 @@ impl BatchSender {
 }
 
 pub struct BatchWriter {
-    channels: EnumMap<TableName, UnboundedReceiver<String>>,
+    channels: EnumMap<TableName, ChannelReceiver<String>>,
 }
 
 impl BatchWriter {
     pub async fn process(self, clickhouse: ClickHouseConnectionInfo, config: BatchWritesConfig) {
         let mut join_set = JoinSet::new();
         let batch_timeout = Duration::from_millis(config.flush_interval_ms);
+        let max_rows = config.max_rows;
+
         for (table_name, channel) in self.channels {
             let clickhouse = clickhouse.clone();
+            let flush = move |buffer: Vec<String>| {
+                let clickhouse = clickhouse.clone();
+                async move {
+                    if let Err(e) = clickhouse
+                        .write_non_batched::<()>(Rows::Serialized(&buffer), table_name)
+                        .await
+                    {
+                        // TODO: if this errors, should we retry?
+                        tracing::error!("Error writing to ClickHouse: {e}");
+                    }
+                    buffer
+                }
+            };
             join_set.spawn(async move {
-                process_channel_with_capacity_and_timeout(
-                    channel,
-                    config.max_rows,
-                    batch_timeout,
-                    move |buffer| {
-                        let clickhouse = clickhouse.clone();
-                        async move {
-                            if let Err(e) = clickhouse
-                                .write_non_batched::<()>(Rows::Serialized(&buffer), table_name)
-                                .await
-                            {
-                                // TODO: if this errors, should we retry?
-                                tracing::error!("Error writing to ClickHouse: {e}");
-                            }
-                            buffer
-                        }
-                    },
-                )
-                .await;
+                process_channel_with_capacity_and_timeout(channel, max_rows, batch_timeout, flush)
+                    .await;
             });
         }
         while let Some(result) = join_set.join_next().await {
