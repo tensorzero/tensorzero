@@ -48,11 +48,13 @@ TensorZero is used by companies ranging from frontier AI startups to the Fortune
 
 > [!NOTE]
 >
-> ### **Coming Soon: TensorZero Autopilot**
+> ### **🆕 TensorZero Autopilot**
 >
 > TensorZero Autopilot is an **automated AI engineer** powered by TensorZero that analyzes LLM observability data, sets up evals, optimizes prompts and models, and runs A/B tests.
 >
-> **[Learn more →](https://www.tensorzero.com/blog/automated-ai-engineer/)**&emsp;&emsp;**[Join the waitlist →](https://www.tensorzero.com/autopilot-waitlist)**
+> It **dramatically improves the performance of LLM agents** across diverse tasks:
+>
+> **[Learn more →](https://www.tensorzero.com/blog/automated-ai-engineer/)**&emsp;&emsp;**[Schedule a demo →](https://www.tensorzero.com/schedule-demo)**
 
 ### 🌐 LLM Gateway
 

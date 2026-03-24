@@ -56,9 +56,8 @@ Results are written to `output/<env_name>/<timestamp>/`.
 | `terminal_bench.yaml`    | terminal-bench@2.0   | Terminal commands        | reward      | OPENAI, ANTHROPIC, DAYTONA |
 
 All benchmarks also require `TENSORZERO_AUTOPILOT_API_KEY`.
-TensorZero Autopilot is currently in a private beta.
-Please sign up on the [waitlist](https://tensorzerodotcom.notion.site/2d87520bbad380c9ad0dd19566b3bc91) to get access.
-Harbor-based benchmarks (lawbench, medagentbench, replicationbench, terminal-bench) additionally require `DAYTONA_API_KEY` for sandboxed code execution.
+Please visit our website to [get access](https://www.tensorzero.com).
+Harbor-based benchmarks (`lawbench`, `medagentbench`, `replicationbench`, `terminal-bench`) additionally require `DAYTONA_API_KEY` for sandboxed code execution.
 
 ## Configuration
 
