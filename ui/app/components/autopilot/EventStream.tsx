@@ -371,19 +371,6 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     case "tool_call_authorization":
-      return (
-        <span className="inline-flex items-center gap-2">
-          Tool Call
-          {payload.tool_call_name && (
-            <>
-              <DotSeparator />
-              <span className="font-mono font-medium">
-                {payload.tool_call_name}
-              </span>
-            </>
-          )}
-        </span>
-      );
     case "tool_result":
       return (
         <span className="inline-flex items-center gap-2">
