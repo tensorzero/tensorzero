@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     error::{Error, ErrorDetails},
@@ -49,6 +51,7 @@ pub mod migration_0048;
 pub mod migration_0049;
 pub mod migration_0050;
 pub mod migration_0051;
+pub mod migration_0052;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -233,4 +236,58 @@ async fn check_index_exists(
     );
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim() == "1")
+}
+
+/// Submits a `MATERIALIZE INDEX` mutation asynchronously (with `mutations_sync=0` to override
+/// the connection-level `mutations_sync=2`), then polls `system.mutations` until the table
+/// has no pending mutations.
+///
+/// This avoids holding a blocking HTTP connection for the entire duration of the mutation,
+/// which can cause timeouts and lock contention when multiple gateway instances start concurrently.
+pub async fn materialize_index(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    index: &str,
+) -> Result<(), Error> {
+    // Submit the mutation asynchronously by overriding mutations_sync at the query level.
+    // The connection-level mutations_sync=2 is overridden by the SETTINGS clause.
+    let query =
+        format!("ALTER TABLE {table} MATERIALIZE INDEX {index} SETTINGS mutations_sync = 0");
+    clickhouse.run_query_synchronous_no_params(query).await?;
+
+    // Poll system.mutations until no pending mutations remain for this table.
+    let poll_interval = Duration::from_millis(100);
+    let timeout = Duration::from_secs(300);
+    let start = std::time::Instant::now();
+
+    loop {
+        let query = format!(
+            "SELECT count() FROM system.mutations WHERE database = currentDatabase() AND table = '{table}' AND is_done = 0 FORMAT CSV"
+        );
+        let result = clickhouse.run_query_synchronous_no_params(query).await?;
+
+        let pending: i64 = result.response.trim().parse().map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
+                id: "materialize_index".to_string(),
+                message: format!("Failed to parse pending mutation count for table `{table}`: {e}"),
+            })
+        })?;
+
+        if pending == 0 {
+            return Ok(());
+        }
+
+        if start.elapsed() > timeout {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "materialize_index".to_string(),
+                message: format!(
+                    "Timed out waiting for MATERIALIZE INDEX `{index}` on table `{table}` to complete ({pending} mutations still pending after {}s)",
+                    timeout.as_secs()
+                ),
+            }
+            .into());
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
 }

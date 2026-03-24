@@ -108,6 +108,7 @@ pub async fn get_clean_clickhouse(
             flush_interval_ms: 1000,
             max_rows: 100,
             max_rows_postgres: None,
+            write_queue_capacity: None,
         },
     )
     .await
@@ -626,6 +627,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         ttft_ms: None,
         cached: false,
         cost: Some(cost1),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
         timestamp: None,
@@ -646,6 +649,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         ttft_ms: None,
         cached: false,
         cost: Some(cost2),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
         timestamp: None,
@@ -687,15 +692,15 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     clean_start
 }
 
-async fn run_migration_0051_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
+async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R>(
     clickhouse: &ClickHouseConnectionInfo,
     run_migration: F,
 ) -> bool {
     // Insert ModelInference rows: two with cost, one without (NULL cost).
-    // Migration 0051 adds `count_with_cost` via `countState(cost)`, so only
+    // Migration 0052 adds `count_with_cost` via `countState(cost)`, so only
     // rows with non-null cost should be counted in the backfill.
-    let test_model_name = "test_count_with_cost_model_0051";
-    let test_provider_name = "test_count_with_cost_provider_0051";
+    let test_model_name = "test_count_with_cost_model_0052";
+    let test_provider_name = "test_count_with_cost_provider_0052";
     let cost1 = Decimal::from_str("0.001500000").unwrap();
     let cost2 = Decimal::from_str("0.002500000").unwrap();
 
@@ -710,6 +715,8 @@ async fn run_migration_0051_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             output: Some(vec![]),
             input_tokens: Some(100),
             output_tokens: Some(50),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: None,
             model_name: test_model_name.to_string(),
             model_provider_name: test_provider_name.to_string(),
@@ -730,6 +737,8 @@ async fn run_migration_0051_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             output: Some(vec![]),
             input_tokens: Some(200),
             output_tokens: Some(100),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: None,
             model_name: test_model_name.to_string(),
             model_provider_name: test_provider_name.to_string(),
@@ -750,6 +759,8 @@ async fn run_migration_0051_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             output: Some(vec![]),
             input_tokens: Some(300),
             output_tokens: Some(150),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: None,
             model_name: test_model_name.to_string(),
             model_provider_name: test_provider_name.to_string(),
@@ -869,7 +880,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45
     ]
 );
 
@@ -1047,12 +1058,13 @@ async fn test_clickhouse_migration_manager() {
                     );
                     run_migration_0050_with_data(clickhouse, run_migration).await
                 }
-                "Migration0051" => {
+                "Migration0051" => run_migration().await,
+                "Migration0052" => {
                     assert!(
                         !initial_clean_start.get(),
-                        "Migration0051 should not be run on a clean start"
+                        "Migration0052 should not be run on a clean start"
                     );
-                    run_migration_0051_with_data(clickhouse, run_migration).await
+                    run_migration_0052_with_data(clickhouse, run_migration).await
                 }
                 _ => run_migration().await,
             };
@@ -1183,6 +1195,8 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         cost: None,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
         timestamp: None,

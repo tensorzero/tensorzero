@@ -65,6 +65,16 @@ export type ModelInference = {
    */
   output?: Array<ContentBlockOutput>;
   /**
+   * Number of input tokens read from the provider's prompt cache.
+   * None if the provider does not report cache token counts.
+   */
+  provider_cache_read_input_tokens?: number;
+  /**
+   * Number of input tokens written to the provider's prompt cache.
+   * None if the provider does not report cache token counts.
+   */
+  provider_cache_write_input_tokens?: number;
+  /**
    * Whether the inference was cached.
    */
   cached: boolean;

@@ -212,6 +212,8 @@ pub fn create_mock_chat_response(text: &str) -> InferenceResponse {
             input_tokens: Some(10),
             output_tokens: Some(5),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         },
         raw_usage: None,
         original_response: None,

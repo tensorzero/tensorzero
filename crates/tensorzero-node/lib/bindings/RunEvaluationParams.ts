@@ -6,9 +6,20 @@ import type { CacheEnabledMode } from "./CacheEnabledMode";
  */
 export type RunEvaluationParams = {
   /**
-   * Name of the evaluation to run (must be defined in config).
+   * Name of the evaluation to run (legacy named-evaluation path).
+   * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
    */
-  evaluation_name: string;
+  evaluation_name?: string | null;
+  /**
+   * Name of the function to evaluate when using `evaluator_names`.
+   * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
+   */
+  function_name?: string | null;
+  /**
+   * Function-scoped evaluator names to run.
+   * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
+   */
+  evaluator_names?: Array<string> | null;
   /**
    * Name of the dataset to run on.
    * Either `dataset_name` or `datapoint_ids` must be provided, but not both.

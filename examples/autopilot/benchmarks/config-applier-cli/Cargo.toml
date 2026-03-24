@@ -1,0 +1,9 @@
+[package]
+name = "config-applier-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+config-applier = { git = "https://github.com/tensorzero/tensorzero", branch = "main" }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }

@@ -1028,6 +1028,8 @@ impl From<GeminiUsageMetadata> for Usage {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -1778,6 +1780,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -1894,6 +1898,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);
@@ -2023,6 +2029,8 @@ mod tests {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         assert_eq!(model_inference_response.provider_latency, latency);

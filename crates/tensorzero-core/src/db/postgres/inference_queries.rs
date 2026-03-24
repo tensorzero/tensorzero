@@ -393,7 +393,8 @@ impl InferenceQueries for PostgresConnectionInfo {
         }
 
         if let Some(batch_sender) = self.batch_sender() {
-            return batch_sender.send_chat_inferences(rows);
+            batch_sender.send_chat_inferences(rows);
+            return Ok(());
         }
 
         let pool = self.get_pool_result()?;
@@ -414,7 +415,8 @@ impl InferenceQueries for PostgresConnectionInfo {
         }
 
         if let Some(batch_sender) = self.batch_sender() {
-            return batch_sender.send_json_inferences(rows);
+            batch_sender.send_json_inferences(rows);
+            return Ok(());
         }
 
         let pool = self.get_pool_result()?;
@@ -739,7 +741,7 @@ fn build_order_by_clause(
                         name,
                         metric_config.r#type,
                         metric_config.level.clone(),
-                    );
+                    )?;
                     OrderByTermResolved::Column(format!("{alias}.value"))
                 }
                 // TODO(#6441): Implement proper search relevance ordering for Postgres.

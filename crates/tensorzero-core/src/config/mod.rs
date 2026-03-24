@@ -482,11 +482,11 @@ impl ObservabilityConfig {
     }
 }
 
-fn default_flush_interval_ms() -> u64 {
+pub(crate) fn default_flush_interval_ms() -> u64 {
     100
 }
 
-fn default_max_rows() -> usize {
+pub(crate) fn default_max_rows() -> usize {
     1000
 }
 
@@ -506,6 +506,13 @@ pub struct BatchWritesConfig {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_rows_postgres: Option<usize>,
+    /// Optional capacity for bounded batch writer channels per table type.
+    /// When set, channels are bounded: if full, new rows are dropped and logged
+    /// to protect against out-of-memory crashes.
+    /// When unset (`None`), channels are unbounded (legacy behavior).
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub write_queue_capacity: Option<usize>,
 }
 
 impl Default for BatchWritesConfig {
@@ -516,6 +523,7 @@ impl Default for BatchWritesConfig {
             flush_interval_ms: default_flush_interval_ms(),
             max_rows: default_max_rows(),
             max_rows_postgres: None,
+            write_queue_capacity: None,
         }
     }
 }
@@ -1594,6 +1602,13 @@ impl Config {
             }
             .into());
         }
+        if self.gateway.observability.batch_writes.write_queue_capacity == Some(0) {
+            return Err(ErrorDetails::Config {
+                message: "Batch writes `write_queue_capacity` must be greater than 0 when set"
+                    .to_string(),
+            }
+            .into());
+        }
         if self.gateway.observability.batch_writes.flush_interval_ms == 0 {
             return Err(ErrorDetails::Config {
                 message: "Batch writes flush interval must be greater than 0".to_string(),
@@ -1645,6 +1660,9 @@ impl Config {
                 }
                 .into());
             }
+            // Metric names are interpolated into SQL in some query paths (e.g. LATERAL JOINs),
+            // so we validate they contain only safe characters.
+            crate::db::postgres::validate_safe_sql_name(metric_name, "Metric name")?;
         }
 
         // Validate each model
@@ -1938,6 +1956,7 @@ impl UninitializedConfig {
     pub(crate) fn warn_on_deprecations(&mut self) -> Result<(), Error> {
         self.resolve_clickhouse_config_deprecation()?;
         self.warn_variant_weight_deprecation();
+        self.warn_evaluation_evaluators_deprecation();
         Ok(())
     }
 
@@ -1982,6 +2001,16 @@ impl UninitializedConfig {
                 functions_with_weight.join(", ")
             ));
         }
+    }
+
+    fn warn_evaluation_evaluators_deprecation(&self) {
+        if self.evaluations.is_empty() {
+            return;
+        }
+        deprecation_warning(
+            "Top-level evaluations are deprecated — please migrate them to \
+             `[functions.function_name.evaluators]` instead.",
+        );
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`

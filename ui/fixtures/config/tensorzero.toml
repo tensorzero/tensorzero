@@ -134,6 +134,9 @@ delta = 0.05
 epsilon = 0.1
 update_period_s = 60
 
+[functions.extract_entities.evaluators.exact_match]
+type = "exact_match"
+
 [functions.write_haiku]
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
