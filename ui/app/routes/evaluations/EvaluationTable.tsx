@@ -43,6 +43,7 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
+import { formatCost } from "~/utils/cost";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -229,6 +230,13 @@ interface MetricValueInfo {
   is_human_feedback: boolean;
 }
 
+interface UsageInfo {
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+  processing_time_ms?: number;
+}
+
 // Interface for tracking selected rows
 export interface SelectedRowData {
   datapoint_id: string;
@@ -296,6 +304,7 @@ export function EvaluationTable({
         {
           generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
+          usage?: UsageInfo;
         }
       >
     >();
@@ -316,6 +325,18 @@ export function EvaluationTable({
         datapointMap.set(result.evaluation_run_id, {
           generated_output: result.generated_output,
           metrics: new Map(),
+          usage: {
+            input_tokens:
+              result.input_tokens != null
+                ? Number(result.input_tokens)
+                : undefined,
+            output_tokens:
+              result.output_tokens != null
+                ? Number(result.output_tokens)
+                : undefined,
+            cost: result.cost ?? undefined,
+            processing_time_ms: result.processing_time_ms ?? undefined,
+          },
         });
       }
 
@@ -408,6 +429,9 @@ export function EvaluationTable({
                     <TableHead className="py-2 text-center align-top">
                       Generated Output
                     </TableHead>
+                    <TableHead className="py-2 text-center align-top">
+                      Usage
+                    </TableHead>
                     {/* Dynamic metric columns */}
                     {metric_names.map((metric_name) => {
                       const evaluator_name = resolveEvaluatorName(metric_name);
@@ -449,6 +473,7 @@ export function EvaluationTable({
                           | JsonInferenceOutput
                           | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
+                        usage?: UsageInfo;
                       },
                     ][];
 
@@ -567,6 +592,11 @@ export function EvaluationTable({
                                 )}
                               </TableCell>
 
+                              {/* Usage */}
+                              <TableCell className="align-middle">
+                                <UsageCell usage={data.usage} />
+                              </TableCell>
+
                               {/* Metrics cells */}
                               {metric_names.map((metric_name) => {
                                 const metricValue =
@@ -656,6 +686,63 @@ export function EvaluationTable({
     </ColorAssignerProvider>
   );
 }
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return tokens.toLocaleString();
+}
+
+function formatDuration(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${ms}ms`;
+}
+
+const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
+  if (!usage) return <span className="text-muted-foreground">-</span>;
+
+  const hasAnyData =
+    usage.input_tokens != null ||
+    usage.output_tokens != null ||
+    usage.cost != null ||
+    usage.processing_time_ms != null;
+
+  if (!hasAnyData) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <div className="text-muted-foreground space-y-0.5 text-xs">
+      {usage.input_tokens != null && (
+        <div>
+          <span className="font-medium">In:</span>{" "}
+          {formatTokenCount(usage.input_tokens)}
+        </div>
+      )}
+      {usage.output_tokens != null && (
+        <div>
+          <span className="font-medium">Out:</span>{" "}
+          {formatTokenCount(usage.output_tokens)}
+        </div>
+      )}
+      {usage.cost != null && (
+        <div>
+          <span className="font-medium">Cost:</span> {formatCost(usage.cost)}
+        </div>
+      )}
+      {usage.processing_time_ms != null && (
+        <div>
+          <span className="font-medium">Time:</span>{" "}
+          {formatDuration(usage.processing_time_ms)}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const EvaluatorHeader = ({
   evaluation_name,
