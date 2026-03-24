@@ -13,6 +13,7 @@ overrides:
   react-router: '>=7.12.0'
   lodash: '>=4.17.23'
   valibot: '>=1.2.0'
+  '@lezer/highlight': 1.2.3
 
 importers:
 
@@ -1099,9 +1100,6 @@ packages:
 
   '@lezer/css@1.2.1':
     resolution: {integrity: sha512-2F5tOqzKEKbCUNraIXc0f6HKeyKlmMWJnBB0i4XW6dJgssrZO/YlZ2pY5xgyqDleqqhiNJ3dQhbrV2aClZQMvg==}
-
-  '@lezer/highlight@1.2.1':
-    resolution: {integrity: sha512-Z5duk4RN/3zuVO7Jq0pGLJ3qynpxUVsh7IbUbGj88+uV2ApSAn6kWg2au3iJb+0Zi7kKtqffIESgNcRXWZWmSA==}
 
   '@lezer/highlight@1.2.3':
     resolution: {integrity: sha512-qXdH7UqTvGfdVBINrgKhDsVTJTxactNNxLk7+UMwZhU13lMHaOBlJe9Vqp907ya56Y3+ed2tlqzys7jDkTmW0g==}
@@ -6203,10 +6201,6 @@ snapshots:
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.8
 
-  '@lezer/highlight@1.2.1':
-    dependencies:
-      '@lezer/common': 1.5.1
-
   '@lezer/highlight@1.2.3':
     dependencies:
       '@lezer/common': 1.5.1
@@ -6226,7 +6220,7 @@ snapshots:
   '@lezer/json@1.0.3':
     dependencies:
       '@lezer/common': 1.2.3
-      '@lezer/highlight': 1.2.1
+      '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.2
 
   '@lezer/lr@1.4.2':
@@ -6240,7 +6234,7 @@ snapshots:
   '@lezer/markdown@1.4.3':
     dependencies:
       '@lezer/common': 1.2.3
-      '@lezer/highlight': 1.2.1
+      '@lezer/highlight': 1.2.3
 
   '@marijn/find-cluster-break@1.0.2': {}
 

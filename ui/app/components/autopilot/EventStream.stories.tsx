@@ -559,6 +559,14 @@ export const LongForm: Story = {
 };
 
 // Events demonstrating visualization rendering with tool results
+const topkEvalArgs = {
+  evaluation_name: "test_topk_evaluation",
+  dataset_name: "topk_test_dataset",
+  variant_names: ["echo", "empty", "empty2", "test", "test2"],
+  k_min: 1,
+  max_datapoints: 100,
+};
+
 const visualizationEvents: GatewayEvent[] = [
   buildEvent(
     {
@@ -588,13 +596,7 @@ const visualizationEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "topk_evaluation",
         requires_approval: true,
-        arguments: {
-          evaluation_name: "test_topk_evaluation",
-          dataset_name: "topk_test_dataset",
-          variant_names: ["echo", "empty", "empty2", "test", "test2"],
-          k_min: 1,
-          max_datapoints: 100,
-        },
+        arguments: topkEvalArgs,
         side_info: {
           tool_call_event_id: "v2-tool-call",
           session_id: sessionId,
@@ -619,13 +621,7 @@ const visualizationEvents: GatewayEvent[] = [
         status: { type: "approved" },
         tool_call_event_id: "v2-tool-call",
         tool_call_name: "topk_evaluation",
-        tool_call_arguments: {
-          evaluation_name: "test_topk_evaluation",
-          dataset_name: "topk_test_dataset",
-          variant_names: ["echo", "empty", "empty2", "test", "test2"],
-          k_min: 1,
-          max_datapoints: 100,
-        },
+        tool_call_arguments: topkEvalArgs,
       },
     },
     2,
@@ -639,13 +635,7 @@ const visualizationEvents: GatewayEvent[] = [
         type: "tool_result",
         tool_call_event_id: "v2-tool-call",
         tool_call_name: "topk_evaluation",
-        tool_call_arguments: {
-          evaluation_name: "test_topk_evaluation",
-          dataset_name: "topk_test_dataset",
-          variant_names: ["echo", "empty", "empty2", "test", "test2"],
-          k_min: 1,
-          max_datapoints: 100,
-        },
+        tool_call_arguments: topkEvalArgs,
         tool_call_authorization_source: { type: "ui" as const },
         tool_call_authorization_status: { type: "approved" as const },
         outcome: {
@@ -930,6 +920,36 @@ export const MarkdownContent: Story = {
 // ── Stories covering event superseding / collapsing logic ──
 
 // Scenario: auto_eval_example_labeling superseded by answers
+const exampleLabelingBase = {
+  maybe_excerpted_prompt: {
+    type: "markdown" as const,
+    text: "What is TensorZero?",
+    label: "Prompt",
+  },
+  maybe_excerpted_response: {
+    type: "markdown" as const,
+    text: "TensorZero is an ML optimization platform.",
+    label: "Response",
+  },
+  source: {
+    type: "synthetic" as const,
+    full_prompt: { type: "markdown" as const, text: "What is TensorZero?" },
+    full_response: {
+      type: "markdown" as const,
+      text: "TensorZero is an ML optimization platform.",
+    },
+  },
+  label_question: {
+    id: "q1",
+    header: "Quality",
+    question: "Is this response accurate?",
+    options: [
+      { id: "yes", label: "Yes", description: "The response is accurate" },
+      { id: "no", label: "No", description: "The response is inaccurate" },
+    ],
+  },
+};
+
 const autoEvalExampleLabelingEvents: GatewayEvent[] = [
   buildEvent(
     {
@@ -957,48 +977,7 @@ const autoEvalExampleLabelingEvents: GatewayEvent[] = [
       created_at: "",
       payload: {
         type: "auto_eval_example_labeling",
-        examples: [
-          {
-            maybe_excerpted_prompt: {
-              type: "markdown",
-              text: "What is TensorZero?",
-              label: "Prompt",
-            },
-            maybe_excerpted_response: {
-              type: "markdown",
-              text: "TensorZero is an ML optimization platform.",
-              label: "Response",
-            },
-            source: {
-              type: "synthetic",
-              full_prompt: {
-                type: "markdown",
-                text: "What is TensorZero?",
-              },
-              full_response: {
-                type: "markdown",
-                text: "TensorZero is an ML optimization platform.",
-              },
-            },
-            label_question: {
-              id: "q1",
-              header: "Quality",
-              question: "Is this response accurate?",
-              options: [
-                {
-                  id: "yes",
-                  label: "Yes",
-                  description: "The response is accurate",
-                },
-                {
-                  id: "no",
-                  label: "No",
-                  description: "The response is inaccurate",
-                },
-              ],
-            },
-          },
-        ],
+        examples: [exampleLabelingBase],
       },
     },
     1,
@@ -1013,44 +992,7 @@ const autoEvalExampleLabelingEvents: GatewayEvent[] = [
         auto_eval_example_labeling_event_id: "ael-labeling",
         examples: [
           {
-            maybe_excerpted_prompt: {
-              type: "markdown",
-              text: "What is TensorZero?",
-              label: "Prompt",
-            },
-            maybe_excerpted_response: {
-              type: "markdown",
-              text: "TensorZero is an ML optimization platform.",
-              label: "Response",
-            },
-            source: {
-              type: "synthetic",
-              full_prompt: {
-                type: "markdown",
-                text: "What is TensorZero?",
-              },
-              full_response: {
-                type: "markdown",
-                text: "TensorZero is an ML optimization platform.",
-              },
-            },
-            label_question: {
-              id: "q1",
-              header: "Quality",
-              question: "Is this response accurate?",
-              options: [
-                {
-                  id: "yes",
-                  label: "Yes",
-                  description: "The response is accurate",
-                },
-                {
-                  id: "no",
-                  label: "No",
-                  description: "The response is inaccurate",
-                },
-              ],
-            },
+            ...exampleLabelingBase,
             label_answer: {
               type: "multiple_choice",
               selected: ["yes"],
@@ -1071,6 +1013,20 @@ export const SupersedingAutoEvalExampleLabeling: Story = {
 };
 
 // Scenario: auto_eval_behavior_spec superseded by answers
+const behaviorSpecTargetBehavior = {
+  id: "tb1",
+  header: "Target Behavior",
+  question: "What should the model do?",
+  default_value: "Respond accurately and concisely.",
+};
+
+const behaviorSpecAdditionalContext = {
+  id: "ac1",
+  header: "Additional Context",
+  question: "Any extra context for evaluation?",
+  default_value: "Focus on factual accuracy.",
+};
+
 const autoEvalBehaviorSpecEvents: GatewayEvent[] = [
   buildEvent(
     {
@@ -1098,18 +1054,8 @@ const autoEvalBehaviorSpecEvents: GatewayEvent[] = [
       created_at: "",
       payload: {
         type: "auto_eval_behavior_spec",
-        target_behavior: {
-          id: "tb1",
-          header: "Target Behavior",
-          question: "What should the model do?",
-          default_value: "Respond accurately and concisely.",
-        },
-        additional_context: {
-          id: "ac1",
-          header: "Additional Context",
-          question: "Any extra context for evaluation?",
-          default_value: "Focus on factual accuracy.",
-        },
+        target_behavior: behaviorSpecTargetBehavior,
+        additional_context: behaviorSpecAdditionalContext,
       },
     },
     1,
@@ -1122,22 +1068,12 @@ const autoEvalBehaviorSpecEvents: GatewayEvent[] = [
       payload: {
         type: "auto_eval_behavior_spec_answers",
         auto_eval_behavior_spec_event_id: "abs-spec",
-        target_behavior: {
-          id: "tb1",
-          header: "Target Behavior",
-          question: "What should the model do?",
-          default_value: "Respond accurately and concisely.",
-        },
+        target_behavior: behaviorSpecTargetBehavior,
         target_behavior_answer: {
           type: "free_response",
           text: "Respond accurately and concisely.",
         },
-        additional_context: {
-          id: "ac1",
-          header: "Additional Context",
-          question: "Any extra context for evaluation?",
-          default_value: "Focus on factual accuracy.",
-        },
+        additional_context: behaviorSpecAdditionalContext,
         additional_context_answer: {
           type: "free_response",
           text: "Focus on factual accuracy.",

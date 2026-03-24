@@ -14,6 +14,7 @@ import {
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { UuidLink } from "~/components/autopilot/UuidLink";
 import {
   remarkUuidLinks,
@@ -270,7 +271,7 @@ function ToolStatusIcon({ variant }: { variant: ToolStatusVariant }) {
     case "success":
       return <Check className="h-3 w-3 text-green-600 dark:text-green-400" />;
     case "failure":
-      return <Cross className="h-3 w-3 text-red-400 dark:text-red-400" />;
+      return <Cross className="h-3 w-3 text-red-400" />;
     case "pending":
       return (
         <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-gray-500" />
@@ -351,13 +352,10 @@ function renderEventTitle(event: GatewayEvent) {
 
   switch (payload.type) {
     case "message": {
-      const roleLabel =
-        payload.role === "user"
-          ? "User"
-          : payload.role === "assistant"
-            ? "Assistant"
-            : "Message";
-      return roleLabel;
+      if (payload.role === "user") return "User";
+      if (payload.role === "assistant") return "Assistant";
+      const _exhaustiveCheck: never = payload.role;
+      return _exhaustiveCheck;
     }
     case "status_update":
       return "Status Update";
@@ -383,22 +381,20 @@ function renderEventTitle(event: GatewayEvent) {
           )}
         </span>
       );
-    case "tool_result": {
-      const toolName = payload.tool_call_name ? (
-        <>
-          <DotSeparator />
-          <span className="font-mono font-medium">
-            {payload.tool_call_name}
-          </span>
-        </>
-      ) : null;
+    case "tool_result":
       return (
         <span className="inline-flex items-center gap-2">
           Tool Call
-          {toolName}
+          {payload.tool_call_name && (
+            <>
+              <DotSeparator />
+              <span className="font-mono font-medium">
+                {payload.tool_call_name}
+              </span>
+            </>
+          )}
         </span>
       );
-    }
     case "error":
       // TODO: handle errors better
       return "Error";
@@ -667,22 +663,36 @@ function ToolResultContent({
   description,
 }: {
   payload: ToolResultPayload;
-  description: string;
+  description?: string;
 }) {
+  const rejectionReason =
+    payload.outcome.type === "rejected" ? payload.outcome.reason : null;
+  const formattedDescription = useFormattedJson(description ?? "");
+
   return (
     <div className="flex flex-col gap-3">
       {payload.tool_call_arguments && (
         <ToolCallArgumentsSection arguments={payload.tool_call_arguments} />
       )}
-      <div className="flex flex-col gap-1">
-        <span className="text-fg-muted text-xs font-medium">Result</span>
-        <p
-          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
-          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
-        >
-          {description}
-        </p>
-      </div>
+      {description && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">Result</span>
+          <CodeEditor
+            value={formattedDescription}
+            readOnly
+            allowedLanguages={["json", "text"]}
+            showLineNumbers={false}
+          />
+        </div>
+      )}
+      {rejectionReason && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">
+            Rejection Reason
+          </span>
+          <ReadOnlyCodeBlock code={rejectionReason} language="text" />
+        </div>
+      )}
     </div>
   );
 }
@@ -702,9 +712,7 @@ function ToolCallAuthorizationContent({
           <span className="text-fg-muted text-xs font-medium">
             Rejection Reason
           </span>
-          <p className="text-fg-secondary text-sm whitespace-pre-wrap">
-            {payload.status.reason}
-          </p>
+          <ReadOnlyCodeBlock code={payload.status.reason} language="text" />
         </div>
       )}
     </div>
@@ -750,7 +758,7 @@ function EventItemContent({
     return <AutoEvalLabelingAnswersContent examples={event.payload.examples} />;
   }
 
-  if (event.payload.type === "tool_result" && description) {
+  if (event.payload.type === "tool_result") {
     return (
       <ToolResultContent payload={event.payload} description={description} />
     );
@@ -771,11 +779,7 @@ function EventItemContent({
       );
 
     case "tool_call":
-      return <ReadOnlyCodeBlock code={description} language="json" />;
-
-    case "tool_result":
-      // Handled above — this branch is for exhaustiveness only
-      return null;
+      return <ToolCallArgumentsSection arguments={event.payload.arguments} />;
 
     case "error":
       return (
@@ -846,7 +850,9 @@ function EventItem({
         event.payload.tool_call_arguments != null)) ||
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
-        event.payload.outcome.type === "failure"));
+        event.payload.outcome.type === "failure" ||
+        event.payload.outcome.type === "rejected" ||
+        event.payload.tool_call_arguments != null));
   const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
   const toolStatus = getToolEventStatus(event);
