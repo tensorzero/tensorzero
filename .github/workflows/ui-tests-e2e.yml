@@ -555,6 +555,22 @@ jobs:
           PROVIDER_PROXY_CACHE_DIR: provider-proxy-cache-ui
         run: ./ci/upload-provider-proxy-cache.sh
 
+      - name: Provider proxy cache stats
+        if: always()
+        working-directory: ui
+        run: |
+          LOGS=$(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml -f fixtures/docker-compose.proxy.yml logs provider-proxy 2>&1)
+          HITS=$(echo "$LOGS" | grep -c "Cache hit:" || true)
+          MISSES=$(echo "$LOGS" | grep -c "Cache miss:" || true)
+          TOTAL=$((HITS + MISSES))
+          echo "### Provider Proxy Cache Stats (ui-e2e-main, auth=${{ matrix.auth_mode }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hits:** $HITS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Misses:** $MISSES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "- **Hit rate:** $(( HITS * 100 / TOTAL ))%" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Print Docker Compose logs
         if: always()
         working-directory: ui

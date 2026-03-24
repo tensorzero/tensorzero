@@ -359,6 +359,21 @@ jobs:
           docker stop gateway-e2e || true
           docker rm gateway-e2e || true
 
+      - name: Provider proxy cache stats
+        if: always()
+        run: |
+          LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1)
+          HITS=$(echo "$LOGS" | grep -c "Cache hit:" || true)
+          MISSES=$(echo "$LOGS" | grep -c "Cache miss:" || true)
+          TOTAL=$((HITS + MISSES))
+          echo "### Provider Proxy Cache Stats (client-tests, batch_writes=${{ matrix.batch_writes }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hits:** $HITS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Misses:** $MISSES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "- **Hit rate:** $(( HITS * 100 / TOTAL ))%" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Print provider-proxy logs
         if: always()
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml --profile provider-proxy logs provider-proxy 2>&1 || echo "No provider-proxy logs available"
