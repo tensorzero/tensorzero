@@ -1280,8 +1280,8 @@ pub struct AnthropicUsage {
     #[serde(default)]
     cache_creation_input_tokens: Option<u32>,
     /// Number of input tokens read from cache
-    #[serde(default, rename = "cache_read_input_tokens")]
-    provider_cache_read_input_tokens: Option<u32>,
+    #[serde(default)]
+    cache_read_input_tokens: Option<u32>,
 }
 
 impl From<AnthropicUsage> for Usage {
@@ -1291,20 +1291,20 @@ impl From<AnthropicUsage> for Usage {
         let total_input_tokens = match (
             value.input_tokens,
             value.cache_creation_input_tokens,
-            value.provider_cache_read_input_tokens,
+            value.cache_read_input_tokens,
         ) {
             (None, None, None) => None,
             _ => Some(
                 value.input_tokens.unwrap_or(0)
                     + value.cache_creation_input_tokens.unwrap_or(0)
-                    + value.provider_cache_read_input_tokens.unwrap_or(0),
+                    + value.cache_read_input_tokens.unwrap_or(0),
             ),
         };
 
         Usage {
             input_tokens: total_input_tokens,
             output_tokens: value.output_tokens,
-            provider_cache_read_input_tokens: value.provider_cache_read_input_tokens,
+            provider_cache_read_input_tokens: value.cache_read_input_tokens,
             provider_cache_write_input_tokens: value.cache_creation_input_tokens,
             cost: None,
         }
@@ -2605,7 +2605,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: Some(100),
-            provider_cache_read_input_tokens: Some(200),
+            cache_read_input_tokens: Some(200),
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2632,7 +2632,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: Some(4000),
-            provider_cache_read_input_tokens: None,
+            cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2657,7 +2657,7 @@ mod tests {
             input_tokens: Some(10),
             output_tokens: Some(50),
             cache_creation_input_tokens: None,
-            provider_cache_read_input_tokens: Some(4000),
+            cache_read_input_tokens: Some(4000),
         };
 
         let usage: Usage = anthropic_usage.into();
@@ -2682,7 +2682,7 @@ mod tests {
             input_tokens: Some(100),
             output_tokens: Some(50),
             cache_creation_input_tokens: None,
-            provider_cache_read_input_tokens: None,
+            cache_read_input_tokens: None,
         };
 
         let usage: Usage = anthropic_usage.into();

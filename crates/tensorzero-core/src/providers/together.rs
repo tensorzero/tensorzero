@@ -1210,6 +1210,8 @@ mod tests {
                 },
                 finish_reason: None,
             }],
+            // Together has transparent backend caching but does not report cache
+            // token counts in its API responses. See cache.rs for details.
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),

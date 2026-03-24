@@ -832,6 +832,8 @@ impl From<DeepSeekUsage> for Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
             provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
+            // DeepSeek's `prompt_cache_miss_tokens` = tokens not in cache, which are
+            // written to cache for future requests, so we map miss → write.
             provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
             cost: None,
         }
