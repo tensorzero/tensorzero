@@ -167,12 +167,25 @@ export function getToolCallEventId(event: ToolEvent): string {
 
 /**
  * Type guard to check if an event is a config write event.
- * A config write event is a tool_call with name === "write_config".
+ * A config write event is a tool_call with name === "write_config",
+ * or a tool_result / tool_call_authorization whose tool_call_name === "write_config"
+ * (which supersedes the original tool_call in the event stream).
  */
 export function isConfigWriteEvent(event: GatewayEvent): boolean {
-  return (
-    event.payload.type === "tool_call" && event.payload.name === "write_config"
-  );
+  if (
+    event.payload.type === "tool_call" &&
+    event.payload.name === "write_config"
+  ) {
+    return true;
+  }
+  if (
+    (event.payload.type === "tool_result" ||
+      event.payload.type === "tool_call_authorization") &&
+    event.payload.tool_call_name === "write_config"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function getMessageText(content: EventPayloadMessageContent[]) {
