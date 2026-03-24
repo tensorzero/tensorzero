@@ -1127,6 +1127,8 @@ mod tests {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1168,6 +1170,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1228,6 +1232,8 @@ mod tests {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1272,6 +1278,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1348,6 +1356,8 @@ mod tests {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1389,6 +1399,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1512,6 +1524,8 @@ mod tests {
             input_tokens: Some(75),
             output_tokens: Some(126),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);

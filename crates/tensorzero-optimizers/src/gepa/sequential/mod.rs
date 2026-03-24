@@ -49,6 +49,14 @@ impl Optimizer for GEPAConfig {
         db: &Arc<dyn DelegatingDatabaseQueries + Send + Sync>,
         config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        tracing::warn!(
+            "The optimization workflow API for GEPA is deprecated. \
+             Please use the dedicated GEPA API instead: \
+             HTTP: `POST /v1/optimization/gepa` (launch) and `GET /v1/optimization/gepa/{{task_id}}` (poll), \
+             Python: `client.optimization.gepa.launch(...)` and `client.optimization.gepa.get(task_id=...)`, \
+             Rust: `client.gepa_launch(...)` and `client.gepa_get(...)`"
+        );
+
         // Validate configuration and examples, get the FunctionContext (function_config, static_tools, and evaluation_config)
         let function_context = validate_gepa_config(self, &config)?;
 

@@ -6,6 +6,7 @@ use crate::{
         BooleanMetricFilter, DemonstrationFeedbackFilter, FloatMetricFilter, InferenceFilter,
         TagFilter, TimeFilter,
     },
+    db::postgres::is_safe_sql_name,
     endpoints::stored_inferences::v1::types::TagComparisonOperator,
     error::{Error, ErrorDetails},
 };
@@ -81,7 +82,7 @@ fn apply_float_metric_filter(
         MetricConfigLevel::Inference => "i.id",
         MetricConfigLevel::Episode => "i.episode_id",
     };
-    let operator = fm.comparison_operator.to_postgres_operator();
+    let operator = fm.comparison_operator.to_sql_operator();
 
     // Use EXISTS subquery to filter by metric value
     query_builder
@@ -173,7 +174,7 @@ fn apply_tag_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, tag: &TagF
 }
 
 fn apply_time_filter(query_builder: &mut QueryBuilder<sqlx::Postgres>, time: &TimeFilter) {
-    let operator = time.comparison_operator.to_postgres_operator();
+    let operator = time.comparison_operator.to_sql_operator();
 
     query_builder.push("i.created_at ");
     query_builder.push(operator);
@@ -268,12 +269,25 @@ impl MetricJoinRegistry {
 
     /// Registers a metric join and returns the alias for the joined value.
     /// Uses LATERAL join to get the latest feedback value per target with filter pushdown.
+    ///
+    /// Returns an error if `metric_name` contains characters unsafe for SQL interpolation.
+    /// Metric names should be validated at config load time via [`validate_safe_sql_name`].
     pub(super) fn register_metric_join(
         &mut self,
         metric_name: &str,
         metric_type: MetricConfigType,
         level: MetricConfigLevel,
-    ) -> String {
+    ) -> Result<String, Error> {
+        // Defense-in-depth: metric names come from validated config, but verify here
+        // to prevent SQL injection if a code path bypasses config validation.
+        if !is_safe_sql_name(metric_name) {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!(
+                    "Metric name `{metric_name}` contains characters unsafe for SQL interpolation"
+                ),
+            }));
+        }
+
         let alias = format!("metric_{}", self.alias_counter);
         self.alias_counter += 1;
 
@@ -284,10 +298,10 @@ impl MetricJoinRegistry {
         // This pushes down the filter on target_id, allowing Postgres to use indexes
         // efficiently instead of scanning the entire feedback table.
         //
-        // TODO(#5691): there's a small risk of SQL injection here because metric_name is
-        // user configurable and is not escaped. In practice, metric names are in the config
-        // so it's unlikely to be a problem. Still, we may want to revisit and refactor the
-        // join clauses to enable parameterized joins.
+        // Note: metric_name is validated above. We use string interpolation here because
+        // the join clause is built as a raw string appended to the query, not via QueryBuilder.
+        // A proper fix would refactor to use QueryBuilder with push_bind for the metric_name,
+        // but that requires restructuring how MetricJoinRegistry integrates with the query.
         let join_clause = format!(
             r"
 LEFT JOIN LATERAL (
@@ -301,7 +315,7 @@ LEFT JOIN LATERAL (
         );
 
         self.joins.push(join_clause);
-        alias
+        Ok(alias)
     }
 
     /// Returns the JOIN clauses as a single string.
@@ -679,18 +693,22 @@ mod tests {
     fn test_metric_join_registry() {
         let mut registry = MetricJoinRegistry::new();
 
-        let alias1 = registry.register_metric_join(
-            "test_metric",
-            MetricConfigType::Float,
-            MetricConfigLevel::Inference,
-        );
+        let alias1 = registry
+            .register_metric_join(
+                "test_metric",
+                MetricConfigType::Float,
+                MetricConfigLevel::Inference,
+            )
+            .expect("valid metric name should not fail");
         assert_eq!(alias1, "metric_0", "First alias should be metric_0");
 
-        let alias2 = registry.register_metric_join(
-            "another_metric",
-            MetricConfigType::Boolean,
-            MetricConfigLevel::Episode,
-        );
+        let alias2 = registry
+            .register_metric_join(
+                "another_metric",
+                MetricConfigType::Boolean,
+                MetricConfigLevel::Episode,
+            )
+            .expect("valid metric name should not fail");
         assert_eq!(alias2, "metric_1", "Second alias should be metric_1");
 
         let joins_sql = registry.get_joins_sql();

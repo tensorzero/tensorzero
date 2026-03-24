@@ -71,6 +71,17 @@ default-filter = 'package(evaluations)'
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
 
+# Run cache and valkey-related e2e tests. Used in the inference-cache-tests CI job with a matrix
+# of cache backends (clickhouse, valkey, redis).
+# The profile default-filter is broad; the CI matrix narrows via -E flags:
+#   - clickhouse: -E 'test(_clickhouse)' → only cache::*_clickhouse tests
+#   - valkey/redis: -E 'test(valkey)' → cache, rate_limiting, and db valkey tests
+[profile.cache]
+default-filter = 'binary(e2e) and (test(cache::) | test(valkey))'
+retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+slow-timeout = { period = "30s", terminate-after = 2 }
+junit.path = "junit.xml"
+
 [profile.optimization]
 default-filter = 'binary(optimization-live)'
 

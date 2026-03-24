@@ -63,7 +63,7 @@ impl SerializableFunctionContext {
         function_name: &str,
         metrics: &HashMap<String, MetricConfig>,
     ) -> Result<FunctionContext, Error> {
-        let function_config = self.function_config.load(function_name, metrics)?;
+        let loaded = self.function_config.load(function_name, metrics)?;
         let static_tools = self
             .static_tools
             .map(|tools| {
@@ -77,7 +77,7 @@ impl SerializableFunctionContext {
             })
             .transpose()?;
         Ok(FunctionContext {
-            function_config: Arc::new(function_config),
+            function_config: Arc::new(loaded.function_config),
             static_tools,
             evaluation_config: Arc::new(self.evaluation_config),
         })
@@ -201,6 +201,7 @@ pub fn validate_gepa_config(
                     description: chat_config.description.clone(),
                     all_explicit_templates_names: Default::default(),
                     experimentation: Default::default(),
+                    evaluators: Default::default(),
                 }))
             }
             FunctionConfig::Json(json_config) => {
@@ -213,6 +214,7 @@ pub fn validate_gepa_config(
                     description: json_config.description.clone(),
                     all_explicit_template_names: Default::default(),
                     experimentation: Default::default(),
+                    evaluators: Default::default(),
                 }))
             }
         }
@@ -579,11 +581,10 @@ pub fn validate_gepa_config_uninitialized(
             })
         })?;
 
-    let function_config = Arc::new(
-        uninitialized_fn
-            .clone()
-            .load(&config.function_name, &uninitialized_config.metrics)?,
-    );
+    let loaded_fn = uninitialized_fn
+        .clone()
+        .load(&config.function_name, &uninitialized_config.metrics)?;
+    let function_config = Arc::new(loaded_fn.function_config);
 
     // Load the evaluation
     let uninitialized_eval = uninitialized_config
@@ -676,6 +677,7 @@ pub fn validate_gepa_config_uninitialized(
                     description: chat_config.description.clone(),
                     all_explicit_templates_names: Default::default(),
                     experimentation: Default::default(),
+                    evaluators: Default::default(),
                 }))
             }
             FunctionConfig::Json(json_config) => {
@@ -687,6 +689,7 @@ pub fn validate_gepa_config_uninitialized(
                     description: json_config.description.clone(),
                     all_explicit_template_names: Default::default(),
                     experimentation: Default::default(),
+                    evaluators: Default::default(),
                 }))
             }
         }
@@ -1496,6 +1499,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }))
     }
 
@@ -1723,6 +1727,7 @@ mod tests {
                 parallel_tool_calls: None,
                 description: None,
                 experimentation: None,
+                evaluators: HashMap::new(),
             }),
         );
 
@@ -1795,6 +1800,7 @@ mod tests {
                     parallel_tool_calls: None,
                     description: None,
                     experimentation: None,
+                    evaluators: HashMap::new(),
                 },
             ),
         );

@@ -281,7 +281,7 @@ fn resolve_evaluation_config(
                             message: format!("Function `{function_name}` not found in config"),
                         })
                     })?;
-            let evaluators = resolve_evaluators(evaluator_names, app_state)?;
+            let evaluators = resolve_evaluators(function_name, evaluator_names, app_state)?;
             Ok(ResolvedEvaluationConfig {
                 function_name: function_name.clone(),
                 function_config: EvaluationFunctionConfig::from(function_config.as_ref()),
@@ -323,19 +323,33 @@ fn resolve_evaluation_config(
     }
 }
 
-/// Resolves evaluator configs by name from the top-level `[evaluators]` config.
+/// Resolves evaluator configs by name from the function's evaluators.
+///
+/// TODO(#6983): allow evaluators defined under evaluations to be referenced here
+/// for (function, evaluators) style evaluation runs.
 fn resolve_evaluators(
+    function_name: &str,
     evaluator_names: &[String],
     app_state: &AppStateData,
 ) -> Result<HashMap<String, EvaluatorConfig>, Error> {
-    let mut evaluators = HashMap::new();
-    for name in evaluator_names {
-        let evaluator = app_state.config.evaluators.get(name).ok_or_else(|| {
+    let function_config = app_state
+        .config
+        .functions
+        .get(function_name)
+        .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Top-level evaluator `{name}` not found in config"),
+                message: format!("Function `{function_name}` not found in config"),
             })
         })?;
-        evaluators.insert(name.clone(), (**evaluator).clone());
+    let function_evaluators = function_config.evaluators();
+    let mut evaluators = HashMap::new();
+    for name in evaluator_names {
+        let evaluator = function_evaluators.get(name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Evaluator `{name}` not found on function `{function_name}`"),
+            })
+        })?;
+        evaluators.insert(name.clone(), evaluator.clone());
     }
     Ok(evaluators)
 }

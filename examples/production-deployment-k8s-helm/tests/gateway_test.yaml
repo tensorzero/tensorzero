@@ -1,0 +1,74 @@
+suite: gateway deployment tests
+templates:
+  - templates/gateway.yaml
+tests:
+  - it: should render with default values
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-tensorzero-gateway
+
+  - it: should set replica count from values
+    set:
+      gateway.replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should include storage volume mount when persistence is enabled
+    set:
+      persistence.enabled: true
+      persistence.mountPath: /app/storage
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: storage-volume
+            mountPath: /app/storage
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: storage-volume
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-tensorzero-storage
+
+  - it: should not include storage volume mount when persistence is disabled
+    set:
+      persistence.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: storage-volume
+            mountPath: /app/storage
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: storage-volume
+          any: true
+
+  - it: should set service account name when provided
+    set:
+      gateway.serviceAccountName: my-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: my-sa
+
+  - it: should not set service account name when empty
+    set:
+      gateway.serviceAccountName: ""
+    asserts:
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+
+  - it: should use Chart.AppVersion when image tag is empty
+    set:
+      gateway.image.tag: ""
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "tensorzero/gateway:.+"

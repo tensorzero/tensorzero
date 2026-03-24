@@ -1503,59 +1503,106 @@ pub async fn test_get_by_ids_json_function_with_inference_params() {
     );
 }
 
+/// Test that list_inferences with output_source "none" returns inferences with null output
+/// and empty dispreferred_outputs.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_get_inferences_rejects_output_source_none() {
-    let http_client = Client::new();
-
+async fn test_list_inferences_output_source_none() {
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
     let request = json!({
-        "ids": ["00000000-0000-0000-0000-000000000000"],
-        "output_source": "none"
+        "function_name": "write_haiku",
+        "variant_name": "better_prompt_haiku_4_5",
+        "output_source": "none",
+        "limit": 3
     });
 
-    let response = http_client
-        .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
-        .json(&request)
-        .send()
-        .await
-        .unwrap();
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 3, "Expected 3 inferences from list_inferences");
 
-    assert_eq!(
-        response.status(),
-        400,
-        "Expected 400 Bad Request for output_source: none"
-    );
-    let error: serde_json::Value = response.json().await.unwrap();
-    let error_message = error["error"].as_str().unwrap().to_lowercase();
-    assert!(
-        error_message.contains("none"),
-        "Error message should mention 'none': {error_message}"
-    );
+    for inference in &res {
+        assert_eq!(inference["type"], "chat");
+        assert_eq!(inference["function_name"], "write_haiku");
+        assert!(
+            inference["output"].is_null(),
+            "Output should be null when output_source is 'none', got: {}",
+            inference["output"]
+        );
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0,
+            "Dispreferred outputs should be empty when output_source is 'none'"
+        );
+        // Other fields should still be present
+        assert!(
+            inference["inference_id"].is_string(),
+            "inference_id should still be present"
+        );
+        assert!(
+            inference["input"].is_object(),
+            "input should still be present"
+        );
+    }
 }
 
+/// Test that get_inferences with output_source "none" returns inferences with null output
+/// and empty dispreferred_outputs.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_list_inferences_rejects_output_source_none() {
-    let http_client = Client::new();
-
-    let request = json!({
-        "output_source": "none"
+async fn test_get_inferences_output_source_none() {
+    // First, list some inference IDs using the normal output_source.
+    // Filter by variant_name to avoid metadata-only inferences in Postgres.
+    let list_request = json!({
+        "function_name": "extract_entities",
+        "variant_name": "baseline",
+        "output_source": "inference",
+        "limit": 2
     });
 
-    let response = http_client
-        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
-        .json(&request)
-        .send()
+    let initial_res = list_inferences(list_request).await.unwrap();
+    assert_eq!(initial_res.len(), 2);
+
+    let ids: Vec<Uuid> = initial_res
+        .iter()
+        .map(|inf| Uuid::parse_str(inf["inference_id"].as_str().unwrap()).unwrap())
+        .collect();
+
+    // Verify the inferences have non-null output with output_source "inference"
+    let res_with_output = get_inferences_by_ids(ids.clone(), InferenceOutputSource::Inference)
         .await
         .unwrap();
+    assert_eq!(res_with_output.len(), 2);
+    for inference in &res_with_output {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected Json inference");
+        };
+        assert!(
+            json_inference.output.is_some(),
+            "Output should be present with output_source 'inference'"
+        );
+    }
 
-    assert_eq!(
-        response.status(),
-        400,
-        "Expected 400 Bad Request for output_source: none"
-    );
-    let error: serde_json::Value = response.json().await.unwrap();
-    let error_message = error["error"].as_str().unwrap().to_lowercase();
-    assert!(
-        error_message.contains("none"),
-        "Error message should mention 'none': {error_message}"
-    );
+    // Now get the same inferences with output_source "none"
+    let res_no_output = get_inferences_by_ids(ids.clone(), InferenceOutputSource::None)
+        .await
+        .unwrap();
+    assert_eq!(res_no_output.len(), 2);
+
+    for inference in &res_no_output {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected Json inference");
+        };
+        assert!(ids.contains(&json_inference.inference_id));
+        assert_eq!(json_inference.function_name, "extract_entities");
+        assert!(
+            json_inference.output.is_none(),
+            "Output should be None when output_source is 'none'"
+        );
+        assert!(
+            json_inference.dispreferred_outputs.is_empty(),
+            "Dispreferred outputs should be empty when output_source is 'none'"
+        );
+        // Other fields should still be populated
+        assert!(
+            json_inference.input.is_some(),
+            "Input should still be present"
+        );
+    }
 }

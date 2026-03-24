@@ -554,6 +554,7 @@ mod tests {
             all_explicit_templates_names: std::collections::HashSet::new(),
             experimentation:
                 tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 
@@ -605,6 +606,7 @@ mod tests {
             all_explicit_templates_names: std::collections::HashSet::new(),
             experimentation:
                 tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 

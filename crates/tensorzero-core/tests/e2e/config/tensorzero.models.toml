@@ -975,6 +975,13 @@ cost = [
     { pointer = "/usage/prompt_tokens", cost_per_million = 3.0 },
 ]
 
+[embedding_models.prometheus-test-embedding-model]
+routing = ["dummy"]
+
+[embedding_models.prometheus-test-embedding-model.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+
 [embedding_models.gemini_embedding_001_openrouter]
 routing = ["openrouter"]
 

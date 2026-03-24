@@ -60,6 +60,7 @@ crates/tensorzero-client/bindings/
 crates/tensorzero-node/bindings/
 *.junit.xml
 crates/tensorzero-core/schemas
+crates/tensorzero-types/schemas
 
 # Rust ICE logs
 rustc-ice-*.txt

@@ -1,5 +1,4 @@
 import { data } from "react-router";
-import { getConfig } from "~/utils/config/index.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { logger } from "~/utils/logger";
 
@@ -12,23 +11,8 @@ export interface SelectedItemData {
 export async function handleBulkAddToDataset(
   dataset: string,
   selectedItems: SelectedItemData[],
-  evaluation_name: string,
+  function_name: string,
 ) {
-  const config = await getConfig();
-  const evaluation_config = config.evaluations[evaluation_name];
-
-  if (!evaluation_config) {
-    return data(
-      {
-        error: `Evaluation config not found for ${evaluation_name}`,
-        success: false,
-      },
-      { status: 404 },
-    );
-  }
-
-  const function_name = evaluation_config.function_name;
-
   // Process all selected items in parallel
   const results = await Promise.allSettled(
     selectedItems.map((item) => {

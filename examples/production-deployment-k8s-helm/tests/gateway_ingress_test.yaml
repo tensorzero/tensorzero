@@ -1,0 +1,58 @@
+suite: gateway ingress tests
+templates:
+  - templates/gateway-ingress.yaml
+tests:
+  - it: should create ingress when gateway.ingress.enabled is true
+    set:
+      gateway.ingress.enabled: true
+      gateway.ingress.hosts:
+        - host: tensorzero-gateway.local
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-tensorzero-gateway
+
+  - it: should not create ingress when gateway.ingress.enabled is false
+    set:
+      gateway.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should include annotations when set
+    set:
+      gateway.ingress.enabled: true
+      gateway.ingress.annotations:
+        kubernetes.io/tls-acme: "true"
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      gateway.ingress.hosts:
+        - host: tensorzero-gateway.local
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: metadata.annotations["kubernetes.io/tls-acme"]
+          value: "true"
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-prod
+
+  - it: should set ingressClassName when provided
+    set:
+      gateway.ingress.enabled: true
+      gateway.ingress.className: nginx
+      gateway.ingress.hosts:
+        - host: tensorzero-gateway.local
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx

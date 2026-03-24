@@ -707,9 +707,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.16.1"
+version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94bffc006df10ac2a68c83692d734a465f8ee6c5b384d8545a636f81d858f4bf"
+checksum = "a054912289d18629dc78375ba2c3726a3afe3ff71b4edba9dedfca0e3446d1fc"
 dependencies = [
  "aws-lc-sys",
  "untrusted 0.7.1",
@@ -718,9 +718,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.38.0"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4321e568ed89bb5a7d291a7f37997c2c0df89809d7b6d12062c81ddb54aa782e"
+checksum = "1fa7e52a4c5c547c741610a2c6f123f3881e409b714cd27e6798ef020c514f0a"
 dependencies = [
  "cc",
  "cmake",
@@ -2183,7 +2183,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=2bfe26218458a48d1ab15f22a902536402284cf6#2bfe26218458a48d1ab15f22a902536402284cf6"
+source = "git+https://github.com/tensorzero/durable?rev=03f2c5f820b57dff2bdcb60c081533d03605519f#03f2c5f820b57dff2bdcb60c081533d03605519f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5985,9 +5985,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.9"
+version = "0.103.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7df23109aa6c1567d1c575b9952556388da57401e4ace1d15f79eedad0d8f53"
+checksum = "df33b2b81ac578cabaf06b89b0631153a3f416b0a886e8a7a1707fb51abbd1ef"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -7004,6 +7004,7 @@ dependencies = [
  "tensorzero-auth",
  "tensorzero-config-paths",
  "tensorzero-derive",
+ "tensorzero-error",
  "tensorzero-types",
  "tensorzero-types-providers",
  "tensorzero-unsafe-helpers",
@@ -7036,6 +7037,29 @@ dependencies = [
  "serde_path_to_error",
  "syn 2.0.117",
  "trybuild",
+]
+
+[[package]]
+name = "tensorzero-error"
+version = "2026.3.3"
+dependencies = [
+ "autopilot-client",
+ "axum",
+ "http 1.4.0",
+ "indexmap 2.13.0",
+ "minijinja-utils",
+ "opentelemetry",
+ "redis",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tensorzero-types",
+ "thiserror 2.0.18",
+ "tracing",
+ "tracing-opentelemetry",
+ "ts-rs",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -7117,12 +7141,17 @@ name = "tensorzero-types"
 version = "2026.3.3"
 dependencies = [
  "aws-smithy-types",
+ "blake3",
+ "chrono",
+ "hex",
  "infer",
  "mime 0.4.0-a.0",
+ "num-bigint",
  "object_store",
  "pyo3",
  "rust_decimal",
  "schemars 1.2.1",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_path_to_error",

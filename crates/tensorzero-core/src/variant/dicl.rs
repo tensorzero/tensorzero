@@ -1485,6 +1485,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: Default::default(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
 
         // Call prepare_request with EMPTY examples
@@ -1615,6 +1616,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: Default::default(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
 
         // Call prepare_request with examples

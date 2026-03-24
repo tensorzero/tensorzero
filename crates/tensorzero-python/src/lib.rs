@@ -946,22 +946,24 @@ fn resolve_evaluation_config(
             })
         }
         (None, Some(function_name), Some(evaluator_names)) => {
-            let function_config = app_state
+            let func = app_state
                 .config
                 .functions
                 .get(&function_name)
-                .map(|f| tensorzero_core::evaluations::EvaluationFunctionConfig::from(f.as_ref()))
                 .ok_or_else(|| {
                     PyValueError::new_err(format!("function `{function_name}` not found"))
                 })?;
+            let function_config =
+                tensorzero_core::evaluations::EvaluationFunctionConfig::from(func.as_ref());
+            let function_evaluators = func.evaluators();
             let mut evaluators = HashMap::new();
             for name in &evaluator_names {
-                let evaluator = app_state.config.evaluators.get(name).ok_or_else(|| {
+                let evaluator = function_evaluators.get(name).ok_or_else(|| {
                     PyValueError::new_err(format!(
-                        "top-level evaluator `{name}` not found in config"
+                        "evaluator `{name}` not found on function `{function_name}`"
                     ))
                 })?;
-                evaluators.insert(name.clone(), (**evaluator).clone());
+                evaluators.insert(name.clone(), evaluator.clone());
             }
             Ok(ResolvedEvaluationConfig {
                 function_name,
