@@ -215,8 +215,8 @@ function formatToolError(error: unknown): string {
 type ToolStatusVariant =
   | "success"
   | "failure"
-  | "pending"
-  | "pending_auth"
+  | "pending_execution"
+  | "pending_approval"
   | "warning";
 
 type ToolStatusInfo = {
@@ -228,13 +228,16 @@ function getToolEventStatus(event: GatewayEvent): ToolStatusInfo | null {
   const { payload } = event;
 
   if (payload.type === "tool_call") {
-    return { label: "Pending Approval", variant: "pending_auth" };
+    if (payload.requires_approval) {
+      return { label: "Pending Approval", variant: "pending_approval" };
+    }
+    return { label: "Pending Execution", variant: "pending_execution" };
   }
 
   if (payload.type === "tool_call_authorization") {
     switch (payload.status.type) {
       case "approved":
-        return { label: "Pending Execution", variant: "pending" };
+        return { label: "Pending Execution", variant: "pending_execution" };
       case "rejected":
         return { label: "Rejected", variant: "failure" };
       default: {
@@ -272,11 +275,11 @@ function ToolStatusIcon({ variant }: { variant: ToolStatusVariant }) {
       return <Check className="h-3 w-3 text-green-600 dark:text-green-400" />;
     case "failure":
       return <Cross className="h-3 w-3 text-red-400" />;
-    case "pending":
+    case "pending_execution":
       return (
         <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-gray-500" />
       );
-    case "pending_auth":
+    case "pending_approval":
       return (
         <KeyRound className="h-3 w-3 text-yellow-500 dark:text-yellow-400" />
       );
