@@ -54,6 +54,7 @@ BEGIN
         total_output_tokens,
         inference_count,
         total_cost,
+        count_with_cost,
         total_provider_cache_read_input_tokens,
         total_provider_cache_write_input_tokens
     )
@@ -66,6 +67,7 @@ BEGIN
         SUM(output_tokens)::BIGINT AS total_output_tokens,
         COUNT(*)::BIGINT AS inference_count,
         SUM(cost)::NUMERIC AS total_cost,
+        COUNT(cost)::BIGINT AS count_with_cost,
         SUM(provider_cache_read_input_tokens)::BIGINT AS total_provider_cache_read_input_tokens,
         SUM(provider_cache_write_input_tokens)::BIGINT AS total_provider_cache_write_input_tokens
     FROM tensorzero.model_inferences
@@ -78,6 +80,7 @@ BEGIN
         total_output_tokens = EXCLUDED.total_output_tokens,
         inference_count = EXCLUDED.inference_count,
         total_cost = EXCLUDED.total_cost,
+        count_with_cost = EXCLUDED.count_with_cost,
         total_provider_cache_read_input_tokens = EXCLUDED.total_provider_cache_read_input_tokens,
         total_provider_cache_write_input_tokens = EXCLUDED.total_provider_cache_write_input_tokens;
 
