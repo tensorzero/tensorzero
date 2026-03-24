@@ -789,6 +789,16 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 WHERE metric_name IN ({{metric_names:Array(String)}})
                 AND target_id IN (SELECT inference_id FROM all_inference_ids)
                 GROUP BY target_id, metric_name
+            ),
+            inference_usage AS (
+                SELECT
+                    mi.inference_id as inference_id,
+                    sum(mi.input_tokens) as input_tokens,
+                    sum(mi.output_tokens) as output_tokens,
+                    if(count(*) = countIf(isNotNull(mi.cost)), sum(mi.cost), null) as cost
+                FROM ModelInference mi
+                WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY mi.inference_id
             )
             SELECT
                 filtered_dp.input as input,
@@ -806,10 +816,16 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
                 filtered_feedback.feedback_id as feedback_id,
                 toBool(filtered_feedback.is_human_feedback) as is_human_feedback,
                 filtered_dp.staled_at as staled_at,
-                filtered_inference.variant_name as variant_name
+                filtered_inference.variant_name as variant_name,
+                inference_usage.input_tokens as input_tokens,
+                inference_usage.output_tokens as output_tokens,
+                inference_usage.cost as cost,
+                filtered_inference.processing_time_ms as processing_time_ms
             FROM filtered_dp
             INNER JOIN filtered_inference
                 ON toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id']) = filtered_dp.id
+            LEFT JOIN inference_usage
+                ON inference_usage.inference_id = filtered_inference.id
             LEFT JOIN filtered_feedback
                 ON filtered_feedback.target_id = filtered_inference.id
             ORDER BY toUInt128(datapoint_id) DESC, metric_name DESC
@@ -1937,7 +1953,17 @@ mod tests {
                 assert_query_contains(query, "filtered_feedback AS");
                 assert_query_contains(query, "FROM ChatInference");
                 assert_query_contains(query, "FROM ChatInferenceDatapoint");
+                assert_query_contains(query, "inference_usage AS");
+                assert_query_contains(query, "FROM ModelInference");
+                assert_query_contains(query, "LEFT JOIN inference_usage");
                 assert_query_contains(query, "LEFT JOIN filtered_feedback");
+                assert_query_contains(query, "inference_usage.input_tokens as input_tokens");
+                assert_query_contains(query, "inference_usage.output_tokens as output_tokens");
+                assert_query_contains(query, "inference_usage.cost as cost");
+                assert_query_contains(
+                    query,
+                    "filtered_inference.processing_time_ms as processing_time_ms",
+                );
                 assert_query_contains(query, "LIMIT 10");
                 assert_query_contains(query, "OFFSET 0");
                 assert_query_contains(query, "ORDER BY toUInt128(datapoint_id) DESC");
@@ -1992,6 +2018,55 @@ mod tests {
                 );
                 assert_eq!(row.metric_value, Some("true".to_string()));
                 assert!(!row.is_human_feedback);
+                // Usage fields should be None when not in response
+                assert!(row.input_tokens.is_none());
+                assert!(row.output_tokens.is_none());
+                assert!(row.cost.is_none());
+                assert!(row.processing_time_ms.is_none());
+            }
+            EvaluationResultRow::Json(_) => {
+                panic!("Expected Chat result")
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_with_usage() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95f","episode_id":"0196ee9c-d808-74f3-8000-02ec7409b960","datapoint_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","evaluation_run_id":"0196ee9c-d808-74f3-8000-02ec7409b95e","evaluator_inference_id":null,"input":"{\"messages\":[]}","generated_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","reference_output":"[{\"type\":\"text\",\"text\":\"hello\"}]","dataset_name":"test_dataset","metric_name":"metric1","metric_value":"true","feedback_id":"0196ee9c-d808-74f3-8000-02ec7409b961","is_human_feedback":false,"variant_name":"test_variant","name":null,"staled_at":null,"input_tokens":150,"output_tokens":50,"cost":0.002,"processing_time_ms":300}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap()],
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                None,
+                10,
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            EvaluationResultRow::Chat(row) => {
+                assert_eq!(row.input_tokens, Some(150));
+                assert_eq!(row.output_tokens, Some(50));
+                assert_eq!(row.cost, Some(0.002));
+                assert_eq!(row.processing_time_ms, Some(300));
             }
             EvaluationResultRow::Json(_) => {
                 panic!("Expected Chat result")

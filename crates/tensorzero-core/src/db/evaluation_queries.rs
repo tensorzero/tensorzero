@@ -161,6 +161,14 @@ pub(crate) struct RawEvaluationResultRow {
     pub variant_name: String,
     pub name: Option<String>,
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences for this inference
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences for this inference
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds from the inference table
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result for a chat function.
@@ -204,6 +212,18 @@ pub struct ChatEvaluationResultRow {
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result for a JSON function.
@@ -247,6 +267,18 @@ pub struct JsonEvaluationResultRow {
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
@@ -314,6 +346,10 @@ impl RawEvaluationResultRow {
             variant_name: self.variant_name,
             name: self.name,
             staled_at: self.staled_at,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            cost: self.cost,
+            processing_time_ms: self.processing_time_ms,
         })
     }
 
@@ -354,6 +390,10 @@ impl RawEvaluationResultRow {
             variant_name: self.variant_name,
             name: self.name,
             staled_at: self.staled_at,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            cost: self.cost,
+            processing_time_ms: self.processing_time_ms,
         })
     }
 }
