@@ -3,4 +3,5 @@
 export type ToolCallDecisionSource =
   | { type: "ui" }
   | { type: "automatic" }
-  | { type: "whitelist" };
+  | { type: "whitelist" }
+  | { type: "interrupted" };
