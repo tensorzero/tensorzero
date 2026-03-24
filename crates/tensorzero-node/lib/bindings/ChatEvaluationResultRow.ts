@@ -55,4 +55,20 @@ export type ChatEvaluationResultRow = {
    * When the datapoint was marked as stale (if ever)
    */
   staled_at?: string;
+  /**
+   * Total input tokens across all model inferences
+   */
+  input_tokens?: bigint;
+  /**
+   * Total output tokens across all model inferences
+   */
+  output_tokens?: bigint;
+  /**
+   * Total cost across all model inferences (null if any model inference lacks cost)
+   */
+  cost?: number;
+  /**
+   * Processing time in milliseconds
+   */
+  processing_time_ms?: number;
 };
