@@ -15,7 +15,7 @@ jobs:
     name: Create PR Feedback
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8
         with:
           oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
