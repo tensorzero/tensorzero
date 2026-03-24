@@ -21,24 +21,24 @@ jobs:
       has-changes: ${{ steps.generate.outputs.has-changes }}
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8
         with:
           oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
           tags: tag:ci
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           fetch-tags: false
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup toolchain install stable --profile minimal
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
 
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload patch artifact
         if: steps.generate.outputs.has-changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: pr-patch
           path: |
@@ -73,7 +73,7 @@ jobs:
       - name: Upload diagnostics bundle
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: ci-failure-diagnostics
           path: debug-logs/
@@ -89,7 +89,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8
         with:
           oauth-client-id: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.CI_BOT_TS_OAUTH_CLIENT_SECRET }}
@@ -97,7 +97,7 @@ jobs:
 
       # Download to /tmp so checkout doesn't delete it
       - name: Download patch artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           name: pr-patch
           path: /tmp/patch-data
@@ -119,7 +119,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Checkout PR branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ steps.meta.outputs.head-ref }}
           fetch-depth: 0
