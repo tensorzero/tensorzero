@@ -675,7 +675,25 @@ fn build_get_evaluation_results_query(
     qb.push(inference_data_table);
     qb.push(" WHERE id IN (SELECT inference_id FROM all_inference_ids)");
 
-    // CTE 6: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
+    // CTE 6: inference_usage - aggregated token/cost usage per inference from model_inferences
+    qb.push(
+        r"),
+        inference_usage AS (
+            SELECT
+                mi.inference_id,
+                SUM(mi.input_tokens)::BIGINT as input_tokens,
+                SUM(mi.output_tokens)::BIGINT as output_tokens,
+                CASE
+                    WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                    ELSE NULL
+                END as cost
+            FROM tensorzero.model_inferences mi
+            WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
+            GROUP BY mi.inference_id
+        )",
+    );
+
+    // CTE 7: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
     qb.push(
         r"),
         filtered_feedback AS (
@@ -729,13 +747,19 @@ fn build_get_evaluation_results_query(
             filtered_feedback.feedback_id as feedback_id,
             COALESCE(filtered_feedback.is_human_feedback, false) as is_human_feedback,
             filtered_dp.staled_at::TEXT as staled_at,
-            filtered_inference.variant_name as variant_name
+            filtered_inference.variant_name as variant_name,
+            inference_usage.input_tokens as input_tokens,
+            inference_usage.output_tokens as output_tokens,
+            inference_usage.cost as cost,
+            filtered_inference.processing_time_ms as processing_time_ms
         FROM filtered_dp
         INNER JOIN filtered_inference
             ON (filtered_inference.tags->>'tensorzero::datapoint_id')::UUID = filtered_dp.id
         LEFT JOIN filtered_inference_data
             ON filtered_inference_data.id = filtered_inference.id
             AND filtered_inference_data.created_at = filtered_inference.created_at
+        LEFT JOIN inference_usage
+            ON inference_usage.inference_id = filtered_inference.id
         LEFT JOIN filtered_feedback
             ON filtered_feedback.target_id = filtered_inference.id
         ORDER BY datapoint_id DESC, metric_name DESC
@@ -958,6 +982,60 @@ mod tests {
             FROM tensorzero.inference_evaluation_human_feedback
             WHERE metric_name = $1 AND datapoint_id = $2 AND output = $3 LIMIT 1
             ",
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_results_query_includes_usage_columns() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_results_query(
+            "test_func",
+            &[run_id],
+            FunctionConfigType::Chat,
+            &["metric1".to_string()],
+            None,
+            100,
+            0,
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // Verify the inference_usage CTE is present
+        assert!(
+            sql.contains("inference_usage AS"),
+            "Expected query to contain inference_usage CTE"
+        );
+        assert!(
+            sql.contains("SUM(mi.input_tokens)"),
+            "Expected inference_usage CTE to sum input_tokens"
+        );
+        assert!(
+            sql.contains("SUM(mi.output_tokens)"),
+            "Expected inference_usage CTE to sum output_tokens"
+        );
+
+        // Verify the usage columns are in the final SELECT
+        assert!(
+            sql.contains("inference_usage.input_tokens as input_tokens"),
+            "Expected final SELECT to include input_tokens from inference_usage"
+        );
+        assert!(
+            sql.contains("inference_usage.output_tokens as output_tokens"),
+            "Expected final SELECT to include output_tokens from inference_usage"
+        );
+        assert!(
+            sql.contains("inference_usage.cost as cost"),
+            "Expected final SELECT to include cost from inference_usage"
+        );
+        assert!(
+            sql.contains("filtered_inference.processing_time_ms as processing_time_ms"),
+            "Expected final SELECT to include processing_time_ms from filtered_inference"
+        );
+
+        // Verify the LEFT JOIN is present
+        assert!(
+            sql.contains("LEFT JOIN inference_usage"),
+            "Expected LEFT JOIN on inference_usage"
         );
     }
 }
