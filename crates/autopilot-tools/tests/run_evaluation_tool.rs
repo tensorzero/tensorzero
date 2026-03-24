@@ -8,7 +8,7 @@ use std::sync::Arc;
 use durable::MIGRATOR;
 use durable_tools::{
     ActionInput, ActionResponse, CacheEnabledMode, DatapointResult, ErasedSimpleTool,
-    RunEvaluationResponse, SimpleToolContext,
+    RunEvaluationResponse, SimpleToolContext, ToolRegistry,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -35,6 +35,7 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
         num_errors: 5,
         stats,
         datapoint_results: None,
+        evaluation_infos: None,
     }
 }
 
@@ -78,7 +79,7 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
                 return false;
             };
             snapshot_hash.to_string() == test_snapshot_hash
-                && params.evaluation_name == "test_evaluation"
+                && params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.datapoint_ids.is_none()
                 && params.variant_name == "test_variant"
@@ -93,7 +94,8 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -149,7 +151,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
-            params.evaluation_name == "test_evaluation"
+            params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.datapoint_ids.is_none()
                 && params.variant_name == "test_variant"
@@ -169,7 +171,8 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -232,7 +235,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
-            params.evaluation_name == "test_evaluation"
+            params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name.is_none()
                 && params.datapoint_ids == Some(expected_datapoint_ids.clone())
                 && params.variant_name == "test_variant"
@@ -251,7 +254,8 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -310,7 +314,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
-            params.evaluation_name == "test_evaluation"
+            params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.variant_name == "test_variant"
                 && params.concurrency == 10
@@ -327,7 +331,8 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -382,7 +387,8 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool - should fail
     let result = tool
@@ -472,6 +478,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         num_errors: 1,
         stats,
         datapoint_results: Some(datapoint_results),
+        evaluation_infos: None,
     };
     let expected_response = mock_response.clone();
 
@@ -506,7 +513,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
-            params.evaluation_name == "test_evaluation"
+            params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.variant_name == "test_variant"
                 // Verify include_datapoint_results is passed through correctly
@@ -519,7 +526,8 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool

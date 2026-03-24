@@ -592,12 +592,26 @@ impl AutopilotClient {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Convert pending autoeval example labeling to gateway events (no filtering needed)
+        let pending_auto_eval_example_labeling = body
+            .pending_auto_eval_example_labeling
+            .into_iter()
+            .map(|event| {
+                event.try_into().map_err(|e| {
+                    AutopilotError::Internal(format!(
+                        "Event conversion failed for pending autoeval example labeling: {e}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(GatewayListEventsResponse {
             events: filtered_events,
             previous_user_message_event_id: body.previous_user_message_event_id,
             status: body.status,
             pending_tool_calls: filtered_pending_tool_calls,
             pending_user_questions,
+            pending_auto_eval_example_labeling,
         })
     }
 
@@ -1029,6 +1043,133 @@ impl AutopilotClient {
         });
 
         Ok(stream)
+    }
+
+    // -------------------------------------------------------------------------
+    // Failure Mode Analysis Endpoints
+    // -------------------------------------------------------------------------
+
+    /// Lists active failure modes for a deployment/function.
+    pub async fn list_failure_modes(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        params: crate::types::FmaCursorPaginationParams,
+    ) -> Result<crate::types::ListFailureModesResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failure-modes"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
+    }
+
+    /// Gets a single failure mode by ID.
+    pub async fn get_failure_mode(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        failure_mode_id: Uuid,
+    ) -> Result<crate::types::FailureModeResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failure-modes/{failure_mode_id}"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
+    }
+
+    /// Lists active failures for a deployment/function.
+    pub async fn list_failures(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        params: crate::types::ListFailuresParams,
+    ) -> Result<crate::types::ListFailuresResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failures"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
+    }
+
+    /// Gets a single failure by ID.
+    pub async fn get_failure(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        failure_id: Uuid,
+    ) -> Result<crate::types::FailureResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failures/{failure_id}"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
+    }
+
+    /// Lists analyses for a deployment/function.
+    pub async fn list_analyses(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        params: crate::types::FmaCursorPaginationParams,
+    ) -> Result<crate::types::ListAnalysesResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failure-mode-analyses"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .query(&params)
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
+    }
+
+    /// Gets a single analysis by ID.
+    pub async fn get_analysis(
+        &self,
+        deployment_id: &str,
+        function_name: &str,
+        analysis_id: Uuid,
+    ) -> Result<crate::types::AnalysisResponse, AutopilotError> {
+        let url = self.base_url.join(&format!(
+            "/v1/deployments/{deployment_id}/functions/{function_name}/failure-mode-analyses/{analysis_id}"
+        ))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        Ok(response.json().await?)
     }
 
     // -------------------------------------------------------------------------

@@ -46,6 +46,10 @@ export function PendingQuestionCard({
             question={data.question}
             selectedValues={data.selectedValues}
             onToggle={data.onToggle}
+            otherSelected={data.otherSelected}
+            onOtherToggle={data.onOtherToggle}
+            mcFreeText={data.mcFreeText}
+            onMcFreeTextChange={data.onMcFreeTextChange}
           />
         );
       case "free_response":

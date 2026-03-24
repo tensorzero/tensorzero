@@ -28,6 +28,8 @@ import {
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
+  AutoEvalContentBlock,
+  AutoEvalLabeledExample,
   AutopilotStatus,
   EventPayloadMessageContent,
   EventPayloadUserQuestion,
@@ -249,6 +251,9 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
     case "user_questions":
     case "user_questions_answers":
     case "auto_eval_example_labeling":
+    case "auto_eval_example_labeling_answers":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "visualization":
     case "unknown":
       return {};
@@ -431,6 +436,26 @@ function renderEventTitle(event: GatewayEvent) {
     }
     case "auto_eval_example_labeling":
       return "Example Labeling";
+    case "auto_eval_example_labeling_answers": {
+      const exampleCount = payload.examples.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {exampleCount === 1 ? "Example Label" : "Example Labels"}
+          <DotSeparator />
+          Submitted
+        </span>
+      );
+    }
+    case "auto_eval_behavior_spec":
+      return "Behavior Spec";
+    case "auto_eval_behavior_spec_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Behavior Spec
+          <DotSeparator />
+          Submitted
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -553,6 +578,81 @@ function UserQuestionsAnswersContent({
   );
 }
 
+function formatLabelAnswer(
+  answer: UserQuestionAnswer,
+  example: AutoEvalLabeledExample,
+): string {
+  return formatResponse(answer, {
+    id: example.label_question.id,
+    header: example.label_question.header,
+    question: example.label_question.question,
+    type: "multiple_choice",
+    options: example.label_question.options,
+    multi_select: false,
+  });
+}
+
+function AutoEvalLabelingAnswersContent({
+  examples,
+}: {
+  examples: AutoEvalLabeledExample[];
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {examples.map((example, idx) => (
+        <div key={idx} className="flex flex-col gap-2">
+          {/* Context blocks */}
+          {[example.maybe_excerpted_prompt, example.maybe_excerpted_response]
+            .filter((block): block is AutoEvalContentBlock => block !== null)
+            .map((block, blockIdx) => (
+              <div key={blockIdx} className="flex flex-col gap-0.5">
+                {block.label && (
+                  <span className="text-fg-muted text-xs font-medium">
+                    {block.label}
+                  </span>
+                )}
+                {block.type === "markdown" ? (
+                  <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+                    {block.text}
+                  </p>
+                ) : (
+                  <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
+                    {JSON.stringify(block.data, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
+          {/* Label answer */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {example.label_question.header}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {formatLabelAnswer(example.label_answer, example)}
+            </span>
+          </div>
+          {/* Explanation answer */}
+          {example.explanation_question && example.explanation_answer && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-fg-muted text-xs font-medium">
+                {example.explanation_question.header}
+              </span>
+              <span className="text-fg-primary text-sm">
+                {formatResponse(example.explanation_answer, {
+                  id: example.explanation_question.id,
+                  header: example.explanation_question.header,
+                  question: example.explanation_question.question,
+                  type: "free_response",
+                })}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
@@ -588,6 +688,10 @@ function EventItemContent({
     );
   }
 
+  if (event.payload.type === "auto_eval_example_labeling_answers") {
+    return <AutoEvalLabelingAnswersContent examples={event.payload.examples} />;
+  }
+
   if (!description) return null;
 
   switch (event.payload.type) {
@@ -616,6 +720,8 @@ function EventItemContent({
     case "tool_call_authorization":
     case "visualization":
     case "auto_eval_example_labeling":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
     case "unknown":
       return (
         <p className="text-fg-secondary text-sm whitespace-pre-wrap">
@@ -664,6 +770,7 @@ function EventItem({
     event.payload.type === "visualization" ||
     event.payload.type === "user_questions" ||
     event.payload.type === "user_questions_answers" ||
+    event.payload.type === "auto_eval_example_labeling_answers" ||
     (event.payload.type === "tool_call_authorization" &&
       event.payload.status.type === "rejected") ||
     (event.payload.type === "tool_result" &&
@@ -792,6 +899,10 @@ function getStatusLabel(status: AutopilotStatus): {
     case "waiting_for_tool_execution":
       return { text: "Executing tool", showEllipsis: true };
     case "waiting_for_user_questions_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_behavior_spec_answers":
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };

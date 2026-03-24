@@ -2,7 +2,7 @@
 import type { ChatCompletionInferenceParams } from "./ChatCompletionInferenceParams";
 
 /**
- * InferenceParams is the top-level struct for inference parameters.
+ * Top-level struct for inference parameters.
  * We backfill these from the configs given in the variants used and ultimately write them to the database.
  */
 export type InferenceParams = {

@@ -767,6 +767,8 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             ttft_ms: None,
             cached: false,
             cost: Some(Decimal::new(500, 6)), // 0.000500
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -787,6 +789,8 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             ttft_ms: None,
             cached: false,
             cost: Some(Decimal::new(1500, 6)), // 0.001500
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -807,6 +811,8 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             ttft_ms: None,
             cached: false,
             cost: None, // NULL cost — should be excluded from SUM
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -853,6 +859,8 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             ttft_ms: None,
             cached: false,
             cost: Some(Decimal::new(500, 6)), // 0.000500
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -874,6 +882,8 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             ttft_ms: None,
             cached: false,
             cost: Some(Decimal::new(1500, 6)), // 0.001500
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,
@@ -895,6 +905,8 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             ttft_ms: None,
             cached: false,
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
             timestamp: None,

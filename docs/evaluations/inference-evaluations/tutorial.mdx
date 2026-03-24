@@ -90,29 +90,13 @@ See the [Datasets & Datapoints API Reference](/gateway/api-reference/datasets-da
 
 </Tip>
 
-## Evaluations
-
-Evalutions test the behavior of variants for a TensorZero function.
-
-Let's define an evaluation in our configuration file:
-
-```toml
-[evaluations.haiku_eval]
-type = "inference"
-function_name = "write_haiku"
-```
-
 ## Evaluators
 
-Each evaluation has one or more evaluators: a rule or behavior you'd like to test.
+Evaluators are defined as part of a function's configuration.
+Each evaluator defines a rule or behavior you'd like to test.
 
-Today, TensorZero supports two types of evaluators: `exact_match` and `llm_judge`.
-
-<Tip title="Coming Soon">
-
-We're planning to release other types of evaluators soon (e.g. semantic similarity in an embedding space).
-
-</Tip>
+We're going to configure our `write_haiku` function with two types of evaluators: `exact_match` and `llm_judge`.
+See the [Evaluations Configuration Reference](/evaluations/inference-evaluations/configuration-reference) for the full list of supported evaluator types.
 
 ### `exact_match`
 
@@ -120,7 +104,7 @@ The `exact_match` evaluator compares the generated output with the datapoint's r
 If they are identical, it returns true; otherwise, it returns false.
 
 ```toml
-[evaluations.haiku_eval.evaluators.exact_match]
+[functions.write_haiku.evaluators.exact_match]
 type = "exact_match"
 ```
 
@@ -134,21 +118,21 @@ Why not ask an LLM?
 Let's do that:
 
 ```toml
-[evaluations.haiku_eval.evaluators.valid_haiku]
+[functions.write_haiku.evaluators.valid_haiku]
 type = "llm_judge"
 output_type = "boolean"  # LLM judge should generate a boolean (or float)
 optimize = "max"  # higher is better
 
-[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
+[functions.write_haiku.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+system_instructions = "functions/write_haiku/evaluators/valid_haiku/system_instructions.txt"
 json_mode = "strict"
 ```
 
 <Accordion title="System Instructions">
 
-```text title="evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+```text title="functions/write_haiku/evaluators/valid_haiku/system_instructions.txt"
 Evaluate if the text follows the haiku structure of exactly three lines with a 5-7-5 syllable pattern, totaling 17 syllables. Verify only this specific syllable structure of a haiku without making content assumptions.
 ```
 
@@ -162,22 +146,22 @@ But unlike regular functions, only one variant can be active at a time during ev
 <Accordion title="Example: Multiple Variants for an LLM Judge">
 
 ```toml
-[evaluations.haiku_eval.evaluators.valid_haiku]
+[functions.write_haiku.evaluators.valid_haiku]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
+[functions.write_haiku.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+system_instructions = "functions/write_haiku/evaluators/valid_haiku/system_instructions.txt"
 json_mode = "strict"
 active = true
 
-[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_judge]
+[functions.write_haiku.evaluators.valid_haiku.variants.gpt_4o_judge]
 type = "chat_completion"
 model = "openai::gpt-4o"
-system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
+system_instructions = "functions/write_haiku/evaluators/valid_haiku/system_instructions.txt"
 json_mode = "strict"
 ```
 
@@ -188,7 +172,7 @@ The LLM judge we showed above generates a boolean, but they can also generate fl
 Let's define another evalutor that counts the number of metaphors in our haiku.
 
 ```toml {3}
-[evaluations.haiku_eval.evaluators.metaphor_count]
+[functions.write_haiku.evaluators.metaphor_count]
 type = "llm_judge"
 output_type = "float"  # LLM judge should generate a boolean (or float)
 optimize = "max"
@@ -198,16 +182,16 @@ We can also use different variant types for evaluators.
 Let's use a chain-of-thought variant for our metaphor count evaluator, since it's a bit more complex.
 
 ```toml {2}
-[evaluations.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
+[functions.write_haiku.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evaluations/haiku_eval/metaphor_count/system_instructions.txt"
+system_instructions = "functions/write_haiku/evaluators/metaphor_count/system_instructions.txt"
 json_mode = "strict"
 ```
 
 <Accordion title="System Instructions">
 
-```text title="evaluations/haiku_eval/metaphor_count/system_instructions.txt"
+```text title="functions/write_haiku/evaluators/metaphor_count/system_instructions.txt"
 How many metaphors does the generated haiku have?
 ```
 
@@ -217,22 +201,22 @@ The LLM judges we've defined so far only look at the datapoint's input and the g
 But we can also provide the datapoint's reference output to the judge:
 
 ```toml {3}
-[evaluations.haiku_eval.evaluators.compare_haikus]
+[functions.write_haiku.evaluators.compare_haikus]
 type = "llm_judge"
 include = { reference_output = true }  # include the reference output in the LLM judge's context
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.haiku_eval.evaluators.compare_haikus.variants.gpt_4o_mini_judge]
+[functions.write_haiku.evaluators.compare_haikus.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evaluations/haiku_eval/compare_haikus/system_instructions.txt"
+system_instructions = "functions/write_haiku/evaluators/compare_haikus/system_instructions.txt"
 json_mode = "strict"
 ```
 
 <Accordion title="System Instructions">
 
-```text title="evaluations/haiku_eval/compare_haikus/system_instructions.txt"
+```text title="functions/write_haiku/evaluators/compare_haikus/system_instructions.txt"
 Does the generated haiku include the same figures of speech as the reference haiku?
 ```
 
@@ -264,7 +248,8 @@ To run evaluations in the CLI, you can use the `tensorzero/evaluations` containe
 
 ```bash
 docker compose run --rm evaluations \
-    --evaluation-name haiku_eval \
+    --function-name write_haiku \
+    --evaluator-names valid_haiku,metaphor_count,exact_match,compare_haikus \
     --dataset-name haiku_dataset \
     --variant-name gpt_4o \
     --concurrency 5 \
@@ -290,11 +275,11 @@ services:
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
       # ... and any other relevant API credentials ...
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      clickhouse:
+      postgres:
         condition: service_healthy
 # ...
 ```

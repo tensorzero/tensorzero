@@ -203,7 +203,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
 
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,
@@ -431,7 +431,7 @@ fn build_count_datapoints_for_evaluation_query(
 }
 
 fn build_search_evaluation_runs_query(
-    evaluation_name: &str,
+    evaluation_name: Option<&str>,
     function_name: Option<&str>,
     query: &str,
     limit: u32,
@@ -441,23 +441,34 @@ fn build_search_evaluation_runs_query(
         r"
         SELECT
             run_id AS evaluation_run_id,
+            evaluation_name,
+            dataset_name,
             COALESCE(variant_names->>0, '') AS variant_name
         FROM tensorzero.inference_evaluation_runs
-        WHERE evaluation_name = ",
+        WHERE TRUE",
     );
-    qb.push_bind(evaluation_name.to_string());
+    if let Some(evaluation_name) = evaluation_name {
+        qb.push(" AND evaluation_name = ");
+        qb.push_bind(evaluation_name.to_string());
+    }
     if let Some(fn_name) = function_name {
         qb.push(" AND function_name = ");
         qb.push_bind(fn_name.to_string());
     }
-    qb.push(
-        r"
+    if !query.is_empty() {
+        qb.push(
+            r"
         AND (run_id::TEXT ILIKE ",
-    );
-    qb.push_bind(format!("%{query}%"));
-    qb.push(" OR COALESCE(variant_names->>0, '') ILIKE ");
-    qb.push_bind(format!("%{query}%"));
-    qb.push(")");
+        );
+        qb.push_bind(format!("%{query}%"));
+        qb.push(" OR evaluation_name ILIKE ");
+        qb.push_bind(format!("%{query}%"));
+        qb.push(" OR dataset_name ILIKE ");
+        qb.push_bind(format!("%{query}%"));
+        qb.push(" OR COALESCE(variant_names->>0, '') ILIKE ");
+        qb.push_bind(format!("%{query}%"));
+        qb.push(")");
+    }
     qb.push(
         r"
         ORDER BY run_id DESC
@@ -812,7 +823,7 @@ mod tests {
     #[test]
     fn test_build_search_evaluation_runs_query() {
         let qb = build_search_evaluation_runs_query(
-            "test_eval",
+            Some("test_eval"),
             Some("test_func"),
             "search_term",
             50,
@@ -826,19 +837,21 @@ mod tests {
             r"
             SELECT
                 run_id AS evaluation_run_id,
+                evaluation_name,
+                dataset_name,
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
-            WHERE evaluation_name = $1 AND function_name = $2
-            AND (run_id::TEXT ILIKE $3 OR COALESCE(variant_names->>0, '') ILIKE $4)
+            WHERE TRUE AND evaluation_name = $1 AND function_name = $2
+            AND (run_id::TEXT ILIKE $3 OR evaluation_name ILIKE $4 OR dataset_name ILIKE $5 OR COALESCE(variant_names->>0, '') ILIKE $6)
             ORDER BY run_id DESC
-            LIMIT $5 OFFSET $6
+            LIMIT $7 OFFSET $8
             ",
         );
     }
 
     #[test]
     fn test_build_search_evaluation_runs_query_no_function_name() {
-        let qb = build_search_evaluation_runs_query("test_eval", None, "search_term", 50, 10);
+        let qb = build_search_evaluation_runs_query(Some("test_eval"), None, "search_term", 50, 10);
         let sql = qb.sql();
         let sql = sql.as_str();
 
@@ -847,12 +860,36 @@ mod tests {
             r"
             SELECT
                 run_id AS evaluation_run_id,
+                evaluation_name,
+                dataset_name,
                 COALESCE(variant_names->>0, '') AS variant_name
             FROM tensorzero.inference_evaluation_runs
-            WHERE evaluation_name = $1
-            AND (run_id::TEXT ILIKE $2 OR COALESCE(variant_names->>0, '') ILIKE $3)
+            WHERE TRUE AND evaluation_name = $1
+            AND (run_id::TEXT ILIKE $2 OR evaluation_name ILIKE $3 OR dataset_name ILIKE $4 OR COALESCE(variant_names->>0, '') ILIKE $5)
             ORDER BY run_id DESC
-            LIMIT $4 OFFSET $5
+            LIMIT $6 OFFSET $7
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_search_evaluation_runs_query_function_only_empty_search() {
+        let qb = build_search_evaluation_runs_query(None, Some("test_func"), "", 50, 10);
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        assert_query_equals(
+            sql,
+            r"
+            SELECT
+                run_id AS evaluation_run_id,
+                evaluation_name,
+                dataset_name,
+                COALESCE(variant_names->>0, '') AS variant_name
+            FROM tensorzero.inference_evaluation_runs
+            WHERE TRUE AND function_name = $1
+            ORDER BY run_id DESC
+            LIMIT $2 OFFSET $3
             ",
         );
     }

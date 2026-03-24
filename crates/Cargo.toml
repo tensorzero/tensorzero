@@ -27,12 +27,13 @@ members = [
     "tensorzero-ts-types",
     "tensorzero-types",
     "tensorzero-types-providers",
+    "tensorzero-error",
     "tensorzero-unsafe-helpers",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2026.3.1"
+version = "2026.3.3"
 rust-version = "1.93.0"
 license = "Apache-2.0"
 edition = "2024"
@@ -117,7 +118,7 @@ schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
 moka = { version = "0.12.14", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "2d69424943b1db91b055154062143457c91e8ee7" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "03f2c5f820b57dff2bdcb60c081533d03605519f" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }

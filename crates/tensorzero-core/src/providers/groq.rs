@@ -1248,6 +1248,8 @@ fn groq_usage_to_tensorzero_usage(usage: GroqUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         cost: None,
     }
 }
@@ -2556,6 +2558,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             "expected usage to include provider raw_usage entries"
         );

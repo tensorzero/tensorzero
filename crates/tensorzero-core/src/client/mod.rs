@@ -132,13 +132,23 @@ impl HTTPGateway {
         Ok(resp)
     }
 
-    fn customize_builder<'a>(
+    pub fn customize_builder<'a>(
         &self,
         mut builder: TensorzeroRequestBuilder<'a>,
     ) -> TensorzeroRequestBuilder<'a> {
         if let Some(timeout) = self.timeout {
             builder = builder.timeout(timeout);
         }
+        builder.headers(self.headers.clone())
+    }
+
+    /// Like `customize_builder` but without applying the per-request timeout.
+    /// Use this for long-running SSE streams (e.g. evaluation runs) where the
+    /// stream lifetime is unbounded and should not be subject to the HTTP timeout.
+    pub fn customize_builder_no_timeout<'a>(
+        &self,
+        builder: TensorzeroRequestBuilder<'a>,
+    ) -> TensorzeroRequestBuilder<'a> {
         builder.headers(self.headers.clone())
     }
 
@@ -375,7 +385,7 @@ impl Display for TensorZeroError {
 
 #[derive(Debug, thiserror::Error)]
 #[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] Error);
+pub struct TensorZeroInternalError(#[from] pub Error);
 
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
@@ -584,7 +594,7 @@ impl ClientBuilder {
                         })?
                 };
                 let clickhouse_connection_info =
-                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone())
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
@@ -768,7 +778,7 @@ impl ClientBuilder {
         })?;
 
         // Setup ClickHouse with runtime URL
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url, true)
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url)
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
@@ -1512,12 +1522,13 @@ mod tests {
         .build()
         .await
         .expect("Failed to build client");
+
+        // This setup has no Clickhouse or Postgres, and observability is not explicitly enabled.
+        // We should be able to start up, but log warnings.
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
-        ));
+        assert!(logs_contain("Disabling observability:"));
     }
 
     #[tokio::test]
@@ -1541,9 +1552,10 @@ mod tests {
         assert!(logs_contain(
             "No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."
-        ));
+
+        // This setup has no Clickhouse or Postgres, and observability is not explicitly enabled.
+        // We should be able to start up, but log warnings.
+        assert!(logs_contain("Disabling observability:"));
     }
 
     #[tokio::test]

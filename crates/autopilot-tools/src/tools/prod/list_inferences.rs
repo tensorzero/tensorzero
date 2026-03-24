@@ -90,13 +90,9 @@ impl ToolMetadata for ListInferencesTool {
                 },
                 "output_source": {
                     "type": "string",
-                    "enum": ["inference", "demonstration"],
+                    "enum": ["none", "inference", "demonstration"],
                     "default": "inference",
-                    // Note: "none" is intentionally omitted. The list_inferences endpoint
-                    // rejects output_source: "none" since these endpoints are for retrieving
-                    // complete inference records. Other endpoints (like dataset creation)
-                    // still support "none" when only metadata is needed.
-                    "description": "Source of the inference output. 'inference' returns the original output, 'demonstration' returns manually-curated output if available."
+                    "description": "Source of the inference output. 'none' returns metadata only (no output), 'inference' returns the original output, 'demonstration' returns manually-curated output if available."
                 },
                 "limit": {
                     "type": "integer",

@@ -306,7 +306,9 @@ model = "eval_test_model_{id}"
     let params = ActionInputInfo {
         snapshot_hash,
         input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
-            evaluation_name: "nonexistent_evaluation".to_string(),
+            evaluation_name: Some("nonexistent_evaluation".to_string()),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: None,
             variant_name: "baseline".to_string(),
@@ -316,6 +318,8 @@ model = "eval_test_model_{id}"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         })),
     };
 
@@ -393,7 +397,9 @@ json_mode = "on"
     let params = ActionInputInfo {
         snapshot_hash,
         input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
-            evaluation_name: format!("test_eval_{id}"),
+            evaluation_name: Some(format!("test_eval_{id}")),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: None,
             datapoint_ids: None,
             variant_name: "baseline".to_string(),
@@ -403,6 +409,8 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         })),
     };
 
@@ -479,7 +487,9 @@ json_mode = "on"
     let params = ActionInputInfo {
         snapshot_hash,
         input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
-            evaluation_name: format!("test_eval_{id}"),
+            evaluation_name: Some(format!("test_eval_{id}")),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: Some("some_dataset".to_string()),
             datapoint_ids: Some(vec![Uuid::now_v7()]),
             variant_name: "baseline".to_string(),
@@ -489,6 +499,8 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: false,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         })),
     };
 
@@ -633,7 +645,9 @@ json_mode = "on"
     let params = ActionInputInfo {
         snapshot_hash,
         input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
-            evaluation_name: format!("action_test_eval_{id}"),
+            evaluation_name: Some(format!("action_test_eval_{id}")),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: None,
             datapoint_ids: Some(vec![datapoint_id_1, datapoint_id_2]),
             variant_name: "baseline".to_string(),
@@ -643,6 +657,8 @@ json_mode = "on"
             precision_targets: HashMap::new(),
             include_datapoint_results: true,
             tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         })),
     };
 
@@ -711,4 +727,333 @@ json_mode = "on"
 #[tokio::test(flavor = "multi_thread")]
 async fn test_action_run_evaluation_basic_impl_http_gateway() {
     test_action_run_evaluation_basic_impl(make_http_gateway().await).await;
+}
+
+/// Test that the action endpoint can run an evaluation using function_name + evaluator_names
+/// (the new inline evaluator path) instead of a named evaluation.
+#[expect(clippy::disallowed_methods)]
+async fn test_action_run_evaluation_function_evaluator_names_impl(client: Client) {
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let id = Uuid::now_v7();
+    let dataset_name = format!("action_eval_fn_dataset_{id}");
+    let function_name = format!("eval_fn_func_{id}");
+
+    // Create a historical config with evaluators defined on the function (not as a named evaluation)
+    let historical_config = format!(
+        r#"
+[models.eval_fn_model_{id}]
+routing = ["provider"]
+
+[models.eval_fn_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.{function_name}]
+type = "chat"
+
+[functions.{function_name}.variants.baseline]
+type = "chat_completion"
+model = "eval_fn_model_{id}"
+
+[functions.{function_name}.evaluators.always_true]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[functions.{function_name}.evaluators.always_true.variants.judge]
+type = "chat_completion"
+model = "dummy::llm_judge::true"
+active = true
+system_instructions = {{ __tensorzero_remapped_path = "inline", __data = "Return true." }}
+json_mode = "on"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    database.write_config_snapshot(&snapshot).await.unwrap();
+
+    // Create test datapoints
+    let datapoint_id_1 = Uuid::now_v7();
+    let datapoint_id_2 = Uuid::now_v7();
+
+    let datapoints = vec![
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.clone(),
+            name: Some("Test datapoint 1".to_string()),
+            id: datapoint_id_1,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: tensorzero_core::inference::types::Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Hi there!".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        }),
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            dataset_name: dataset_name.clone(),
+            function_name: function_name.clone(),
+            name: Some("Test datapoint 2".to_string()),
+            id: datapoint_id_2,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: tensorzero_core::inference::types::Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "How are you?".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "I'm doing well!".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            is_deleted: false,
+            updated_at: String::new(),
+            snapshot_hash: None,
+        }),
+    ];
+
+    database.insert_datapoints(&datapoints).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Use function_name + evaluator_names instead of evaluation_name
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
+            evaluation_name: None,
+            function_name: Some(function_name.clone()),
+            evaluator_names: Some(vec!["always_true".to_string()]),
+            dataset_name: None,
+            datapoint_ids: Some(vec![datapoint_id_1, datapoint_id_2]),
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: true,
+            tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
+        })),
+    };
+
+    let response = call_action(&client, params).await;
+
+    assert!(
+        response.is_ok(),
+        "RunEvaluation with function_name + evaluator_names should succeed: {:?}",
+        response.err()
+    );
+
+    match response.unwrap() {
+        ActionResponse::RunEvaluation(eval_response) => {
+            assert_eq!(
+                eval_response.num_datapoints, 2,
+                "Should have evaluated 2 datapoints"
+            );
+            assert_eq!(
+                eval_response.num_successes, 2,
+                "Both evaluations should succeed"
+            );
+            assert_eq!(eval_response.num_errors, 0, "Should have no errors");
+
+            assert!(
+                eval_response.stats.contains_key("always_true"),
+                "Stats should contain 'always_true' evaluator"
+            );
+
+            let always_true_stats = &eval_response.stats["always_true"];
+            assert_eq!(always_true_stats.count, 2, "Should have 2 samples");
+            assert!(
+                (always_true_stats.mean - 1.0).abs() < 0.01,
+                "Mean should be 1.0 for always_true evaluator, got {}",
+                always_true_stats.mean
+            );
+
+            let results = eval_response
+                .datapoint_results
+                .expect("Should include datapoint results when requested");
+            assert_eq!(results.len(), 2, "Should have 2 datapoint results");
+
+            for result in &results {
+                assert!(result.success, "Each datapoint should be successful");
+                assert!(
+                    result.evaluations.contains_key("always_true"),
+                    "Each result should have always_true evaluation"
+                );
+            }
+        }
+        other => panic!(
+            "Expected RunEvaluation response, got {:?}",
+            std::mem::discriminant(&other)
+        ),
+    }
+}
+
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_function_evaluator_names_impl_http_gateway() {
+    test_action_run_evaluation_function_evaluator_names_impl(make_http_gateway().await).await;
+}
+
+/// Test that the action endpoint rejects invalid combinations of evaluation_name/function_name/evaluator_names.
+#[expect(clippy::disallowed_methods)]
+async fn test_action_run_evaluation_invalid_eval_params_impl(client: Client) {
+    let database = DelegatingDatabaseConnection::new_for_e2e_test().await;
+    let id = Uuid::now_v7();
+
+    let historical_config = format!(
+        r#"
+[models.eval_test_model_{id}]
+routing = ["provider"]
+
+[models.eval_test_model_{id}.providers.provider]
+type = "dummy"
+model_name = "test"
+
+[functions.eval_test_func_{id}]
+type = "chat"
+
+[functions.eval_test_func_{id}.variants.baseline]
+type = "chat_completion"
+model = "eval_test_model_{id}"
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
+    let snapshot_hash = snapshot.hash.clone();
+
+    database.write_config_snapshot(&snapshot).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Both evaluation_name AND function_name+evaluator_names — should fail
+    let params = ActionInputInfo {
+        snapshot_hash: snapshot_hash.clone(),
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
+            evaluation_name: Some("some_eval".to_string()),
+            function_name: Some(format!("eval_test_func_{id}")),
+            evaluator_names: Some(vec!["some_evaluator".to_string()]),
+            dataset_name: Some("some_dataset".to_string()),
+            datapoint_ids: None,
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+            tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
+        })),
+    };
+
+    let response = call_action(&client, params).await;
+    assert!(
+        response.is_err(),
+        "Should reject when both evaluation_name and function_name+evaluator_names are provided"
+    );
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(status_code, 400, "Should return 400 for invalid params");
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+
+    // function_name without evaluator_names — should fail
+    let params = ActionInputInfo {
+        snapshot_hash: snapshot_hash.clone(),
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
+            evaluation_name: None,
+            function_name: Some(format!("eval_test_func_{id}")),
+            evaluator_names: None,
+            dataset_name: Some("some_dataset".to_string()),
+            datapoint_ids: None,
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+            tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
+        })),
+    };
+
+    let response = call_action(&client, params).await;
+    assert!(
+        response.is_err(),
+        "Should reject function_name without evaluator_names"
+    );
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(status_code, 400, "Should return 400 for invalid params");
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+
+    // Empty evaluator_names — should fail
+    let params = ActionInputInfo {
+        snapshot_hash,
+        input: ActionInput::RunEvaluation(Box::new(RunEvaluationParams {
+            evaluation_name: None,
+            function_name: Some(format!("eval_test_func_{id}")),
+            evaluator_names: Some(vec![]),
+            dataset_name: Some("some_dataset".to_string()),
+            datapoint_ids: None,
+            variant_name: "baseline".to_string(),
+            concurrency: 1,
+            inference_cache: CacheEnabledMode::Off,
+            max_datapoints: None,
+            precision_targets: HashMap::new(),
+            include_datapoint_results: false,
+            tags: HashMap::new(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
+        })),
+    };
+
+    let response = call_action(&client, params).await;
+    assert!(response.is_err(), "Should reject empty evaluator_names");
+    match response.unwrap_err() {
+        TensorZeroError::Http { status_code, .. } => {
+            assert_eq!(
+                status_code, 400,
+                "Should return 400 for empty evaluator_names"
+            );
+        }
+        other => panic!("Expected HTTP error, got: {other:?}"),
+    }
+}
+
+// Only HTTP gateway test - embedded mode doesn't support action in the SDK
+#[tokio::test(flavor = "multi_thread")]
+async fn test_action_run_evaluation_invalid_eval_params_impl_http_gateway() {
+    test_action_run_evaluation_invalid_eval_params_impl(make_http_gateway().await).await;
 }

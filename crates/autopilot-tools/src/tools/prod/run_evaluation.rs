@@ -185,7 +185,9 @@ impl SimpleTool for RunEvaluationTool {
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
         let params = RunEvaluationParams {
-            evaluation_name: llm_params.evaluation_name,
+            evaluation_name: Some(llm_params.evaluation_name),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: llm_params.dataset_name,
             datapoint_ids: llm_params.datapoint_ids,
             variant_name: llm_params.variant_name,
@@ -195,6 +197,8 @@ impl SimpleTool for RunEvaluationTool {
             precision_targets: llm_params.precision_targets,
             include_datapoint_results: llm_params.include_datapoint_results,
             tags: side_info.to_tags(),
+            internal_dynamic_variant_config: None,
+            include_evaluation_infos: false,
         };
 
         // Since autopilot sessions always have a config snapshot hash set, we use the action

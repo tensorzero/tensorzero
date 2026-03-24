@@ -1,0 +1,30 @@
+autopilot_target:
+  kind: prod
+  api_key_env: "TENSORZERO_AUTOPILOT_API_KEY"
+
+interlocutor:
+  config_file: "interlocutor_config/tensorzero.toml"
+
+infra:
+  gateway_binary_path: "/usr/local/bin/gateway"
+  gateway_port: 3000
+  gateway_startup_timeout: 30.0
+  gateway_shutdown_timeout: 10.0
+
+environments:
+  - name: "ner_conllpp_v0"
+    function_name: "ner_conllpp_v0::extract_entities"
+    metric_name: "exact_match"
+    initial_model: "openai::gpt-5-mini"
+    num_iterations: 3
+    episodes_per_iteration: 100
+    episode_concurrency: 10
+    autopilot_initial_message: "Improve the exact match accuracy of this NER entity extraction function. Do not ask the user any questions — just analyze the data and make improvements autonomously."
+    autopilot_max_turns: 70
+    available_models:
+      - "anthropic::claude-haiku-4-5"
+      - "openai::gpt-5-mini"
+      - "google_ai_studio_gemini::gemini-3-flash-preview"
+      - "fireworks::fireworks/glm-5"
+      - "fireworks::fireworks/kimi-k2p5"
+      - "fireworks::fireworks/minimax-m2p5"

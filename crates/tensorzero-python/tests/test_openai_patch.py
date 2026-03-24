@@ -78,7 +78,7 @@ async def test_patch_openai_client_with_async_client_async_setup_true():
     patched_client = await tensorzero.patch_openai_client(
         client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
+        config_file="../../examples/docs/guides/quickstart/config/tensorzero.toml",
         async_setup=True,
     )
 
@@ -115,7 +115,7 @@ async def test_patch_openai_client_with_async_client_async_setup_false_non_strea
     patched_client = tensorzero.patch_openai_client(
         client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
+        config_file="../../examples/docs/guides/quickstart/config/tensorzero.toml",
         async_setup=False,
     )
 
@@ -152,7 +152,7 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     patched_client = tensorzero.patch_openai_client(
         client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
+        config_file="../../examples/docs/guides/quickstart/config/tensorzero.toml",
         async_setup=False,
     )
 
@@ -202,7 +202,7 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     patched_client = tensorzero.patch_openai_client(
         client,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
-        config_file="../../examples/quickstart/config/tensorzero.toml",
+        config_file="../../examples/docs/guides/quickstart/config/tensorzero.toml",
         async_setup=False,
     )
 

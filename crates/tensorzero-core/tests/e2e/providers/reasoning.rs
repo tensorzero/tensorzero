@@ -614,7 +614,8 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
 ) {
     skip_for_postgres!();
     // Direct Anthropic uses output_format for json_mode=strict
-    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+    // AWS Bedrock uses json_mode=off (prompt-based JSON) to avoid prefill conflicts with thinking
+    // GCP Vertex Anthropic uses json_mode=off because it doesn't support structured outputs or JSON mode
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
@@ -854,7 +855,8 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     }
 
     // Direct Anthropic uses output_format for json_mode=strict
-    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+    // AWS Bedrock uses json_mode=off (prompt-based JSON) to avoid prefill conflicts with thinking
+    // GCP Vertex Anthropic uses json_mode=off because it doesn't support structured outputs or JSON mode
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {

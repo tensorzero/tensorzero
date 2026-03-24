@@ -2,7 +2,7 @@
 Tests for the experimental_run_evaluation function
 
 These tests validate that the Python client can run evaluations using both
-sync and async clients in embedded gateway mode.
+sync and async clients in both embedded gateway and HTTP gateway modes.
 """
 
 from typing import Any, Dict, List
@@ -11,6 +11,7 @@ import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
     EvaluatorStatsDict,
+    TensorZeroError,
     TensorZeroGateway,
     TensorZeroInternalError,
 )
@@ -18,10 +19,10 @@ from tensorzero import (
 
 def test_sync_run_evaluation(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation."""
-    job = embedded_sync_client.experimental_run_evaluation(
+    job = sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
         variant_name="gpt_4o_mini",
@@ -108,11 +109,11 @@ def test_sync_run_evaluation(
 
 
 def test_sync_run_evaluation_invalid_cache_mode(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation with invalid cache mode."""
-    with pytest.raises(TensorZeroInternalError, match="unknown variant"):
-        embedded_sync_client.experimental_run_evaluation(
+    with pytest.raises((TensorZeroError, TensorZeroInternalError, RuntimeError)):
+        sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
             variant_name="gpt_4o_mini",
@@ -124,10 +125,10 @@ def test_sync_run_evaluation_invalid_cache_mode(
 @pytest.mark.asyncio
 async def test_async_run_evaluation(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation."""
-    job = await embedded_async_client.experimental_run_evaluation(
+    job = await async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
         variant_name="gpt_4o_mini",
@@ -222,11 +223,11 @@ async def test_async_run_evaluation(
 
 @pytest.mark.asyncio
 async def test_async_run_evaluation_invalid_cache_mode(
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation with invalid cache mode."""
-    with pytest.raises(TensorZeroInternalError, match="unknown variant"):
-        await embedded_async_client.experimental_run_evaluation(
+    with pytest.raises((TensorZeroError, TensorZeroInternalError, RuntimeError)):
+        await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
             variant_name="gpt_4o_mini",
@@ -240,7 +241,7 @@ async def test_async_run_evaluation_invalid_cache_mode(
 
 def test_sync_run_evaluation_with_dynamic_variant(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation with dynamic variant.
 
@@ -263,7 +264,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
     }
 
     # Run evaluation with dynamic variant
-    job = embedded_sync_client.experimental_run_evaluation(
+    job = sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
         internal_dynamic_variant_config=dynamic_variant,
@@ -313,7 +314,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
 @pytest.mark.asyncio
 async def test_async_run_evaluation_with_dynamic_variant(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation with dynamic variant.
 
@@ -333,7 +334,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
     }
 
     # Run evaluation with dynamic variant
-    job = await embedded_async_client.experimental_run_evaluation(
+    job = await async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
         internal_dynamic_variant_config=dynamic_variant,
@@ -388,7 +389,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
 
 def test_sync_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
@@ -402,7 +403,7 @@ def test_sync_run_evaluation_both_variant_params_error(
 
     # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
     with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
@@ -415,7 +416,7 @@ def test_sync_run_evaluation_both_variant_params_error(
 @pytest.mark.asyncio
 async def test_async_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
@@ -429,7 +430,7 @@ async def test_async_run_evaluation_both_variant_params_error(
 
     # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
     with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
-        await embedded_async_client.experimental_run_evaluation(
+        await async_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
@@ -441,10 +442,10 @@ async def test_async_run_evaluation_both_variant_params_error(
 
 def test_sync_run_evaluation_with_adaptive_stopping(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation with adaptive stopping parameters."""
-    job = embedded_sync_client.experimental_run_evaluation(
+    job = sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
         variant_name="gpt_4o_mini",
@@ -485,10 +486,10 @@ def test_sync_run_evaluation_with_adaptive_stopping(
 @pytest.mark.asyncio
 async def test_async_run_evaluation_with_adaptive_stopping(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation with adaptive stopping parameters."""
-    job = await embedded_async_client.experimental_run_evaluation(
+    job = await async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
         variant_name="gpt_4o_mini",
@@ -531,7 +532,7 @@ async def test_async_run_evaluation_with_adaptive_stopping(
 
 def test_sync_run_evaluation_with_datapoint_ids(
     evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client experimental_run_evaluation with specific datapoint_ids.
 
@@ -542,7 +543,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
     4. Verifies only the selected datapoints were evaluated
     """
     # First, run evaluation to collect available datapoint IDs from the dataset
-    first_job = embedded_sync_client.experimental_run_evaluation(
+    first_job = sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
         variant_name="gpt_4o_mini",
@@ -565,7 +566,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
     selected_ids = all_datapoint_ids[:num_to_select]
 
     # Run evaluation with only the selected datapoint IDs
-    second_job = embedded_sync_client.experimental_run_evaluation(
+    second_job = sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         datapoint_ids=selected_ids,
         variant_name="gpt_4o_mini",
@@ -598,7 +599,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
 @pytest.mark.asyncio
 async def test_async_run_evaluation_with_datapoint_ids(
     evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client experimental_run_evaluation with specific datapoint_ids.
 
@@ -609,7 +610,7 @@ async def test_async_run_evaluation_with_datapoint_ids(
     4. Verifies only the selected datapoints were evaluated
     """
     # First, run evaluation to collect available datapoint IDs from the dataset
-    first_job = await embedded_async_client.experimental_run_evaluation(
+    first_job = await async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
         variant_name="gpt_4o_mini",
@@ -632,7 +633,7 @@ async def test_async_run_evaluation_with_datapoint_ids(
     selected_ids = all_datapoint_ids[:num_to_select]
 
     # Run evaluation with only the selected datapoint IDs
-    second_job = await embedded_async_client.experimental_run_evaluation(
+    second_job = await async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         datapoint_ids=selected_ids,
         variant_name="gpt_4o_mini",
@@ -663,11 +664,11 @@ async def test_async_run_evaluation_with_datapoint_ids(
 
 
 def test_sync_run_evaluation_both_dataset_and_datapoint_ids_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client rejects both dataset_name and datapoint_ids."""
     with pytest.raises(RuntimeError, match="Cannot provide both"):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="some_dataset",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
@@ -679,11 +680,11 @@ def test_sync_run_evaluation_both_dataset_and_datapoint_ids_error(
 
 @pytest.mark.asyncio
 async def test_async_run_evaluation_both_dataset_and_datapoint_ids_error(
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client rejects both dataset_name and datapoint_ids."""
     with pytest.raises(RuntimeError, match="Cannot provide both"):
-        await embedded_async_client.experimental_run_evaluation(
+        await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="some_dataset",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
@@ -694,11 +695,11 @@ async def test_async_run_evaluation_both_dataset_and_datapoint_ids_error(
 
 
 def test_sync_run_evaluation_neither_dataset_nor_datapoint_ids_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client rejects neither dataset_name nor datapoint_ids."""
     with pytest.raises(RuntimeError, match="Must provide either"):
-        embedded_sync_client.experimental_run_evaluation(
+        sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             variant_name="gpt_4o_mini",
             concurrency=1,
@@ -708,11 +709,11 @@ def test_sync_run_evaluation_neither_dataset_nor_datapoint_ids_error(
 
 @pytest.mark.asyncio
 async def test_async_run_evaluation_neither_dataset_nor_datapoint_ids_error(
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client rejects neither dataset_name nor datapoint_ids."""
     with pytest.raises(RuntimeError, match="Must provide either"):
-        await embedded_async_client.experimental_run_evaluation(
+        await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             variant_name="gpt_4o_mini",
             concurrency=1,
@@ -721,11 +722,11 @@ async def test_async_run_evaluation_neither_dataset_nor_datapoint_ids_error(
 
 
 def test_sync_run_evaluation_datapoint_ids_and_max_datapoints_error(
-    embedded_sync_client: TensorZeroGateway,
+    sync_client: TensorZeroGateway,
 ):
     """Test sync client rejects both datapoint_ids and max_datapoints."""
-    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
-        embedded_sync_client.experimental_run_evaluation(
+    with pytest.raises(RuntimeError, match="Cannot provide both `datapoint_ids` and `max_datapoints`"):
+        sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
             variant_name="gpt_4o_mini",
@@ -737,15 +738,168 @@ def test_sync_run_evaluation_datapoint_ids_and_max_datapoints_error(
 
 @pytest.mark.asyncio
 async def test_async_run_evaluation_datapoint_ids_and_max_datapoints_error(
-    embedded_async_client: AsyncTensorZeroGateway,
+    async_client: AsyncTensorZeroGateway,
 ):
     """Test async client rejects both datapoint_ids and max_datapoints."""
-    with pytest.raises(RuntimeError, match="Cannot provide both datapoint_ids and max_datapoints"):
-        await embedded_async_client.experimental_run_evaluation(
+    with pytest.raises(RuntimeError, match="Cannot provide both `datapoint_ids` and `max_datapoints`"):
+        await async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             datapoint_ids=["01957bbb-44a8-7490-bfe7-32f8ed2fc797"],
             variant_name="gpt_4o_mini",
             concurrency=1,
             inference_cache="on",
             max_datapoints=10,
+        )
+
+
+# TESTS FOR function_name + evaluator_names
+
+
+def test_sync_run_evaluation_with_function_name_and_evaluator_names(
+    evaluation_datasets: Dict[str, str],
+    sync_client: TensorZeroGateway,
+):
+    """Test sync client using function_name + evaluator_names instead of evaluation_name.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    job = sync_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=["exact_match"],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+    # A default evaluation_name is generated when using function_name + evaluator_names
+    assert "evaluation_name" in run_info
+    assert "write_haiku" in run_info["evaluation_name"]
+
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert "exact_match" in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert "exact_match" in stats
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_function_name_and_evaluator_names(
+    evaluation_datasets: Dict[str, str],
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test async client using function_name + evaluator_names instead of evaluation_name.
+
+    Uses the parameterized async_client fixture to test both HTTP and embedded modes.
+    """
+    job = await async_client.experimental_run_evaluation(
+        function_name="write_haiku",
+        evaluator_names=["exact_match"],
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+    # A default evaluation_name is generated when using function_name + evaluator_names
+    assert "evaluation_name" in run_info
+    assert "write_haiku" in run_info["evaluation_name"]
+
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert result["type"] in ["success", "error"]
+        if result["type"] == "success":
+            assert "exact_match" in result["evaluations"]
+
+    assert len(results) == run_info["num_datapoints"]
+
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert "exact_match" in stats
+
+
+def test_sync_run_evaluation_no_eval_source_error(
+    sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects when neither evaluation_name nor function_name is provided.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        sync_client.experimental_run_evaluation(
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_both_eval_sources_error(
+    sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects when both evaluation_name and function_name are provided.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        sync_client.experimental_run_evaluation(
+            evaluation_name="entity_extraction",
+            function_name="extract_entities",
+            evaluator_names=["exact_match"],
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_function_name_without_evaluator_names_error(
+    sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects function_name without evaluator_names.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        sync_client.experimental_run_evaluation(
+            function_name="write_haiku",
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
+        )
+
+
+def test_sync_run_evaluation_evaluator_names_without_function_name_error(
+    sync_client: TensorZeroGateway,
+):
+    """Test sync client rejects evaluator_names without function_name.
+
+    Uses the parameterized sync_client fixture to test both HTTP and embedded modes.
+    """
+    with pytest.raises(
+        ValueError,
+        match="Incorrect arguments to identify evaluation: either provide both `function_name` and `evaluator_names`, or provide only `evaluation_name`",
+    ):
+        sync_client.experimental_run_evaluation(
+            evaluator_names=["exact_match"],
+            dataset_name="some_dataset",
+            variant_name="gpt_4o_mini",
         )

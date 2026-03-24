@@ -1,0 +1,40 @@
+[package]
+name = "tensorzero-error"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tensorzero-types = { path = "../tensorzero-types" }
+http = { workspace = true }
+indexmap = { version = "2", features = ["serde"] }
+minijinja-utils = { path = "../minijinja-utils" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+url = { workspace = true }
+
+# Feature-gated deps
+axum = { workspace = true, optional = true }
+opentelemetry = { version = "0.31", optional = true }
+tracing-opentelemetry = { version = "0.32.1", optional = true }
+sqlx = { workspace = true, optional = true }
+redis = { workspace = true, optional = true }
+autopilot-client = { path = "../autopilot-client", optional = true }
+ts-rs = { workspace = true, optional = true }
+
+[features]
+default = []
+axum = ["dep:axum"]
+otel = ["dep:opentelemetry", "dep:tracing-opentelemetry"]
+sqlx = ["dep:sqlx"]
+redis = ["dep:redis"]
+autopilot-client = ["dep:autopilot-client"]
+ts-bindings = ["dep:ts-rs"]
+e2e_tests = []
+
+[lints]
+workspace = true

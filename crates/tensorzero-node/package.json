@@ -29,13 +29,13 @@
     "version": "napi version"
   },
   "devDependencies": {
-    "@eslint/js": "^9.37.0",
+    "@eslint/js": "^9.39.4",
     "@napi-rs/cli": "^3.5.1",
-    "@types/node": "^20.19.4",
+    "@types/node": "^20.19.37",
     "eslint": "^9.39.4",
     "oxfmt": "^0.35.0",
-    "typescript-eslint": "^8.57.0",
-    "vitest": "^4.0.8"
+    "typescript-eslint": "^8.57.1",
+    "vitest": "^4.1.0"
   },
   "napi": {
     "binaryName": "tensorzero-node",

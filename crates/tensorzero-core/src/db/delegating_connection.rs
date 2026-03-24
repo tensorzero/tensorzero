@@ -140,8 +140,7 @@ impl PrimaryDatastore {
             None => {
                 if resolved == Self::Disabled {
                     tracing::warn!(
-                        "No observability backend available. \
-                         Observability writes will be disabled."
+                        "Disabling observability: `gateway.observability.enabled` is not explicitly enabled in the configuration and no backend is available (`TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`)."
                     );
                 }
                 Ok(resolved)
@@ -915,7 +914,7 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
 
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,

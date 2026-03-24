@@ -5,7 +5,6 @@
 //! processed regardless of the visitor implementation.
 
 use std::collections::HashSet;
-use std::sync::Mutex;
 
 use async_trait::async_trait;
 use durable_tools::{SimpleTool, TaskTool};
@@ -21,14 +20,14 @@ use autopilot_client::AutopilotSideInfo;
 ///
 /// The `Default` bound on tool types is required for the type-based registration
 /// helpers. If you need runtime-configured tools, use the instance registration
-/// helpers on `ToolExecutor` instead.
+/// helpers on `ToolExecutorBuilder` instead.
 ///
 /// The bounds on `SideInfo` are required for:
 /// - `Serialize`: Serializing side info into tool call events
 ///
 /// # Implementors
 ///
-/// - **Local execution**: Call `register_task_tool`/`register_simple_tool` directly
+/// - **Local execution**: Push tools onto a `ToolExecutorBuilder`
 /// - **Remote execution**: Wrap tools in an adapter (e.g., `ClientToolTaskAdapter`)
 ///   that delegates execution to a remote client
 #[async_trait]
@@ -38,17 +37,17 @@ pub trait ToolVisitor {
 
     /// Visit a `TaskTool`.
     ///
-    /// For local execution, this typically calls `register_task_tool`.
+    /// For local execution, this typically pushes the tool onto a builder.
     /// For remote execution, this wraps the tool in an adapter.
-    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
+    async fn visit_task_tool<T>(&mut self, tool: T) -> Result<(), Self::Error>
     where
         T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>;
 
     /// Visit a `SimpleTool`.
     ///
-    /// For local execution, this typically calls `register_simple_tool`.
+    /// For local execution, this typically pushes the tool onto a builder.
     /// For remote execution, this wraps the tool in an adapter.
-    async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
+    async fn visit_simple_tool<T>(&mut self) -> Result<(), Self::Error>
     where
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default;
 
@@ -56,7 +55,7 @@ pub trait ToolVisitor {
     ///
     /// Standalone task tools are registered directly without wrapping.
     /// They are not visible to the autopilot server.
-    async fn visit_standalone_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
+    async fn visit_standalone_task_tool<T>(&mut self, tool: T) -> Result<(), Self::Error>
     where
         T: TaskTool<SideInfo = (), ExtraState = ()>;
 }
@@ -66,23 +65,19 @@ pub trait ToolVisitor {
 /// This is used by `collect_tool_names` to derive the set of available
 /// tool names from the single source of truth in `for_each_tool`.
 pub struct ToolNameCollector {
-    names: Mutex<HashSet<String>>,
+    names: HashSet<String>,
 }
 
 impl ToolNameCollector {
     pub fn new() -> Self {
         Self {
-            names: Mutex::new(HashSet::new()),
+            names: HashSet::new(),
         }
     }
 
     /// Consume the collector and return the collected tool names.
-    ///
-    /// If the mutex was poisoned (which would only happen if a panic occurred
-    /// while holding the lock), this returns the data anyway since we still
-    /// want to use it.
     pub fn into_names(self) -> HashSet<String> {
-        self.names.into_inner().unwrap_or_else(|e| e.into_inner())
+        self.names
     }
 }
 
@@ -96,31 +91,23 @@ impl Default for ToolNameCollector {
 impl ToolVisitor for ToolNameCollector {
     type Error = String;
 
-    async fn visit_task_tool<T>(&self, tool: T) -> Result<(), Self::Error>
+    async fn visit_task_tool<T>(&mut self, tool: T) -> Result<(), Self::Error>
     where
         T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
     {
-        let mut names = self
-            .names
-            .lock()
-            .map_err(|e| format!("Failed to acquire lock: {e}"))?;
-        names.insert(tool.name().to_string());
+        self.names.insert(tool.name().to_string());
         Ok(())
     }
 
-    async fn visit_simple_tool<T>(&self) -> Result<(), Self::Error>
+    async fn visit_simple_tool<T>(&mut self) -> Result<(), Self::Error>
     where
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
-        let mut names = self
-            .names
-            .lock()
-            .map_err(|e| format!("Failed to acquire lock: {e}"))?;
-        names.insert(T::default().name().to_string());
+        self.names.insert(T::default().name().to_string());
         Ok(())
     }
 
-    async fn visit_standalone_task_tool<T>(&self, _tool: T) -> Result<(), Self::Error>
+    async fn visit_standalone_task_tool<T>(&mut self, _tool: T) -> Result<(), Self::Error>
     where
         T: TaskTool<SideInfo = (), ExtraState = ()>,
     {
