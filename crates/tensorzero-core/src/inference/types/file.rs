@@ -44,17 +44,13 @@
 //!           ObjectStorageFile (metadata + data)
 //! ```
 
-use std::borrow::Cow;
-
 use aws_smithy_types::base64;
-use futures::FutureExt;
 use mime::MediaType;
 
-use super::{ContentBlock, RequestMessage};
 use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::{resolved_input::LazyFile, stored_input::StoredFile},
+    inference::types::stored_input::StoredFile,
 };
 
 // Re-export wire types from tensorzero-types
@@ -246,72 +242,6 @@ impl FileExt for File {
     }
 }
 
-/// Strips out image data from the raw request, replacing it with a placeholder.
-/// This is a best-effort attempt to avoid filling up ClickHouse with image data.
-pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: String) -> String {
-    let mut i = 0;
-    for message in input_messages {
-        for content in &message.content {
-            if let ContentBlock::File(file) = content {
-                let file_with_path = match &**file {
-                    LazyFile::Url {
-                        future,
-                        file_url: _,
-                    } => {
-                        // If we actually sent the file bytes to some model provider, then the
-                        // Shared future must be ready, so we'll get a file from `now_or_never`.
-                        // Otherwise, the file cannot have been sent to a model provider (since the
-                        // future was never `.await`ed before we constructed `raw_request`), so
-                        // there's nothing to strip from the message.
-                        // We ignore errors here, since an error during file resolution means that
-                        // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(File::ObjectStorage(resolved)))
-                        } else {
-                            None
-                        }
-                    }
-                    LazyFile::Base64(pending) => {
-                        Some(Cow::Owned(File::ObjectStorage(pending.0.clone())))
-                    }
-                    LazyFile::ObjectStorage(resolved) => {
-                        Some(Cow::Owned(File::ObjectStorage(resolved.clone())))
-                    }
-                    LazyFile::ObjectStoragePointer { future, .. } => {
-                        // If we actually sent the file bytes to some model provider, then the
-                        // Shared future must be ready, so we'll get a file from `now_or_never`.
-                        // Otherwise, the file cannot have been sent to a model provider (since the
-                        // future was never `.await`ed before we constructed `raw_request`), so
-                        // there's nothing to strip from the message.
-                        // We ignore errors here, since an error during file resolution means that
-                        // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(File::ObjectStorage(resolved)))
-                        } else {
-                            None
-                        }
-                    }
-                };
-                if let Some(file) = file_with_path {
-                    let data = match &*file {
-                        File::ObjectStorage(resolved) => &resolved.data,
-                        File::Base64(base64) => base64.data(),
-                        // These variants should not occur in resolved files
-                        File::Url(_)
-                        | File::ObjectStoragePointer(_)
-                        | File::ObjectStorageError(_) => {
-                            continue;
-                        }
-                    };
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
-                    i += 1;
-                }
-            }
-        }
-    }
-    raw_request
-}
-
 /// Tries to convert a mime type to a file extension, picking an arbitrary extension if there are multiple
 /// extensions for the mime type.
 /// This is used when writing a file input to object storage, and when determining the file name
@@ -375,10 +305,11 @@ pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, 
 mod tests {
     use crate::inference::types::{
         ContentBlock, RequestMessage, Role,
-        file::{ObjectStorageFile, ObjectStoragePointer, sanitize_raw_request},
+        file::{ObjectStorageFile, ObjectStoragePointer},
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
     };
+    use tensorzero_provider_types::sanitize_raw_request;
 
     #[test]
     fn test_sanitize_input() {

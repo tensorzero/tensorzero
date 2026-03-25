@@ -33,6 +33,7 @@ use crate::error::{
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
 use crate::inference::types::ObjectStorageFile;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
@@ -41,7 +42,6 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile, LazyFileExt};
 use crate::inference::types::usage::raw_usage_entries_from_value;
@@ -2824,20 +2824,21 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        let raw_request = sanitize_raw_request(&messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system,
-            input_messages: messages,
-            raw_request,
-            raw_response: raw_response.clone(),
-            raw_usage,
-            relay_raw_response: None,
-            usage,
-            provider_latency: latency,
-            finish_reason: Some(finish_reason.into()),
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                raw_usage,
+                relay_raw_response: None,
+                usage,
+                provider_latency: latency,
+                finish_reason: Some(finish_reason.into()),
+            },
+        ))
     }
 }
 

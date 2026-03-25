@@ -3,6 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+use futures::FutureExt;
 use futures::Stream;
 use futures::future::Shared;
 use futures::stream::Peekable;
@@ -312,6 +313,108 @@ pub struct ProviderInferenceResponse {
     pub finish_reason: Option<FinishReason>,
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     pub relay_raw_response: Option<Vec<tensorzero_types::RawResponseEntry>>,
+}
+
+pub struct ProviderInferenceResponseArgs {
+    pub output: Vec<ContentBlockOutput>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    pub relay_raw_response: Option<Vec<tensorzero_types::RawResponseEntry>>,
+    /// Time elapsed between making the request to the model provider and receiving the response.
+    /// Important: this is NOT latency from the start of the TensorZero request.
+    pub provider_latency: Latency,
+    pub finish_reason: Option<FinishReason>,
+    pub id: Uuid,
+}
+
+impl ProviderInferenceResponse {
+    pub fn new(args: ProviderInferenceResponseArgs) -> Self {
+        let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
+
+        Self {
+            id: args.id,
+            output: args.output,
+            system: args.system,
+            input_messages: args.input_messages,
+            raw_request: sanitized_raw_request,
+            raw_response: args.raw_response,
+            usage: args.usage,
+            provider_latency: args.provider_latency,
+            finish_reason: args.finish_reason,
+            raw_usage: args.raw_usage,
+            relay_raw_response: args.relay_raw_response,
+        }
+    }
+}
+
+/// Strips out file data from the raw request, replacing it with a placeholder.
+/// This is a best-effort attempt to avoid filling up ClickHouse with file data.
+pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: String) -> String {
+    let mut i = 0;
+    for message in input_messages {
+        for content in &message.content {
+            if let ContentBlock::File(file) = content {
+                let file_with_path = match &**file {
+                    LazyFile::Url {
+                        future,
+                        file_url: _,
+                    } => {
+                        // If we actually sent the file bytes to some model provider, then the
+                        // Shared future must be ready, so we'll get a file from `now_or_never`.
+                        // Otherwise, the file cannot have been sent to a model provider (since the
+                        // future was never `.await`ed before we constructed `raw_request`), so
+                        // there's nothing to strip from the message.
+                        // We ignore errors here, since an error during file resolution means that
+                        // we cannot have included the file bytes in `raw_request`.
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(tensorzero_types::File::ObjectStorage(resolved)))
+                        } else {
+                            None
+                        }
+                    }
+                    LazyFile::Base64(pending) => Some(Cow::Owned(
+                        tensorzero_types::File::ObjectStorage(pending.0.clone()),
+                    )),
+                    LazyFile::ObjectStorage(resolved) => Some(Cow::Owned(
+                        tensorzero_types::File::ObjectStorage(resolved.clone()),
+                    )),
+                    LazyFile::ObjectStoragePointer { future, .. } => {
+                        // If we actually sent the file bytes to some model provider, then the
+                        // Shared future must be ready, so we'll get a file from `now_or_never`.
+                        // Otherwise, the file cannot have been sent to a model provider (since the
+                        // future was never `.await`ed before we constructed `raw_request`), so
+                        // there's nothing to strip from the message.
+                        // We ignore errors here, since an error during file resolution means that
+                        // we cannot have included the file bytes in `raw_request`.
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(tensorzero_types::File::ObjectStorage(resolved)))
+                        } else {
+                            None
+                        }
+                    }
+                };
+                if let Some(file) = file_with_path {
+                    let data = match &*file {
+                        tensorzero_types::File::ObjectStorage(resolved) => &resolved.data,
+                        tensorzero_types::File::Base64(base64) => base64.data(),
+                        // These variants should not occur in resolved files
+                        tensorzero_types::File::Url(_)
+                        | tensorzero_types::File::ObjectStoragePointer(_)
+                        | tensorzero_types::File::ObjectStorageError(_) => {
+                            continue;
+                        }
+                    };
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
+                    i += 1;
+                }
+            }
+        }
+    }
+    raw_request
 }
 
 #[derive(Clone, Debug, Serialize)]

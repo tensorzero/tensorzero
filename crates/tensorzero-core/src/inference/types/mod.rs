@@ -142,8 +142,8 @@ pub use tensorzero_provider_types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FileFuture, FileUrl, FinishReason,
     FlattenUnknown, Latency, LazyFile, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, PendingObjectStoreFile, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, ThoughtChunk, UnknownChunk,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, ThoughtChunk, UnknownChunk,
 };
 
 /*

@@ -18,12 +18,12 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -847,22 +847,23 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
         let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        let raw_request = sanitize_raw_request(&input_messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            raw_usage,
-            relay_raw_response: None,
-            provider_latency: latency,
-            finish_reason: response
-                .stop_reason
-                .map(AnthropicStopReason::into_finish_reason),
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                raw_usage,
+                relay_raw_response: None,
+                provider_latency: latency,
+                finish_reason: response
+                    .stop_reason
+                    .map(AnthropicStopReason::into_finish_reason),
+            },
+        ))
     }
 }
 

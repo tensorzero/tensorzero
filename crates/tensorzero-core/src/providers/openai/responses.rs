@@ -28,9 +28,8 @@ use crate::{
     inference::types::{
         ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
         Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Thought,
-        ThoughtChunk, Unknown, UnknownChunk, Usage,
-        file::{Detail, sanitize_raw_request},
+        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
     },
     providers::openai::{
         OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
@@ -271,20 +270,21 @@ impl OpenAIResponsesResponse<'_> {
         });
         let usage = self.usage.map(|u| u.into_usage()).unwrap_or_default();
         let input_messages = generic_request.messages.clone();
-        let raw_request = sanitize_raw_request(&input_messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output,
-            system: generic_request.system.clone(),
-            input_messages,
-            raw_request,
-            raw_response: raw_response.clone(),
-            raw_usage,
-            relay_raw_response: None,
-            usage,
-            provider_latency: latency,
-            finish_reason,
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output,
+                system: generic_request.system.clone(),
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                raw_usage,
+                relay_raw_response: None,
+                usage,
+                provider_latency: latency,
+                finish_reason,
+            },
+        ))
     }
 }
 
