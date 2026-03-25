@@ -1047,6 +1047,47 @@ async fn test_get_evaluation_results_chat_datapoint_details(conn: impl Evaluatio
         output_json.contains("Swallowing moonlight"),
         "Generated output should contain 'Swallowing moonlight'"
     );
+
+    // Verify usage fields are populated (aggregated from model_inferences via GROUP BY)
+    // The same inference backs both metric rows, so usage should be identical across metrics
+    for result in &chat_results {
+        assert!(
+            result.input_tokens.is_some(),
+            "input_tokens should be populated from model_inferences"
+        );
+        assert!(
+            result.output_tokens.is_some(),
+            "output_tokens should be populated from model_inferences"
+        );
+        assert!(
+            result.processing_time_ms.is_some(),
+            "processing_time_ms should be populated from the inference table"
+        );
+        // input_tokens and output_tokens should be positive (SUM of model_inferences)
+        assert!(
+            result.input_tokens.unwrap() > 0,
+            "input_tokens should be positive, got {}",
+            result.input_tokens.unwrap()
+        );
+        assert!(
+            result.output_tokens.unwrap() > 0,
+            "output_tokens should be positive, got {}",
+            result.output_tokens.unwrap()
+        );
+    }
+    // Both metric rows come from the same inference, so usage values must match
+    assert_eq!(
+        chat_results[0].input_tokens, chat_results[1].input_tokens,
+        "input_tokens should be the same across metrics for the same inference"
+    );
+    assert_eq!(
+        chat_results[0].output_tokens, chat_results[1].output_tokens,
+        "output_tokens should be the same across metrics for the same inference"
+    );
+    assert_eq!(
+        chat_results[0].processing_time_ms, chat_results[1].processing_time_ms,
+        "processing_time_ms should be the same across metrics for the same inference"
+    );
 }
 make_db_test!(test_get_evaluation_results_chat_datapoint_details);
 
@@ -1130,6 +1171,45 @@ async fn test_get_evaluation_results_json_datapoint_details(conn: impl Evaluatio
             "Generated output should have 'raw' field"
         );
     }
+
+    // Verify usage fields are populated (aggregated from model_inferences via GROUP BY)
+    for result in &json_results {
+        assert!(
+            result.input_tokens.is_some(),
+            "input_tokens should be populated from model_inferences"
+        );
+        assert!(
+            result.output_tokens.is_some(),
+            "output_tokens should be populated from model_inferences"
+        );
+        assert!(
+            result.processing_time_ms.is_some(),
+            "processing_time_ms should be populated from the inference table"
+        );
+        assert!(
+            result.input_tokens.unwrap() > 0,
+            "input_tokens should be positive, got {}",
+            result.input_tokens.unwrap()
+        );
+        assert!(
+            result.output_tokens.unwrap() > 0,
+            "output_tokens should be positive, got {}",
+            result.output_tokens.unwrap()
+        );
+    }
+    // Both metric rows come from the same inference, so usage values must match
+    assert_eq!(
+        json_results[0].input_tokens, json_results[1].input_tokens,
+        "input_tokens should be the same across metrics for the same inference"
+    );
+    assert_eq!(
+        json_results[0].output_tokens, json_results[1].output_tokens,
+        "output_tokens should be the same across metrics for the same inference"
+    );
+    assert_eq!(
+        json_results[0].processing_time_ms, json_results[1].processing_time_ms,
+        "processing_time_ms should be the same across metrics for the same inference"
+    );
 }
 make_db_test!(test_get_evaluation_results_json_datapoint_details);
 

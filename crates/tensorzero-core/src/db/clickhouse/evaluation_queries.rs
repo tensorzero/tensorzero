@@ -719,9 +719,9 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
             inference_usage AS (
                 SELECT
                     mi.inference_id as inference_id,
-                    sum(mi.input_tokens) as input_tokens,
-                    sum(mi.output_tokens) as output_tokens,
-                    if(count(*) = countIf(isNotNull(mi.cost)), sum(mi.cost), null) as cost
+                    toInt64(sum(mi.input_tokens)) as input_tokens,
+                    toInt64(sum(mi.output_tokens)) as output_tokens,
+                    if(count(*) = countIf(isNotNull(mi.cost)), toFloat64(sum(mi.cost)), null) as cost
                 FROM ModelInference mi
                 WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
                 GROUP BY mi.inference_id
