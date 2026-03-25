@@ -20,16 +20,16 @@ TensorZero's configuration is currently defined entirely in TOML files, loaded o
 
 ### What Exists Today
 
-| Capability | Status | Notes |
-|---|---|---|
-| TOML config at startup | Done | Loaded into immutable `Arc<Config>` |
-| Config snapshots in DB | Done | Blake3-hashed, stored in Postgres/ClickHouse |
-| `POST /internal/config` | Done | Writes full config snapshot, validates before persisting |
-| `GET /internal/config/{hash}` | Done | Loads historical config for reproducibility |
-| Autopilot `write_config` tool | Done | Writes new full config snapshot via the internal API |
-| Gateway hot-reload | **Missing** | Gateway never picks up new snapshots after startup |
-| Granular config mutations | **Missing** | Only full-config writes supported; no PATCH semantics |
-| Config diff / migration | **Missing** | No way to express "add variant X to function Y" without sending the entire config |
+| Capability                    | Status      | Notes                                                                             |
+| ----------------------------- | ----------- | --------------------------------------------------------------------------------- |
+| TOML config at startup        | Done        | Loaded into immutable `Arc<Config>`                                               |
+| Config snapshots in DB        | Done        | Blake3-hashed, stored in Postgres/ClickHouse                                      |
+| `POST /internal/config`       | Done        | Writes full config snapshot, validates before persisting                          |
+| `GET /internal/config/{hash}` | Done        | Loads historical config for reproducibility                                       |
+| Autopilot `write_config` tool | Done        | Writes new full config snapshot via the internal API                              |
+| Gateway hot-reload            | **Missing** | Gateway never picks up new snapshots after startup                                |
+| Granular config mutations     | **Missing** | Only full-config writes supported; no PATCH semantics                             |
+| Config diff / migration       | **Missing** | No way to express "add variant X to function Y" without sending the entire config |
 
 ### Related GitHub Issues
 
@@ -105,6 +105,7 @@ CREATE TABLE tensorzero.active_config (
 ```
 
 **Behavior:**
+
 - On gateway startup: load TOML → write snapshot → set as `active_config` if no active config exists (or if TOML has changed).
 - On `POST /internal/config`: write snapshot → optionally activate it (new `activate: bool` field, default `false` for backwards compat).
 - New endpoint `POST /internal/config/activate` with `{ "hash": "<hash>" }` to activate a previously written snapshot.
@@ -154,6 +155,7 @@ async fn config_poll_loop(
 ```
 
 **Reload logic:**
+
 1. Query `active_config.snapshot_hash`
 2. Compare against current `app_state.config.hash`
 3. If different:
@@ -191,6 +193,7 @@ let config = app_state.config.load();  // Returns Guard<Arc<Config>>, very cheap
 `ArcSwap` is lock-free and wait-free for readers. The `load()` call is ~1 nanosecond overhead. Writers (the poller) call `store()` which is also lock-free. In-flight requests continue using their loaded `Arc<Config>` until they complete — no request sees a partial config state.
 
 **Migration path:** This is a large but mechanical refactor. Every `app_state.config.X` becomes `app_state.config.load().X`. Can be done incrementally by:
+
 1. First, alias `type ConfigRef = Arc<Config>` everywhere
 2. Change `AppStateData.config` to `Arc<ArcSwap<Config>>`
 3. Add a `config()` helper method that returns `arc_swap::Guard<Arc<Config>>`
@@ -240,6 +243,7 @@ POST   /internal/config/rollback                            — Rollback to prev
 ```
 
 **Mutation flow:**
+
 1. Load current active config snapshot
 2. Deserialize to `UninitializedConfig`
 3. Apply the requested mutation
@@ -255,6 +259,7 @@ POST   /internal/config/rollback                            — Rollback to prev
 #### Recommended: Start with Option B for the most common operations, add Option A later for power users.
 
 **Priority order for mutation endpoints:**
+
 1. Variant CRUD (highest demand — autopilot, optimizers, A/B testing)
 2. Variant weight updates (experimentation)
 3. Model CRUD (adding new providers/models)
@@ -272,6 +277,7 @@ POST /internal/config/functions/{function_name}/variants
 ```
 
 **Request:**
+
 ```json
 {
   "name": "gpt4o_finetuned_v2",
@@ -286,6 +292,7 @@ POST /internal/config/functions/{function_name}/variants
 ```
 
 **Response:**
+
 ```json
 {
   "snapshot_hash": "abc123...",
@@ -295,6 +302,7 @@ POST /internal/config/functions/{function_name}/variants
 ```
 
 **Validation:**
+
 - Function must exist in current config
 - Variant name must not already exist
 - Model must exist in current config
@@ -308,6 +316,7 @@ PATCH /internal/config/functions/{function_name}/variants/{variant_name}
 ```
 
 **Request:**
+
 ```json
 {
   "weight": 0.5
@@ -323,6 +332,7 @@ PATCH /internal/config/functions/{function_name}/variants/{variant_name}
 ```
 
 **Request:**
+
 ```json
 {
   "weight": 0.0
@@ -355,6 +365,7 @@ Each inference still records `snapshot_hash`, so reproducibility is preserved.
 ### TOML Files
 
 TOML files remain the **base config** and the developer-friendly authoring format:
+
 - Used for initial seeding on first deploy
 - Used for version-controlled "known good" configs
 - Can be re-applied via `POST /internal/config` to reset to a known state
@@ -373,17 +384,20 @@ config_poll_interval_seconds = 5
 ```
 
 When `config_source = "database"`:
+
 - On startup, check if `active_config` has a row
 - If yes, load that snapshot (ignore TOML changes)
 - If no, load TOML, write snapshot, set as active
 - Start the config poller
 
 When `config_source = "toml"` (default):
+
 - Current behavior, no poller, no dynamic updates
 
 ### UI
 
 The UI already polls for config changes (5s interval in `ui/app/utils/config/index.server.ts`). With gateway hot-reload:
+
 - UI sees new entities immediately after the gateway reloads (within poll interval)
 - Issue #6457 (stale config) becomes less severe — both gateway and UI are eventually consistent
 
@@ -453,6 +467,7 @@ Evaluations already support historical config snapshots. No changes needed — t
 Watch TOML files for changes and reload on modification.
 
 **Rejected because:**
+
 - Doesn't solve programmatic creation (still need filesystem access)
 - Doesn't work in containerized/immutable deployments
 - Platform-specific, unreliable with NFS/remote filesystems
@@ -469,6 +484,7 @@ Only support writing complete config snapshots, no PATCH endpoints.
 Separate service that manages config and pushes to gateways.
 
 **Rejected because:**
+
 - Adds operational complexity
 - TensorZero already has Postgres — no need for another service
 - Config is tightly coupled to the gateway's validation logic
@@ -478,6 +494,7 @@ Separate service that manages config and pushes to gateways.
 Allow env vars to override specific config values (e.g., `TZ_FUNCTION_MY_CHAT_VARIANT_V1_WEIGHT=0.5`).
 
 **Rejected because:**
+
 - Doesn't scale beyond simple overrides
 - No audit trail
 - Requires process restart to pick up env changes
