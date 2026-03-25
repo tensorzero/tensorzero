@@ -2640,7 +2640,7 @@ mod tests {
             cache_read_input_tokens: None,
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,
@@ -2665,7 +2665,7 @@ mod tests {
             cache_read_input_tokens: Some(4000),
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,
@@ -2690,7 +2690,7 @@ mod tests {
             cache_read_input_tokens: None,
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(usage.provider_cache_read_input_tokens, None);
         assert_eq!(usage.provider_cache_write_input_tokens, None);
@@ -2707,7 +2707,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage = serde_json::from_str(json)
             .expect("should deserialize Anthropic usage with cache tokens");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(4215));
         assert_eq!(usage.provider_cache_write_input_tokens, Some(4200));
         assert_eq!(usage.provider_cache_read_input_tokens, Some(0));
@@ -2721,7 +2721,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize Anthropic usage with cache read");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(4215));
         assert_eq!(usage.provider_cache_write_input_tokens, Some(0));
         assert_eq!(usage.provider_cache_read_input_tokens, Some(4200));
@@ -2733,7 +2733,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize without cache fields");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(100));
         assert_eq!(usage.provider_cache_write_input_tokens, None);
         assert_eq!(usage.provider_cache_read_input_tokens, None);
