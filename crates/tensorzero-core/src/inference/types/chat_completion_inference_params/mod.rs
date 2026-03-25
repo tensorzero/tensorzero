@@ -1,26 +1,4 @@
-//! TODO (GabrielBianconi):
-//! We are migrating the inference parameters to a struct that must be explicitly handled by every model provider.
-//! To avoid a massive PR, I'll start with a small struct as an extension, and gradually migrate the rest of the parameters.
-
-mod service_tier;
-
-pub use service_tier::ServiceTier;
-
-use serde::{Deserialize, Serialize};
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-pub struct ChatCompletionInferenceParamsV2 {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning_effort: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<ServiceTier>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thinking_budget_tokens: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verbosity: Option<String>,
-}
+pub use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, ServiceTier};
 
 pub fn warn_inference_parameter_not_supported(
     model_provider_name: &str,

@@ -1,0 +1,98 @@
+name: Inference Cache Tests
+
+on:
+  workflow_call:
+
+env:
+  CARGO_INCREMENTAL: 0
+  FORCE_COLOR: 1
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  SQLX_OFFLINE: 1
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+
+jobs:
+  cache-tests:
+    if: github.repository == 'tensorzero/tensorzero'
+    name: "cache-tests (backend: ${{ matrix.cache_backend }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - cache_backend: clickhouse
+            test_filter: "test(_clickhouse)"
+            cache_backend_env: clickhouse
+            # Still need to pass valkey_url and start valkey; we force clickhouse in the backend
+            valkey_url: "redis://valkey:6379"
+            services: "clickhouse valkey provider-proxy"
+          - cache_backend: valkey
+            test_filter: "test(valkey)"
+            cache_backend_env: valkey
+            valkey_url: "redis://valkey:6379"
+            services: "clickhouse postgres gateway-postgres-migrations valkey provider-proxy"
+          - cache_backend: redis
+            test_filter: "test(valkey)"
+            cache_backend_env: valkey
+            valkey_url: "redis://redis:6379"
+            services: "clickhouse postgres gateway-postgres-migrations redis provider-proxy"
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull container images
+        run: |
+          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          docker pull tensorzero/live-tests:sha-${{ github.sha }}
+          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+
+      - name: Restore provider-proxy cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: ./ci/provider-proxy-cache/
+          key: provider-proxy-cache-${{ github.run_id }}
+          restore-keys: provider-proxy-cache-
+
+      - name: Download provider-proxy cache
+        if: github.event_name != 'schedule'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/download-provider-proxy-cache.sh
+
+      - name: Start infrastructure services
+        run: >
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
+          up ${{ matrix.services }} -d --wait
+
+      - name: Run cache tests
+        run: |
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --no-deps --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
+            -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
+            live-tests \
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
+            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
+            --profile cache -E '${{ matrix.test_filter }}' -j 4"
+
+      - name: Upload provider-proxy cache
+        if: github.event_name == 'merge_group' && matrix.cache_backend == 'clickhouse'
+        run: |
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
+
+      - name: Print logs
+        if: always()
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t

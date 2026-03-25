@@ -1361,6 +1361,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1744,6 +1745,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -1829,6 +1832,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -1893,6 +1898,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let inference_config = InferenceConfig {
             templates: templates.clone(),
@@ -1927,6 +1933,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -2032,6 +2040,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -2084,6 +2094,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -2165,6 +2176,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -2217,6 +2230,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2291,6 +2305,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match result {
@@ -2374,6 +2390,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
 
         let system_template = get_system_template();
@@ -2630,6 +2647,8 @@ mod tests {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
                         cost: None,
+                        provider_cache_read_input_tokens: None,
+                        provider_cache_write_input_tokens: None,
                     })
                 );
                 break;
@@ -2681,6 +2700,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {

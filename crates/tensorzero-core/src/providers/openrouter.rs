@@ -72,6 +72,7 @@ use super::openai::{
 use crate::inference::TensorZeroEventError;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::providers::openai::OpenAIEmbeddingUsage;
+use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -1577,6 +1578,8 @@ impl<'a> OpenRouterRequest<'a> {
 pub(super) struct OpenRouterUsage {
     pub prompt_tokens: Option<u32>,
     pub completion_tokens: Option<u32>,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
 }
 
 impl From<OpenRouterUsage> for Usage {
@@ -1584,6 +1587,10 @@ impl From<OpenRouterUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cache_read_input_tokens: usage
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -2507,6 +2514,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2608,6 +2616,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2700,6 +2709,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
+                prompt_tokens_details: None,
             },
         };
         let request_body = OpenRouterRequest {
@@ -2761,6 +2771,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
+                prompt_tokens_details: None,
             },
         };
 
@@ -3101,6 +3112,7 @@ mod tests {
         let usage = OpenRouterUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = OpenRouterChatChunk {
             choices: vec![],
@@ -3152,6 +3164,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"

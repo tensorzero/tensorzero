@@ -10,6 +10,7 @@ interface DatasetComboboxProps {
   functionName?: string;
   allowCreation?: boolean;
   disabled?: boolean;
+  ariaLabel?: string;
 }
 
 export function DatasetCombobox({
@@ -18,6 +19,7 @@ export function DatasetCombobox({
   functionName,
   allowCreation = false,
   disabled = false,
+  ariaLabel,
 }: DatasetComboboxProps) {
   const {
     items,
@@ -46,6 +48,7 @@ export function DatasetCombobox({
       loadingMessage="Loading datasets..."
       error={isError}
       errorMessage="There was an error loading datasets."
+      ariaLabel={ariaLabel}
     />
   );
 }

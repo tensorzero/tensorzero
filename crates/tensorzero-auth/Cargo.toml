@@ -10,7 +10,7 @@ hex = "0.4.3"
 
 secrecy.workspace = true
 serde.workspace = true
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 sqlx = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }

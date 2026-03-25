@@ -23,8 +23,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    inject_extra_request_data_and_send_eventsource, inject_extra_request_data_and_send_with_headers,
 };
+use crate::inference::types::Usage;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     cache::ModelProviderRequest,
@@ -200,7 +201,7 @@ impl InferenceProvider for FireworksProvider {
         let builder = http_client
             .post(request_url)
             .bearer_auth(api_key.expose_secret());
-        let (res, raw_request) = inject_extra_request_data_and_send(
+        let injected = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
             &request.extra_body,
@@ -210,11 +211,16 @@ impl InferenceProvider for FireworksProvider {
             request_body,
             builder,
         )
-        .await?;
+        .await
+        .map_err(|(e, _headers)| e)?;
+        let headers = injected.headers;
+        let res = injected.response;
+        let raw_request = injected.raw_request;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
+            let cached_prompt_tokens = extract_fireworks_cached_prompt_tokens(&headers);
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -245,6 +251,7 @@ impl InferenceProvider for FireworksProvider {
                 generic_request: request,
                 raw_response,
                 model_inference_id,
+                cached_prompt_tokens,
             }
             .try_into()?)
         } else {
@@ -1021,6 +1028,8 @@ struct FireworksResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     model_inference_id: Uuid,
+    /// Cache token count from `fireworks-cached-prompt-tokens` HTTP header.
+    cached_prompt_tokens: Option<u32>,
 }
 
 impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1033,6 +1042,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             generic_request,
             raw_response,
             model_inference_id,
+            cached_prompt_tokens,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -1103,7 +1113,9 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let mut usage: Usage = response.usage.into();
+        // Fireworks reports cached prompt tokens in HTTP headers, not in the JSON body.
+        usage.provider_cache_read_input_tokens = cached_prompt_tokens;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -1128,6 +1140,14 @@ fn fireworks_usage_from_raw_response(raw_response: &str) -> Option<Value> {
     serde_json::from_str::<Value>(raw_response)
         .ok()
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
+}
+
+/// Extract cached prompt tokens from the `fireworks-cached-prompt-tokens` HTTP header.
+fn extract_fireworks_cached_prompt_tokens(headers: &http::HeaderMap) -> Option<u32> {
+    headers
+        .get("fireworks-cached-prompt-tokens")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok())
 }
 
 #[cfg(test)]
@@ -1183,6 +1203,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1201,6 +1222,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let inference_response: ProviderInferenceResponse =
@@ -1348,6 +1370,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1385,6 +1408,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
         let inference_response: ProviderInferenceResponse =
             fireworks_response_with_metadata.try_into().unwrap();
@@ -1484,6 +1508,7 @@ mod tests {
         let usage = OpenAIUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = FireworksChatChunk {
             choices: vec![],
@@ -1537,6 +1562,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -1771,6 +1798,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(15),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1783,6 +1811,7 @@ mod tests {
             raw_request: "test_request".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let result: ProviderInferenceResponse =
@@ -1850,6 +1879,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(15),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1862,6 +1892,7 @@ mod tests {
             raw_request: "test_request".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let result: ProviderInferenceResponse =
@@ -2134,5 +2165,22 @@ mod tests {
         assert!(logs_contain(
             "Fireworks does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[test]
+    fn test_extract_fireworks_cached_prompt_tokens() {
+        let mut headers = http::HeaderMap::new();
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), None);
+
+        headers.insert("fireworks-cached-prompt-tokens", "42".parse().unwrap());
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), Some(42));
+
+        // Non-numeric value should return None
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            "fireworks-cached-prompt-tokens",
+            "not-a-number".parse().unwrap(),
+        );
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), None);
     }
 }

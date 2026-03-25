@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
 use durable::MIGRATOR;
-use durable_tools::{ErasedSimpleTool, SimpleToolContext};
+use durable_tools::{ErasedSimpleTool, SimpleToolContext, ToolRegistry};
 use sqlx::PgPool;
 use tensorzero::{GetConfigResponse, WriteConfigResponse};
 use uuid::Uuid;
@@ -48,7 +48,8 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -114,7 +115,8 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

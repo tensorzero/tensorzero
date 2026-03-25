@@ -1231,6 +1231,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let config = Config {
             functions: HashMap::from([("test_fn".to_string(), Arc::new(chat_fn))]),
@@ -1537,6 +1538,7 @@ mod tests {
                 description: None,
                 all_explicit_templates_names: HashSet::new(),
                 experimentation: ExperimentationConfigWithNamespaces::default(),
+                evaluators: HashMap::new(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1682,6 +1684,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })));
 
         // Case 5: a JSON function with correct output

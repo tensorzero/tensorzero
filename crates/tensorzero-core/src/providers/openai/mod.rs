@@ -872,15 +872,22 @@ impl InferenceProvider for OpenAIProvider {
                 api_type,
             })
         })?;
-        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}."),
-                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(text.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-                api_type,
-            })
-        })?;
+        let response: OpenAIBatchResponse = match serde_json::from_str(&text) {
+            Ok(response) => response,
+            Err(e) => {
+                // The response didn't match the expected batch status schema.
+                // This can happen when the batch was deleted and the API returns
+                // an error JSON, or due to other unexpected response formats.
+                tracing::warn!(
+                    "Failed to deserialize OpenAI batch response as OpenAIBatchResponse: {e}. \
+                     Raw response: {text}"
+                );
+                return Ok(PollBatchInferenceResponse::Failed {
+                    raw_request,
+                    raw_response: text,
+                });
+            }
+        };
         let status: BatchStatus = response.status.into();
         let raw_response = text;
         match status {
@@ -889,6 +896,19 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response,
             }),
             BatchStatus::Completed => {
+                // If error_file_id is set but there's no output_file_id, the entire
+                // batch failed — no usable results exist. If both are set, it's a
+                // partial failure and we should still process the available output.
+                if response.error_file_id.is_some() && response.output_file_id.is_none() {
+                    tracing::warn!(
+                        "OpenAI batch completed with error_file_id but no output_file_id. \
+                         Marking as failed. Raw response: {raw_response}"
+                    );
+                    return Ok(PollBatchInferenceResponse::Failed {
+                        raw_request,
+                        raw_response,
+                    });
+                }
                 let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Output file ID is missing".to_string(),
@@ -2671,6 +2691,10 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cache_read_input_tokens: usage
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -2695,6 +2719,8 @@ impl From<OpenAIEmbeddingUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: Some(0), // this is always zero for embeddings
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -3114,7 +3140,7 @@ struct OpenAIBatchResponse {
     // completion_window: String,
     status: OpenAIBatchStatus,
     output_file_id: Option<String>,
-    // error_file_id: String,
+    error_file_id: Option<String>,
     // created_at: i64,
     // in_progress_at: Option<i64>,
     // expires_at: i64,
@@ -3726,6 +3752,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             }),
         };
         let generic_request = ModelInferenceRequest {
@@ -3819,6 +3846,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
+                prompt_tokens_details: None,
             }),
         };
         let generic_request = ModelInferenceRequest {
@@ -3904,6 +3932,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
+                prompt_tokens_details: None,
             }),
         };
         let request_body = OpenAIRequest {
@@ -3958,6 +3987,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
+                prompt_tokens_details: None,
             }),
         };
 
@@ -4319,6 +4349,7 @@ mod tests {
         let usage = OpenAIUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = OpenAIChatChunk {
             choices: vec![],
@@ -4370,6 +4401,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -5853,10 +5886,85 @@ mod tests {
         let openai_usage = Some(OpenAIUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         });
         let usage: Usage = openai_usage.into();
         assert_eq!(usage.input_tokens, Some(10), "input_tokens should be 10");
         assert_eq!(usage.output_tokens, Some(20), "output_tokens should be 20");
+        assert_eq!(
+            usage.provider_cache_read_input_tokens, None,
+            "cache_read should be None without prompt_tokens_details"
+        );
+        assert_eq!(
+            usage.provider_cache_write_input_tokens, None,
+            "OpenAI doesn't report cache_write"
+        );
+    }
+
+    #[test]
+    fn test_usage_from_openai_usage_with_cached_tokens() {
+        use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
+
+        // OpenAI reports cached tokens in prompt_tokens_details.cached_tokens
+        let openai_usage = Some(OpenAIUsage {
+            prompt_tokens: Some(5000),
+            completion_tokens: Some(100),
+            prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                cached_tokens: Some(4500),
+            }),
+        });
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(5000));
+        assert_eq!(usage.output_tokens, Some(100));
+        assert_eq!(
+            usage.provider_cache_read_input_tokens,
+            Some(4500),
+            "cache_read should come from prompt_tokens_details.cached_tokens"
+        );
+        assert_eq!(
+            usage.provider_cache_write_input_tokens, None,
+            "OpenAI doesn't report cache_write"
+        );
+    }
+
+    #[test]
+    fn test_openai_usage_deserialization_with_cached_tokens() {
+        // Simulate a real OpenAI API response usage block with caching
+        let json = r#"{
+            "prompt_tokens": 5000,
+            "completion_tokens": 100,
+            "prompt_tokens_details": {
+                "cached_tokens": 4500
+            }
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize OpenAI usage with cached_tokens");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.input_tokens, Some(5000));
+        assert_eq!(usage.provider_cache_read_input_tokens, Some(4500));
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
+
+        // Without prompt_tokens_details
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 50
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize without cached_tokens");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
+        assert_eq!(usage.provider_cache_write_input_tokens, None);
+
+        // With prompt_tokens_details but no cached_tokens
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "prompt_tokens_details": {}
+        }"#;
+        let openai_usage: OpenAIUsage =
+            serde_json::from_str(json).expect("should deserialize with empty details");
+        let usage: Usage = openai_usage.into();
+        assert_eq!(usage.provider_cache_read_input_tokens, None);
     }
 
     #[test]
@@ -6237,5 +6345,86 @@ mod tests {
             }
             _ => panic!("expected assistant message"),
         }
+    }
+
+    #[test]
+    fn test_batch_response_deserialization_error_json() {
+        // When the API returns an error JSON (e.g. batch was deleted),
+        // deserialization into OpenAIBatchResponse should fail.
+        let error_json = r#"{"error":{"message":"No such batch: batch_abc123","type":"invalid_request_error","param":null,"code":null}}"#;
+        let result = serde_json::from_str::<OpenAIBatchResponse>(error_json);
+        assert!(
+            result.is_err(),
+            "error JSON should not deserialize as OpenAIBatchResponse"
+        );
+    }
+
+    #[test]
+    fn test_batch_response_deserialization_valid() {
+        // A valid batch response should deserialize successfully.
+        let valid_json = json!({
+            "id": "batch_abc123",
+            "status": "completed",
+            "output_file_id": "file-output-123",
+            "error_file_id": null,
+            "errors": null
+        });
+        let result = serde_json::from_value::<OpenAIBatchResponse>(valid_json);
+        assert!(
+            result.is_ok(),
+            "valid batch JSON should deserialize as OpenAIBatchResponse"
+        );
+        let response = result.expect("should deserialize");
+        assert_eq!(response.id, "batch_abc123");
+        assert!(matches!(response.status, OpenAIBatchStatus::Completed));
+        assert_eq!(response.output_file_id.as_deref(), Some("file-output-123"));
+        assert!(response.error_file_id.is_none());
+    }
+
+    #[test]
+    fn test_batch_response_completed_with_error_file_only() {
+        // Completed batch with error_file_id but no output_file_id — total failure.
+        let json_val = json!({
+            "id": "batch_fail",
+            "status": "completed",
+            "output_file_id": null,
+            "error_file_id": "file-error-456",
+            "errors": null
+        });
+        let response: OpenAIBatchResponse =
+            serde_json::from_value(json_val).expect("should deserialize");
+        assert!(
+            response.error_file_id.is_some(),
+            "error_file_id should be set"
+        );
+        assert!(
+            response.output_file_id.is_none(),
+            "output_file_id should be None"
+        );
+        // This combination should trigger the Failed path in poll_batch_inference.
+    }
+
+    #[test]
+    fn test_batch_response_completed_with_both_files() {
+        // Completed batch with both output_file_id and error_file_id — partial failure.
+        // Should NOT be treated as total failure; output should be processed.
+        let json_val = json!({
+            "id": "batch_partial",
+            "status": "completed",
+            "output_file_id": "file-output-789",
+            "error_file_id": "file-error-789",
+            "errors": null
+        });
+        let response: OpenAIBatchResponse =
+            serde_json::from_value(json_val).expect("should deserialize");
+        assert!(
+            response.error_file_id.is_some(),
+            "error_file_id should be set"
+        );
+        assert!(
+            response.output_file_id.is_some(),
+            "output_file_id should also be set for partial failures"
+        );
+        // This combination should NOT trigger the Failed path — output is still usable.
     }
 }

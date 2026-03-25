@@ -89,7 +89,7 @@ impl DatapointFilter {
                     query_params,
                     param_idx_counter,
                 );
-                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                let comparison_operator = comparison_operator.to_sql_operator();
                 // Add mapContains check to ensure the tag exists before comparing.
                 // Without this, a != filter would match rows without the tag (since
                 // accessing a missing key returns empty string, and '' != value is true).
@@ -107,7 +107,7 @@ impl DatapointFilter {
                     query_params,
                     param_idx_counter,
                 );
-                let comparison_operator = comparison_operator.to_clickhouse_operator();
+                let comparison_operator = comparison_operator.to_sql_operator();
                 format!(
                     "{table_prefix}updated_at {comparison_operator} parseDateTimeBestEffort({time_placeholder})"
                 )

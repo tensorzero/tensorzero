@@ -2,6 +2,10 @@
 //!
 //! These types are shared between the client and server.
 
+mod autoevals;
+
+pub use autoevals::*;
+
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -515,6 +519,8 @@ pub enum ToolCallDecisionSource {
     Ui,
     Automatic,
     Whitelist,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -584,8 +590,12 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
-    Rejected { reason: String },
+    Rejected {
+        reason: String,
+    },
     NotAvailable,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 /// Authorization status for tool calls as seen by gateway consumers.
@@ -613,6 +623,9 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
             }
             ToolCallAuthorizationStatus::NotAvailable => {
                 Err("NotAvailable status should be filtered before conversion")
+            }
+            ToolCallAuthorizationStatus::Interrupted => {
+                Err("Interrupted status should be filtered before conversion")
             }
         }
     }
@@ -767,6 +780,10 @@ pub struct MultipleChoiceQuestion {
     pub options: Vec<MultipleChoiceOption>,
     /// Set to true to allow the user to select multiple options instead of just one.
     pub multi_select: bool,
+    /// Set to true to show a free-text textarea below the options for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub include_free_response: Option<bool>,
 }
 
 /// An option in a multiple choice question.
@@ -809,6 +826,10 @@ pub enum UserQuestionAnswer {
 pub struct MultipleChoiceAnswer {
     /// IDs of the selected options.
     pub selected: Vec<Uuid>,
+    /// Optional free-text response for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub free_response_text: Option<String>,
 }
 
 /// A user's free-form text answer.
@@ -817,190 +838,6 @@ pub struct MultipleChoiceAnswer {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct FreeResponseAnswer {
     pub text: String,
-}
-
-// =============================================================================
-// AutoEval Example Labeling Types
-// =============================================================================
-
-/// Payload for an autoeval example labeling event.
-///
-/// Groups labeled examples together, each with rich context blocks
-/// (e.g. prompt/response) and associated labeling questions.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalExampleLabeling {
-    pub examples: Vec<AutoEvalExampleLabeling>,
-}
-
-/// A single example to label, with context and a structured labeling question.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalExampleLabeling {
-    /// Rich content blocks providing context (e.g. the prompt and response).
-    pub context: Vec<AutoEvalContentBlock>,
-    /// The multiple-choice labeling question for this example.
-    pub label_question: AutoEvalLabelQuestion,
-    /// An optional free-response explanation question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_question: Option<AutoEvalExplanationQuestion>,
-}
-
-/// A multiple-choice labeling question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalLabelQuestion {
-    pub id: Uuid,
-    pub header: String,
-    pub question: String,
-    pub options: Vec<MultipleChoiceOption>,
-}
-
-/// A free-response explanation question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalExplanationQuestion {
-    pub id: Uuid,
-    pub header: String,
-    pub question: String,
-}
-
-/// A block of rich content displayed alongside an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export, tag = "type", rename_all = "snake_case")
-)]
-pub enum AutoEvalContentBlock {
-    /// Rendered as formatted markdown.
-    Markdown {
-        text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
-    /// Rendered as a formatted JSON viewer.
-    Json {
-        data: serde_json::Value,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        label: Option<String>,
-    },
-}
-
-/// Minimal input payload for submitting autoeval example labeling answers.
-/// The server enriches this with context from the original labeling event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
-    /// Map from question UUID to response.
-    pub responses: HashMap<Uuid, UserQuestionAnswer>,
-    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-    pub auto_eval_example_labeling_event_id: Uuid,
-}
-
-/// Self-contained read-only payload for labeled autoeval examples.
-/// Includes the full context blocks so the UI can render everything
-/// without looking up the original labeling event.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalExampleLabelingAnswers {
-    pub examples: Vec<AutoEvalLabeledExample>,
-    /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-    pub auto_eval_example_labeling_event_id: Uuid,
-}
-
-/// A labeled example with its full context and submitted answers.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalLabeledExample {
-    /// Rich content blocks providing context (e.g. the prompt and response).
-    pub context: Vec<AutoEvalContentBlock>,
-    /// The multiple-choice labeling question for this example.
-    pub label_question: AutoEvalLabelQuestion,
-    /// The user's answer to the label question.
-    pub label_answer: UserQuestionAnswer,
-    /// An optional free-response explanation question.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_question: Option<AutoEvalExplanationQuestion>,
-    /// The user's answer to the explanation question, if one was present.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub explanation_answer: Option<UserQuestionAnswer>,
-}
-
-// =============================================================================
-// AutoEval Behavior Spec Types
-// =============================================================================
-
-/// Payload for an autoeval behavior spec event.
-///
-/// Contains two required free-response fields: a target behavior description
-/// and additional context, both with optional pre-filled defaults.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalBehaviorSpec {
-    /// The target behavior question.
-    pub target_behavior: AutoEvalBehaviorSpecQuestion,
-    /// The additional context question.
-    pub additional_context: AutoEvalBehaviorSpecQuestion,
-}
-
-/// A free-response question within an autoeval behavior spec.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct AutoEvalBehaviorSpecQuestion {
-    pub id: Uuid,
-    pub header: String,
-    pub question: String,
-    /// Pre-filled text shown in the input. The user can edit or submit as-is.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub default_value: Option<String>,
-}
-
-/// Minimal input payload for submitting autoeval behavior spec answers.
-/// The server enriches this with context from the original event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
-    /// Map from question UUID to response.
-    pub responses: HashMap<Uuid, UserQuestionAnswer>,
-    /// The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
-    pub auto_eval_behavior_spec_event_id: Uuid,
-}
-
-/// Self-contained read-only payload for answered autoeval behavior spec.
-/// Includes the full questions so the UI can render everything
-/// without looking up the original event.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct EventPayloadAutoEvalBehaviorSpecAnswers {
-    /// The target behavior question.
-    pub target_behavior: AutoEvalBehaviorSpecQuestion,
-    /// The user's answer to the target behavior question.
-    pub target_behavior_answer: UserQuestionAnswer,
-    /// The additional context question.
-    pub additional_context: AutoEvalBehaviorSpecQuestion,
-    /// The user's answer to the additional context question.
-    pub additional_context_answer: UserQuestionAnswer,
-    /// The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
-    pub auto_eval_behavior_spec_event_id: Uuid,
 }
 
 // =============================================================================
@@ -1219,6 +1056,98 @@ pub struct S3UploadResponse {
     pub secret_access_key: Option<String>,
     pub session_token: Option<String>,
     pub credential_expiration: DateTime<Utc>,
+}
+
+// =============================================================================
+// Failure Mode Analysis Types
+// =============================================================================
+
+/// Query parameters for cursor-based pagination on FMA endpoints.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FmaCursorPaginationParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Query parameters for listing failures.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListFailuresParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_mode_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unclassified: Option<bool>,
+}
+
+/// A failure mode returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureModeResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A failure returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub failure_mode_id: Option<Uuid>,
+    pub episode_id: Uuid,
+    pub inference_id: Option<Uuid>,
+    pub characterization: String,
+    pub pinned: bool,
+    pub failure_mode_id_is_user_provided: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// An analysis returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisResponse {
+    pub id: Uuid,
+    pub deployment_id: String,
+    pub function_name: String,
+    pub tool_name: String,
+    pub session_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruction: Option<String>,
+    pub filters: Option<serde_json::Value>,
+    pub max_failures: Option<i32>,
+    pub fit_score: Option<f64>,
+    pub failure_mode_count: i64,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response from listing failure modes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailureModesResponse {
+    pub failure_modes: Vec<FailureModeResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailuresResponse {
+    pub failures: Vec<FailureResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing analyses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListAnalysesResponse {
+    pub analyses: Vec<AnalysisResponse>,
+    pub next_cursor: Option<Uuid>,
 }
 
 // =============================================================================

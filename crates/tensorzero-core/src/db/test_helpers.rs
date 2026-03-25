@@ -15,6 +15,16 @@ pub trait TestDatabaseHelpers: Send + Sync {
 
     /// (In ClickHouse only) sleeps for a given duration to ensure writes are visible.
     async fn sleep_for_writes_to_be_visible(&self);
+
+    /// Prepares the model provider statistics rollup for querying after an insert.
+    ///
+    /// ClickHouse: flushes the async insert queue so the materialized view has
+    /// processed the new rows. Callers should then poll `get_model_usage_timeseries`
+    /// until the expected data appears.
+    ///
+    /// Postgres: triggers `refresh_model_provider_statistics_incremental` so the
+    /// rollup table is up to date before querying.
+    async fn prepare_model_provider_statistics(&self);
 }
 
 #[async_trait]
@@ -33,6 +43,11 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
     async fn sleep_for_writes_to_be_visible(&self) {
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
+
+    /// For ClickHouse, flush the async insert queue so the MV has processed the rows.
+    async fn prepare_model_provider_statistics(&self) {
+        self.flush_pending_writes().await;
+    }
 }
 
 #[async_trait]
@@ -42,6 +57,21 @@ impl TestDatabaseHelpers for PostgresConnectionInfo {
 
     /// For Postgres, this is a no-op since writes are immediately visible.
     async fn sleep_for_writes_to_be_visible(&self) {}
+
+    /// For Postgres, trigger the incremental refresh so the rollup table is up to date.
+    #[expect(clippy::panic)]
+    async fn prepare_model_provider_statistics(&self) {
+        if let Some(pool) = self.get_pool() {
+            sqlx::query(
+                "SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE)",
+            )
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| {
+                panic!("refresh_model_provider_statistics_incremental failed: {e}")
+            });
+        }
+    }
 }
 
 /// Normalize whitespace and newlines in a query for comparison

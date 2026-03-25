@@ -8,8 +8,6 @@ use futures::stream::Stream;
 use futures_core::FusedStream;
 use indexmap::IndexMap;
 use metrics::{Label, counter};
-use schemars::JsonSchema;
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -43,9 +41,6 @@ use crate::function::{
     DEFAULT_FUNCTION_NAME, FunctionConfig, FunctionConfigChat, FunctionConfigType,
 };
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, ServiceTier,
-};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::extra_stuff::validate_inference_filters;
@@ -71,8 +66,9 @@ use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
+use crate::variant::{InferenceConfig, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+use tensorzero_types::inference_params::JsonMode;
 
 use crate::endpoints::namespace::{
     validate_model_namespace, validate_variant_namespace_at_inference,
@@ -199,7 +195,9 @@ struct InferenceMetadata {
     pub cost_config: Option<CostConfig>,
 }
 
-pub type InferenceCredentials = HashMap<String, SecretString>;
+pub use tensorzero_types::inference_params::{
+    ChatCompletionInferenceParams, InferenceCredentials, InferenceIds, InferenceParams,
+};
 
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -286,12 +284,6 @@ impl std::fmt::Debug for InferenceOutput {
             InferenceOutput::Streaming(_) => write!(f, "Streaming"),
         }
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct InferenceIds {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
 }
 
 pub struct InferenceOutputData {
@@ -950,11 +942,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // Capture the parent span (function_inference) so we can use it as the parent
             // for write_inference, even if the task is spawned.
             let parent_span = tracing::Span::current();
-            // Always spawn a tokio task here. This ensures that 'write_inference' will
-            // not be cancelled partway through execution if the outer '/inference' request
-            // is cancelled. This reduces the chances that we only write to some tables and not others
-            // (but this is inherently best-effort due to ClickHouse's lack of transactions).
-            let write_future = deferred_tasks.spawn(async move {
+            let write_future = async move {
                 let database = DelegatingDatabaseConnection::new(
                     clickhouse_connection_info,
                     postgres_connection_info,
@@ -969,13 +957,13 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 )
                 .await;
                 Ok::<_, Error>(())
-            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes)));
-            if !async_writes {
-                write_future.await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to await ClickHouse inference write: {e:?}"),
-                    })
-                })??;
+            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes));
+            if async_writes {
+                deferred_tasks.spawn(write_future);
+            } else {
+                // It's safe to directly await this, since we ensure that the overall request future will be executed to completion
+                // See `possibly_prevent_request_cancellation` for more details.
+                write_future.await?;
             }
         }
 
@@ -1069,6 +1057,7 @@ async fn find_function(
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
                     experimentation: ExperimentationConfigWithNamespaces::default(),
+                    evaluators: HashMap::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -2169,107 +2158,6 @@ pub struct InferenceModels {
     pub embedding_models: Arc<EmbeddingModelTable>,
 }
 
-/// InferenceParams is the top-level struct for inference parameters.
-/// We backfill these from the configs given in the variants used and ultimately write them to the database.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(deny_unknown_fields)]
-pub struct InferenceParams {
-    pub chat_completion: ChatCompletionInferenceParams,
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(deny_unknown_fields)]
-pub struct ChatCompletionInferenceParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seed: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub presence_penalty: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub frequency_penalty: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub json_mode: Option<JsonMode>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop_sequences: Option<Vec<String>>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning_effort: Option<String>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<ServiceTier>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verbosity: Option<String>,
-}
-
-impl ChatCompletionInferenceParams {
-    #[expect(clippy::too_many_arguments)]
-    pub fn backfill_with_variant_params(
-        &mut self,
-        temperature: Option<f32>,
-        max_tokens: Option<u32>,
-        seed: Option<u32>,
-        top_p: Option<f32>,
-        presence_penalty: Option<f32>,
-        frequency_penalty: Option<f32>,
-        stop_sequences: Option<Vec<String>>,
-        inference_params_v2: ChatCompletionInferenceParamsV2,
-    ) {
-        if self.temperature.is_none() {
-            self.temperature = temperature;
-        }
-        if self.max_tokens.is_none() {
-            self.max_tokens = max_tokens;
-        }
-        if self.seed.is_none() {
-            self.seed = seed;
-        }
-        if self.top_p.is_none() {
-            self.top_p = top_p;
-        }
-        if self.presence_penalty.is_none() {
-            self.presence_penalty = presence_penalty;
-        }
-        if self.frequency_penalty.is_none() {
-            self.frequency_penalty = frequency_penalty;
-        }
-        if self.stop_sequences.is_none() {
-            self.stop_sequences = stop_sequences;
-        }
-        let ChatCompletionInferenceParamsV2 {
-            reasoning_effort,
-            service_tier,
-            thinking_budget_tokens,
-            verbosity,
-        } = inference_params_v2;
-
-        if self.reasoning_effort.is_none() {
-            self.reasoning_effort = reasoning_effort;
-        }
-        if self.service_tier.is_none() {
-            self.service_tier = service_tier;
-        }
-        if self.thinking_budget_tokens.is_none() {
-            self.thinking_budget_tokens = thinking_budget_tokens;
-        }
-        if self.verbosity.is_none() {
-            self.verbosity = verbosity;
-        }
-    }
-}
-
 /// Prepares the candidate variants map using inference parameters prior to sampling
 /// This function handles 2 cases:
 /// 1. If a variant is pinned, only that variant should be attempted
@@ -2951,6 +2839,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries.clone()),
             raw_response: None,
@@ -3004,6 +2894,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3041,6 +2933,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3075,6 +2969,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3123,6 +3019,8 @@ mod tests {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3213,6 +3111,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3315,6 +3215,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3399,6 +3301,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3484,6 +3388,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             ..Default::default()
         });
@@ -3600,6 +3506,8 @@ mod tests {
                     input_tokens: Some(10),
                     output_tokens: Some(5),
                     cost: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                 },
                 latency: Latency::NonStreaming {
                     response_time: Duration::from_millis(100),

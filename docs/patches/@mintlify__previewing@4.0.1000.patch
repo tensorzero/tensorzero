@@ -1,0 +1,25 @@
+diff --git a/dist/__tests__/downloadTargetMint.test.js b/dist/__tests__/downloadTargetMint.test.js
+index 593a6af59d32ed786ddfa8d8a64fc4c0c4333de3..3bdd6d74170e0aeed91780340f3267609aaaff25 100644
+--- a/dist/__tests__/downloadTargetMint.test.js
++++ b/dist/__tests__/downloadTargetMint.test.js
+@@ -1,6 +1,6 @@
+ import fse from 'fs-extra';
+ import { pipeline } from 'node:stream/promises';
+-import tar from 'tar';
++import * as tar from 'tar';
+ import * as constants from '../constants.js';
+ import { downloadTargetMint } from '../local-preview/client.js';
+ import * as utils from '../util.js';
+diff --git a/dist/local-preview/client.js b/dist/local-preview/client.js
+index f14d091602c068664b73aff6a50c891315b902ff..beaf891c2011261d130e7cd8b41594556c5be5b3 100644
+--- a/dist/local-preview/client.js
++++ b/dist/local-preview/client.js
+@@ -2,7 +2,7 @@ import fse from 'fs-extra';
+ import got from 'got';
+ import isOnline from 'is-online';
+ import { pipeline } from 'node:stream/promises';
+-import tar from 'tar';
++import * as tar from 'tar';
+ import yaml from 'js-yaml';
+ import { DOT_MINTLIFY, DOT_MINTLIFY_LAST, VERSION_PATH, TAR_PATH, TARGET_MINT_VERSION_URL, MINT_VERSION_MAP_URL, } from '../constants.js';
+ import { restoreMintlifyLast, getTarUrl } from '../util.js';

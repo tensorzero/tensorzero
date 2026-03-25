@@ -987,6 +987,7 @@ mod tests {
 
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 
@@ -1000,6 +1001,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 
@@ -1023,6 +1025,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 
@@ -1047,6 +1050,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })
     }
 

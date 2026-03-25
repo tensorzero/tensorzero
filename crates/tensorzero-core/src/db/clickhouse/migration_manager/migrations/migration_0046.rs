@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use super::check_index_exists;
 use super::check_table_exists;
+use super::materialize_index;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -50,17 +51,11 @@ impl Migration for Migration0046<'_> {
             let create_index_query = format!(
                 "ALTER TABLE {table} ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;"
             );
-            let _ = self
-                .clickhouse
+            self.clickhouse
                 .run_query_synchronous_no_params(create_index_query)
                 .await?;
 
-            let materialize_index_query =
-                format!("ALTER TABLE {table} MATERIALIZE INDEX id_index;");
-            let _ = self
-                .clickhouse
-                .run_query_synchronous_no_params(materialize_index_query)
-                .await?;
+            materialize_index(self.clickhouse, table, "id_index").await?;
         }
 
         Ok(())

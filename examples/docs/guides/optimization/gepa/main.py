@@ -5,14 +5,12 @@ from ner import Row, load_dataset
 from tensorzero import (
     AsyncTensorZeroGateway,
     CreateDatapointRequestJson,
-    GEPAConfig,
     JsonDatapointOutputUpdate,
 )
 
 FUNCTION_NAME = "extract_entities"
 EVALUATION_NAME = "extract_entities_eval"
-
-TEMPLATE_VARIANT_NAME = "baseline"
+DATASET_NAME = "extract_entities_dataset"
 
 # Models to use for analyzing inferences and generating prompt mutations
 ANALYSIS_MODEL = "openai::gpt-5.2"
@@ -24,12 +22,8 @@ INITIAL_VARIANTS = ["baseline"]
 # Number of evolution iterations (each iteration evaluates, analyzes, and mutates variants)
 MAX_ITERATIONS = 10
 
-DATASET_NAME = "extract_entities_dataset"
-
 NUM_SAMPLES = 500
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
-
-VAL_FRACTION = 0.5
 
 
 def make_datapoint(row: Row) -> CreateDatapointRequestJson:
@@ -74,36 +68,57 @@ async def main():
 
     print(f"Created {len(datapoints)} datapoints")
 
-    # Configure GEPA optimization
-    optimization_config = GEPAConfig(
+    # Launch GEPA optimization
+    result = await t0.optimization.gepa.launch(
         function_name=FUNCTION_NAME,
+        dataset_name=DATASET_NAME,
         evaluation_name=EVALUATION_NAME,
         analysis_model=ANALYSIS_MODEL,
         mutation_model=MUTATION_MODEL,
         initial_variants=INITIAL_VARIANTS,
         max_iterations=MAX_ITERATIONS,
         max_concurrency=MAX_CONCURRENCY,
-        max_tokens=16384,
     )
 
-    print("\nLaunching GEPA optimization...")
+    task_id = result.task_id
+    print(f"GEPA task launched: {task_id}")
 
-    # Launch the optimization workflow
-    job_handle = await t0.experimental_launch_optimization_workflow(
-        function_name=FUNCTION_NAME,
-        template_variant_name=TEMPLATE_VARIANT_NAME,
-        dataset_name=DATASET_NAME,
-        optimizer_config=optimization_config,
-        val_fraction=VAL_FRACTION,
-    )
+    # Poll for results
+    last_status = None
+    while True:
+        response = await t0.optimization.gepa.get(task_id=task_id)
 
-    # Poll for completion
-    job_info = await t0.experimental_poll_optimization(job_handle=job_handle)
+        if response["status"] == "completed":
+            print("GEPA optimization completed!")
+            break
+        elif response["status"] == "error":
+            print(f"GEPA optimization failed: {response['error']}")
+            return
+        else:
+            progress = response.get("progress")
+            if progress:
+                status = (
+                    f"  Iteration {progress['current_iteration']}/{progress['max_iterations']}"
+                    f" — {progress['current_step']}"
+                )
+            else:
+                status = "  Pending..."
+            if status != last_status:
+                print(status)
+                last_status = status
+            await asyncio.sleep(10)
 
-    assert job_info.output is not None
-    variant_configs = job_info.output["content"]
+    # Print optimized variants and their evaluation statistics
+    for variant_name, stats in response["statistics"].items():
+        print(f"\n# Variant: {variant_name}")
+        for evaluator_name, evaluator_stats in stats.items():
+            print(
+                f"  {evaluator_name}: mean={evaluator_stats['mean']:.3f}"
+                f" stdev={evaluator_stats['stdev']:.3f}"
+                f" (n={evaluator_stats['count']})"
+            )
 
-    for variant_name, variant_config in variant_configs.items():
+    for variant_name, variant_config in response["variants"].items():
         print(f"\n# Optimized variant: {variant_name}")
         for template_name, template in variant_config["templates"].items():
             print(f"## '{template_name}' template:")

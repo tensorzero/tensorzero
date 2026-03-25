@@ -1251,6 +1251,8 @@ mod tests {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1289,6 +1291,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1346,6 +1350,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1387,6 +1393,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1456,6 +1464,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1469,6 +1478,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1507,6 +1518,8 @@ mod tests {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1633,6 +1646,8 @@ mod tests {
             input_tokens: Some(35),
             output_tokens: Some(46),
             cost: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1799,6 +1814,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         }));
 
         let models_arc = Arc::new(models);
@@ -1912,6 +1928,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             None, // raw_usage_entries
         )
@@ -1963,6 +1981,8 @@ mod tests {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
                     cost: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                 }),
                 raw_usage: None,
                 raw_response: None,

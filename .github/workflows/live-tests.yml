@@ -63,7 +63,7 @@ jobs:
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -76,11 +76,12 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/live-tests:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/live-tests:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 
@@ -167,7 +168,7 @@ jobs:
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -180,11 +181,12 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/live-tests:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/live-tests:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
 

@@ -4,8 +4,6 @@ use itertools::izip;
 use pyo3::exceptions::PyValueError;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -129,21 +127,7 @@ pub struct ChainOfThoughtConfigPyClass {
     pub inner: Arc<VariantInfo>,
 }
 
-/// This type is used to determine how to enforce JSON mode for a given variant.
-/// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
-/// we support coercing tool calls into JSON mode.
-/// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum JsonMode {
-    Off,
-    On,
-    Strict,
-    #[serde(alias = "implicit_tool")] // Legacy name (stored in CH --> permanent alias)
-    Tool,
-}
+pub use tensorzero_types::inference_params::JsonMode;
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
@@ -1200,6 +1184,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1249,6 +1234,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let json_mode = JsonMode::On;
@@ -1424,6 +1410,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1502,6 +1489,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1541,6 +1530,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1618,6 +1608,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1752,6 +1744,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1850,6 +1843,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1872,7 +1867,7 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1916,6 +1911,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         // Create an input message
@@ -2085,6 +2081,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })));
 
         let request_messages = vec![RequestMessage {
@@ -2228,7 +2225,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

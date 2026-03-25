@@ -385,7 +385,7 @@ impl Display for TensorZeroError {
 
 #[derive(Debug, thiserror::Error)]
 #[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] Error);
+pub struct TensorZeroInternalError(#[from] pub Error);
 
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]

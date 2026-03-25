@@ -44,7 +44,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -58,10 +58,11 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
@@ -97,7 +98,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -150,10 +151,11 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
@@ -223,7 +225,7 @@ jobs:
     if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
     steps:
       - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -277,10 +279,11 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
@@ -349,7 +352,7 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -411,12 +414,13 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/gateway-e2e:sha-${{ github.sha }}
-          docker pull tensorzero/ui-dev:sha-${{ github.sha }}
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker pull tensorzero/fixtures:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/provider-proxy:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
           docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
 
