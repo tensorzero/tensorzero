@@ -18,11 +18,12 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, Thought, batch::StartBatchProviderInferenceResponse,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse, Thought,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
@@ -332,9 +333,9 @@ enum SGLangFinishReason {
     Unknown,
 }
 
-impl From<SGLangFinishReason> for FinishReason {
-    fn from(reason: SGLangFinishReason) -> Self {
-        match reason {
+impl SGLangFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             SGLangFinishReason::Stop => FinishReason::Stop,
             SGLangFinishReason::Length => FinishReason::Length,
             SGLangFinishReason::ToolCalls => FinishReason::ToolCall,
@@ -479,7 +480,7 @@ fn sglang_to_tensorzero_chunk(
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
-            finish_reason = Some(reason.into());
+            finish_reason = Some(reason.into_finish_reason());
         }
         if let Some(reasoning) = choice.delta.reasoning_content {
             content.push(ContentBlockChunk::Thought(ThoughtChunk {
@@ -818,21 +819,20 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: Some(finish_reason.into()),
+        })
     }
 }
 

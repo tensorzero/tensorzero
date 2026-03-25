@@ -42,11 +42,12 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{Credential, ModelProvider};
@@ -632,24 +633,23 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: finish_reason.map(Into::into),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: finish_reason.map(TGIFinishReason::into_finish_reason),
+        })
     }
 }
 
@@ -689,11 +689,11 @@ struct TGIUsage {
     completion_tokens: u32,
 }
 
-impl From<TGIUsage> for Usage {
-    fn from(usage: TGIUsage) -> Self {
+impl TGIUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: Some(usage.prompt_tokens),
-            output_tokens: Some(usage.completion_tokens),
+            input_tokens: Some(self.prompt_tokens),
+            output_tokens: Some(self.completion_tokens),
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
             cost: None,
@@ -745,9 +745,9 @@ pub(super) enum TGIFinishReason {
     Unknown,
 }
 
-impl From<TGIFinishReason> for FinishReason {
-    fn from(finish_reason: TGIFinishReason) -> Self {
-        match finish_reason {
+impl TGIFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             TGIFinishReason::Stop => FinishReason::Stop,
             TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
@@ -841,12 +841,12 @@ fn tgi_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(TGIUsage::into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
-            finish_reason = Some(reason.into());
+            finish_reason = Some(reason.into_finish_reason());
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {

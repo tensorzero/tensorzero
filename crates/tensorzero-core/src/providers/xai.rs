@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tensorzero_types_providers::xai::{
     XAIAssistantRequestMessage, XAIRequestMessage, XAIResponse as XAIResponseGeneric,
-    XAISystemRequestMessage, XAIToolRequestMessage, XAIUsage, XAIUserRequestMessage,
+    XAISystemRequestMessage, XAIToolRequestMessage, XAIUserRequestMessage,
 };
 use tokio::time::Instant;
 use url::Url;
@@ -23,12 +23,13 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
+use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, Thought, Unknown, Usage,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, Thought, Unknown,
     batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
@@ -56,27 +57,6 @@ const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
 type XAIResponse = XAIResponseGeneric<OpenAIResponseChoice>;
-
-impl From<XAIUsage> for Usage {
-    fn from(usage: XAIUsage) -> Self {
-        // Add `reasoning_tokens` to `completion_tokens` for total output tokens
-        let output_tokens = match (usage.completion_tokens, usage.completion_tokens_details) {
-            (Some(completion), Some(details)) => {
-                Some(completion + details.reasoning_tokens.unwrap_or(0))
-            }
-            (Some(completion), None) => Some(completion),
-            (None, Some(details)) => details.reasoning_tokens,
-            (None, None) => None,
-        };
-        Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens,
-            provider_cache_read_input_tokens: None,
-            provider_cache_write_input_tokens: None,
-            cost: None,
-        }
-    }
-}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
@@ -848,21 +828,20 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        Ok(ProviderInferenceResponse::new(
-            ProviderInferenceResponseArgs {
-                output: content,
-                system,
-                input_messages,
-                raw_request,
-                raw_response: raw_response.clone(),
-                usage,
-                raw_usage,
-                relay_raw_response: None,
-                provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
-            },
-        ))
+        let raw_request = sanitize_raw_request(&input_messages, raw_request);
+        Ok(ProviderInferenceResponse {
+            id: model_inference_id,
+            output: content,
+            system,
+            input_messages,
+            raw_request,
+            raw_response: raw_response.clone(),
+            usage,
+            raw_usage,
+            relay_raw_response: None,
+            provider_latency: latency,
+            finish_reason: Some(finish_reason.into()),
+        })
     }
 }
 
@@ -928,6 +907,7 @@ mod tests {
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use tensorzero_types_providers::xai::XAIUsage;
 
     #[tokio::test]
     async fn test_xai_request_new() {

@@ -25,6 +25,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::{ApiType, RawUsageEntry};
 use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
