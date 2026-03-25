@@ -6,7 +6,7 @@ description: "TensorZero is an open-source alternative to Kong AI Gateway featur
 
 TensorZero and Kong both offer an LLM gateway, but they focus on different things.
 TensorZero is a full-stack LLMOps platform that provides an LLM gateway, observability, evaluations, optimization, and experimentation.
-Kong is a general-purpose API gateway platform with AI capabilities, offering enterprise governance, security, and a broad plugin ecosystem.
+Kong is a general-purpose API gateway platform whose AI Gateway adds LLM-specific capabilities like provider routing, governance plugins, and token-aware rate limiting on top of its existing enterprise features.
 That said, **you can get the best of both worlds by using them together: Kong at the edge for API management and TensorZero for LLMOps workflows**.
 
 ## Similarities
@@ -110,6 +110,6 @@ Is TensorZero missing any features that are really important to you? Let us know
 
 ## Combining TensorZero and Kong AI Gateway
 
-You can get the best of both worlds by using Kong at the edge for API management (authentication, rate limiting, multi-protocol ingress, AI governance plugins) and TensorZero for LLM-specific capabilities (observability, evaluations, optimization, experimentation).
+You can get the best of both worlds by using Kong Gateway (with or without AI Gateway features) at the edge for API management and TensorZero for LLM-specific capabilities (observability, evaluations, optimization, experimentation).
 
-In this architecture, Kong handles general platform-level concerns while TensorZero handles the LLMOps loop, giving you enterprise API governance alongside continuous model improvement.
+In this architecture, Kong handles platform-level concerns like authentication and enterprise governance while TensorZero handles the LLMOps loop, giving you enterprise API management alongside continuous model improvement.
