@@ -695,7 +695,7 @@ fn build_get_evaluation_results_query(
 
     // CTE 7: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
     qb.push(
-        r"),
+        r",
         filtered_feedback AS (
             SELECT * FROM (
                 SELECT DISTINCT ON (target_id, metric_name)
