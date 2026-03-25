@@ -3518,9 +3518,9 @@ dependencies = [
 
 [[package]]
 name = "init-tracing-opentelemetry"
-version = "0.36.0"
+version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65deb51caab84a57b478f5d23ac418288cd04fbc112f94ccedae98c297b4d945"
+checksum = "3910c652151948e4fb51a8c86cad13b8e3d36b9c4268060ca8456ddfad058749"
 dependencies = [
  "opentelemetry",
  "opentelemetry-aws",
@@ -4560,9 +4560,9 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry-otlp"
-version = "0.31.0"
+version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2366db2dca4d2ad033cad11e6ee42844fd727007af5ad04a1730f4cb8163bf"
+checksum = "1f69cd6acbb9af919df949cd1ec9e5e7fdc2ef15d234b6b795aaa525cc02f71f"
 dependencies = [
  "http 1.4.0",
  "opentelemetry",
@@ -7672,9 +7672,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry-instrumentation-sdk"
-version = "0.32.3"
+version = "0.32.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95d05242e88c440ef1bc997c7ae5e0ed76085c5d817ca29c0be12f0813b024e7"
+checksum = "bc2a7ad7b8bd011f482d1fdf95be20377cdd19f45aa9d1f9f902d746eddc3cad"
 dependencies = [
  "http 1.4.0",
  "opentelemetry",
