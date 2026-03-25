@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { getEffectiveApiKey } from "~/utils/api-key-override.server";
 import { getEnv } from "~/utils/env.server";
+import { buildGatewayUrl } from "~/utils/gateway-url";
 
 /**
  * Streaming API route that proxies SSE events from the TensorZero Gateway.
@@ -18,12 +19,13 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const lastEventId = url.searchParams.get("last_event_id");
 
   const env = getEnv();
-  const baseUrl = env.TENSORZERO_GATEWAY_URL.replace(/\/+$/, "");
-  const path = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`;
-  const queryString = lastEventId
-    ? `?last_event_id=${encodeURIComponent(lastEventId)}`
-    : "";
-  const gatewayUrl = `${baseUrl}${path}${queryString}`;
+  const gatewayUrl = buildGatewayUrl(
+    env.TENSORZERO_GATEWAY_URL,
+    `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`,
+  );
+  if (lastEventId) {
+    gatewayUrl.searchParams.set("last_event_id", lastEventId);
+  }
 
   const headers: Record<string, string> = {
     Accept: "text/event-stream",

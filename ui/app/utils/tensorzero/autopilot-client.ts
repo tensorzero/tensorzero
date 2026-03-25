@@ -1,4 +1,5 @@
 import { BaseTensorZeroClient } from "./base-client";
+import { buildGatewayUrl } from "../gateway-url";
 import type {
   ApproveAllToolCallsGatewayRequest,
   ApproveAllToolCallsResponse,
@@ -143,11 +144,13 @@ export class AutopilotClient extends BaseTensorZeroClient {
     sessionId: string,
     params?: StreamEventsParams,
   ): AsyncGenerator<GatewayStreamUpdate, void, unknown> {
-    const searchParams = new URLSearchParams();
-    if (params?.last_event_id)
-      searchParams.set("last_event_id", params.last_event_id);
-    const queryString = searchParams.toString();
-    const url = `${this.baseUrl}/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream${queryString ? `?${queryString}` : ""}`;
+    const url = buildGatewayUrl(
+      this.baseUrl,
+      `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`,
+    );
+    if (params?.last_event_id) {
+      url.searchParams.set("last_event_id", params.last_event_id);
+    }
 
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
