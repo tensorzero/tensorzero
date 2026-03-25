@@ -1,16 +1,9 @@
--- Add cache token columns to model_inferences.
--- These track prompt caching (cache reads and cache writes) reported by providers.
--- NULL means the provider did not report cache token information for this inference.
-ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS provider_cache_read_input_tokens INTEGER;
-ALTER TABLE tensorzero.model_inferences ADD COLUMN IF NOT EXISTS provider_cache_write_input_tokens INTEGER;
-
--- Add cache token columns to model_provider_statistics for aggregation.
+-- Add count_with_cost column: counts only inferences with non-null cost,
+-- giving per-inference accuracy instead of per-bucket granularity (#6574).
 ALTER TABLE tensorzero.model_provider_statistics
-    ADD COLUMN IF NOT EXISTS total_provider_cache_read_input_tokens BIGINT;
-ALTER TABLE tensorzero.model_provider_statistics
-    ADD COLUMN IF NOT EXISTS total_provider_cache_write_input_tokens BIGINT;
+    ADD COLUMN IF NOT EXISTS count_with_cost BIGINT;
 
--- Recreate the incremental refresh function to include cache token columns.
+-- Recreate the incremental refresh function to include count_with_cost
 CREATE OR REPLACE FUNCTION tensorzero.refresh_model_provider_statistics_incremental(
     lookback INTERVAL DEFAULT INTERVAL '10 minutes',
     full_refresh BOOLEAN DEFAULT FALSE
@@ -54,9 +47,7 @@ BEGIN
         total_output_tokens,
         inference_count,
         total_cost,
-        count_with_cost,
-        total_provider_cache_read_input_tokens,
-        total_provider_cache_write_input_tokens
+        count_with_cost
     )
     SELECT
         model_name,
@@ -67,9 +58,7 @@ BEGIN
         SUM(output_tokens)::BIGINT AS total_output_tokens,
         COUNT(*)::BIGINT AS inference_count,
         SUM(cost)::NUMERIC AS total_cost,
-        COUNT(cost)::BIGINT AS count_with_cost,
-        SUM(provider_cache_read_input_tokens)::BIGINT AS total_provider_cache_read_input_tokens,
-        SUM(provider_cache_write_input_tokens)::BIGINT AS total_provider_cache_write_input_tokens
+        COUNT(cost)::BIGINT AS count_with_cost
     FROM tensorzero.model_inferences
     WHERE created_at >= refresh_from
       AND created_at <= refresh_to
@@ -80,9 +69,7 @@ BEGIN
         total_output_tokens = EXCLUDED.total_output_tokens,
         inference_count = EXCLUDED.inference_count,
         total_cost = EXCLUDED.total_cost,
-        count_with_cost = EXCLUDED.count_with_cost,
-        total_provider_cache_read_input_tokens = EXCLUDED.total_provider_cache_read_input_tokens,
-        total_provider_cache_write_input_tokens = EXCLUDED.total_provider_cache_write_input_tokens;
+        count_with_cost = EXCLUDED.count_with_cost;
 
     -- Keep retention behavior correct: if old source partitions were dropped,
     -- remove stale stats buckets that are now older than the earliest source row.
@@ -110,3 +97,8 @@ BEGIN
     WHERE singleton = TRUE;
 END;
 $$;
+
+-- Backfill existing rows by running a full refresh so that `count_with_cost`
+-- is populated for all historical data (otherwise it remains NULL until the
+-- next incremental refresh covers those buckets).
+SELECT tensorzero.refresh_model_provider_statistics_incremental(full_refresh => TRUE);
