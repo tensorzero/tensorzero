@@ -48,8 +48,10 @@ describe("buildGatewayUrl", () => {
 
   it("still works for a gateway configured at the origin root", () => {
     expect(
-      buildGatewayUrl("http://tensorzero-gateway:3000/", "/internal/ui_config")
-        .toString(),
+      buildGatewayUrl(
+        "http://tensorzero-gateway:3000/",
+        "/internal/ui_config",
+      ).toString(),
     ).toBe("http://tensorzero-gateway:3000/internal/ui_config");
   });
 });
