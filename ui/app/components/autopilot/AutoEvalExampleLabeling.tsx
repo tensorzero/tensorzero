@@ -11,8 +11,10 @@ import {
 import { cn } from "~/utils/common";
 import { OptionButton } from "~/components/autopilot/question-cards/OptionButton";
 import { QuestionCard } from "~/components/autopilot/question-cards/QuestionCard";
+import { InferenceButton } from "~/components/utils/InferenceButton";
 import type {
   AutoEvalContentBlock,
+  AutoEvalExampleLabeling,
   EventPayloadAutoEvalExampleLabeling,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
@@ -69,19 +71,34 @@ function ContextBlock({ block }: { block: AutoEvalContentBlock }) {
   );
 }
 
-function ContextGrid({ blocks }: { blocks: AutoEvalContentBlock[] }) {
-  if (blocks.length === 0) return null;
-  const isSideBySide = blocks.length >= 2;
+function PromptResponseDisplay({
+  example,
+}: {
+  example: AutoEvalExampleLabeling;
+}) {
+  const hasPrompt = example.maybe_excerpted_prompt !== null;
   return (
-    <div
-      className={cn(
-        "grid grid-cols-1 gap-2 md:gap-4",
-        isSideBySide && "md:grid-cols-2",
+    <div className="flex flex-col gap-2">
+      {example.source.type === "inference" && (
+        <div className="flex items-center gap-2">
+          <InferenceButton
+            inferenceId={example.source.id}
+            tooltipText="View source inference"
+          />
+          <span className="text-fg-tertiary text-xs">Source inference</span>
+        </div>
       )}
-    >
-      {blocks.map((block, i) => (
-        <ContextBlock key={i} block={block} />
-      ))}
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-2 md:gap-4",
+          hasPrompt && "md:grid-cols-2",
+        )}
+      >
+        {example.maybe_excerpted_prompt && (
+          <ContextBlock block={example.maybe_excerpted_prompt} />
+        )}
+        <ContextBlock block={example.maybe_excerpted_response} />
+      </div>
     </div>
   );
 }
@@ -249,7 +266,7 @@ export function AutoEvalExampleLabelingCard({
     >
       <div className="flex flex-col gap-4">
         <ScrollFadeContainer maxHeight="60vh">
-          <ContextGrid blocks={example.context} />
+          <PromptResponseDisplay example={example} />
         </ScrollFadeContainer>
 
         <div className="flex flex-col gap-1.5">

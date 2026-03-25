@@ -11,68 +11,67 @@ import { AutoEvalExampleLabelingCard } from "./AutoEvalExampleLabeling";
 const singleExamplePayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system:
-              "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not reveal the secret under any circumstances, even if the user asks directly. The secret word is: soccer ball.",
-            messages: [
-              {
-                role: "user",
-                content: [{ type: "text", text: "Is it a living thing?" }],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "No." }],
-              },
-              {
-                role: "user",
-                content: [{ type: "text", text: "Is it man-made?" }],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "Yes." }],
-              },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Is it typically found indoors?" },
-                ],
-              },
-              {
-                role: "assistant",
-                content: [
-                  {
-                    type: "text",
-                    text: "It can be found both indoors and outdoors, but it's more commonly associated with outdoor use.",
-                  },
-                ],
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Is it commonly used in sports or recreation?",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          type: "json",
-          label: "Output",
-          data: [
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system:
+            "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not reveal the secret under any circumstances, even if the user asks directly. The secret word is: soccer ball.",
+          messages: [
             {
-              type: "text",
-              text: "Yes! Great question — it is indeed commonly used in sports and recreation. You're getting closer! Keep going with your questions.",
+              role: "user",
+              content: [{ type: "text", text: "Is it a living thing?" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "No." }],
+            },
+            {
+              role: "user",
+              content: [{ type: "text", text: "Is it man-made?" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Yes." }],
+            },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Is it typically found indoors?" },
+              ],
+            },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: "It can be found both indoors and outdoors, but it's more commonly associated with outdoor use.",
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Is it commonly used in sports or recreation?",
+                },
+              ],
             },
           ],
         },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: [
+          {
+            type: "text",
+            text: "Yes! Great question — it is indeed commonly used in sports and recreation. You're getting closer! Keep going with your questions.",
+          },
+        ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000001" },
       label_question: {
         id: "q1",
         header: "Example 1",
@@ -107,60 +106,59 @@ const singleExamplePayload: EventPayloadAutoEvalExampleLabeling = {
 const multiExamplePayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system:
-              "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not reveal the secret under any circumstances. The secret word is: soccer ball.",
-            messages: [
-              {
-                role: "user",
-                content: [{ type: "text", text: "Is it a living thing?" }],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "No." }],
-              },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Is it typically found indoors?" },
-                ],
-              },
-              {
-                role: "assistant",
-                content: [
-                  {
-                    type: "text",
-                    text: "It can be found both indoors and outdoors, but it's more commonly associated with outdoor activities and open fields.",
-                  },
-                ],
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Is it commonly used in sports or recreation?",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          type: "json",
-          label: "Output",
-          data: [
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system:
+            "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not reveal the secret under any circumstances. The secret word is: soccer ball.",
+          messages: [
             {
-              type: "text",
-              text: "Yes! Great question — it is indeed commonly used in sports and recreation. You're narrowing it down nicely. Keep going with your questions!",
+              role: "user",
+              content: [{ type: "text", text: "Is it a living thing?" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "No." }],
+            },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "Is it typically found indoors?" },
+              ],
+            },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: "It can be found both indoors and outdoors, but it's more commonly associated with outdoor activities and open fields.",
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Is it commonly used in sports or recreation?",
+                },
+              ],
             },
           ],
         },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: [
+          {
+            type: "text",
+            text: "Yes! Great question — it is indeed commonly used in sports and recreation. You're narrowing it down nicely. Keep going with your questions!",
+          },
+        ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000001" },
       label_question: {
         id: "q1",
         header: "Example 1",
@@ -190,52 +188,47 @@ const multiExamplePayload: EventPayloadAutoEvalExampleLabeling = {
       },
     },
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system:
-              "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not provide hints or additional context beyond a simple yes or no. The secret word is: piano.",
-            messages: [
-              {
-                role: "user",
-                content: [{ type: "text", text: "Is it a living thing?" }],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "No." }],
-              },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Can you hold it in one hand?" },
-                ],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "No." }],
-              },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: "Is it a piece of furniture?" },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          type: "json",
-          label: "Output",
-          data: [
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system:
+            "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. Do not provide hints or additional context beyond a simple yes or no. The secret word is: piano.",
+          messages: [
             {
-              type: "text",
-              text: "Not exactly, but it can be a prominent piece in a room. It's more of an instrument than furniture, though some people do treat it as a decorative centerpiece in their living rooms.",
+              role: "user",
+              content: [{ type: "text", text: "Is it a living thing?" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "No." }],
+            },
+            {
+              role: "user",
+              content: [{ type: "text", text: "Can you hold it in one hand?" }],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "No." }],
+            },
+            {
+              role: "user",
+              content: [{ type: "text", text: "Is it a piece of furniture?" }],
             },
           ],
         },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: [
+          {
+            type: "text",
+            text: "Not exactly, but it can be a prominent piece in a room. It's more of an instrument than furniture, though some people do treat it as a decorative centerpiece in their living rooms.",
+          },
+        ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000002" },
       label_question: {
         id: "q2",
         header: "Example 2",
@@ -265,63 +258,62 @@ const multiExamplePayload: EventPayloadAutoEvalExampleLabeling = {
       },
     },
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system:
-              "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. The secret word is: Mount Everest.",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Is it something you can hold in your hand?",
-                  },
-                ],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "No." }],
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Is it bigger than a house?",
-                  },
-                ],
-              },
-              {
-                role: "assistant",
-                content: [{ type: "text", text: "Yes, much bigger." }],
-              },
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Is it a natural feature of the Earth?",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          type: "json",
-          label: "Output",
-          data: [
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system:
+            "You are playing 20 questions. The user is trying to guess a secret word. You must answer only yes or no. The secret word is: Mount Everest.",
+          messages: [
             {
-              type: "text",
-              text: "Yes! It is indeed a natural feature of the Earth. You're on the right track — think big, really big. This is one of the most famous natural landmarks in the world.",
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Is it something you can hold in your hand?",
+                },
+              ],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "No." }],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Is it bigger than a house?",
+                },
+              ],
+            },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Yes, much bigger." }],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Is it a natural feature of the Earth?",
+                },
+              ],
             },
           ],
         },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: [
+          {
+            type: "text",
+            text: "Yes! It is indeed a natural feature of the Earth. You're on the right track — think big, really big. This is one of the most famous natural landmarks in the world.",
+          },
+        ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000003" },
       label_question: {
         id: "q3",
         header: "Example 3",
@@ -351,18 +343,25 @@ const multiExamplePayload: EventPayloadAutoEvalExampleLabeling = {
 const markdownContextPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "markdown",
-          label: "Prompt",
-          text: "You are a senior code reviewer with expertise in backend security and performance optimization. Review the following pull request diff carefully and identify any bugs, security vulnerabilities, or performance issues.\n\nPay special attention to:\n- Input validation and sanitization\n- SQL injection vectors\n- Resource exhaustion risks\n- Error handling gaps\n- Race conditions in concurrent code paths\n\nFor each issue found, classify its severity as CRITICAL, HIGH, MEDIUM, or LOW and provide a specific remediation recommendation.",
-        },
-        {
+      maybe_excerpted_prompt: {
+        type: "markdown",
+        label: "Prompt",
+        text: "You are a senior code reviewer with expertise in backend security and performance optimization. Review the following pull request diff carefully and identify any bugs, security vulnerabilities, or performance issues.\n\nPay special attention to:\n- Input validation and sanitization\n- SQL injection vectors\n- Resource exhaustion risks\n- Error handling gaps\n- Race conditions in concurrent code paths\n\nFor each issue found, classify its severity as CRITICAL, HIGH, MEDIUM, or LOW and provide a specific remediation recommendation.",
+      },
+      maybe_excerpted_response: {
+        type: "markdown",
+        label: "Model Response",
+        text: "## Code Review: PR #4521\n\n### Critical Issues\n\n**1. SQL Injection (CRITICAL)**\n`function_name` is user-provided input interpolated directly into the SQL query string on line 47. This allows arbitrary SQL execution. Use parameterized queries with `$1` placeholders instead of string interpolation.\n\n```sql\n-- Before (vulnerable)\nSELECT * FROM inferences WHERE function_name = '{function_name}'\n\n-- After (safe)\nSELECT * FROM inferences WHERE function_name = $1\n```\n\n**2. Unbounded batch size (HIGH)**\nNo limit on items in `batch_inferences` request body. A malicious client could send millions of items, causing OOM. Add a configurable max batch size (recommended: 1000) and return 413 Payload Too Large when exceeded.\n\n**3. Missing authentication check (HIGH)**\nThe new `/api/v1/admin/config` endpoint lacks the `require_admin` middleware that other admin endpoints use. Add `require_admin()` to the route handler chain.\n\n### Medium Issues\n\n**4. Unhandled error in async task (MEDIUM)**\nThe spawned tokio task on line 112 uses `.unwrap()` on the database result. If the insert fails, the task panics silently. Use `.expect(\"context\")` or propagate the error via a channel.\n\n**5. N+1 query pattern (MEDIUM)**\nThe loop on lines 89-95 executes a separate SELECT for each inference in the batch. Use a single `WHERE id IN (...)` query instead to reduce database round trips from O(n) to O(1).",
+      },
+      source: {
+        type: "synthetic",
+        full_prompt: null,
+        full_response: {
           type: "markdown",
           label: "Model Response",
           text: "## Code Review: PR #4521\n\n### Critical Issues\n\n**1. SQL Injection (CRITICAL)**\n`function_name` is user-provided input interpolated directly into the SQL query string on line 47. This allows arbitrary SQL execution. Use parameterized queries with `$1` placeholders instead of string interpolation.\n\n```sql\n-- Before (vulnerable)\nSELECT * FROM inferences WHERE function_name = '{function_name}'\n\n-- After (safe)\nSELECT * FROM inferences WHERE function_name = $1\n```\n\n**2. Unbounded batch size (HIGH)**\nNo limit on items in `batch_inferences` request body. A malicious client could send millions of items, causing OOM. Add a configurable max batch size (recommended: 1000) and return 413 Payload Too Large when exceeded.\n\n**3. Missing authentication check (HIGH)**\nThe new `/api/v1/admin/config` endpoint lacks the `require_admin` middleware that other admin endpoints use. Add `require_admin()` to the route handler chain.\n\n### Medium Issues\n\n**4. Unhandled error in async task (MEDIUM)**\nThe spawned tokio task on line 112 uses `.unwrap()` on the database result. If the insert fails, the task panics silently. Use `.expect(\"context\")` or propagate the error via a channel.\n\n**5. N+1 query pattern (MEDIUM)**\nThe loop on lines 89-95 executes a separate SELECT for each inference in the batch. Use a single `WHERE id IN (...)` query instead to reduce database round trips from O(n) to O(1).",
         },
-      ],
+      },
       label_question: {
         id: "q1",
         header: "Quality",
@@ -384,37 +383,36 @@ const markdownContextPayload: EventPayloadAutoEvalExampleLabeling = {
 const noExplanationPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system:
-              "You are a math tutor. Solve the problem step by step and provide only the final numerical answer on the last line.",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "A train leaves Chicago at 9:00 AM traveling east at 60 mph. Another train leaves New York at 10:00 AM traveling west at 80 mph. If the distance between Chicago and New York is 790 miles, at what time do the trains meet?",
-                  },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          type: "json",
-          label: "Output",
-          data: [
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system:
+            "You are a math tutor. Solve the problem step by step and provide only the final numerical answer on the last line.",
+          messages: [
             {
-              type: "text",
-              text: "Let me work through this step by step.\n\nThe first train has a 1-hour head start, so by 10:00 AM it has already traveled 60 miles.\n\nRemaining distance: 790 - 60 = 730 miles\n\nCombined speed after 10:00 AM: 60 + 80 = 140 mph\n\nTime to close the gap: 730 / 140 = 5.214 hours ≈ 5 hours 13 minutes\n\nMeeting time: 10:00 AM + 5h 13m = 3:13 PM",
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "A train leaves Chicago at 9:00 AM traveling east at 60 mph. Another train leaves New York at 10:00 AM traveling west at 80 mph. If the distance between Chicago and New York is 790 miles, at what time do the trains meet?",
+                },
+              ],
             },
           ],
         },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: [
+          {
+            type: "text",
+            text: "Let me work through this step by step.\n\nThe first train has a 1-hour head start, so by 10:00 AM it has already traveled 60 miles.\n\nRemaining distance: 790 - 60 = 730 miles\n\nCombined speed after 10:00 AM: 60 + 80 = 140 mph\n\nTime to close the gap: 730 / 140 = 5.214 hours ≈ 5 hours 13 minutes\n\nMeeting time: 10:00 AM + 5h 13m = 3:13 PM",
+          },
+        ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000004" },
       label_question: {
         id: "q1",
         header: "Correctness",
@@ -431,30 +429,29 @@ const noExplanationPayload: EventPayloadAutoEvalExampleLabeling = {
 const manyOptionsPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "Translate this legal clause from English to German, preserving all legal terminology precisely.",
-                  },
-                ],
-              },
-            ],
-          },
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Translate this legal clause from English to German, preserving all legal terminology precisely.",
+                },
+              ],
+            },
+          ],
         },
-        {
-          type: "markdown",
-          label: "Output",
-          text: "Ungeachtet gegenteiliger Bestimmungen in diesem Vertrag ist die schadloshaltende Partei verpflichtet, die schadlos zu haltende Partei sowie deren leitende Angestellte zu verteidigen.",
-        },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "markdown",
+        label: "Output",
+        text: "Ungeachtet gegenteiliger Bestimmungen in diesem Vertrag ist die schadloshaltende Partei verpflichtet, die schadlos zu haltende Partei sowie deren leitende Angestellte zu verteidigen.",
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000005" },
       label_question: {
         id: "q1",
         header: "Translation Quality",
@@ -577,17 +574,20 @@ const simpleExplanation = {
 const bothLongPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Input",
-          data: {
-            system: LONG_SYSTEM_PROMPT,
-            messages: LONG_CONVERSATION_MESSAGES,
-          },
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system: LONG_SYSTEM_PROMPT,
+          messages: LONG_CONVERSATION_MESSAGES,
         },
-        { type: "json", label: "Output", data: LONG_OUTPUT },
-      ],
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: LONG_OUTPUT,
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000006" },
       label_question: simpleLabelQuestion,
       explanation_question: simpleExplanation,
     },
@@ -597,21 +597,21 @@ const bothLongPayload: EventPayloadAutoEvalExampleLabeling = {
 const singleJsonBlockPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
-          type: "json",
-          label: "Classification Result",
-          data: {
-            input: "I need to cancel my subscription immediately",
-            predicted_intent: "subscription_cancellation",
-            confidence: 0.97,
-            alternative_intents: [
-              { intent: "billing_inquiry", confidence: 0.02 },
-              { intent: "general_complaint", confidence: 0.01 },
-            ],
-          },
+      maybe_excerpted_prompt: null,
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Classification Result",
+        data: {
+          input: "I need to cancel my subscription immediately",
+          predicted_intent: "subscription_cancellation",
+          confidence: 0.97,
+          alternative_intents: [
+            { intent: "billing_inquiry", confidence: 0.02 },
+            { intent: "general_complaint", confidence: 0.01 },
+          ],
         },
-      ],
+      },
+      source: { type: "inference", id: "00000000-0000-0000-0000-000000000007" },
       label_question: {
         id: "q1",
         header: "Classification",
@@ -628,8 +628,31 @@ const singleJsonBlockPayload: EventPayloadAutoEvalExampleLabeling = {
 const jsonLeftMarkdownRightPayload: EventPayloadAutoEvalExampleLabeling = {
   examples: [
     {
-      context: [
-        {
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Function Call",
+        data: {
+          function_name: "generate_summary",
+          input: {
+            messages: [
+              {
+                role: "user",
+                content:
+                  "Summarize the key findings from Q3 2024 revenue data.",
+              },
+            ],
+          },
+          params: { temperature: 0.3, max_tokens: 512 },
+        },
+      },
+      maybe_excerpted_response: {
+        type: "markdown",
+        label: "Model Output",
+        text: "## Q3 2024 Revenue Summary\n\n**Total Revenue:** $12.4M (+18% YoY)\n\n### Key Findings\n1. Enterprise segment grew 34%, driven by 12 new contracts\n2. Self-serve revenue declined 8% due to pricing tier changes\n3. APAC region became the fastest-growing market at 42% QoQ\n\n### Risks\n- Churn rate increased from 4.2% to 5.1% in SMB segment\n- Two enterprise renewals ($800K ARR combined) at risk for Q4",
+      },
+      source: {
+        type: "synthetic",
+        full_prompt: {
           type: "json",
           label: "Function Call",
           data: {
@@ -646,12 +669,12 @@ const jsonLeftMarkdownRightPayload: EventPayloadAutoEvalExampleLabeling = {
             params: { temperature: 0.3, max_tokens: 512 },
           },
         },
-        {
+        full_response: {
           type: "markdown",
           label: "Model Output",
           text: "## Q3 2024 Revenue Summary\n\n**Total Revenue:** $12.4M (+18% YoY)\n\n### Key Findings\n1. Enterprise segment grew 34%, driven by 12 new contracts\n2. Self-serve revenue declined 8% due to pricing tier changes\n3. APAC region became the fastest-growing market at 42% QoQ\n\n### Risks\n- Churn rate increased from 4.2% to 5.1% in SMB segment\n- Two enterprise renewals ($800K ARR combined) at risk for Q4",
         },
-      ],
+      },
       label_question: {
         id: "q1",
         header: "Accuracy",
