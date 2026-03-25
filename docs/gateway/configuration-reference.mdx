@@ -251,6 +251,7 @@ The `batch_writes` object supports the following fields:
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
 - `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
+- `write_queue_capacity` (integer, optional): Maximum number of inferences each gateway instance can hold in memory per table type before dropping new rows to protect against out-of-memory crashes. When set, the write queue is bounded: if full, new rows are dropped and an error is logged. When unset (default), the queue is unbounded — all rows are buffered in memory. We recommend setting this for high-throughput production deployments, and monitoring your gateway instances' memory usage to determine an appropriate value
 
 ```toml tensorzero.toml
 [gateway]
