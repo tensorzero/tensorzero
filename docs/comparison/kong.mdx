@@ -1,0 +1,108 @@
+---
+title: "Comparison: TensorZero vs. Kong AI Gateway"
+sidebarTitle: "Kong AI Gateway"
+description: "TensorZero is an open-source alternative to Kong AI Gateway featuring an LLM gateway, observability, optimization, evaluations, and experimentation."
+---
+
+TensorZero and Kong both offer an LLM gateway, but they focus on different things.
+TensorZero is a full-stack LLMOps platform that provides an LLM gateway, observability, evaluations, optimization, and experimentation.
+Kong is a general-purpose API gateway platform with AI capabilities, offering enterprise governance, security, and a broad plugin ecosystem.
+That said, **you can get the best of both worlds by using them together: Kong at the edge for API management and TensorZero for LLMOps workflows**.
+
+## Similarities
+
+- **Unified Inference API.**
+  Both TensorZero and Kong AI Gateway offer a unified API that allows you to access LLMs from multiple model providers with a single integration, with broad support for features like structured generation, tool use, file inputs, and more.<br />
+  [→ TensorZero Gateway Quickstart](/quickstart/)
+
+- **Automatic Fallbacks for Higher Reliability.**
+  Both TensorZero and Kong AI Gateway offer automatic fallbacks and load balancing between model providers to increase reliability.<br />
+  [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
+
+- **Open Source.**
+  Both TensorZero and Kong Gateway are open source (Apache 2.0).
+  However, TensorZero is fully open-source, whereas the Kong AI Gateway gates many features behind an enterprise license.
+
+- **Observability.**
+  Both TensorZero and Kong AI Gateway support OpenTelemetry for exporting traces and metrics.
+  TensorZero also provides its own LLM-native observability (structured inference + feedback data stored in your database), while Kong provides API-oriented observability (e.g. request latency breakdowns, GenAI OpenTelemetry span attributes).<br />
+  [→ TensorZero Observability Overview](/observability/)
+
+## Key Differences
+
+### TensorZero
+
+- **High Performance.**
+  The TensorZero Gateway was built from the ground up in Rust with performance in mind (&lt;1ms P99 latency at 10,000 QPS).
+  Kong AI Gateway does not publish comparable LLM-specific overhead benchmarks, and its performance is highly dependent on the plugin chain configured.<br />
+  [→ TensorZero Performance Benchmarks](/gateway/benchmarks/)
+
+- **Built-in LLM-Native Observability.**
+  TensorZero collects structured inference and feedback data in your own database (Postgres or ClickHouse), enabling a closed-loop system where production data feeds directly into evaluations, optimization, and experimentation.
+  Kong's observability is API-platform-native (standard request metrics and OpenTelemetry export) rather than LLM-workflow-native.
+
+- **Built-in Evaluations.**
+  TensorZero offers built-in evaluation functionality, including heuristics and LLM judges.
+  Kong AI Gateway does not offer native evaluation capabilities; evaluation is typically handled by external tools and pipelines.<br />
+  [→ TensorZero Evaluations Overview](/evaluations/)
+
+- **Automated Experimentation (A/B Testing).**
+  TensorZero offers built-in experimentation features, including adaptive A/B testing, to help you identify the best models and prompts for your use cases.
+  Kong AI Gateway can do weighted routing and load balancing, but metric-driven experiment orchestration is not a built-in feature.<br />
+  [→ Run adaptive A/B tests with TensorZero](/experimentation/run-adaptive-ab-tests/)
+
+- **Built-in Inference-Time Optimizations.**
+  TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
+  Kong AI Gateway does not offer inference-time optimizations in this sense.<br />
+  [→ Inference-Time Optimizations with TensorZero](/gateway/guides/inference-time-optimizations/)
+
+- **Optimization Recipes.**
+  TensorZero offers optimization recipes (e.g. supervised fine-tuning, RLHF, GEPA) that leverage your own data to improve your LLM's performance.
+  Kong AI Gateway does not offer any features like this.<br />
+  [→ LLM Optimization with TensorZero](/optimization/)
+
+- **Schemas, Templates, GitOps.**
+  TensorZero enables a schema-first approach to building LLM applications, allowing you to separate your application logic from LLM implementation details.
+  This approach allows you to more easily manage complex LLM applications, benefit from GitOps for prompt and configuration management, counterfactually improve data for optimization, and more.
+  Kong AI Gateway does not offer a comparable schema-first approach for LLM applications.<br />
+  [→ Prompt Templates & Schemas with TensorZero](/gateway/create-a-prompt-template)
+
+- **Inference Caching.**
+  TensorZero offers open-source inference caching features, allowing you to cache requests to improve latency and reduce costs.
+  Kong offers a semantic cache plugin, but it is only available as part of AI Gateway Enterprise.<br />
+  [→ Inference Caching with TensorZero](/gateway/guides/inference-caching/)
+
+### Kong AI Gateway
+
+- **General-Purpose API Gateway Platform.**
+  Kong AI Gateway is built on top of Kong Gateway, a mature API gateway and reverse proxy.
+  This means it inherits a rich set of platform capabilities that go far beyond LLM traffic.
+  TensorZero is purpose-built for LLM inference and LLMOps workflows, not general API management.
+
+- **Enterprise Governance.**
+  Kong AI Gateway offers dedicated AI governance plugins (e.g. PII sanitization) that can enforce policies at the gateway layer.
+  TensorZero does not offer built-in guardrails or content safety plugins; you'll need to integrate with other tools.
+
+- **Enterprise API Security Features.**
+  Kong offers RBAC with roles/permissions, vault-backed secret stores, and other security features on the enterprise plan.
+  TensorZero offers API key authentication, credential management, and custom rate limiting, but you'll need to layer specialized security and/or networking software for additional general-purpose API controls.
+
+- **Plugin Ecosystem.**
+  Kong offers a large plugin marketplace with categories spanning authentication, security, traffic control, logging, and more, plus a Plugin Development Kit (PDK) for custom plugins.
+  TensorZero supports industry standards (e.g. OpenTelemetry, OpenInference) and offers configuration-driven extensibility, but does not have a built-in plugin marketplace.
+
+- **Managed Service.**
+  Kong offers Konnect, a managed SaaS/hybrid platform for managing Kong Gateway deployments.
+  TensorZero is fully open-source and self-hosted.
+
+<Tip title="Feedback">
+
+Is TensorZero missing any features that are really important to you? Let us know on [GitHub Discussions](https://github.com/tensorzero/tensorzero/discussions), [Slack](https://www.tensorzero.com/slack), or [Discord](https://www.tensorzero.com/discord).
+
+</Tip>
+
+## Combining TensorZero and Kong AI Gateway
+
+You can get the best of both worlds by using Kong at the edge for API management (authentication, rate limiting, multi-protocol ingress, AI governance plugins) and TensorZero for LLM-specific capabilities (observability, evaluations, optimization, experimentation).
+
+In this architecture, Kong handles general platform-level concerns while TensorZero handles the LLMOps loop, giving you enterprise API governance alongside continuous model improvement.
