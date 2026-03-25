@@ -25,7 +25,7 @@ repos:
               crates/tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
       - id: end-of-file-fixer
-        exclude: \.minijinja$
+        exclude: (\.minijinja|target-check/)$
       - id: trailing-whitespace
 
   - repo: local
