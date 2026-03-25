@@ -690,6 +690,40 @@ function AutopilotSessionEventsPageContent({
     [sessionId, toast],
   );
 
+  const handleAnswerAutoEvalExampleLabeling = useCallback(
+    async (eventId: string, responses: Record<string, UserQuestionAnswer>) => {
+      if (questionSubmittedRef.current === eventId) return;
+      questionSubmittedRef.current = eventId;
+      setIsQuestionSubmitting(true);
+      try {
+        const res = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/answer-auto-eval-example-labeling`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              auto_eval_example_labeling_event_id: eventId,
+              responses,
+            }),
+          },
+        );
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+      } catch {
+        questionSubmittedRef.current = null;
+        toast.error({
+          title: "Failed to submit answers",
+          description:
+            "Could not submit example labeling responses. Please try again.",
+        });
+      } finally {
+        setIsQuestionSubmitting(false);
+      }
+    },
+    [sessionId, toast],
+  );
+
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
     interruptedSessionRef.current = sessionId;
@@ -981,7 +1015,7 @@ function AutopilotSessionEventsPageContent({
                   payload={oldestPendingUserQuestion.payload}
                   isLoading={isQuestionSubmitting}
                   onSubmit={(responses) =>
-                    handleAnswerQuestions(
+                    handleAnswerAutoEvalExampleLabeling(
                       oldestPendingUserQuestion.id,
                       responses,
                     )

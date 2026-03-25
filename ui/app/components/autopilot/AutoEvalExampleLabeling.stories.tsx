@@ -693,6 +693,120 @@ const jsonLeftMarkdownRightPayload: EventPayloadAutoEvalExampleLabeling = {
   ],
 };
 
+const HUGE_SYSTEM_PROMPT =
+  "You are an expert legal analyst specializing in international trade law, intellectual property rights, and cross-border regulatory compliance. Your role is to provide comprehensive legal analysis of complex commercial agreements, identifying potential risks, regulatory conflicts, and areas requiring further legal review.\n\nCRITICAL GUIDELINES:\n1. Always cite specific legal provisions, statutes, or case law when making assertions about legal requirements.\n2. Consider jurisdiction-specific variations — what is permissible under EU law may not be under US, Chinese, or Japanese law.\n3. Flag any clauses that could trigger antitrust concerns under the Sherman Act, EU Competition Law, or equivalent legislation.\n4. Identify force majeure provisions and assess their adequacy given current geopolitical risks.\n5. Review indemnification clauses for proportionality and enforceability.\n6. Assess data protection implications under GDPR, CCPA, PIPL, and other applicable privacy frameworks.\n7. Consider the interplay between contractual terms and mandatory statutory provisions that cannot be overridden by agreement.\n8. Flag any provisions that could be considered unconscionable or that create significant imbalances in the parties' obligations.\n9. Review dispute resolution clauses for practicality, including choice of law, forum selection, and arbitration provisions.\n10. Identify any representations or warranties that may be difficult to verify or that create ongoing compliance obligations.";
+
+const HUGE_CONVERSATION = [
+  {
+    role: "user" as const,
+    content: [
+      {
+        type: "text" as const,
+        text: 'Review the following Master Services Agreement between TechCorp International (a Delaware corporation) and GlobalData Solutions GmbH (a German company). The agreement covers cloud infrastructure services, data processing, and AI model training services. Key concerns: (1) The data processing addendum references GDPR compliance but the main agreement contains a broad indemnification clause that may conflict with GDPR\'s allocation of liability between controllers and processors. (2) The SLA commits to 99.99% uptime but the force majeure clause is unusually broad, potentially exempting most outage scenarios. (3) The IP assignment clause in Section 12.3 states that all "derivative works" created during the engagement belong to TechCorp, but the definition of derivative works is ambiguous and could potentially capture pre-existing IP of GlobalData. (4) The non-compete in Section 15.2 restricts GlobalData from offering similar services to any TechCorp competitor for 3 years post-termination, which may violate EU competition law. (5) The governing law clause specifies Delaware law but the dispute resolution clause requires arbitration in Singapore under ICC rules — assess enforceability.',
+      },
+    ],
+  },
+  {
+    role: "assistant" as const,
+    content: [
+      {
+        type: "text" as const,
+        text: "I'll analyze each concern systematically, cross-referencing applicable law across jurisdictions.\n\n## 1. GDPR Liability vs. Indemnification Conflict\n\nThis is a significant issue. Under GDPR Article 82, data subjects can claim compensation from either the controller or the processor. Article 82(2) provides that a processor is liable only where it has not complied with processor-specific obligations or has acted outside/contrary to the controller's instructions. The broad indemnification clause in the MSA that requires GlobalData to indemnify TechCorp for \"all losses arising from data processing activities\" effectively attempts to contractually override this statutory allocation.\n\n**Risk Assessment:** HIGH. Under German law (which would apply to GlobalData as the processor), courts have consistently held that contractual provisions cannot derogate from mandatory GDPR provisions to the detriment of data subjects. Furthermore, the German Federal Court (BGH) has indicated that indemnification clauses in B2B contracts that effectively circumvent GDPR's liability framework may be void under § 307 BGB (German Civil Code) as unreasonable general terms and conditions.\n\n**Recommendation:** Restructure the indemnification to align with GDPR Article 82's fault-based allocation. Each party should indemnify the other only for losses attributable to its own non-compliance with applicable data protection obligations.",
+      },
+    ],
+  },
+  {
+    role: "user" as const,
+    content: [
+      {
+        type: "text" as const,
+        text: "Continue with the analysis of concerns 2-5. For the IP clause, also consider the implications under German copyright law (UrhG) which has different rules about work-for-hire compared to US law.",
+      },
+    ],
+  },
+  {
+    role: "assistant" as const,
+    content: [
+      {
+        type: "text" as const,
+        text: '## 2. SLA vs. Force Majeure Tension\n\nThe 99.99% uptime commitment (approximately 52.6 minutes of permitted downtime per year) is an aggressive SLA. However, the force majeure clause\'s breadth fundamentally undermines it.\n\nThe clause includes: "acts of God, war, terrorism, pandemics, government actions, **supply chain disruptions**, **cyber attacks**, **third-party service failures**, **software bugs**, power outages, and **any other events beyond the reasonable control of the affected party**." (emphasis on problematic terms)\n\n**Critical Issues:**\n- "Software bugs" as force majeure is legally dubious — bugs in a vendor\'s own software are arguably within their control and are a core operational risk they\'re being paid to manage.\n- "Third-party service failures" is problematic for a cloud infrastructure provider whose entire service depends on third-party infrastructure (AWS/Azure/GCP). This essentially provides a blanket excuse for any upstream outage.\n- The catch-all "any other events beyond reasonable control" is unenforceable in many jurisdictions due to vagueness.\n\n**Under German law:** § 276 BGB establishes a general standard of care. German courts (particularly the OLG München) have held that professional service providers cannot invoke force majeure for events that fall within their professional sphere of risk. Software bugs and dependency on third-party infrastructure would likely fall within TechCorp\'s sphere.\n\n## 3. IP Assignment — Derivative Works\n\nThis is perhaps the most dangerous provision in the agreement.\n\n**Under US Law (Delaware):** The "work made for hire" doctrine under 17 USC § 101 is narrowly defined and only applies to (a) works by employees within the scope of employment, or (b) specifically enumerated categories of specially commissioned works with a written agreement. Since GlobalData is an independent contractor (not an employee), and most software development doesn\'t fall within the enumerated categories, the work-for-hire doctrine likely doesn\'t apply. The assignment clause must therefore function as a present assignment of future rights.\n\n**Under German Law (UrhG):** This is where it gets significantly more complex.\n- **§ 7 UrhG:** The author (Urheber) is always the natural person who created the work. Companies cannot be "authors" under German law.\n- **§ 29 UrhG:** Copyright itself is **not transferable** under German law. Only usage rights (Nutzungsrechte) can be granted under §§ 31 ff. UrhG.\n- **§ 31(5) UrhG (Zweckübertragungslehre — Purpose Transfer Doctrine):** Where the scope of granted usage rights is unclear, the interpretation is guided by the purpose of the contract. Rights are only granted to the extent necessary to fulfill the contractual purpose.\n- **§ 40a UrhG:** Authors have a right to further exploitation if the rights holder doesn\'t exercise the granted rights within a reasonable timeframe.\n\n**The fundamental problem:** The clause\'s definition of "derivative works" — "any work that is based upon, incorporates, modifies, or is otherwise derived from any work product created during the engagement period" — could capture GlobalData\'s pre-existing libraries, frameworks, and tools if any portion of them is used during the engagement. Under US law, this broad assignment might be enforceable (though unconscionability arguments exist). Under German law, the Purpose Transfer Doctrine would likely limit the scope significantly, but the ambiguity creates enormous litigation risk.\n\n**Recommendation:** Define "derivative works" precisely to exclude pre-existing IP. Include a schedule of GlobalData\'s pre-existing IP with a license-back provision rather than assignment.\n\n## 4. Non-Compete — EU Competition Law\n\nThe 3-year, unlimited-scope non-compete in Section 15.2 raises serious red flags under EU competition law.\n\n**Under Regulation (EU) 330/2010 (Vertical Block Exemption):** Post-term non-competes are only block-exempted if they (a) relate to goods or services competing with the contract services, (b) are limited to the premises from which the buyer operated during the contract, and (c) do not exceed 1 year after termination. The 3-year restriction exceeds this by 200%.\n\n**Under German Competition Law (GWB):** § 1 GWB (equivalent to Article 101 TFEU) prohibits agreements that restrict competition. The Bundeskartellamt has consistently challenged overly broad non-competes in technology services agreements.\n\n**Risk:** The clause is likely void under EU/German competition law. Moreover, it could trigger regulatory scrutiny and fines.\n\n## 5. Governing Law + Dispute Resolution\n\nThe combination of Delaware governing law with ICC arbitration in Singapore is unusual but not inherently problematic.\n\n**Enforceability concerns:**\n- Under the New York Convention (1958), arbitral awards from ICC Singapore would be enforceable in both the US and Germany.\n- However, German courts may refuse enforcement under Article V(2)(b) if the award violates German public policy (ordre public), which could include mandatory GDPR provisions or competition law.\n- Delaware choice of law may not be effective for matters governed by mandatory EU regulations (GDPR, competition law) — these apply regardless of contractual choice of law per their own terms.',
+      },
+    ],
+  },
+  {
+    role: "user" as const,
+    content: [
+      {
+        type: "text" as const,
+        text: "Given this analysis, what would your overall risk assessment be, and what are the top 3 changes you would recommend before GlobalData signs this agreement?",
+      },
+    ],
+  },
+];
+
+const HUGE_OUTPUT = [
+  {
+    type: "text" as const,
+    text: '## Overall Risk Assessment: HIGH\n\nThis agreement, in its current form, presents material legal risks for GlobalData Solutions GmbH. While the commercial terms may be attractive, several provisions could expose GlobalData to significant financial liability, IP loss, and regulatory risk.\n\n### Risk Matrix\n\n| Issue | Severity | Likelihood | Impact |\n|-------|----------|------------|--------|\n| GDPR indemnification conflict | High | Very Likely | Financial liability, regulatory fines |\n| IP derivative works overreach | Critical | Likely | Loss of pre-existing IP portfolio |\n| Non-compete enforceability | High | Certain | Business restriction, antitrust exposure |\n| SLA/Force majeure mismatch | Medium | Likely | Service credit disputes |\n| Governing law/arbitration split | Low-Medium | Possible | Enforcement complications |\n\n### Top 3 Recommended Changes\n\n**1. Restructure IP Provisions (CRITICAL)**\n- Replace the broad "derivative works" assignment with a narrow assignment limited to custom deliverables specifically created for TechCorp under this engagement.\n- Add a comprehensive schedule of GlobalData\'s pre-existing IP (background IP) with a clear license-back provision.\n- Define "foreground IP" (created specifically for the engagement) separately from "sideground IP" (improvements to background IP made during the engagement).\n- For sideground IP, grant TechCorp a non-exclusive, perpetual license rather than assignment.\n- This approach aligns with standard industry practice (e.g., the ITMA model clauses) and avoids the German copyright transferability issue.\n\n**2. Align Data Processing Terms with GDPR Framework (HIGH)**\n- Rewrite the indemnification clause to follow GDPR Article 82\'s fault-based allocation model.\n- Ensure the Data Processing Addendum (DPA) takes precedence over conflicting terms in the MSA — add an explicit hierarchy of documents clause.\n- Include mutual audit rights consistent with GDPR Article 28(3)(h).\n- Address cross-border data transfer mechanisms explicitly (Standard Contractual Clauses, adequacy decisions) following the Schrems II framework.\n\n**3. Remove or Substantially Narrow the Non-Compete (HIGH)**\n- Option A (preferred): Remove the non-compete entirely and rely on confidentiality obligations and IP protections instead.\n- Option B: Limit to 12 months post-termination, restricted to the specific services provided under this agreement and the specific geographic markets where TechCorp operates.\n- Option C: Convert to a non-solicitation of TechCorp\'s customers (narrower and more likely enforceable).\n- Regardless of option chosen, obtain competition law advice from a German/EU specialist before finalizing.\n\n### Additional Recommendations\n- Narrow the force majeure clause to exclude software bugs, third-party dependencies that TechCorp selected, and the catch-all provision.\n- Add a dispute resolution escalation ladder (negotiation → mediation → arbitration) to reduce costs.\n- Consider splitting governing law: Delaware for commercial terms, EU/German law for data protection and competition matters.\n- Include a severability clause that specifically addresses the non-compete to prevent it from tainting the entire agreement if struck down.',
+  },
+];
+
+const hugeInputPayload: EventPayloadAutoEvalExampleLabeling = {
+  examples: [
+    {
+      maybe_excerpted_prompt: {
+        type: "json",
+        label: "Input",
+        data: {
+          system: HUGE_SYSTEM_PROMPT,
+          messages: HUGE_CONVERSATION,
+        },
+      },
+      maybe_excerpted_response: {
+        type: "json",
+        label: "Output",
+        data: HUGE_OUTPUT,
+      },
+      source: {
+        type: "inference",
+        id: "00000000-0000-0000-0000-000000000008",
+      },
+      label_question: {
+        id: "q1",
+        header: "Legal Accuracy",
+        question:
+          "Is the legal analysis accurate and well-supported by relevant law?",
+        options: [
+          {
+            id: "yes",
+            label: "Yes",
+            description:
+              "Accurate citations, correct legal reasoning, appropriate jurisdiction analysis",
+          },
+          {
+            id: "mostly",
+            label: "Mostly",
+            description:
+              "Generally accurate with minor errors or missing considerations",
+          },
+          {
+            id: "no",
+            label: "No",
+            description:
+              "Significant legal errors, incorrect citations, or flawed reasoning",
+          },
+        ],
+      },
+      explanation_question: {
+        id: "eq1",
+        header: "Details",
+        question:
+          "Note any specific legal errors, missing considerations, or particularly strong analysis points.",
+      },
+    },
+  ],
+};
+
 // ── Meta ──────────────────────────────────────────────────────────────
 
 const meta = {
@@ -779,6 +893,14 @@ export const SingleJsonBlock: Story = {
 export const JsonLeftMarkdownRight: Story = {
   args: {
     payload: jsonLeftMarkdownRightPayload,
+    isLoading: false,
+    onSubmit: () => {},
+  },
+};
+
+export const HugeInput: Story = {
+  args: {
+    payload: hugeInputPayload,
     isLoading: false,
     onSubmit: () => {},
   },
