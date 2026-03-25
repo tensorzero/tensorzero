@@ -52,7 +52,9 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
     let test_snapshot_hash = "12345678901234567890";
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some("test_dataset".to_string()),
         datapoint_ids: None,
         variant_name: "test_variant".to_string(),
@@ -123,7 +125,9 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some("test_dataset".to_string()),
         datapoint_ids: None,
         variant_name: "test_variant".to_string(),
@@ -207,7 +211,9 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let expected_datapoint_ids = datapoint_ids.clone();
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(datapoint_ids),
         variant_name: "test_variant".to_string(),
@@ -288,7 +294,9 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let expected_precision_targets = precision_targets.clone();
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some("test_dataset".to_string()),
         datapoint_ids: None,
         variant_name: "test_variant".to_string(),
@@ -356,7 +364,9 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "nonexistent_evaluation".to_string(),
+        evaluation_name: Some("nonexistent_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some("test_dataset".to_string()),
         datapoint_ids: None,
         variant_name: "test_variant".to_string(),
@@ -487,7 +497,9 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let tool_call_event_id = Uuid::now_v7();
 
     let llm_params = RunEvaluationToolParams {
-        evaluation_name: "test_evaluation".to_string(),
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: Some("test_dataset".to_string()),
         datapoint_ids: None,
         variant_name: "test_variant".to_string(),
@@ -607,4 +619,121 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
         dp3.evaluator_errors.is_empty(),
         "failed datapoint should have empty evaluator_errors (per API semantics)"
     );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_run_evaluation_tool_rejects_both_evaluation_name_and_evaluator_names(pool: PgPool) {
+    let llm_params = RunEvaluationToolParams {
+        evaluation_name: Some("test_evaluation".to_string()),
+        function_name: Some("my_function".to_string()),
+        evaluator_names: Some(vec!["evaluator_a".to_string()]),
+        dataset_name: Some("test_dataset".to_string()),
+        datapoint_ids: None,
+        variant_name: "test_variant".to_string(),
+        concurrency: 10,
+        max_datapoints: None,
+        precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id: Uuid::now_v7(),
+        session_id: Uuid::now_v7(),
+        config_snapshot_hash: "1234567".to_string(),
+        optimization: Default::default(),
+    };
+
+    // The mock client should never be called — validation fails first
+    let mock_client = MockTensorZeroClient::new();
+
+    let tool = RunEvaluationTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await;
+
+    let err = result
+        .expect_err("should reject when both evaluation_name and evaluator_names are provided");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("not both"),
+        "error should mention mutual exclusivity, got: {err_str}"
+    );
+}
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_run_evaluation_tool_with_function_name_and_evaluator_names(pool: PgPool) {
+    let mock_response = create_mock_run_evaluation_response();
+
+    let session_id = Uuid::now_v7();
+    let tool_call_event_id = Uuid::now_v7();
+
+    let llm_params = RunEvaluationToolParams {
+        evaluation_name: None,
+        function_name: Some("my_function".to_string()),
+        evaluator_names: Some(vec!["evaluator_a".to_string(), "evaluator_b".to_string()]),
+        dataset_name: Some("test_dataset".to_string()),
+        datapoint_ids: None,
+        variant_name: "test_variant".to_string(),
+        concurrency: 10,
+        max_datapoints: None,
+        precision_targets: HashMap::new(),
+        inference_cache: CacheEnabledMode::Off,
+        include_datapoint_results: false,
+    };
+
+    let side_info = AutopilotSideInfo {
+        tool_call_event_id,
+        session_id,
+        config_snapshot_hash: "1234567".to_string(),
+        optimization: Default::default(),
+    };
+
+    let mut mock_client = MockTensorZeroClient::new();
+    mock_client
+        .expect_action()
+        .withf(move |_, input, _| {
+            let ActionInput::RunEvaluation(params) = input else {
+                return false;
+            };
+            params.evaluation_name.is_none()
+                && params.function_name.as_deref() == Some("my_function")
+                && params.evaluator_names.as_deref()
+                    == Some(&["evaluator_a".to_string(), "evaluator_b".to_string()])
+                && params.dataset_name == Some("test_dataset".to_string())
+                && params.variant_name == "test_variant"
+        })
+        .returning(move |_, _, _| Ok(ActionResponse::RunEvaluation(mock_response.clone())));
+
+    let tool = RunEvaluationTool;
+    let t0_client: Arc<dyn durable_tools::TensorZeroClient> = Arc::new(mock_client);
+    let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
+        Arc::new(durable_tools::NoopHeartbeater);
+    let registry = ToolRegistry::new();
+    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+
+    let result = tool
+        .execute_erased(
+            serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
+            serde_json::to_value(&side_info).expect("Failed to serialize side_info"),
+            ctx,
+            "test-idempotency-key",
+        )
+        .await
+        .expect(
+            "RunEvaluationTool execution should succeed with function_name and evaluator_names",
+        );
+
+    assert!(result.is_object(), "Result should be a JSON object");
 }

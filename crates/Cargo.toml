@@ -64,6 +64,7 @@ axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.102"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.60", features = ["derive", "env"] }
+http-body-util = "0.1.3"
 futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }

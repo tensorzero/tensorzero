@@ -1894,7 +1894,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     };
 
     for should_be_cached in [false, true] {
-        let response = client.inference(params.clone()).await.unwrap();
+        let response = client
+            .inference(params.clone())
+            .await
+            .expect("image inference should succeed");
 
         let InferenceOutput::NonStreaming(response) = response else {
             panic!("Expected non-streaming inference response");
@@ -1915,9 +1918,9 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let mut image_png = ImageReader::new(Cursor::new(FERRIS_PNG))
         .with_guessed_format()
-        .unwrap()
+        .expect("FERRIS_PNG should have a guessable format")
         .decode()
-        .unwrap();
+        .expect("FERRIS_PNG should decode successfully");
 
     // Get 32 random bytes, and write then to the image. This should force a cache miss
     let mut rng = rand::rng();
@@ -1926,7 +1929,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         .collect();
     image_png
         .as_mut_rgba8()
-        .unwrap()
+        .expect("FERRIS_PNG should decode as RGBA8")
         .as_flat_samples_mut()
         .samples[0..(random_bytes.len())]
         .copy_from_slice(&random_bytes);
@@ -1934,7 +1937,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let mut updated_image = Cursor::new(Vec::new());
     image_png
         .write_to(&mut updated_image, ImageFormat::Png)
-        .unwrap();
+        .expect("should be able to re-encode modified PNG");
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
@@ -1943,7 +1946,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             .expect("test data should be valid"),
     ));
 
-    let response = client.inference(params.clone()).await.unwrap();
+    let response = client
+        .inference(params.clone())
+        .await
+        .expect("modified image inference should succeed");
 
     let InferenceOutput::NonStreaming(response) = response else {
         panic!("Expected non-streaming inference response");

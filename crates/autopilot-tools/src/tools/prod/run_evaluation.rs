@@ -23,7 +23,17 @@ use autopilot_client::AutopilotSideInfo;
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
-    pub evaluation_name: String,
+    /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
+    #[serde(default)]
+    pub evaluation_name: Option<String>,
+    /// Name of the function to evaluate when using `evaluator_names`.
+    /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
+    #[serde(default)]
+    pub function_name: Option<String>,
+    /// Function-scoped evaluator names to run.
+    /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
+    #[serde(default)]
+    pub evaluator_names: Option<Vec<String>>,
     /// Name of the dataset to evaluate on.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
     #[serde(default)]
@@ -104,8 +114,10 @@ impl ToolMetadata for RunEvaluationTool {
 
     fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
-            "Run an evaluation on a dataset. This runs inference on each datapoint using the \
-             specified variant, then runs the configured evaluators. Returns statistics \
+            "Run an evaluation on a dataset. Supports two modes: (1) provide `evaluation_name` \
+             to run a named evaluation, or (2) provide `function_name` and `evaluator_names` \
+             to run specific evaluators for a function. This runs inference on each datapoint \
+             using the specified variant, then runs the configured evaluators. Returns statistics \
              (mean, stderr, count) for each evaluator.",
         )
     }
@@ -117,11 +129,20 @@ impl ToolMetadata for RunEvaluationTool {
     fn parameters_schema(&self) -> ToolResult<Schema> {
         let schema = serde_json::json!({
             "type": "object",
-            "description": "Run an evaluation on a dataset using configured evaluators.",
+            "description": "Run an evaluation on a dataset. Either provide `evaluation_name` to run a named evaluation, or provide `function_name` and `evaluator_names` to run specific evaluators for a function.",
             "properties": {
                 "evaluation_name": {
                     "type": "string",
-                    "description": "Name of the evaluation to run (must be defined in config)."
+                    "description": "Name of the evaluation to run (must be defined in config). Use this OR (`function_name` + `evaluator_names`)."
+                },
+                "function_name": {
+                    "type": "string",
+                    "description": "Name of the function to evaluate. Must be provided together with `evaluator_names`. Use this OR `evaluation_name`."
+                },
+                "evaluator_names": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Function-scoped evaluator names to run. Must be provided together with `function_name`. Use this OR `evaluation_name`."
                 },
                 "dataset_name": {
                     "type": "string",
@@ -159,7 +180,7 @@ impl ToolMetadata for RunEvaluationTool {
                     "description": "Include per-datapoint results in the response (default: false)."
                 }
             },
-            "required": ["evaluation_name", "variant_name"],
+            "required": ["variant_name"],
             "additionalProperties": false
         });
 
@@ -184,10 +205,35 @@ impl SimpleTool for RunEvaluationTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
+        let has_evaluation_name = llm_params.evaluation_name.is_some();
+        let has_function_evaluators =
+            llm_params.function_name.is_some() || llm_params.evaluator_names.is_some();
+
+        if has_evaluation_name && has_function_evaluators {
+            return Err(AutopilotToolError::validation(
+                "Provide either `evaluation_name` or (`function_name` + `evaluator_names`), not both",
+            )
+            .into());
+        }
+        if !has_evaluation_name && !has_function_evaluators {
+            return Err(AutopilotToolError::validation(
+                "Must provide either `evaluation_name` or both `function_name` and `evaluator_names`",
+            )
+            .into());
+        }
+        if has_function_evaluators
+            && (llm_params.function_name.is_none() || llm_params.evaluator_names.is_none())
+        {
+            return Err(AutopilotToolError::validation(
+                "`function_name` and `evaluator_names` must both be provided together",
+            )
+            .into());
+        }
+
         let params = RunEvaluationParams {
-            evaluation_name: Some(llm_params.evaluation_name),
-            function_name: None,
-            evaluator_names: None,
+            evaluation_name: llm_params.evaluation_name,
+            function_name: llm_params.function_name,
+            evaluator_names: llm_params.evaluator_names,
             dataset_name: llm_params.dataset_name,
             datapoint_ids: llm_params.datapoint_ids,
             variant_name: llm_params.variant_name,

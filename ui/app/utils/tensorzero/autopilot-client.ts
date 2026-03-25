@@ -22,10 +22,17 @@ import type {
  */
 export class AutopilotClient extends BaseTensorZeroClient {
   private betaTools: string | null;
+  private extraHeaders: Record<string, string>;
 
-  constructor(baseUrl: string, apiKey?: string, betaTools?: string) {
+  constructor(
+    baseUrl: string,
+    apiKey?: string,
+    betaTools?: string,
+    extraHeaders?: Record<string, string>,
+  ) {
     super(baseUrl, apiKey);
     this.betaTools = betaTools ?? null;
+    this.extraHeaders = extraHeaders ?? {};
   }
 
   /**
@@ -94,6 +101,8 @@ export class AutopilotClient extends BaseTensorZeroClient {
     if (this.betaTools) {
       headers["tensorzero-beta-tools"] = this.betaTools;
     }
+    // Extra headers override betaTools on conflict
+    Object.assign(headers, this.extraHeaders);
     const response = await this.fetch(endpoint, {
       method: "POST",
       body: JSON.stringify(request),

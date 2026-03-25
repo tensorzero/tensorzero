@@ -81,6 +81,16 @@ pub struct ModelInference {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Vec<ContentBlockOutput>>,
 
+    /// Number of input tokens read from the provider's prompt cache.
+    /// None if the provider does not report cache token counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_cache_read_input_tokens: Option<u32>,
+
+    /// Number of input tokens written to the provider's prompt cache.
+    /// None if the provider does not report cache token counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_cache_write_input_tokens: Option<u32>,
+
     /// Whether the inference was cached.
     pub cached: bool,
 
@@ -148,6 +158,8 @@ async fn get_model_inferences(
                 model_provider_name: row.model_provider_name,
                 input_tokens: row.input_tokens,
                 output_tokens: row.output_tokens,
+                provider_cache_read_input_tokens: row.provider_cache_read_input_tokens,
+                provider_cache_write_input_tokens: row.provider_cache_write_input_tokens,
                 response_time_ms: row.response_time_ms,
                 ttft_ms: row.ttft_ms,
                 timestamp,

@@ -511,6 +511,8 @@ pub enum ToolCallDecisionSource {
     Ui,
     Automatic,
     Whitelist,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -568,8 +570,12 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
-    Rejected { reason: String },
+    Rejected {
+        reason: String,
+    },
     NotAvailable,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 /// Authorization status for tool calls as seen by gateway consumers.
@@ -597,6 +603,9 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
             }
             ToolCallAuthorizationStatus::NotAvailable => {
                 Err("NotAvailable status should be filtered before conversion")
+            }
+            ToolCallAuthorizationStatus::Interrupted => {
+                Err("Interrupted status should be filtered before conversion")
             }
         }
     }

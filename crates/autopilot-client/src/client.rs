@@ -319,12 +319,16 @@ impl AutopilotClient {
     /// Check if an event should be filtered from responses.
     ///
     /// Returns `true` for:
-    /// - `ToolCallAuthorization` events with `NotAvailable` status
+    /// - `ToolCallAuthorization` events with `NotAvailable` or `Interrupted` status
     /// - `ToolCall` events for unknown tools (not in `available_tools`)
     fn should_filter_event(event: &Event, available_tools: &HashSet<String>) -> bool {
         match &event.payload {
             EventPayload::ToolCallAuthorization(auth)
-                if matches!(auth.status, ToolCallAuthorizationStatus::NotAvailable) =>
+                if matches!(
+                    auth.status,
+                    ToolCallAuthorizationStatus::NotAvailable
+                        | ToolCallAuthorizationStatus::Interrupted
+                ) =>
             {
                 true
             }
@@ -686,9 +690,10 @@ impl AutopilotClient {
         let tool_call_event_id = match &request.payload {
             CreateEventPayload::ToolCallAuthorization(auth) => match auth.status {
                 ToolCallAuthorizationStatus::Approved => Some(auth.tool_call_event_id),
-                // Don't start the tool if rejected or not available
+                // Don't start the tool if rejected, not available, or interrupted
                 ToolCallAuthorizationStatus::Rejected { .. }
-                | ToolCallAuthorizationStatus::NotAvailable => None,
+                | ToolCallAuthorizationStatus::NotAvailable
+                | ToolCallAuthorizationStatus::Interrupted => None,
             },
             _ => None,
         };
