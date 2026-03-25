@@ -1272,16 +1272,16 @@ mod tests {
 
     #[test]
     fn test_deserialize_option_f64_from_number() {
-        let json = r#"{"value": 3.14}"#;
+        let json = r#"{"value": 2.718}"#;
         let result: TestOptionF64 = serde_json::from_str(json).unwrap();
-        assert_eq!(result.value, Some(3.14));
+        assert_eq!(result.value, Some(2.718));
     }
 
     #[test]
     fn test_deserialize_option_f64_from_string() {
-        let json = r#"{"value": "3.14"}"#;
+        let json = r#"{"value": "2.718"}"#;
         let result: TestOptionF64 = serde_json::from_str(json).unwrap();
-        assert_eq!(result.value, Some(3.14));
+        assert_eq!(result.value, Some(2.718));
     }
 
     #[test]
