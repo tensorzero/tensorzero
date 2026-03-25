@@ -342,6 +342,9 @@ test.describe("Auto-eval example labeling", () => {
     await expect(page.getByText("Example Label")).toBeVisible({
       timeout: 10000,
     });
+    await expect(
+      page.getByText("Label examples to improve evaluator accuracy"),
+    ).not.toBeVisible();
 
     // Verify the response was persisted correctly
     const answer = queryFirstAutoEvalAnswerPayload(sessionId);

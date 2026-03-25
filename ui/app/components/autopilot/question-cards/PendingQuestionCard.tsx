@@ -80,6 +80,8 @@ export function PendingQuestionCard({
       onDismiss={handleDismiss}
       isLoading={isLoading}
       className={className}
+      contentClassName="max-h-[48vh] overflow-y-auto"
+      dismissAriaLabel="Dismiss questions"
       activeStep={state.activeStep}
       steps={
         !state.isSingleQuestion

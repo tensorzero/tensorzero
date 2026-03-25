@@ -12,6 +12,8 @@ type QuestionCardProps = {
   isLoading: boolean;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
+  dismissAriaLabel?: string;
   activeStep: number;
   steps?: {
     items: { id: string; label: string; state: StepTabState }[];
@@ -26,6 +28,8 @@ export function QuestionCard({
   isLoading,
   children,
   className,
+  contentClassName,
+  dismissAriaLabel = "Dismiss",
   activeStep,
   steps,
   footer,
@@ -54,7 +58,7 @@ export function QuestionCard({
           onClick={onDismiss}
           disabled={isLoading}
           className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-300 transition-colors hover:text-purple-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-700 dark:hover:text-purple-500"
-          aria-label="Dismiss"
+          aria-label={dismissAriaLabel}
         >
           <X className="h-4 w-4" />
         </button>
@@ -83,6 +87,7 @@ export function QuestionCard({
           ref={contentRef}
           className={cn(
             "transition-[height] duration-300 ease-in-out",
+            contentClassName,
             isAnimating && "overflow-hidden",
           )}
           style={{ height: isAnimating ? contentHeight : "auto" }}
