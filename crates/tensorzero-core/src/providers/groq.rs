@@ -1248,7 +1248,7 @@ fn groq_usage_to_tensorzero_usage(usage: GroqUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
-        provider_cache_read_input_tokens: None,
+        provider_cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
         provider_cache_write_input_tokens: None,
         cost: None,
     }
@@ -1835,6 +1835,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1938,6 +1939,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2032,6 +2034,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
+                prompt_tokens_details: None,
             },
         };
         let request_body = GroqRequest {
@@ -2095,6 +2098,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
+                prompt_tokens_details: None,
             },
         };
 
@@ -2507,6 +2511,7 @@ mod tests {
         let usage = GroqUsage {
             prompt_tokens: 10,
             completion_tokens: 20,
+            prompt_tokens_details: None,
         };
         let chunk = GroqChatChunk {
             choices: vec![],
@@ -2557,9 +2562,9 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             "expected usage to include provider raw_usage entries"
         );
@@ -2941,6 +2946,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 30,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
