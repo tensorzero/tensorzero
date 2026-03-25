@@ -18,14 +18,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const lastEventId = url.searchParams.get("last_event_id");
 
   const env = getEnv();
-  const gatewayUrl = new URL(
-    `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`,
-    env.TENSORZERO_GATEWAY_URL,
-  );
-
-  if (lastEventId) {
-    gatewayUrl.searchParams.set("last_event_id", lastEventId);
-  }
+  const baseUrl = env.TENSORZERO_GATEWAY_URL.replace(/\/+$/, "");
+  const path = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`;
+  const queryString = lastEventId
+    ? `?last_event_id=${encodeURIComponent(lastEventId)}`
+    : "";
+  const gatewayUrl = `${baseUrl}${path}${queryString}`;
 
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
@@ -37,7 +35,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   try {
-    const response = await fetch(gatewayUrl.toString(), {
+    const response = await fetch(gatewayUrl, {
       headers,
       signal: request.signal,
     });
