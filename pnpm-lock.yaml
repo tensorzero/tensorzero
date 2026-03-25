@@ -13,6 +13,7 @@ overrides:
   react-router: '>=7.12.0'
   lodash: '>=4.17.23'
   valibot: '>=1.2.0'
+  '@lezer/highlight': 1.2.3
 
 importers:
 

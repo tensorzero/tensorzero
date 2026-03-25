@@ -83,6 +83,8 @@ const toolingEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero" },
       },
     },
     1,
@@ -95,6 +97,10 @@ const toolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "0a1b2c3d-4e5f-4a6b-8c7d-3456789012c3",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero" },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Found relevant context.",
@@ -166,6 +172,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
       },
     },
     3,
@@ -178,6 +186,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "b2c3d4e5-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: { query: "TensorZero Autopilot" },
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Found audit notes on recent Autopilot sessions.",
@@ -197,6 +209,8 @@ const mixedEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "rejected", reason: "Blocked by policy" },
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "dangerous_tool",
+        tool_call_arguments: {},
       },
     },
     5,
@@ -209,6 +223,13 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "rejected-tool-call-event-id",
+        tool_call_name: "dangerous_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: {
+          type: "rejected" as const,
+          reason: "Blocked by policy",
+        },
         outcome: {
           type: "failure",
           error: {
@@ -229,6 +250,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "missing-tool-call-event-id",
+        tool_call_name: "missing_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "missing",
         },
@@ -245,6 +270,10 @@ const mixedEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "other-tool-call-event-id",
+        tool_call_name: "other_tool",
+        tool_call_arguments: {},
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "unknown",
         },
@@ -446,6 +475,10 @@ const longFormEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "8c9d0e1f-2a3b-4c4d-9e5f-1234567890e1",
+        tool_call_name: "search_wikipedia",
+        tool_call_arguments: JSON.parse(longToolArguments),
+        tool_call_authorization_source: { type: "automatic" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: longToolResult,
@@ -526,6 +559,14 @@ export const LongForm: Story = {
 };
 
 // Events demonstrating visualization rendering with tool results
+const topkEvalArgs = {
+  evaluation_name: "test_topk_evaluation",
+  dataset_name: "topk_test_dataset",
+  variant_names: ["echo", "empty", "empty2", "test", "test2"],
+  k_min: 1,
+  max_datapoints: 100,
+};
+
 const visualizationEvents: GatewayEvent[] = [
   buildEvent(
     {
@@ -555,13 +596,7 @@ const visualizationEvents: GatewayEvent[] = [
         type: "tool_call",
         name: "topk_evaluation",
         requires_approval: true,
-        arguments: {
-          evaluation_name: "test_topk_evaluation",
-          dataset_name: "topk_test_dataset",
-          variant_names: ["echo", "empty", "empty2", "test", "test2"],
-          k_min: 1,
-          max_datapoints: 100,
-        },
+        arguments: topkEvalArgs,
         side_info: {
           tool_call_event_id: "v2-tool-call",
           session_id: sessionId,
@@ -585,6 +620,8 @@ const visualizationEvents: GatewayEvent[] = [
         source: { type: "ui" },
         status: { type: "approved" },
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: topkEvalArgs,
       },
     },
     2,
@@ -597,6 +634,10 @@ const visualizationEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "v2-tool-call",
+        tool_call_name: "topk_evaluation",
+        tool_call_arguments: topkEvalArgs,
+        tool_call_authorization_source: { type: "ui" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: JSON.stringify(
@@ -831,6 +872,10 @@ const whitelistedToolingEvents: GatewayEvent[] = [
       payload: {
         type: "tool_result",
         tool_call_event_id: "wt-tool-call",
+        tool_call_name: "read_config",
+        tool_call_arguments: { section: "deployment" },
+        tool_call_authorization_source: { type: "whitelist" as const },
+        tool_call_authorization_status: { type: "approved" as const },
         outcome: {
           type: "success",
           result: "Current deployment: region=us-east-1, replicas=3",
@@ -869,5 +914,179 @@ export const WhitelistedTooling: Story = {
 export const MarkdownContent: Story = {
   args: {
     events: markdownEvents,
+  },
+};
+
+// ── Stories covering event superseding / collapsing logic ──
+
+// Scenario: auto_eval_example_labeling superseded by answers
+const exampleLabelingBase = {
+  maybe_excerpted_prompt: {
+    type: "markdown" as const,
+    text: "What is TensorZero?",
+    label: "Prompt",
+  },
+  maybe_excerpted_response: {
+    type: "markdown" as const,
+    text: "TensorZero is an ML optimization platform.",
+    label: "Response",
+  },
+  source: {
+    type: "synthetic" as const,
+    full_prompt: { type: "markdown" as const, text: "What is TensorZero?" },
+    full_response: {
+      type: "markdown" as const,
+      text: "TensorZero is an ML optimization platform.",
+    },
+  },
+  label_question: {
+    id: "q1",
+    header: "Quality",
+    question: "Is this response accurate?",
+    options: [
+      { id: "yes", label: "Yes", description: "The response is accurate" },
+      { id: "no", label: "No", description: "The response is inaccurate" },
+    ],
+  },
+};
+
+const autoEvalExampleLabelingEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "ael-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Label these examples (labeling event should be hidden once answers exist).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "ael-labeling",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_example_labeling",
+        examples: [exampleLabelingBase],
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "ael-answers",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_example_labeling_answers",
+        auto_eval_example_labeling_event_id: "ael-labeling",
+        examples: [
+          {
+            ...exampleLabelingBase,
+            label_answer: {
+              type: "multiple_choice",
+              selected: ["yes"],
+            },
+          },
+        ],
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingAutoEvalExampleLabeling: Story = {
+  name: "Superseding / Auto eval example labeling (answers hide labeling)",
+  args: {
+    events: autoEvalExampleLabelingEvents,
+  },
+};
+
+// Scenario: auto_eval_behavior_spec superseded by answers
+const behaviorSpecTargetBehavior = {
+  id: "tb1",
+  header: "Target Behavior",
+  question: "What should the model do?",
+  default_value: "Respond accurately and concisely.",
+};
+
+const behaviorSpecAdditionalContext = {
+  id: "ac1",
+  header: "Additional Context",
+  question: "Any extra context for evaluation?",
+  default_value: "Focus on factual accuracy.",
+};
+
+const autoEvalBehaviorSpecEvents: GatewayEvent[] = [
+  buildEvent(
+    {
+      id: "abs-user",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Define behavior spec (spec event should be hidden once answers exist).",
+          },
+        ],
+        metadata: {},
+      },
+    },
+    0,
+  ),
+  buildEvent(
+    {
+      id: "abs-spec",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_behavior_spec",
+        target_behavior: behaviorSpecTargetBehavior,
+        additional_context: behaviorSpecAdditionalContext,
+      },
+    },
+    1,
+  ),
+  buildEvent(
+    {
+      id: "abs-answers",
+      session_id: sessionId,
+      created_at: "",
+      payload: {
+        type: "auto_eval_behavior_spec_answers",
+        auto_eval_behavior_spec_event_id: "abs-spec",
+        target_behavior: behaviorSpecTargetBehavior,
+        target_behavior_answer: {
+          type: "free_response",
+          text: "Respond accurately and concisely.",
+        },
+        additional_context: behaviorSpecAdditionalContext,
+        additional_context_answer: {
+          type: "free_response",
+          text: "Focus on factual accuracy.",
+        },
+      },
+    },
+    2,
+  ),
+];
+
+export const SupersedingAutoEvalBehaviorSpec: Story = {
+  name: "Superseding / Auto eval behavior spec (answers hide spec)",
+  args: {
+    events: autoEvalBehaviorSpecEvents,
   },
 };
