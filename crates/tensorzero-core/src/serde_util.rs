@@ -456,6 +456,82 @@ where
     }
 }
 
+/// Deserializes an `Option<i64>` from either a number or a string (ClickHouse returns
+/// nullable integers as strings in JSONEachRow format).
+pub fn deserialize_option_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(i64),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<i64>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid i64 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
+/// Deserializes an `Option<i32>` from either a number or a string (ClickHouse compatibility).
+pub fn deserialize_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(i32),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<i32>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid i32 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
+/// Deserializes an `Option<f64>` from either a number or a string (ClickHouse compatibility).
+pub fn deserialize_option_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(f64),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<f64>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid f64 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
 /// Serializes an optional value, returning an empty string if the value is None.
 /// This is useful for ClickHouse compatibility where empty strings represent null for certain fields.
 pub fn serialize_none_as_empty_string<S, T>(
