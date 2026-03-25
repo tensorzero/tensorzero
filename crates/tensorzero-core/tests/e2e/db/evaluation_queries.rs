@@ -1704,6 +1704,8 @@ async fn test_get_evaluation_results_usage_aggregation(
             cost: Some(Decimal::new(15, 4)), // 0.0015
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             timestamp: None,
         },
         // Inference 1 - model inference B (fallback)
@@ -1725,6 +1727,8 @@ async fn test_get_evaluation_results_usage_aggregation(
             cost: Some(Decimal::new(25, 4)), // 0.0025
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             timestamp: None,
         },
         // Inference 2 - model inference A (has cost)
@@ -1746,6 +1750,8 @@ async fn test_get_evaluation_results_usage_aggregation(
             cost: Some(Decimal::new(50, 4)), // 0.0050
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             timestamp: None,
         },
         // Inference 2 - model inference B (NO cost => total cost should be NULL)
@@ -1767,6 +1773,8 @@ async fn test_get_evaluation_results_usage_aggregation(
             cost: None, // Missing cost
             finish_reason: None,
             snapshot_hash: None,
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             timestamp: None,
         },
     ];
