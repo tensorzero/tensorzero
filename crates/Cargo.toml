@@ -94,7 +94,7 @@ ts-rs = { version = "12.0.1", features = [
 ] }
 pin-project = "1.1.11"
 chrono = { version = "0.4.43", features = ["serde"] }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
+tracing-opentelemetry-instrumentation-sdk = { version = "0.32.4", features = [
     "tracing_level_info",
 ] }
 tower-http = { version = "0.6.7", features = ["trace"] }
