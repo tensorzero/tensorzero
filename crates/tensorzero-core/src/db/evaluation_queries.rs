@@ -14,7 +14,10 @@ use crate::endpoints::inference::InferenceResponse;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::{
+    deserialize_json_string, deserialize_option_f64, deserialize_option_i32,
+    deserialize_option_i64, deserialize_optional_json_string,
+};
 
 /// Database struct for deserializing evaluation run info.
 #[derive(Debug, Deserialize, sqlx::FromRow)]
@@ -150,12 +153,16 @@ pub(crate) struct RawEvaluationResultRow {
     pub name: Option<String>,
     pub staled_at: Option<String>,
     /// Total input tokens across all model inferences for this inference
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
     pub input_tokens: Option<i64>,
     /// Total output tokens across all model inferences for this inference
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
     pub output_tokens: Option<i64>,
     /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
     pub cost: Option<f64>,
     /// Processing time in milliseconds from the inference table
+    #[serde(default, deserialize_with = "deserialize_option_i32")]
     pub processing_time_ms: Option<i32>,
 }
 
