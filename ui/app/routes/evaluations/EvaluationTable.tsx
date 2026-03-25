@@ -429,9 +429,6 @@ export function EvaluationTable({
                     <TableHead className="py-2 text-center align-top">
                       Generated Output
                     </TableHead>
-                    <TableHead className="py-2 text-center align-top">
-                      Usage
-                    </TableHead>
                     {/* Dynamic metric columns */}
                     {metric_names.map((metric_name) => {
                       const evaluator_name = resolveEvaluatorName(metric_name);
@@ -455,6 +452,9 @@ export function EvaluationTable({
                         </TableHead>
                       );
                     })}
+                    <TableHead className="py-2 text-center align-top">
+                      Usage
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -592,11 +592,6 @@ export function EvaluationTable({
                                 )}
                               </TableCell>
 
-                              {/* Usage */}
-                              <TableCell className="align-middle">
-                                <UsageCell usage={data.usage} />
-                              </TableCell>
-
                               {/* Metrics cells */}
                               {metric_names.map((metric_name) => {
                                 const metricValue =
@@ -671,6 +666,11 @@ export function EvaluationTable({
                                   </TableCell>
                                 );
                               })}
+
+                              {/* Usage */}
+                              <TableCell className="align-middle">
+                                <UsageCell usage={data.usage} />
+                              </TableCell>
                             </TableRow>
                           );
                         })}
