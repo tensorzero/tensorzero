@@ -44,6 +44,7 @@ import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
 import { formatCost } from "~/utils/cost";
+import { InputIcon, Output, Cost, Timer } from "~/components/icons/Icons";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -716,29 +717,30 @@ const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
   if (!hasAnyData) return <span className="text-muted-foreground">-</span>;
 
   return (
-    <div className="text-muted-foreground space-y-0.5 text-xs">
+    <div className="text-muted-foreground flex items-center gap-3 text-xs whitespace-nowrap">
       {usage.input_tokens != null && (
-        <div>
-          <span className="font-medium">In:</span>{" "}
-          {formatTokenCount(usage.input_tokens)}
-        </div>
+        <span className="flex items-center gap-1">
+          <InputIcon size={12} />
+          {formatTokenCount(usage.input_tokens)} tok
+        </span>
       )}
       {usage.output_tokens != null && (
-        <div>
-          <span className="font-medium">Out:</span>{" "}
-          {formatTokenCount(usage.output_tokens)}
-        </div>
+        <span className="flex items-center gap-1">
+          <Output size={12} />
+          {formatTokenCount(usage.output_tokens)} tok
+        </span>
       )}
       {usage.cost != null && (
-        <div>
-          <span className="font-medium">Cost:</span> {formatCost(usage.cost)}
-        </div>
+        <span className="flex items-center gap-1">
+          <Cost size={12} />
+          {formatCost(usage.cost)}
+        </span>
       )}
       {usage.processing_time_ms != null && (
-        <div>
-          <span className="font-medium">Time:</span>{" "}
+        <span className="flex items-center gap-1">
+          <Timer size={12} />
           {formatDuration(usage.processing_time_ms)}
-        </div>
+        </span>
       )}
     </div>
   );
