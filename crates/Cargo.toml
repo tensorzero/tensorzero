@@ -48,10 +48,10 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-uuid = { version = "1.21.0", features = ["serde", "v7"] }
+uuid = { version = "1.22.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-toml = { version = "1.0.3", features = ["preserve_order"] }
+toml = { version = "1.0.6", features = ["preserve_order"] }
 async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.4.0"
@@ -63,15 +63,15 @@ tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.102"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.60", features = ["derive", "env"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+clap = { version = "4.6.0", features = ["derive", "env"] }
 http-body-util = "0.1.3"
 futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
 reqwest-sse-stream = { path = "reqwest-sse-stream" }
-minijinja = { version = "2.16.0", features = [
+minijinja = { version = "2.18.0", features = [
     "loader",
     "debug",
     "json",
@@ -80,10 +80,10 @@ minijinja = { version = "2.16.0", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.6.0"
-object_store = { version = "0.13.1", features = ["serde", "aws", "gcp"] }
-arrow = { version = "58.0.0", default-features = false, features = ["json"] }
-parquet = { version = "58.0.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
+google-cloud-auth = "1.7.0"
+object_store = { version = "0.13.2", features = ["serde", "aws", "gcp"] }
+arrow = { version = "58.1.0", default-features = false, features = ["json"] }
+parquet = { version = "58.1.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
 rand = "0.10.0"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
@@ -95,7 +95,7 @@ ts-rs = { version = "12.0.1", features = [
 ] }
 pin-project = "1.1.11"
 chrono = { version = "0.4.43", features = ["serde"] }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.32.3", features = [
+tracing-opentelemetry-instrumentation-sdk = { version = "0.32.4", features = [
     "tracing_level_info",
 ] }
 tower-http = { version = "0.6.7", features = ["trace"] }
@@ -119,13 +119,13 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.3"
-moka = { version = "0.12.14", features = ["sync"] }
+moka = { version = "0.12.15", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "03f2c5f820b57dff2bdcb60c081533d03605519f" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
 regex = "1.12.2"
-redis = { version = "1.0.4", features = [
+redis = { version = "1.1.0", features = [
     "tokio-comp",
     "connection-manager",
     "tls-rustls",
@@ -137,7 +137,7 @@ globset = "0.4.18"
 json-pointer = "0.3.4"
 rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"] }
 walkdir = "2.5.0"
-tempfile = "3.26.0"
+tempfile = "3.27.0"
 toml_edit = "0.25"
 googletest = "0.14.2"
 

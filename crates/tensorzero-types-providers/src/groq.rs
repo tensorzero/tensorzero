@@ -26,11 +26,17 @@ pub enum GroqToolType {
     Function,
 }
 
+/// Groq usage struct.
+///
+/// Groq supports automatic prompt caching and returns `prompt_tokens_details.cached_tokens`
+/// in the same format as OpenAI. See [`super::cache`] for the full provider mapping.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GroqUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<super::openai::OpenAIPromptTokensDetails>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]

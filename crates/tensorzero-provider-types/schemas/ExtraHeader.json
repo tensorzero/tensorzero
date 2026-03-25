@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtraHeader",
+  "anyOf": [
+    {
+      "title": "VariantExtraHeader",
+      "type": "object",
+      "properties": {
+        "variant_name": {
+          "description": "A variant name in your configuration (e.g. `my_variant`)",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value of the HTTP header (e.g. `feature1,feature2,feature3`)",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "variant_name",
+        "name",
+        "value"
+      ]
+    },
+    {
+      "title": "VariantExtraHeaderDelete",
+      "type": "object",
+      "properties": {
+        "variant_name": {
+          "description": "A variant name in your configuration (e.g. `my_variant`)",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "delete": {
+          "description": "Set to true to remove the header from the model provider request",
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "variant_name",
+        "name",
+        "delete"
+      ]
+    },
+    {
+      "title": "ModelProviderExtraHeader",
+      "type": "object",
+      "properties": {
+        "model_name": {
+          "description": "A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)",
+          "type": "string"
+        },
+        "provider_name": {
+          "description": "A provider name for the model you specified (e.g. `my_openai`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value of the HTTP header (e.g. `feature1,feature2,feature3`)",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model_name",
+        "name",
+        "value"
+      ]
+    },
+    {
+      "title": "ModelProviderExtraHeaderDelete",
+      "type": "object",
+      "properties": {
+        "model_name": {
+          "description": "A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)",
+          "type": "string"
+        },
+        "provider_name": {
+          "description": "A provider name for the model you specified (e.g. `my_openai`)",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "delete": {
+          "description": "Set to true to remove the header from the model provider request",
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model_name",
+        "name",
+        "delete"
+      ]
+    },
+    {
+      "title": "AlwaysExtraHeader",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value of the HTTP header (e.g. `feature1,feature2,feature3`)",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ]
+    },
+    {
+      "title": "AlwaysExtraHeaderDelete",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The name of the HTTP header (e.g. `anthropic-beta`)",
+          "type": "string"
+        },
+        "delete": {
+          "description": "Set to true to remove the header from the model provider request",
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "delete"
+      ]
+    }
+  ]
+}

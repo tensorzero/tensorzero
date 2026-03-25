@@ -906,8 +906,11 @@ fn convert_converse_response(
     let usage = Usage {
         input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
-        provider_cache_read_input_tokens: None,
-        provider_cache_write_input_tokens: None,
+        provider_cache_read_input_tokens: response.usage.cache_read_input_tokens.map(|v| v as u32),
+        provider_cache_write_input_tokens: response
+            .usage
+            .cache_write_input_tokens
+            .map(|v| v as u32),
         cost: None,
     };
 
@@ -1278,8 +1281,14 @@ fn process_stream_event(
             let usage = Some(Usage {
                 input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
-                provider_cache_read_input_tokens: None,
-                provider_cache_write_input_tokens: None,
+                provider_cache_read_input_tokens: event
+                    .usage
+                    .cache_read_input_tokens
+                    .map(|v| v as u32),
+                provider_cache_write_input_tokens: event
+                    .usage
+                    .cache_write_input_tokens
+                    .map(|v| v as u32),
                 cost: None,
             });
 
@@ -1303,6 +1312,7 @@ fn process_stream_event(
 mod tests {
     use super::*;
     use crate::utils::testing::reset_capture_logs;
+    use googletest::prelude::*;
 
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
@@ -1378,5 +1388,40 @@ mod tests {
         assert!(logs_contain(
             "Creating new AWS config for region: me-shire-2"
         ));
+    }
+
+    #[gtest]
+    fn test_aws_bedrock_usage_with_cache_tokens() {
+        use tensorzero_types_providers::aws_bedrock;
+
+        let bedrock_usage = aws_bedrock::Usage {
+            input_tokens: 50,
+            output_tokens: 30,
+            total_tokens: Some(80),
+            cache_read_input_tokens: Some(40),
+            cache_write_input_tokens: Some(10),
+        };
+
+        // Replicate the conversion logic from the provider:
+        // total_input_tokens includes cache tokens since Bedrock reports them separately
+        let total_input_tokens = bedrock_usage.input_tokens as u32
+            + bedrock_usage.cache_read_input_tokens.unwrap_or(0) as u32
+            + bedrock_usage.cache_write_input_tokens.unwrap_or(0) as u32;
+        let usage = Usage {
+            input_tokens: Some(total_input_tokens),
+            output_tokens: Some(bedrock_usage.output_tokens as u32),
+            provider_cache_read_input_tokens: bedrock_usage
+                .cache_read_input_tokens
+                .map(|v| v as u32),
+            provider_cache_write_input_tokens: bedrock_usage
+                .cache_write_input_tokens
+                .map(|v| v as u32),
+            cost: None,
+        };
+
+        expect_that!(usage.input_tokens, eq(Some(100)));
+        expect_that!(usage.output_tokens, eq(Some(30)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(40)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(Some(10)));
     }
 }

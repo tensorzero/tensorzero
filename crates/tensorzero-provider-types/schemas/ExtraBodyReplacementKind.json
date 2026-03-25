@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExtraBodyReplacementKind",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": [
+        "delete"
+      ]
+    },
+    {
+      "title": "ExtraBodyReplacementKindValue",
+      "type": "object",
+      "properties": {
+        "value": true
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

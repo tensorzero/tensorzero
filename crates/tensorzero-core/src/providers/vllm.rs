@@ -546,6 +546,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
+        // vLLM supports automatic prefix caching and reports `prompt_tokens_details.cached_tokens`
+        // in the OpenAI-compatible response. This is handled by the `From<OpenAIUsage>` impl.
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
@@ -621,6 +623,7 @@ mod tests {
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
     #[tokio::test]
     async fn test_vllm_request_new() {
@@ -755,6 +758,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             }),
         };
         let generic_request = ModelInferenceRequest {
@@ -877,6 +881,78 @@ mod tests {
         assert_eq!(
             inference_response.usage.output_tokens, None,
             "output_tokens should be None when usage is null"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_vllm_response_with_cache_tokens() {
+        let response_with_cache = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
+                    tool_calls: None,
+                },
+                finish_reason: OpenAIFinishReason::Stop,
+            }],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: Some(100),
+                completion_tokens: Some(20),
+                prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                    cached_tokens: Some(80),
+                }),
+            }),
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let vllm_response_with_metadata = VLLMResponseWithMetadata {
+            response: response_with_cache,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: serde_json::to_string(
+                &VLLMRequest::new("test-model", &generic_request)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let inference_response: ProviderInferenceResponse =
+            vllm_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
+        assert_eq!(
+            inference_response.usage.provider_cache_read_input_tokens,
+            Some(80),
+            "vLLM automatic prefix caching should populate provider_cache_read_input_tokens"
+        );
+        assert_eq!(
+            inference_response.usage.provider_cache_write_input_tokens, None,
+            "vLLM does not report cache write tokens"
         );
     }
 
