@@ -19,14 +19,21 @@ That said, **you can get the best of both worlds by using them together: Kong at
   Both TensorZero and Kong AI Gateway offer automatic fallbacks and load balancing between model providers to increase reliability.<br />
   [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
 
-- **Open Source.**
-  Both TensorZero and Kong Gateway are open source (Apache 2.0).
-  However, TensorZero is fully open-source, whereas the Kong AI Gateway gates many features behind an enterprise license.
-
-- **Observability.**
+- **LLM Observability.**
   Both TensorZero and Kong AI Gateway support OpenTelemetry for exporting traces and metrics.
   TensorZero also provides its own LLM-native observability (structured inference + feedback data stored in your database), while Kong provides API-oriented observability (e.g. request latency breakdowns, GenAI OpenTelemetry span attributes).<br />
   [→ TensorZero Observability Overview](/observability/)
+
+- **LLM Controls.**
+  Both TensorZero and Kong AI Gateway offer operational controls for LLM traffic, including rate limiting (by tokens, cost, or request count), usage and spend tracking, credential management, and custom API keys for access control.<br />
+  [→ Enforce custom rate limits](/operations/enforce-custom-rate-limits/)<br />
+  [→ Track usage and cost](/operations/track-usage-and-cost/)<br />
+  [→ Manage credentials (API keys)](/operations/manage-credentials/)<br />
+  [→ Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero/)
+
+- **Open Source.**
+  Both TensorZero and Kong Gateway are open source (Apache 2.0).
+  However, TensorZero is fully open-source, whereas the Kong AI Gateway gates many features behind an enterprise license.
 
 ## Key Differences
 
