@@ -1,14 +1,18 @@
 /**
  * Database helpers for autopilot e2e tests.
  *
- * These functions insert/query events directly in the autopilot Postgres
- * database, bypassing the API. Useful for injecting server-only event types
- * (like `user_questions`) that can't be created via the client API.
+ * Event writes use the test-only `/v1/sessions/{id}/test/insert-db-event`
+ * endpoint (gated behind the `e2e_tests` feature flag) to inject server-only
+ * event types (like `user_questions`) that can't be created via the normal
+ * client API.
  *
- * Uses `docker exec` to run psql inside the Postgres container so that
- * no local psql installation is required.
+ * Event reads still use `docker exec` psql for simplicity.
  */
 import { execSync } from "node:child_process";
+
+const AUTOPILOT_API_URL =
+  process.env.TENSORZERO_AUTOPILOT_API_URL || "http://localhost:4444";
+const AUTOPILOT_API_KEY = process.env.TENSORZERO_AUTOPILOT_API_KEY || "";
 
 const POSTGRES_CONTAINER =
   process.env.TENSORZERO_AUTOPILOT_POSTGRES_CONTAINER || "autopilot-postgres-1";
@@ -17,51 +21,29 @@ const POSTGRES_PORT = process.env.TENSORZERO_AUTOPILOT_POSTGRES_PORT || "5433";
 const PSQL_PREFIX = `docker exec -i ${POSTGRES_CONTAINER} psql -U postgres -d autopilot_api -p ${POSTGRES_PORT}`;
 
 /**
- * Insert an event directly into the autopilot events table.
- * Uses Postgres dollar-quoting to avoid JSON escaping issues.
+ * Insert an event via the test-only insert-db-event API endpoint.
  */
-export function insertEvent(
+export async function insertEvent(
   eventId: string,
   sessionId: string,
   payload: object,
-): void {
-  const payloadJson = JSON.stringify(payload);
-  // Use the monotonic_message_id insert (new schema) with fallback to the old schema.
-  // The new schema requires allocating a monotonic_message_id from the workspace counter.
-  const sqlNew = `
-    WITH workspace_lock AS (
-      UPDATE autopilot.workspace w
-      SET next_stream_id = w.next_stream_id + 1
-      FROM autopilot.sessions s
-      WHERE s.id = '${sessionId}' AND w.workspace_id = s.workspace_id
-      RETURNING w.next_stream_id - 1 AS monotonic_message_id
-    )
-    INSERT INTO autopilot.events (id, payload, session_id, monotonic_message_id)
-    SELECT '${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}', workspace_lock.monotonic_message_id
-    FROM workspace_lock`;
-  const sqlOld = `INSERT INTO autopilot.events (id, payload, session_id) VALUES ('${eventId}', $json$${payloadJson}$json$::jsonb, '${sessionId}')`;
-  let useOld = false;
-  try {
-    const result = execSync(`${PSQL_PREFIX}`, {
-      input: sqlNew,
-      timeout: 5000,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    // psql prints "INSERT 0 N" where N is the number of rows inserted.
-    // If the CTE matched zero workspace rows, N will be 0 and the event was silently not inserted.
-    if (!result.includes("INSERT 0 1")) {
-      useOld = true;
-    }
-  } catch {
-    useOld = true;
-  }
-  if (useOld) {
-    execSync(`${PSQL_PREFIX} -q`, {
-      input: sqlOld,
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+): Promise<void> {
+  const url = `${AUTOPILOT_API_URL}/v1/sessions/${sessionId}/test/insert-db-event`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(AUTOPILOT_API_KEY
+        ? { Authorization: `Bearer ${AUTOPILOT_API_KEY}` }
+        : {}),
+    },
+    body: JSON.stringify({ id: eventId, payload }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `insert-db-event failed (${response.status}): ${body}`,
+    );
   }
 }
 
