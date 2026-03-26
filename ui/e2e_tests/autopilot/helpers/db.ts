@@ -41,9 +41,7 @@ export async function insertEvent(
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(
-      `insert-db-event failed (${response.status}): ${body}`,
-    );
+    throw new Error(`insert-db-event failed (${response.status}): ${body}`);
   }
 }
 

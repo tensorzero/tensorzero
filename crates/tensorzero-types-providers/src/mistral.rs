@@ -48,9 +48,16 @@ pub enum MistralResponseFormat {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct MistralPromptTokensDetails {
+    pub cached_tokens: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct MistralUsage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<MistralPromptTokensDetails>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
