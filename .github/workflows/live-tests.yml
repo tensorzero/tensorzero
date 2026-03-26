@@ -123,7 +123,7 @@ jobs:
 
       - name: Print live tests logs
         if: always()
-        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t --tail 2000
 
       - name: Check e2e logs for impossible error messages
         run: |
