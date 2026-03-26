@@ -9,8 +9,8 @@ from tensorzero import (
 )
 
 FUNCTION_NAME = "extract_entities"
-EVALUATION_NAME = "extract_entities_eval"
 DATASET_NAME = "extract_entities_dataset"
+EVALUATORS = ["judge_improvement"]
 
 # Models to use for analyzing inferences and generating prompt mutations
 ANALYSIS_MODEL = "openai::gpt-5.2"
@@ -72,7 +72,7 @@ async def main():
     result = await t0.optimization.gepa.launch(
         function_name=FUNCTION_NAME,
         dataset_name=DATASET_NAME,
-        evaluation_name=EVALUATION_NAME,
+        evaluators=EVALUATORS,
         analysis_model=ANALYSIS_MODEL,
         mutation_model=MUTATION_MODEL,
         initial_variants=INITIAL_VARIANTS,
