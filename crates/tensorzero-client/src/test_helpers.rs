@@ -40,7 +40,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> Client {
 
 pub async fn make_embedded_gateway_with_config_path(config_path: Option<&Path>) -> Client {
     let clickhouse_url = if PrimaryDatastore::from_test_env() == PrimaryDatastore::ClickHouse {
-        Some(create_unique_clickhouse_url("embedded"))
+        Some(CLICKHOUSE_URL.clone())
     } else {
         None
     };
@@ -68,7 +68,7 @@ pub async fn make_embedded_gateway_with_config_path(config_path: Option<&Path>) 
 
 pub async fn make_embedded_gateway_with_config_and_postgres(config: &str) -> Client {
     let clickhouse_url = if PrimaryDatastore::from_test_env() == PrimaryDatastore::ClickHouse {
-        Some(create_unique_clickhouse_url("embedded"))
+        Some(CLICKHOUSE_URL.clone())
     } else {
         None
     };
@@ -105,7 +105,7 @@ pub async fn make_embedded_gateway_with_rate_limiting(config: &str) -> Client {
     std::fs::write(tmp_config.path(), config).unwrap();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(create_unique_clickhouse_url("rate_limit")),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_config: postgres_url.map(PostgresConfig::Url),
         valkey_url,
         timeout: None,
