@@ -49,14 +49,11 @@ async fn test_dummy_only_replicated_clickhouse() {
     };
 
     // Poll until the trailing write from the API lands in ClickHouse
-    let clickhouse = &client
-        .get_app_state_data()
-        .expect("Expected embedded gateway")
-        .clickhouse_connection_info;
+    let clickhouse = get_clickhouse().await;
     let inference_id = response.inference_id();
     let result = poll_for_result(
         || async {
-            Ok::<_, String>(select_chat_inference_clickhouse(clickhouse, inference_id).await)
+            Ok::<_, String>(select_chat_inference_clickhouse(&clickhouse, inference_id).await)
         },
         |r| r.is_some(),
         "Timed out waiting for ChatInference to appear in ClickHouse",
@@ -183,13 +180,6 @@ async fn test_clickhouse_bulk_insert() {
     }
     assert_eq!(expected_inference_ids.len(), inference_count);
 
-    // Clone the ClickHouse connection before dropping the client so we can query after shutdown
-    let clickhouse_client = client
-        .get_app_state_data()
-        .expect("Expected embedded gateway")
-        .clickhouse_connection_info
-        .clone();
-
     assert_eq!(Arc::strong_count(&client), 1);
     eprintln!("Dropping client");
     // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
@@ -198,6 +188,7 @@ async fn test_clickhouse_bulk_insert() {
     eprintln!("Dropped client");
 
     // Poll until all batch writes have been flushed to ClickHouse
+    let clickhouse_client = get_clickhouse().await;
     let inferences = poll_for_result(
         || async {
             Ok::<_, String>(select_chat_inferences_clickhouse(&clickhouse_client, episode_id).await)
