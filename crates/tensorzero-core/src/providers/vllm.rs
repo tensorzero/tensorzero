@@ -18,6 +18,7 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::Thought;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
@@ -27,7 +28,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
+    batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
@@ -552,6 +553,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -562,7 +564,6 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
             },
         ))
     }

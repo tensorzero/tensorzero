@@ -18,6 +18,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
@@ -27,7 +28,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
+    ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
 };
 use crate::inference::types::{
     FunctionType, Latency, ModelInferenceRequestJsonMode,
@@ -761,28 +762,28 @@ pub struct GCPVertexAnthropicUsage {
     cache_read_input_tokens: Option<u32>,
 }
 
-impl From<GCPVertexAnthropicUsage> for Usage {
-    fn from(value: GCPVertexAnthropicUsage) -> Self {
+impl GCPVertexAnthropicUsage {
+    fn into_usage(self) -> Usage {
         // GCP Vertex Anthropic reports cache tokens separately from input_tokens.
         // We need to add them back to get the total input token count.
         let total_input_tokens = match (
-            value.input_tokens,
-            value.cache_creation_input_tokens,
-            value.cache_read_input_tokens,
+            self.input_tokens,
+            self.cache_creation_input_tokens,
+            self.cache_read_input_tokens,
         ) {
             (None, None, None) => None,
             _ => Some(
-                value.input_tokens.unwrap_or(0)
-                    + value.cache_creation_input_tokens.unwrap_or(0)
-                    + value.cache_read_input_tokens.unwrap_or(0),
+                self.input_tokens.unwrap_or(0)
+                    + self.cache_creation_input_tokens.unwrap_or(0)
+                    + self.cache_read_input_tokens.unwrap_or(0),
             ),
         };
 
         Usage {
             input_tokens: total_input_tokens,
-            output_tokens: value.output_tokens,
-            provider_cache_read_input_tokens: value.cache_read_input_tokens,
-            provider_cache_write_input_tokens: value.cache_creation_input_tokens,
+            output_tokens: self.output_tokens,
+            provider_cache_read_input_tokens: self.cache_read_input_tokens,
+            provider_cache_write_input_tokens: self.cache_creation_input_tokens,
             cost: None,
         }
     }
@@ -843,11 +844,12 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -857,8 +859,9 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: response.stop_reason.map(AnthropicStopReason::into),
-                id: model_inference_id,
+                finish_reason: response
+                    .stop_reason
+                    .map(AnthropicStopReason::into_finish_reason),
             },
         ))
     }
@@ -1348,7 +1351,7 @@ mod tests {
             ..Default::default()
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
         assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
@@ -1360,7 +1363,7 @@ mod tests {
             ..Default::default()
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens, None,
@@ -1376,7 +1379,7 @@ mod tests {
             cache_read_input_tokens: Some(200),
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,

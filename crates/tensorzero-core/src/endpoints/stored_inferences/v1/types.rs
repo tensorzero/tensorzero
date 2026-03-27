@@ -11,6 +11,7 @@ use crate::stored_inference::StoredInference;
 
 // Re-exported for backwards compatibility.
 pub use crate::endpoints::shared_types::OrderDirection;
+
 pub use tensorzero_types::inference_filters::{
     BooleanMetricFilter, DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter,
     InferenceFilter, OrderBy, OrderByTerm, TagComparisonOperator, TagFilter,

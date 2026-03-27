@@ -128,12 +128,12 @@ pub struct OpenAIResponsesInputTokensDetails {
     pub cached_tokens: Option<u32>,
 }
 
-impl From<OpenAIResponsesUsage> for Usage {
-    fn from(usage: OpenAIResponsesUsage) -> Self {
+impl OpenAIResponsesUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
-            provider_cache_read_input_tokens: usage
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            provider_cache_read_input_tokens: self
                 .input_tokens_details
                 .and_then(|d| d.cached_tokens),
             provider_cache_write_input_tokens: None,
@@ -268,12 +268,14 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
             )
         });
-        let usage = self.usage.map(|u| u.into()).unwrap_or_default();
+        let usage = self.usage.map(|u| u.into_usage()).unwrap_or_default();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output,
                 system: generic_request.system.clone(),
-                input_messages: generic_request.messages.clone(),
+                input_messages,
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
@@ -281,7 +283,6 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
                 provider_latency: latency,
                 finish_reason,
-                id: model_inference_id,
             },
         ))
     }

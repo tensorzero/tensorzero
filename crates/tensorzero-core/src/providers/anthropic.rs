@@ -21,19 +21,19 @@ use crate::error::{
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile, LazyFileExt};
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
-    UnknownChunk, Usage,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
@@ -1284,28 +1284,28 @@ pub struct AnthropicUsage {
     cache_read_input_tokens: Option<u32>,
 }
 
-impl From<AnthropicUsage> for Usage {
-    fn from(value: AnthropicUsage) -> Self {
+impl AnthropicUsage {
+    pub fn into_usage(self) -> Usage {
         // Anthropic reports cache tokens separately from input_tokens.
         // We need to add them back to get the total input token count.
         let total_input_tokens = match (
-            value.input_tokens,
-            value.cache_creation_input_tokens,
-            value.cache_read_input_tokens,
+            self.input_tokens,
+            self.cache_creation_input_tokens,
+            self.cache_read_input_tokens,
         ) {
             (None, None, None) => None,
             _ => Some(
-                value.input_tokens.unwrap_or(0)
-                    + value.cache_creation_input_tokens.unwrap_or(0)
-                    + value.cache_read_input_tokens.unwrap_or(0),
+                self.input_tokens.unwrap_or(0)
+                    + self.cache_creation_input_tokens.unwrap_or(0)
+                    + self.cache_read_input_tokens.unwrap_or(0),
             ),
         };
 
         Usage {
             input_tokens: total_input_tokens,
-            output_tokens: value.output_tokens,
-            provider_cache_read_input_tokens: value.cache_read_input_tokens,
-            provider_cache_write_input_tokens: value.cache_creation_input_tokens,
+            output_tokens: self.output_tokens,
+            provider_cache_read_input_tokens: self.cache_read_input_tokens,
+            provider_cache_write_input_tokens: self.cache_creation_input_tokens,
             cost: None,
         }
     }
@@ -1336,9 +1336,9 @@ pub enum AnthropicStopReason {
     Unknown,
 }
 
-impl From<AnthropicStopReason> for FinishReason {
-    fn from(value: AnthropicStopReason) -> Self {
-        match value {
+impl AnthropicStopReason {
+    pub fn into_finish_reason(self) -> FinishReason {
+        match self {
             AnthropicStopReason::EndTurn => FinishReason::Stop,
             AnthropicStopReason::MaxTokens => FinishReason::Length,
             AnthropicStopReason::StopSequence => FinishReason::StopSequence,
@@ -1395,9 +1395,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system: generic_request.system.clone(),
                 input_messages,
@@ -1407,8 +1408,9 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 relay_raw_response: None,
                 usage,
                 provider_latency: latency,
-                finish_reason: response.stop_reason.map(AnthropicStopReason::into),
-                id: model_inference_id,
+                finish_reason: response
+                    .stop_reason
+                    .map(AnthropicStopReason::into_finish_reason),
             },
         ))
     }
@@ -1687,18 +1689,22 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
             Ok(Some(match raw_usage {
                 Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
                     vec![],
-                    Some(usage.into()),
+                    Some(usage.into_usage()),
                     raw_message,
                     message_latency,
-                    delta.stop_reason.map(AnthropicStopReason::into),
+                    delta
+                        .stop_reason
+                        .map(AnthropicStopReason::into_finish_reason),
                     Some(entries),
                 ),
                 None => ProviderInferenceResponseChunk::new(
                     vec![],
-                    Some(usage.into()),
+                    Some(usage.into_usage()),
                     raw_message,
                     message_latency,
-                    delta.stop_reason.map(AnthropicStopReason::into),
+                    delta
+                        .stop_reason
+                        .map(AnthropicStopReason::into_finish_reason),
                 ),
             }))
         }
@@ -1714,7 +1720,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 Ok(Some(match raw_usage {
                     Some(entries) => ProviderInferenceResponseChunk::new_with_raw_usage(
                         vec![],
-                        Some(usage.into()),
+                        Some(usage.into_usage()),
                         raw_message,
                         message_latency,
                         None,
@@ -1722,7 +1728,7 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                     ),
                     None => ProviderInferenceResponseChunk::new(
                         vec![],
-                        Some(usage.into()),
+                        Some(usage.into_usage()),
                         raw_message,
                         message_latency,
                         None,
@@ -2580,7 +2586,7 @@ mod tests {
             ..Default::default()
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(usage.input_tokens, Some(100), "input_tokens should match");
         assert_eq!(usage.output_tokens, Some(50), "output_tokens should match");
@@ -2592,7 +2598,7 @@ mod tests {
             ..Default::default()
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens, None,
@@ -2608,7 +2614,7 @@ mod tests {
             cache_read_input_tokens: Some(200),
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,
@@ -2635,7 +2641,7 @@ mod tests {
             cache_read_input_tokens: None,
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,
@@ -2660,7 +2666,7 @@ mod tests {
             cache_read_input_tokens: Some(4000),
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(
             usage.input_tokens,
@@ -2685,7 +2691,7 @@ mod tests {
             cache_read_input_tokens: None,
         };
 
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
 
         assert_eq!(usage.provider_cache_read_input_tokens, None);
         assert_eq!(usage.provider_cache_write_input_tokens, None);
@@ -2702,7 +2708,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage = serde_json::from_str(json)
             .expect("should deserialize Anthropic usage with cache tokens");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(4215));
         assert_eq!(usage.provider_cache_write_input_tokens, Some(4200));
         assert_eq!(usage.provider_cache_read_input_tokens, Some(0));
@@ -2716,7 +2722,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize Anthropic usage with cache read");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(4215));
         assert_eq!(usage.provider_cache_write_input_tokens, Some(0));
         assert_eq!(usage.provider_cache_read_input_tokens, Some(4200));
@@ -2728,7 +2734,7 @@ mod tests {
         }"#;
         let anthropic_usage: AnthropicUsage =
             serde_json::from_str(json).expect("should deserialize without cache fields");
-        let usage: Usage = anthropic_usage.into();
+        let usage: Usage = anthropic_usage.into_usage();
         assert_eq!(usage.input_tokens, Some(100));
         assert_eq!(usage.provider_cache_write_input_tokens, None);
         assert_eq!(usage.provider_cache_read_input_tokens, None);
