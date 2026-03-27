@@ -74,6 +74,7 @@ impl TensorZeroClient for Client {
                     tensorzero_dryrun: params.dryrun,
                     tensorzero_cache_options: Some(params.cache_options),
                     tensorzero_include_raw_response: params.include_raw_response,
+                    tensorzero_extra_headers: Default::default(),
                 };
 
                 let http_response = Client::http_embeddings(self, openai_params, None)

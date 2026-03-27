@@ -15,7 +15,9 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::extra_body::ExtraBodyConfig;
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_headers::{
+    ExtraHeadersConfig, FilteredInferenceExtraHeaders, FullExtraHeadersConfig,
+};
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -176,8 +178,13 @@ impl EmbeddingModelConfig {
         request: &EmbeddingRequest,
         model_name: &str,
         clients: &InferenceClients,
+        dynamic_extra_headers: FilteredInferenceExtraHeaders,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
+        let extra_headers = FullExtraHeadersConfig {
+            variant_extra_headers: None,
+            inference_extra_headers: dynamic_extra_headers,
+        };
         let run_all_embedding_models = async {
             for provider_name in &self.routing {
                 let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -198,6 +205,7 @@ impl EmbeddingModelConfig {
                     let cache_lookup = embedding_cache_lookup(
                         &clients.cache_manager,
                         &provider_request,
+                        &extra_headers.inference_extra_headers,
                         clients.cache_options.max_age_s,
                         provider_type.clone(),
                     )
@@ -217,7 +225,13 @@ impl EmbeddingModelConfig {
                     }
                 }
                 let response = provider_config
-                    .embed(request, clients, &provider_config.into())
+                    .embed(
+                        request,
+                        clients,
+                        &provider_config.into(),
+                        &extra_headers,
+                        model_name,
+                    )
                     .await;
 
                 match response {
@@ -240,7 +254,8 @@ impl EmbeddingModelConfig {
                             };
                             let _ = start_cache_write(
                                 &clients.cache_manager,
-                                provider_request.get_cache_key()?,
+                                provider_request
+                                    .get_cache_key(&extra_headers.inference_extra_headers)?,
                                 CacheData {
                                     output: EmbeddingCacheData {
                                         embedding: first_embedding.clone(),
@@ -609,6 +624,8 @@ pub trait EmbeddingProvider {
         client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
@@ -683,6 +700,8 @@ impl EmbeddingProviderInfo {
         request: &EmbeddingRequest,
         clients: &InferenceClients,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_manager
@@ -693,6 +712,8 @@ impl EmbeddingProviderInfo {
             &clients.http_client,
             &clients.credentials,
             model_provider_data,
+            extra_headers,
+            model_name,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
             let timeout = Duration::from_millis(timeout_ms);
@@ -818,27 +839,57 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
         client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => {
                 provider
-                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .embed(
+                        request,
+                        client,
+                        dynamic_api_keys,
+                        model_provider_data,
+                        extra_headers,
+                        model_name,
+                    )
                     .await
             }
             EmbeddingProviderConfig::Azure(provider) => {
                 provider
-                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .embed(
+                        request,
+                        client,
+                        dynamic_api_keys,
+                        model_provider_data,
+                        extra_headers,
+                        model_name,
+                    )
                     .await
             }
             EmbeddingProviderConfig::OpenRouter(provider) => {
                 provider
-                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .embed(
+                        request,
+                        client,
+                        dynamic_api_keys,
+                        model_provider_data,
+                        extra_headers,
+                        model_name,
+                    )
                     .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             EmbeddingProviderConfig::Dummy(provider) => {
                 provider
-                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .embed(
+                        request,
+                        client,
+                        dynamic_api_keys,
+                        model_provider_data,
+                        extra_headers,
+                        model_name,
+                    )
                     .await
             }
         }
@@ -970,6 +1021,7 @@ mod tests {
                     include_raw_response: false,
                     include_aggregated_response: false,
                 },
+                Default::default(),
             )
             .await;
         assert!(response.is_ok());

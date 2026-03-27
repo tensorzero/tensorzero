@@ -41,6 +41,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::usage::raw_usage_entries_from_value;
@@ -978,6 +979,8 @@ impl EmbeddingProvider for OpenAIProvider {
         client: &TensorzeroHttpClient,
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
+        extra_headers: &FullExtraHeadersConfig,
+        model_name: &str,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self
             .credentials
@@ -1010,9 +1013,9 @@ impl EmbeddingProvider for OpenAIProvider {
             PROVIDER_TYPE,
             ApiType::Embeddings,
             &FullExtraBodyConfig::default(), // No overrides supported
-            &Default::default(),             // No extra headers for embeddings yet
+            extra_headers,
             model_provider_data,
-            &self.model_name,
+            model_name,
             request_body_value,
             request_builder,
         )

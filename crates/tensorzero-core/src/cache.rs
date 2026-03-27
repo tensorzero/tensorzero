@@ -13,6 +13,7 @@ use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
+use crate::inference::types::extra_headers::FilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -278,7 +279,10 @@ impl From<Hash> for CacheKey {
 impl EmbeddingModelProviderRequest<'_> {
     // Destructure EmbeddingModelProviderRequest so that we get a compiler error
     // if we add any new fields
-    pub fn get_cache_key(&self) -> Result<CacheKey, Error> {
+    pub fn get_cache_key(
+        &self,
+        extra_headers: &FilteredInferenceExtraHeaders,
+    ) -> Result<CacheKey, Error> {
         let EmbeddingModelProviderRequest {
             model_name,
             provider_name,
@@ -301,6 +305,19 @@ impl EmbeddingModelProviderRequest<'_> {
             })
         })?;
         hasher.update(request_json.as_bytes());
+
+        // Include dynamic extra headers in the cache key so that requests with
+        // different headers produce different cache entries.
+        if !extra_headers.data.is_empty() {
+            hasher.update(&[0]); // null byte separator
+            let headers_json = serde_json::to_string(extra_headers).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize extra headers: {e}"),
+                })
+            })?;
+            hasher.update(headers_json.as_bytes());
+        }
+
         Ok(hasher.finalize().into())
     }
 }
@@ -574,12 +591,13 @@ pub fn start_cache_write_streaming<C: CacheQueries + Clone + 'static>(
 pub async fn embedding_cache_lookup(
     cache_manager: &impl CacheQueries,
     request: &EmbeddingModelProviderRequest<'_>,
+    extra_headers: &FilteredInferenceExtraHeaders,
     max_age_s: Option<u32>,
     provider_type: Arc<str>,
 ) -> Result<Option<EmbeddingModelResponse>, Error> {
     let result = cache_lookup_inner::<EmbeddingCacheData>(
         cache_manager,
-        request.get_cache_key()?,
+        request.get_cache_key(extra_headers)?,
         max_age_s,
     )
     .await?;
@@ -1090,6 +1108,20 @@ mod tests {
         model_name: &str,
         provider_name: &str,
     ) -> CacheKey {
+        embedding_cache_key_for_with_headers(
+            request,
+            model_name,
+            provider_name,
+            &FilteredInferenceExtraHeaders::default(),
+        )
+    }
+
+    fn embedding_cache_key_for_with_headers(
+        request: &EmbeddingRequest,
+        model_name: &str,
+        provider_name: &str,
+        extra_headers: &FilteredInferenceExtraHeaders,
+    ) -> CacheKey {
         let otlp_config = OtlpConfig::default();
         EmbeddingModelProviderRequest {
             request,
@@ -1098,7 +1130,7 @@ mod tests {
             otlp_config: &otlp_config,
             model_inference_id: Uuid::now_v7(),
         }
-        .get_cache_key()
+        .get_cache_key(extra_headers)
         .expect("get_cache_key should not fail for a valid embedding request")
     }
 
@@ -1193,5 +1225,49 @@ mod tests {
         };
         let key = embedding_cache_key_for(&different, "model", "provider");
         expect_that!(key, not(eq(baseline_key)));
+    }
+
+    #[gtest]
+    fn test_embedding_cache_key_changes_with_extra_headers() {
+        use crate::inference::types::extra_headers::DynamicExtraHeader;
+
+        let req = baseline_embedding_request();
+        let baseline_key = embedding_cache_key_for(&req, "model", "provider");
+
+        let headers_a = FilteredInferenceExtraHeaders {
+            data: vec![DynamicExtraHeader::Always {
+                name: "X-Custom".to_string(),
+                value: "value-a".to_string(),
+            }],
+        };
+        let headers_b = FilteredInferenceExtraHeaders {
+            data: vec![DynamicExtraHeader::Always {
+                name: "X-Custom".to_string(),
+                value: "value-b".to_string(),
+            }],
+        };
+
+        let key_a = embedding_cache_key_for_with_headers(&req, "model", "provider", &headers_a);
+        let key_b = embedding_cache_key_for_with_headers(&req, "model", "provider", &headers_b);
+
+        // Empty extra headers should produce the same key as no extra headers
+        let key_empty = embedding_cache_key_for_with_headers(
+            &req,
+            "model",
+            "provider",
+            &FilteredInferenceExtraHeaders::default(),
+        );
+        expect_that!(key_empty, eq(baseline_key));
+
+        // Extra headers should change the cache key
+        expect_that!(key_a, not(eq(baseline_key)));
+
+        // Different header values should produce different keys
+        expect_that!(key_a, not(eq(key_b)));
+
+        // Same headers should produce the same key
+        let key_a_again =
+            embedding_cache_key_for_with_headers(&req, "model", "provider", &headers_a);
+        expect_that!(key_a, eq(key_a_again));
     }
 }
