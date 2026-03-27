@@ -1063,6 +1063,7 @@ mod tests {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
                 completion_tokens_details: None,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

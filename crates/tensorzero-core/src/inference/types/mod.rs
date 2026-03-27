@@ -1427,6 +1427,10 @@ pub struct StoredModelInference {
     pub output: Option<Vec<ContentBlockOutput>>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_read_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_write_input_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
     pub model_name: String,
     pub model_provider_name: String,
@@ -1515,6 +1519,8 @@ impl ModelInferenceResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             provider_latency: Latency::NonStreaming {
@@ -1591,6 +1597,10 @@ impl StoredModelInference {
             Some(tokens) if tokens > 0 => Some(tokens),
             _ => None,
         };
+        // None = provider doesn't support cache token reporting.
+        // Some(0) = provider supports caching but no tokens were cached for this request.
+        let provider_cache_read_input_tokens = result.usage.provider_cache_read_input_tokens;
+        let provider_cache_write_input_tokens = result.usage.provider_cache_write_input_tokens;
 
         let cost = if result.cached {
             Some(Decimal::ZERO)
@@ -1621,6 +1631,8 @@ impl StoredModelInference {
             output: Some(result.output),
             input_tokens,
             output_tokens,
+            provider_cache_read_input_tokens,
+            provider_cache_write_input_tokens,
             response_time_ms: latency_ms,
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
@@ -2034,6 +2046,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let raw_request = "raw request".to_string();
@@ -2872,6 +2886,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2880,6 +2896,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2906,6 +2924,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2914,6 +2934,8 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2940,6 +2962,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2948,6 +2972,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(15),
                     output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2974,6 +3000,8 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -2982,6 +3010,8 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -3009,6 +3039,8 @@ mod tests {
                 Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 true,
@@ -3017,6 +3049,8 @@ mod tests {
                 Usage {
                     input_tokens: None,
                     output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 false,
@@ -3092,6 +3126,8 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(20),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
 

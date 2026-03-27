@@ -106,4 +106,5 @@ pub enum ToolFailure {
     Control { message: String },
     Tool { error: NonControlToolError },
     Database { message: String },
+    PayloadTooLarge { message: String },
 }

@@ -5,5 +5,7 @@
  */
 export type SearchEvaluationRunResult = {
   evaluation_run_id: string;
+  evaluation_name: string;
+  dataset_name: string;
   variant_name: string;
 };

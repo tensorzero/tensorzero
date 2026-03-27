@@ -32,6 +32,7 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 use tensorzero_error::Error;
 use tensorzero_types::inference_params::JsonMode;
 use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
+use tensorzero_types_providers::deepseek::DeepSeekUsage;
 use tensorzero_types_providers::fireworks::FireworksFinishReason;
 use tensorzero_types_providers::openai::{OpenAIFinishReason, OpenAIUsage};
 use tensorzero_types_providers::together::TogetherFinishReason;
@@ -66,6 +67,11 @@ pub enum Latency {
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    // Omit from serialized output when None (per AGENTS.md convention for optional fields).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_read_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_write_input_tokens: Option<u32>,
     #[serde(default, with = "decimal_float_option")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub cost: Option<Decimal>,
@@ -103,10 +109,18 @@ mod decimal_float_option {
 }
 
 impl Usage {
+    /// Returns a `Usage` with core fields at zero and cache fields at `None`.
+    ///
+    /// Cache fields start as `None` (meaning "not reported") because not all
+    /// providers support prompt caching. The lenient aggregation helpers
+    /// (`aggregate_usage_across_model_inferences`, `sum_usage_strict`) will
+    /// preserve any `Some` value they encounter rather than contaminating to `None`.
     pub fn zero() -> Usage {
         Usage {
             input_tokens: Some(0),
             output_tokens: Some(0),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: Some(Decimal::ZERO),
         }
     }
@@ -532,6 +546,10 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+            provider_cache_read_input_tokens: usage
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -598,6 +616,24 @@ impl From<XAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens,
+            provider_cache_read_input_tokens: usage
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        }
+    }
+}
+
+impl From<DeepSeekUsage> for Usage {
+    fn from(usage: DeepSeekUsage) -> Self {
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
+            provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
+            // DeepSeek's `prompt_cache_miss_tokens` = tokens not in cache, which are
+            // written to cache for future requests, so we map miss → write.
+            provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
             cost: None,
         }
     }
@@ -1092,7 +1128,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(25),
-            cost: None,
+            ..Default::default()
         };
         expect_that!(usage.total_tokens(), eq(Some(35)));
     }
@@ -1102,7 +1138,7 @@ mod tests {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: None,
-            cost: None,
+            ..Default::default()
         };
         expect_that!(usage.total_tokens(), eq(None));
     }
@@ -1113,6 +1149,7 @@ mod tests {
             input_tokens: Some(100),
             output_tokens: Some(50),
             cost: Some(Decimal::new(15, 4)), // 0.0015
+            ..Default::default()
         };
         let json = serde_json::to_value(usage).expect("should serialize");
         assert_eq!(json["input_tokens"], json!(100));
@@ -1190,7 +1227,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
+                ..Default::default()
             }),
             r#"{"choices":[...]}"#.to_string(),
             Duration::from_millis(50),
@@ -1215,7 +1252,7 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
-                cost: None,
+                ..Default::default()
             }),
             "raw".to_string(),
             Duration::from_millis(100),
@@ -1259,7 +1296,7 @@ mod tests {
                 Some(Usage {
                     input_tokens: Some(15),
                     output_tokens: Some(8),
-                    cost: None,
+                    ..Default::default()
                 }),
                 "chunk3".to_string(),
                 Duration::from_millis(120),

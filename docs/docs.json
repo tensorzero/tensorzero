@@ -13,7 +13,7 @@
     "options": ["copy", "view", "chatgpt", "claude"]
   },
   "banner": {
-    "content": "**[TensorZero Autopilot](https://www.tensorzero.com)** is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests. **[Join the waitlist →](https://www.tensorzero.com/autopilot-waitlist)**"
+    "content": "**[TensorZero Autopilot](https://www.tensorzero.com)** is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests. **[Schedule a demo →](https://www.tensorzero.com/schedule-demo)**"
   },
   "navigation": {
     "tabs": [
@@ -31,6 +31,7 @@
                 "group": "Comparison",
                 "pages": [
                   "comparison/dspy",
+                  "comparison/kong",
                   "comparison/langchain",
                   "comparison/langfuse",
                   "comparison/litellm",
@@ -51,13 +52,13 @@
               "gateway/configure-functions-and-variants",
               "gateway/create-a-prompt-template",
               "gateway/generate-structured-outputs",
+              "gateway/call-llms-with-image-and-file-inputs",
               "gateway/generate-embeddings",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
               "gateway/guides/inference-caching",
               "gateway/guides/inference-time-optimizations",
               "gateway/guides/metrics-feedback",
-              "gateway/guides/multimodal-inference",
               "gateway/guides/retries-fallbacks",
               "gateway/guides/tool-use",
               "gateway/benchmarks",
@@ -125,8 +126,8 @@
             "pages": [
               "deployment/tensorzero-gateway",
               "deployment/tensorzero-ui",
-              "deployment/clickhouse",
               "deployment/postgres",
+              "deployment/clickhouse",
               "deployment/valkey-redis",
               "deployment/tensorzero-autopilot",
               "deployment/upgrade-tensorzero",
@@ -371,6 +372,14 @@
     {
       "source": "/gateway/guides/prompt-templates-schemas/",
       "destination": "/gateway/create-a-prompt-template"
+    },
+    {
+      "source": "/gateway/guides/multimodal-inference",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
+    },
+    {
+      "source": "/gateway/guides/multimodal-inference/",
+      "destination": "/gateway/call-llms-with-image-and-file-inputs"
     },
     {
       "source": "/evaluations/static-evaluations/cli-reference",

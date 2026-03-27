@@ -81,8 +81,8 @@ mod tests {
         let datapoint_id = Uuid::now_v7();
         let evaluator_inference_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
             .expect_get_inference_evaluation_human_feedback()
             .withf(move |metric_name, dp_id, output| {
                 metric_name == "test_metric"
@@ -100,7 +100,7 @@ mod tests {
             });
 
         let result = get_human_feedback(
-            &mock_clickhouse,
+            &mock_db,
             "test_metric",
             &datapoint_id,
             r#"{"raw":"test output"}"#,
@@ -118,20 +118,16 @@ mod tests {
     async fn get_human_feedback_returns_none_when_not_exists() {
         let datapoint_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
             .expect_get_inference_evaluation_human_feedback()
             .times(1)
             .returning(|_, _, _| Box::pin(async move { Ok(None) }));
 
-        let result = get_human_feedback(
-            &mock_clickhouse,
-            "nonexistent_metric",
-            &datapoint_id,
-            "test output",
-        )
-        .await
-        .unwrap();
+        let result =
+            get_human_feedback(&mock_db, "nonexistent_metric", &datapoint_id, "test output")
+                .await
+                .unwrap();
 
         assert!(result.feedback.is_none());
     }
@@ -141,8 +137,8 @@ mod tests {
         let datapoint_id = Uuid::now_v7();
         let evaluator_inference_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
             .expect_get_inference_evaluation_human_feedback()
             .times(1)
             .returning(move |_, _, _| {
@@ -154,7 +150,7 @@ mod tests {
                 })
             });
 
-        let result = get_human_feedback(&mock_clickhouse, "test_metric", &datapoint_id, "output")
+        let result = get_human_feedback(&mock_db, "test_metric", &datapoint_id, "output")
             .await
             .unwrap();
 
@@ -168,8 +164,8 @@ mod tests {
         let datapoint_id = Uuid::now_v7();
         let evaluator_inference_id = Uuid::now_v7();
 
-        let mut mock_clickhouse = MockEvaluationQueries::new();
-        mock_clickhouse
+        let mut mock_db = MockEvaluationQueries::new();
+        mock_db
             .expect_get_inference_evaluation_human_feedback()
             .times(1)
             .returning(move |_, _, _| {
@@ -181,7 +177,7 @@ mod tests {
                 })
             });
 
-        let result = get_human_feedback(&mock_clickhouse, "test_metric", &datapoint_id, "output")
+        let result = get_human_feedback(&mock_db, "test_metric", &datapoint_id, "output")
             .await
             .unwrap();
 

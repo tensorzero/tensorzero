@@ -32,6 +32,7 @@ chrono.workspace = true
 tensorzero.workspace = true
 url = "2"
 secrecy.workspace = true
+http.workspace = true
 
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-core.workspace = true

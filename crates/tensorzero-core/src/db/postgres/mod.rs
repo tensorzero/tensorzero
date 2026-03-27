@@ -38,6 +38,36 @@ pub mod test_helpers;
 
 const RUN_MIGRATIONS_COMMAND: &str = "You likely need to apply migrations to your Postgres database with `--run-postgres-migrations`. Please see our documentation to learn more: https://www.tensorzero.com/docs/deployment/postgres";
 
+/// Returns `true` if the given name is safe to interpolate into SQL.
+///
+/// Safe names contain only ASCII alphanumeric characters, underscores, hyphens, dots,
+/// colons, and forward slashes. This is intentionally restrictive to prevent SQL injection
+/// when a value must be interpolated into a query (e.g. as part of a LATERAL JOIN clause
+/// where `push_bind` cannot be used).
+pub fn is_safe_sql_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ':' | '/'))
+}
+
+/// Validates that a name is safe for SQL interpolation, returning an error if not.
+///
+/// See [`is_safe_sql_name`] for the allowed character set.
+pub fn validate_safe_sql_name(name: &str, context: &str) -> Result<(), Error> {
+    if is_safe_sql_name(name) {
+        Ok(())
+    } else {
+        Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "{context} `{name}` contains characters that are not allowed. \
+                 Only ASCII alphanumeric characters, underscores, hyphens, dots, colons, \
+                 and forward slashes are permitted."
+            ),
+        }))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
     Enabled {
@@ -370,7 +400,7 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
     if let Err(e) = postgres_setup::check_pgcron_configured_correctly(&pool).await {
         let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon.",
+            "pg_cron extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_cron soon. If Postgres is your observability backend, TensorZero Gateway will not start.",
         );
         has_config_error = true;
     }
@@ -379,7 +409,7 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
     if let Err(e) = postgres_setup::check_trigram_indexes_configured_correctly(&pool).await {
         let msg = e.suppress_logging_of_error_message();
         tracing::warn!(
-            "(Optional) pg_trgm extension is not configured correctly for your Postgres setup: {msg}. If observability is enabled, we require pg_trgm to support searching on inference data.",
+            "pg_trgm extension is not configured correctly for your Postgres setup: {msg}. TensorZero will start requiring pg_trgm soon. If Postgres is your observability backend, TensorZero Gateway will not start.",
         );
         has_config_error = true;
     }

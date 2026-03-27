@@ -6,10 +6,17 @@
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct OpenAIPromptTokensDetails {
+    pub cached_tokens: Option<u32>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAIUsage {
     pub prompt_tokens: Option<u32>,
     pub completion_tokens: Option<u32>,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

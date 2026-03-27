@@ -694,6 +694,9 @@ impl TGIUsage {
         Usage {
             input_tokens: Some(self.prompt_tokens),
             output_tokens: Some(self.completion_tokens),
+            // TGI does not report cache token counts.
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }

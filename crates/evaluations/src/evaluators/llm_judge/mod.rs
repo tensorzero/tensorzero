@@ -10,6 +10,7 @@ use tensorzero_core::client::{
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType, get_evaluator_metric_name,
+    get_function_evaluator_metric_name, get_function_llm_judge_function_name,
     get_llm_judge_function_name,
 };
 use tensorzero_core::inference::types::{
@@ -48,6 +49,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: Option<&'a str>,
+    pub function_name: &'a str,
     pub evaluator_name: &'a str,
     pub evaluation_run_id: Uuid,
     pub input: &'a Input,
@@ -65,23 +67,30 @@ pub async fn run_llm_judge_evaluator(
         clients,
         llm_judge_config,
         evaluation_name,
+        function_name,
         evaluator_name,
         evaluation_run_id,
         input,
         inference_cache,
         external_tags,
     } = params;
+
+    let metric_name = match evaluation_name {
+        Some(eval_name) => get_evaluator_metric_name(eval_name, evaluator_name),
+        None => get_function_evaluator_metric_name(function_name, evaluator_name),
+    };
+    let llm_judge_fn_name = match evaluation_name {
+        Some(eval_name) => get_llm_judge_function_name(eval_name, evaluator_name),
+        None => get_function_llm_judge_function_name(function_name, evaluator_name),
+    };
+
     debug!("Checking for existing human feedback");
     let serialized_output = clients
         .db
         .serialize_output_for_feedback(inference_response)?;
     if let Some(human_feedback) = clients
         .db
-        .get_inference_evaluation_human_feedback(
-            &get_evaluator_metric_name(evaluation_name, evaluator_name),
-            &datapoint.id(),
-            &serialized_output,
-        )
+        .get_inference_evaluation_human_feedback(&metric_name, &datapoint.id(), &serialized_output)
         .await?
     {
         info!("Found existing human feedback, using that instead of LLM judge");
@@ -118,7 +127,7 @@ pub async fn run_llm_judge_evaluator(
     let tags = merge_tags(external_tags, internal_tags)?;
 
     let params = ClientInferenceParams {
-        function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
+        function_name: Some(llm_judge_fn_name),
         model_name: None,
         episode_id: None,
         namespace: None,

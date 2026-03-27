@@ -4,7 +4,11 @@ use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
 
-use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant::JsonMode};
+use crate::{
+    embeddings::EmbeddingProviderConfig,
+    inference::types::{Role, storage::StorageKind},
+    variant::JsonMode,
+};
 
 /// Ensure that the sample valid config can be parsed without panicking
 #[tokio::test]
@@ -2074,6 +2078,93 @@ async fn test_config_load_invalid_s3_creds() {
         "Unexpected error message: {err}"
     );
 }
+
+#[tokio::test]
+async fn test_config_object_storage_endpoint_env_var_resolves() {
+    tensorzero_unsafe_helpers::set_env_var_tests_only(
+        "TENSORZERO_TEST_S3_ENDPOINT",
+        "https://storage.example.com",
+    );
+
+    let config_str = r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "env::TENSORZERO_TEST_S3_ENDPOINT"
+
+            [functions]"#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Env-backed object storage endpoint should be valid config");
+    let object_store_info = config
+        .object_store_info
+        .as_ref()
+        .expect("Object store info should be initialized");
+
+    let StorageKind::S3Compatible { endpoint, .. } = &object_store_info.kind else {
+        panic!("Expected an S3-compatible object store");
+    };
+
+    assert_eq!(
+        endpoint.as_deref(),
+        Some("https://storage.example.com"),
+        "The resolved endpoint should be stored in the object store kind"
+    );
+}
+
+#[tokio::test]
+async fn test_config_object_storage_endpoint_env_var_missing_errors() {
+    let config_str = r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "env::TENSORZERO_TEST_NONEXISTENT_S3_ENDPOINT_VAR"
+
+            [functions]"#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Should error when the object storage endpoint env var is missing");
+    let err_msg = err.to_string();
+
+    assert!(
+        err_msg.contains("TENSORZERO_TEST_NONEXISTENT_S3_ENDPOINT_VAR"),
+        "Error should mention the missing env var: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_config_object_storage_endpoint_dynamic_rejected() {
+    let config_str = r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "dynamic::s3_endpoint"
+
+            [functions]"#;
+    let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect_err("Dynamic object storage endpoints should be rejected");
+    let err_msg = err.to_string();
+
+    assert!(
+        err_msg.contains("Invalid `[object_storage].endpoint`"),
+        "Error should point to the invalid object storage endpoint: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("Use `env::ENVIRONMENT_VARIABLE` or a literal endpoint value"),
+        "Error should explain the supported endpoint forms: {err_msg}"
+    );
+}
+
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_default() {
     let logs_contain = crate::utils::testing::capture_logs();
@@ -3434,4 +3525,55 @@ async fn test_nested_skip_credential_validation() {
     })
     .await;
     assert!(!skip_credential_validation());
+}
+
+#[tokio::test]
+async fn test_relay_warns_models_without_skip_relay() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let config_str = r#"
+        [gateway.relay]
+        gateway_url = "http://localhost:9999"
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        model_name = "good"
+    "#;
+
+    let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config should load successfully");
+    assert!(
+        logs_contain("do not have `skip_relay` set"),
+        "Expected warning about models without `skip_relay` in relay mode"
+    );
+}
+
+#[tokio::test]
+async fn test_relay_no_warn_when_skip_relay_set() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let config_str = r#"
+        [gateway.relay]
+        gateway_url = "http://localhost:9999"
+
+        [models.my-model]
+        routing = ["dummy"]
+        skip_relay = true
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        model_name = "good"
+    "#;
+
+    let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
+    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        .await
+        .expect("Config should load successfully");
+    assert!(
+        !logs_contain("do not have `skip_relay` set"),
+        "Should not warn when all models have `skip_relay` set"
+    );
 }

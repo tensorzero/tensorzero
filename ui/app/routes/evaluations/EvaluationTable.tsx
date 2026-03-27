@@ -17,29 +17,22 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { toEvaluationDatapointUrl } from "~/utils/urls";
-
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunInfoById as EvaluationRunInfo } from "~/types/tensorzero";
 import type {
   EvaluationStatistics,
   EvaluationResultRow,
   Input,
-} from "~/types/tensorzero";
-import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
-import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
-
-// Import the custom tooltip styles
-import "./tooltip-styles.css";
-import {
-  formatMetricSummaryValue,
-  formatConfidenceInterval,
-} from "~/utils/config/feedback";
-import type {
-  InferenceEvaluationConfig,
   RunMetricMetadata,
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "~/types/tensorzero";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import {
   useColorAssigner,
   ColorAssignerProvider,
@@ -50,6 +43,11 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
+import { formatCost } from "~/utils/cost";
+import { InputIcon, Output, Cost, Timer } from "~/components/icons/Icons";
+
+// Import the custom tooltip styles
+import "./tooltip-styles.css";
 
 type TruncatedContentProps = (
   | {
@@ -214,11 +212,11 @@ interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
-  evaluator_names: string[];
+  metric_names: string[];
   evaluation_name: string;
-  evaluationConfig: InferenceEvaluationConfig;
+  function_name: string;
   metricsConfig: Record<string, RunMetricMetadata>;
-  /** Maps evaluator_name → metric_name. */
+  /** Maps full metric_name → short evaluator_name. */
   evaluatorMetricNames: Record<string, string>;
   selectedRows: Map<string, SelectedRowData>;
   setSelectedRows: React.Dispatch<
@@ -231,6 +229,13 @@ interface MetricValueInfo {
   evaluator_inference_id?: string;
   inference_id: string;
   is_human_feedback: boolean;
+}
+
+interface UsageInfo {
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+  processing_time_ms?: number;
 }
 
 // Interface for tracking selected rows
@@ -246,22 +251,16 @@ export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
-  evaluator_names,
+  metric_names,
   evaluation_name,
-  evaluationConfig,
+  function_name,
   metricsConfig,
   evaluatorMetricNames,
   selectedRows,
   setSelectedRows,
 }: EvaluationTableProps) {
-  const resolveMetricName = (evaluatorName: string): string => {
-    const name = evaluatorMetricNames[evaluatorName];
-    if (!name) {
-      logger.warn(
-        `No metric name mapping for evaluator ${evaluatorName} in evaluation ${evaluation_name}`,
-      );
-    }
-    return name ?? evaluatorName;
+  const resolveEvaluatorName = (metricName: string): string => {
+    return evaluatorMetricNames[metricName] ?? metricName;
   };
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -306,6 +305,7 @@ export function EvaluationTable({
         {
           generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
+          usage?: UsageInfo;
         }
       >
     >();
@@ -326,6 +326,18 @@ export function EvaluationTable({
         datapointMap.set(result.evaluation_run_id, {
           generated_output: result.generated_output,
           metrics: new Map(),
+          usage: {
+            input_tokens:
+              result.input_tokens != null
+                ? Number(result.input_tokens)
+                : undefined,
+            output_tokens:
+              result.output_tokens != null
+                ? Number(result.output_tokens)
+                : undefined,
+            cost: result.cost ?? undefined,
+            processing_time_ms: result.processing_time_ms ?? undefined,
+          },
         });
       }
 
@@ -388,7 +400,7 @@ export function EvaluationTable({
       <div>
         {/* Eval run selector */}
         <EvalRunSelector
-          evaluationName={evaluation_name}
+          functionName={function_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
         />
 
@@ -419,18 +431,16 @@ export function EvaluationTable({
                       Generated Output
                     </TableHead>
                     {/* Dynamic metric columns */}
-                    {evaluator_names.map((evaluator_name) => {
-                      // Get the metric name for this evaluator
-                      const metric_name = resolveMetricName(evaluator_name);
+                    {metric_names.map((metric_name) => {
+                      const evaluator_name = resolveEvaluatorName(metric_name);
 
-                      // Filter statistics for this specific metric
                       const filteredStats = evaluation_statistics.filter(
                         (stat) => stat.metric_name === metric_name,
                       );
 
                       return (
                         <TableHead
-                          key={evaluator_name}
+                          key={metric_name}
                           className="py-2 text-center"
                         >
                           <EvaluatorHeader
@@ -443,6 +453,9 @@ export function EvaluationTable({
                         </TableHead>
                       );
                     })}
+                    <TableHead className="py-2 text-center align-top">
+                      Usage
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -461,6 +474,7 @@ export function EvaluationTable({
                           | JsonInferenceOutput
                           | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
+                        usage?: UsageInfo;
                       },
                     ][];
 
@@ -580,18 +594,16 @@ export function EvaluationTable({
                               </TableCell>
 
                               {/* Metrics cells */}
-                              {evaluator_names.map((evaluator_name) => {
-                                const metric_name =
-                                  resolveMetricName(evaluator_name);
+                              {metric_names.map((metric_name) => {
                                 const metricValue =
                                   data.metrics.get(metric_name);
+                                const metricConfig = metricsConfig[metric_name];
+
                                 const metricType = metricsConfig[metric_name]
                                   ?.value_type as
                                   | "boolean"
                                   | "float"
                                   | undefined;
-                                const evaluatorConfig =
-                                  evaluationConfig.evaluators[evaluator_name];
 
                                 return (
                                   <TableCell
@@ -602,8 +614,7 @@ export function EvaluationTable({
                                     <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricValue.value &&
-                                      metricType &&
-                                      evaluatorConfig ? (
+                                      metricType ? (
                                         <>
                                           <MetricValue
                                             value={metricValue.value}
@@ -611,16 +622,10 @@ export function EvaluationTable({
                                             isHumanFeedback={
                                               metricValue.is_human_feedback
                                             }
-                                            optimize={
-                                              evaluatorConfig.type ===
-                                              "llm_judge"
-                                                ? evaluatorConfig.optimize
-                                                : "max"
-                                            }
+                                            optimize={metricConfig?.optimize}
                                           />
-                                          {/* Make feedback editor appear on hover */}
-                                          {evaluatorConfig.type ===
-                                            "llm_judge" && (
+                                          {/* Make feedback editor appear on hover for LLM judge metrics */}
+                                          {metricValue.evaluator_inference_id && (
                                             <div
                                               className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                               // Stop click event propagation so the row navigation is not triggered
@@ -646,14 +651,12 @@ export function EvaluationTable({
                                                   "Unknown"
                                                 }
                                               />
-                                              {metricValue.evaluator_inference_id && (
-                                                <InferenceButton
-                                                  inferenceId={
-                                                    metricValue.evaluator_inference_id
-                                                  }
-                                                  tooltipText="View LLM judge inference"
-                                                />
-                                              )}
+                                              <InferenceButton
+                                                inferenceId={
+                                                  metricValue.evaluator_inference_id
+                                                }
+                                                tooltipText="View LLM judge inference"
+                                              />
                                             </div>
                                           )}
                                         </>
@@ -664,6 +667,11 @@ export function EvaluationTable({
                                   </TableCell>
                                 );
                               })}
+
+                              {/* Usage */}
+                              <TableCell className="align-middle">
+                                <UsageCell usage={data.usage} />
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -679,6 +687,64 @@ export function EvaluationTable({
     </ColorAssignerProvider>
   );
 }
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return tokens.toLocaleString();
+}
+
+function formatDuration(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${ms}ms`;
+}
+
+const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
+  if (!usage) return <span className="text-muted-foreground">-</span>;
+
+  const hasAnyData =
+    usage.input_tokens != null ||
+    usage.output_tokens != null ||
+    usage.cost != null ||
+    usage.processing_time_ms != null;
+
+  if (!hasAnyData) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <div className="text-muted-foreground flex items-center gap-3 text-xs whitespace-nowrap">
+      {usage.input_tokens != null && (
+        <span className="flex items-center gap-1">
+          <InputIcon size={12} />
+          {formatTokenCount(usage.input_tokens)} tok
+        </span>
+      )}
+      {usage.output_tokens != null && (
+        <span className="flex items-center gap-1">
+          <Output size={12} />
+          {formatTokenCount(usage.output_tokens)} tok
+        </span>
+      )}
+      {usage.cost != null && (
+        <span className="flex items-center gap-1">
+          <Cost size={12} />
+          {formatCost(usage.cost)}
+        </span>
+      )}
+      {usage.processing_time_ms != null && (
+        <span className="flex items-center gap-1">
+          <Timer size={12} />
+          {formatDuration(usage.processing_time_ms)}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const EvaluatorHeader = ({
   evaluation_name,
@@ -713,6 +779,16 @@ const EvaluatorHeader = ({
       </TooltipTrigger>
       <TooltipContent side="top" className="p-3">
         <div className="space-y-1 text-left text-xs">
+          <div>
+            <span className="font-medium">Metric:</span>
+            <span className="ml-2 font-medium">{metric_name}</span>
+          </div>
+          {evaluator_name !== metric_name && (
+            <div>
+              <span className="font-medium">Evaluator:</span>
+              <span className="ml-2 font-medium">{evaluator_name}</span>
+            </div>
+          )}
           <div>
             <span className="font-medium">Type:</span>
             <span className="ml-2 font-medium">

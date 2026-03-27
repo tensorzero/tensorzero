@@ -210,6 +210,16 @@ impl Error {
         &self.details
     }
 
+    /// Returns true if this is a `BatchInferenceNotYetVisible` error, indicating the
+    /// provider completed but DB rows aren't visible yet (likely replication lag).
+    /// The batch should stay `Pending` so the next poll can retry.
+    pub fn is_retryable_batch_error(&self) -> bool {
+        matches!(
+            *self.details,
+            ErrorDetails::BatchInferenceNotYetVisible { .. }
+        )
+    }
+
     /// Ensures that the OpenTelemetry span corresponding to `span` is marked as an error.
     /// If our level is `ERROR`, then we'll do nothing, since logging an error automatically marks the span as an error.
     /// If our level is anything else, then we explicitly mark the span as an error using our own messages
@@ -441,6 +451,13 @@ pub enum ErrorDetails {
     },
     BatchNotFound {
         id: Uuid,
+    },
+    /// Provider returned valid completed results but the corresponding
+    /// `BatchModelInference` rows are not yet visible in the database.
+    /// This is typically caused by database replication lag and is transient.
+    BatchInferenceNotYetVisible {
+        batch_id: Uuid,
+        expected_count: usize,
     },
     BadFileFetch {
         url: Url,
@@ -870,6 +887,7 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchInferenceNotYetVisible { .. } => tracing::Level::WARN,
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
@@ -1036,6 +1054,7 @@ impl ErrorDetails {
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::BatchInferenceNotYetVisible { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1418,6 +1437,16 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::BatchNotFound { id } => {
                 write!(f, "Batch request not found for id: {id}")
+            }
+            ErrorDetails::BatchInferenceNotYetVisible {
+                batch_id,
+                expected_count,
+            } => {
+                write!(
+                    f,
+                    "Batch {batch_id}: provider returned {expected_count} completed inferences \
+                     but no matching BatchModelInference rows found in database (possible replication lag)"
+                )
             }
             ErrorDetails::Cache { message } => {
                 write!(f, "Error in cache: {message}")

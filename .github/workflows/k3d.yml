@@ -1,0 +1,136 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+
+jobs:
+  deploy-k3d:
+    runs-on: ubuntu-latest
+    name: Run 'examples/production-deployment-k8s-helm' on k3d
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install k3d
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/v5.8.3/install.sh | TAG=v5.8.3 bash
+
+      - name: Create k3d cluster
+        run: |
+          k3d cluster create tensorzero --wait
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull and load gateway and ui containers
+        run: |
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+          k3d image import tensorzero/gateway:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }} -c tensorzero
+
+      - name: Create helm overrides file
+        run: |
+          cd examples/production-deployment-k8s-helm
+          cat > helm-ci-overrides.yaml <<EOF
+          gateway:
+            image:
+              repository: tensorzero/gateway
+              # We load this from the build-gateway-container job
+              tag: sha-${{ github.sha }}
+              pullPolicy: Never
+            service:
+              type: NodePort
+          ui:
+            image:
+              repository: tensorzero/ui
+              # We load this from the build-ui-container job
+              tag: sha-${{ github.sha }}
+              pullPolicy: Never
+            service:
+              type: NodePort
+          EOF
+          # Fix the extra indentation caused by inlining the yaml file in our workflow
+          sed -i 's/^        //' helm-ci-overrides.yaml
+
+      - name: Install ClickHouse
+        run: |
+          cd examples/production-deployment-k8s-helm
+          helm repo add altinity https://altinity.github.io/helm-charts
+          helm repo update
+          kubectl create namespace clickhouse
+          helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
+          kubectl wait --for=condition=available deployment/clickhouse-operator -n clickhouse --timeout=300s
+          kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
+          kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
+
+      - name: Install TensorZero
+        run: |
+          cd examples/production-deployment-k8s-helm
+          kubectl create namespace tensorzero
+          kubectl create secret generic tensorzero-secret -n tensorzero \
+              --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.chi-clickhouse-clickhouse-0-0.clickhouse.svc.cluster.local:8123" \
+              --from-literal=TENSORZERO_GATEWAY_URL="http://tensorzero-gateway.tensorzero.svc.cluster.local:3000" \
+              --from-literal=OPENAI_API_KEY="fake-openai-api-key"
+          helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
+
+      - name: Ping the gateway
+        run: |
+          GATEWAY_URL="http://localhost:3000"
+
+          # TODO - add a 'startupProbe' to the gateway helm chart
+          count=0
+          max_attempts=40
+          while true; do
+            # (Re)start port-forward on each attempt since it dies if the pod isn't ready
+            kill $PF_PID 2>/dev/null || true
+            kubectl port-forward -n tensorzero svc/tensorzero-gateway 3000:3000 &
+            PF_PID=$!
+            sleep 2
+
+            if curl -sf ${GATEWAY_URL}/health; then
+              echo "Gateway is healthy!"
+              kill $PF_PID || true
+              exit 0
+            fi
+
+            count=$((count + 1))
+            echo "Waiting for gateway to be healthy (attempt $count/$max_attempts)..."
+            if [ $count -ge $max_attempts ]; then
+              echo "Gateway failed to become healthy after $max_attempts attempts"
+              kill $PF_PID || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Print pod statuses
+        if: always()
+        run: |
+          kubectl get pods -A
+
+      - name: Run 'kubectl describe pods'
+        if: always()
+        run: |
+          kubectl describe pods -n tensorzero
+
+      - name: Print kubectl logs
+        if: always()
+        run: |
+          kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
+
+      - name: Print logs from stopped pods
+        if: always()
+        run: |
+          kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p || true

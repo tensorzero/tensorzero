@@ -140,8 +140,7 @@ impl PrimaryDatastore {
             None => {
                 if resolved == Self::Disabled {
                     tracing::warn!(
-                        "No observability backend available. \
-                         Observability writes will be disabled."
+                        "Disabling observability: `gateway.observability.enabled` is not explicitly enabled in the configuration and no backend is available (`TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`)."
                     );
                 }
                 Ok(resolved)
@@ -915,7 +914,7 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
 
     async fn search_evaluation_runs(
         &self,
-        evaluation_name: &str,
+        evaluation_name: Option<&str>,
         function_name: Option<&str>,
         query: &str,
         limit: u32,
@@ -1112,6 +1111,18 @@ mod test_helpers_impl {
                 }
                 PrimaryDatastore::ClickHouse => {
                     self.clickhouse.sleep_for_writes_to_be_visible().await;
+                }
+                PrimaryDatastore::Disabled => {}
+            }
+        }
+
+        async fn prepare_model_provider_statistics(&self) {
+            match self.primary {
+                PrimaryDatastore::Postgres => {
+                    self.postgres.prepare_model_provider_statistics().await;
+                }
+                PrimaryDatastore::ClickHouse => {
+                    self.clickhouse.prepare_model_provider_statistics().await;
                 }
                 PrimaryDatastore::Disabled => {}
             }

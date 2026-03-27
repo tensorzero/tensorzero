@@ -101,6 +101,11 @@ impl EvaluationJobHandler {
                     });
                     return serialize_evaluation_error(py, &error);
                 }
+                Some(EvaluationUpdate::FatalError(message)) => {
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                        "Evaluation fatal error: {message}"
+                    )));
+                }
                 None => return Err(PyStopIteration::new_err(())),
             }
         }
@@ -184,6 +189,11 @@ impl AsyncEvaluationJobHandler {
                         let error_clone = error.clone();
                         evaluation_errors.lock().await.push(error_clone);
                         return Python::attach(|py| serialize_evaluation_error(py, &error));
+                    }
+                    Some(EvaluationUpdate::FatalError(message)) => {
+                        return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                            "Evaluation fatal error: {message}"
+                        )));
                     }
                     None => return Err(PyStopAsyncIteration::new_err(())),
                 }

@@ -942,11 +942,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // Capture the parent span (function_inference) so we can use it as the parent
             // for write_inference, even if the task is spawned.
             let parent_span = tracing::Span::current();
-            // Always spawn a tokio task here. This ensures that 'write_inference' will
-            // not be cancelled partway through execution if the outer '/inference' request
-            // is cancelled. This reduces the chances that we only write to some tables and not others
-            // (but this is inherently best-effort due to ClickHouse's lack of transactions).
-            let write_future = deferred_tasks.spawn(async move {
+            let write_future = async move {
                 let database = DelegatingDatabaseConnection::new(
                     clickhouse_connection_info,
                     postgres_connection_info,
@@ -961,13 +957,13 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 )
                 .await;
                 Ok::<_, Error>(())
-            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes)));
-            if !async_writes {
-                write_future.await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to await ClickHouse inference write: {e:?}"),
-                    })
-                })??;
+            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes));
+            if async_writes {
+                deferred_tasks.spawn(write_future);
+            } else {
+                // It's safe to directly await this, since we ensure that the overall request future will be executed to completion
+                // See `possibly_prevent_request_cancellation` for more details.
+                write_future.await?;
             }
         }
 
@@ -1061,6 +1057,7 @@ async fn find_function(
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
                     experimentation: ExperimentationConfigWithNamespaces::default(),
+                    evaluators: HashMap::new(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -2842,6 +2839,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries.clone()),
             raw_response: None,
@@ -2895,6 +2894,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -2932,6 +2933,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -2966,6 +2969,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3014,6 +3019,8 @@ mod tests {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3104,6 +3111,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3206,6 +3215,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3290,6 +3301,8 @@ mod tests {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3375,6 +3388,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }),
             ..Default::default()
         });
@@ -3491,6 +3506,8 @@ mod tests {
                     input_tokens: Some(10),
                     output_tokens: Some(5),
                     cost: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                 },
                 latency: Latency::NonStreaming {
                     response_time: Duration::from_millis(100),

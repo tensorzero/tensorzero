@@ -4,7 +4,6 @@ use serde_json::Value as JsonValue;
 use sqlx::{Executor, PgPool, Postgres};
 use std::sync::Arc;
 use tensorzero::Tool;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::context::{DurableClient, ToolAppState};
@@ -34,18 +33,16 @@ use durable_tools_spawn::TaskToolParams;
 /// // Create TensorZero client
 /// let t0_client = http_gateway_client(Url::parse("http://localhost:3000")?)?;
 ///
-/// // Create executor
+/// // Create executor with tools registered at build time
 /// let database_url: SecretString = std::env::var("DATABASE_URL")?.into();
 /// let executor = ToolExecutor::builder()
 ///     .database_url(database_url)
 ///     .queue_name("tools")
 ///     .t0_client(t0_client)
+///     .register_task_tool_instance(ResearchTool)?
+///     .register_simple_tool_instance(SearchTool)?
 ///     .build()
 ///     .await?;
-///
-/// // Register tools (pass instances)
-/// executor.register_task_tool_instance(ResearchTool).await?;
-/// executor.register_simple_tool_instance(SearchTool).await?;
 ///
 /// // Spawn a tool execution by name
 /// let episode_id = Uuid::now_v7();
@@ -70,8 +67,8 @@ use durable_tools_spawn::TaskToolParams;
 pub struct ToolExecutor<S: Clone + Send + Sync + 'static = ()> {
     /// The durable client for task management.
     durable: DurableClient<S>,
-    /// The tool registry (wrapped in `RwLock` for thread-safe registration).
-    registry: Arc<RwLock<ToolRegistry>>,
+    /// The tool registry (immutable after construction).
+    registry: Arc<ToolRegistry>,
 }
 
 impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
@@ -106,49 +103,6 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
         ToolExecutorBuilder::new(extra_state)
     }
 
-    /// Register a `TaskTool` instance.
-    ///
-    /// This registers the tool with both the tool registry and the durable
-    /// client (so it can be executed by workers).
-    ///
-    /// # Errors
-    ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_task_tool_instance<T: TaskTool<ExtraState = S>>(
-        &self,
-        tool: T,
-    ) -> Result<&Self, ToolError> {
-        let tool = {
-            let mut registry = self.registry.write().await;
-            registry.register_task_tool_instance(tool)?
-        };
-
-        self.durable
-            .register_instance(TaskToolAdapter::new(tool))
-            .await?;
-
-        Ok(self)
-    }
-
-    /// Register a `SimpleTool` instance.
-    ///
-    /// `SimpleTools` don't need to be registered with the durable client
-    /// since they run inside `TaskTool` steps.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
-    /// Returns `ToolError::SchemaGeneration` if the tool's parameter schema generation fails.
-    pub async fn register_simple_tool_instance<T: SimpleTool>(
-        &self,
-        tool: T,
-    ) -> Result<&Self, ToolError> {
-        let mut registry = self.registry.write().await;
-        registry.register_simple_tool_instance(tool)?;
-        Ok(self)
-    }
-
     /// Spawn a tool by name with JSON parameters.
     ///
     /// This allows dynamic tool invocation without knowing the concrete type.
@@ -171,10 +125,8 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
         episode_id: Uuid,
     ) -> anyhow::Result<SpawnResult> {
         // Validate params before spawning
-        {
-            let registry = self.registry.read().await;
-            registry.validate_params(tool_name, &llm_params, &side_info)?;
-        }
+        self.registry
+            .validate_params(tool_name, &llm_params, &side_info)?;
 
         let wrapped_params = TaskToolParams {
             llm_params,
@@ -220,10 +172,8 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
         E: Executor<'e, Database = Postgres>,
     {
         // Validate params before spawning
-        {
-            let registry = self.registry.read().await;
-            registry.validate_params(tool_name, &llm_params, &side_info)?;
-        }
+        self.registry
+            .validate_params(tool_name, &llm_params, &side_info)?;
 
         let wrapped_params = TaskToolParams {
             llm_params,
@@ -252,18 +202,13 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
     /// # Errors
     ///
     /// Returns an error if a tool's parameter schema generation or serialization fails.
-    pub async fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
-        let registry = self.registry.read().await;
-        registry.iter().map(Tool::try_from).collect()
+    pub fn tool_definitions(&self) -> Result<Vec<Tool>, ToolError> {
+        self.registry.iter().map(Tool::try_from).collect()
     }
 
     /// Get a reference to the tool registry.
-    ///
-    /// Note: This returns an `Arc<RwLock<ToolRegistry>>` which requires
-    /// async locking to access. For most use cases, prefer the helper
-    /// methods on `ToolExecutor`.
-    pub fn registry(&self) -> Arc<RwLock<ToolRegistry>> {
-        self.registry.clone()
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.registry
     }
 
     /// Get a reference to the underlying durable client.
@@ -283,16 +228,24 @@ impl<S: Clone + Send + Sync + 'static> ToolExecutor<S> {
 }
 
 /// Builder for creating a [`ToolExecutor`] with custom configuration.
-pub struct ToolExecutorBuilder<S = ()> {
+///
+/// Tools must be registered on the builder before calling [`build`](Self::build):
+/// - Use [`register_task_tool_instance`](Self::register_task_tool_instance) for durable tools
+/// - Use [`register_simple_tool_instance`](Self::register_simple_tool_instance) for lightweight tools
+pub struct ToolExecutorBuilder<S: Clone + Send + Sync + 'static = ()> {
     database_url: Option<SecretString>,
     pool: Option<PgPool>,
     queue_name: String,
     default_max_attempts: u32,
     t0_client: Option<Arc<dyn TensorZeroClient>>,
     extra_state: S,
+    /// Tool registry — tools are registered immediately.
+    registry: ToolRegistry,
+    /// Durable builder — task tools are registered immediately.
+    durable_builder: DurableBuilder<ToolAppState<S>>,
 }
 
-impl<S> ToolExecutorBuilder<S> {
+impl<S: Clone + Send + Sync + 'static> ToolExecutorBuilder<S> {
     /// Create a new builder with default settings.
     pub fn new(extra_state: S) -> Self {
         Self {
@@ -302,6 +255,8 @@ impl<S> ToolExecutorBuilder<S> {
             default_max_attempts: 5,
             t0_client: None,
             extra_state,
+            registry: ToolRegistry::new(),
+            durable_builder: DurableBuilder::new(),
         }
     }
 
@@ -340,23 +295,83 @@ impl<S> ToolExecutorBuilder<S> {
         self
     }
 
+    /// Register a `TaskTool` instance.
+    ///
+    /// This registers the tool with both the tool registry and the durable
+    /// client immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_task_tool_instance<T: TaskTool<ExtraState = S>>(
+        mut self,
+        tool: T,
+    ) -> Result<Self, ToolError> {
+        let tool = self.registry.register_task_tool_instance(tool)?;
+        self.durable_builder = self
+            .durable_builder
+            .register_instance(TaskToolAdapter::new(tool))?;
+        Ok(self)
+    }
+
+    /// Register a `SimpleTool` instance.
+    ///
+    /// `SimpleTools` don't need to be registered with the durable client
+    /// since they run inside `TaskTool` steps.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn register_simple_tool_instance<T: SimpleTool>(
+        mut self,
+        tool: T,
+    ) -> Result<Self, ToolError> {
+        self.registry.register_simple_tool_instance(tool)?;
+        Ok(self)
+    }
+
+    /// Register a `TaskTool` instance (mutable reference variant).
+    ///
+    /// Like [`register_task_tool_instance`](Self::register_task_tool_instance) but takes
+    /// `&mut self` instead of `self`, useful when registering tools from a visitor or loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn push_task_tool_instance<T: TaskTool<ExtraState = S>>(
+        &mut self,
+        tool: T,
+    ) -> Result<(), ToolError> {
+        let tool = self.registry.register_task_tool_instance(tool)?;
+        self.durable_builder
+            .register_instance_mut(TaskToolAdapter::new(tool))?;
+        Ok(())
+    }
+
+    /// Register a `SimpleTool` instance (mutable reference variant).
+    ///
+    /// Like [`register_simple_tool_instance`](Self::register_simple_tool_instance) but takes
+    /// `&mut self` instead of `self`, useful when registering tools from a visitor or loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ToolError::DuplicateToolName` if a tool with the same name is already registered.
+    pub fn push_simple_tool_instance<T: SimpleTool>(&mut self, tool: T) -> Result<(), ToolError> {
+        self.registry.register_simple_tool_instance(tool)?;
+        Ok(())
+    }
+
     /// Build the [`ToolExecutor`].
     ///
     /// # Errors
     ///
     /// Returns an error if the database connection fails or if the TensorZero
     /// client was not provided.
-    pub async fn build(self) -> anyhow::Result<ToolExecutor<S>>
-    where
-        S: Clone + Send + Sync + 'static,
-    {
+    pub async fn build(self) -> anyhow::Result<ToolExecutor<S>> {
         // TensorZero client is required
         let t0_client = self
             .t0_client
             .ok_or_else(|| anyhow::anyhow!("t0_client is required"))?;
-
-        // Create the tool registry
-        let registry = Arc::new(RwLock::new(ToolRegistry::new()));
 
         // Get or create the pool
         let pool = if let Some(pool) = self.pool {
@@ -368,12 +383,15 @@ impl<S> ToolExecutorBuilder<S> {
             PgPool::connect(url.expose_secret()).await?
         };
 
+        let registry = Arc::new(self.registry);
+
         // Create the app context with the pool and TensorZero client
         let app_ctx =
             ToolAppState::new(pool.clone(), registry.clone(), t0_client, self.extra_state);
 
-        // Build the durable client with the app context
-        let durable = DurableBuilder::new()
+        // Finalize the durable client with pool, queue config, and app state
+        let durable = self
+            .durable_builder
             .pool(pool)
             .queue_name(&self.queue_name)
             .default_max_attempts(self.default_max_attempts)
@@ -384,7 +402,7 @@ impl<S> ToolExecutorBuilder<S> {
     }
 }
 
-impl<S: Default> Default for ToolExecutorBuilder<S> {
+impl<S: Default + Clone + Send + Sync + 'static> Default for ToolExecutorBuilder<S> {
     fn default() -> Self {
         Self::new(S::default())
     }

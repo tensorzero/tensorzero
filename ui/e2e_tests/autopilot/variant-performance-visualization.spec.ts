@@ -52,6 +52,10 @@ function buildFeedbackByVariantToolEvents(sessionId: string) {
     type: "tool_result" as const,
     tool_call_id: toolCallId,
     tool_call_event_id: toolCallEventId,
+    tool_call_name: "get_feedback_by_variant",
+    tool_call_arguments: toolCallPayload.arguments,
+    tool_call_authorization_source: { type: "automatic" as const },
+    tool_call_authorization_status: { type: "approved" as const },
     outcome: {
       type: "success" as const,
       result: JSON.stringify(feedbackData),
@@ -72,8 +76,9 @@ test.describe("Variant Performance Visualization", () => {
     const { toolCallPayload, toolResultPayload } =
       buildFeedbackByVariantToolEvents(sessionId);
 
-    insertEvent(v7(), sessionId, toolCallPayload);
-    insertEvent(v7(), sessionId, toolResultPayload);
+    const toolCallEventId = toolCallPayload.side_info.tool_call_event_id;
+    await insertEvent(toolCallEventId, sessionId, toolCallPayload);
+    await insertEvent(v7(), sessionId, toolResultPayload);
 
     // Wait for the tool result card to appear (auto-expanded)
     await expect(

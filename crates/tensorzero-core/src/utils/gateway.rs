@@ -8,7 +8,8 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
 use moka::sync::Cache;
 use serde::de::DeserializeOwned;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::ConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tensorzero_auth::postgres::AuthResult;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
@@ -258,7 +259,7 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, Error> {
-        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
 
         let primary_datastore = PrimaryDatastore::resolve(
@@ -621,18 +622,12 @@ impl AppStateData {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(
-        &Box::pin(Config::new_empty()).await?,
-        Some(clickhouse_url),
-        true,
-    )
-    .await
+    setup_clickhouse(&Box::pin(Config::new_empty()).await?, Some(clickhouse_url)).await
 }
 
 pub async fn setup_clickhouse(
     config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
-    embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
     // ClickHouse.
@@ -660,14 +655,7 @@ pub async fn setup_clickhouse(
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
-            let msg_suffix = if embedded_client {
-                "`clickhouse_url` was not provided."
-            } else {
-                "`TENSORZERO_CLICKHOUSE_URL` is not set."
-            };
-            tracing::warn!(
-                "Disabling ClickHouse: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}"
-            );
+            tracing::debug!("Disabling ClickHouse: `TENSORZERO_CLICKHOUSE_URL` is not set.");
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
@@ -697,9 +685,19 @@ async fn create_postgres_connection(
     connection_pool_size: u32,
     batch_writes: &BatchWritesConfig,
 ) -> Result<PostgresConnectionInfo, Error> {
+    let connect_options: PgConnectOptions = postgres_url.parse().map_err(|err: sqlx::Error| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message: err.to_string(),
+        })
+    })?;
+    // Demote sqlx's built-in statement logging from INFO to TRACE.
+    // This avoids flooding logs with full SQL (including thousands of bind params)
+    // during bulk INSERT operations.
+    let connect_options = connect_options.log_statements(tracing::log::LevelFilter::Trace);
+
     let pool = PgPoolOptions::new()
         .max_connections(connection_pool_size)
-        .connect(postgres_url)
+        .connect_with(connect_options)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -712,6 +710,10 @@ async fn create_postgres_connection(
             pool.clone(),
             batch_writes.clone(),
         )?);
+        tracing::debug!(
+            write_queue_capacity = ?batch_writes.write_queue_capacity,
+            "Postgres batch writer enabled"
+        );
         PostgresConnectionInfo::new_with_pool_and_batcher(pool, batch_sender)
     } else {
         PostgresConnectionInfo::new_with_pool(pool)
@@ -1090,7 +1092,7 @@ mod tests {
         };
         let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(&config, None, false).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -1117,9 +1119,7 @@ mod tests {
             ..Default::default()
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
-            .await
-            .unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -1127,9 +1127,7 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`"
         ));
-        assert!(logs_contain(
-            "`gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."
-        ));
+        assert!(!logs_contain("Disabling observability"));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
@@ -1166,9 +1164,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
-            .await
-            .unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled,
@@ -1204,7 +1200,7 @@ mod tests {
             ..Default::default()
         };
         let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
-        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()))
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -1245,7 +1241,6 @@ mod tests {
         setup_clickhouse(
             &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
-            false,
         )
         .await
         .expect_err("ClickHouse setup should fail given a URL that doesn't point to ClickHouse");

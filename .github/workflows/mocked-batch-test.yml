@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -85,11 +85,13 @@ jobs:
         id: pull-mock-provider-api
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
-          docker pull tensorzero/mock-provider-api:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/mock-provider-api:sha-${{ github.sha }}
 
       - name: Pull gateway container
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }}
           docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
 
       - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG

@@ -41,6 +41,7 @@ ALLOWED_SKIP=(
   "check-version-consistency"
   "clickhouse-tests"
   "client-tests"
+  "inference-cache-tests"
   "Endpoint tests"
   "lint-rust"
   "live-tests"

@@ -32,6 +32,7 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 async-stream = { workspace = true }
+http-body-util = { workspace = true }
 
 [lints]
 workspace = true
@@ -39,7 +40,7 @@ workspace = true
 [features]
 e2e_tests = ["tensorzero-core/e2e_tests", "autopilot-worker/e2e_tests", "autopilot-tools/e2e_tests"]
 default = []
-ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings", "autopilot-worker/ts-bindings"]
+ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings", "autopilot-worker/ts-bindings", "evaluations/ts-bindings"]
 
 [dev-dependencies]
 reqwest.workspace = true

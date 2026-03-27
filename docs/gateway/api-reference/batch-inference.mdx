@@ -183,7 +183,7 @@ If the content block has type `file`, it must have exactly one of the following 
   - `mime_type` (optional): the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`). If not provided, TensorZero will attempt to infer the MIME type from the file's magic bytes.
   - `filename` (optional): a filename to associate with the file
 
-See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
+See the [Call LLMs with image & file inputs](/gateway/call-llms-with-image-and-file-inputs/) guide for more details on how to use images in inference.
 
 If the content block has type `raw_text`, it must have the following additional fields:
 
@@ -630,7 +630,7 @@ Each inference object is the same as the response from a regular inference reque
 ## `GET /batch_inference/:batch_id/inference/:inference_id`
 
 This endpoint can be used to poll the status of a single inference in a batch.
-Since the polling involves pulling data on all the inferences in the batch, we also store the status of all those inference in ClickHouse.
+Since the polling involves pulling data on all the inferences in the batch, we also store the status of all those inference in your database.
 The response format depends on the function type as well as the batch status when polled.
 
 ### Pending

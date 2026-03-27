@@ -824,6 +824,8 @@ fn mistral_usage_to_tensorzero_usage(usage: MistralUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
+        provider_cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
+        provider_cache_write_input_tokens: None,
         cost: None,
     }
 }
@@ -1087,6 +1089,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use googletest::prelude::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
@@ -1430,6 +1433,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
             },
         };
 
@@ -1528,6 +1532,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1612,6 +1617,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
+                prompt_tokens_details: None,
             },
         };
         let request_body = MistralRequest {
@@ -1666,6 +1672,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
+                prompt_tokens_details: None,
             },
         };
         let request_body = MistralRequest {
@@ -1901,6 +1908,7 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 30,
+                prompt_tokens_details: None,
             },
         };
 
@@ -2215,5 +2223,25 @@ mod tests {
         let json = r#"{"content": null}"#;
         let msg: MistralResponseMessage = serde_json::from_str(json).unwrap();
         assert_eq!(msg.content, None, "null content should deserialize as None");
+    }
+
+    #[gtest]
+    fn test_mistral_usage_with_cache_tokens() {
+        use tensorzero_types_providers::mistral::{MistralPromptTokensDetails, MistralUsage};
+
+        let mistral_usage = MistralUsage {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            prompt_tokens_details: Some(MistralPromptTokensDetails {
+                cached_tokens: Some(60),
+            }),
+        };
+
+        let usage = mistral_usage_to_tensorzero_usage(mistral_usage);
+
+        expect_that!(usage.input_tokens, eq(Some(100)));
+        expect_that!(usage.output_tokens, eq(Some(50)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(60)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(None::<u32>));
     }
 }

@@ -13,6 +13,7 @@ export function getAutopilotClient(): AutopilotClient {
       env.TENSORZERO_GATEWAY_URL,
       env.TENSORZERO_API_KEY,
       env.TENSORZERO_AUTOPILOT_BETA_TOOLS,
+      env.autopilotHeaders,
     );
     return _envClient;
   }
@@ -22,5 +23,6 @@ export function getAutopilotClient(): AutopilotClient {
     env.TENSORZERO_GATEWAY_URL,
     getEffectiveApiKey(),
     env.TENSORZERO_AUTOPILOT_BETA_TOOLS,
+    env.autopilotHeaders,
   );
 }

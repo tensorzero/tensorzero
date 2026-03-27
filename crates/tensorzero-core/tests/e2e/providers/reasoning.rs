@@ -403,9 +403,12 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     let inference_id = inference_id.unwrap();
     // We only check that the response contains digits rather than a specific answer,
     // since models can make arithmetic mistakes.
+    // Some providers (e.g. Together DeepSeek R1) put all content including the answer
+    // in the reasoning field during streaming, so we check both text and thought content.
+    let all_content = format!("{}{}", full_content, full_thought.as_deref().unwrap_or(""));
     assert!(
-        full_content.chars().any(|c| c.is_ascii_digit()),
-        "Expected numeric digits in content: {full_content}"
+        all_content.chars().any(|c| c.is_ascii_digit()),
+        "Expected numeric digits in content or thought: content={full_content:?}, thought={full_thought:?}"
     );
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
@@ -482,7 +485,10 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
         }
     }
 
-    assert!(found_text, "Expected to find a text block");
+    // Some together models (e.g. DeepSeek R1) put all content in a thought block
+    if provider.model_provider_name != "together" {
+        assert!(found_text, "Expected to find a text block");
+    }
     assert!(found_thought, "Expected to find a thought block");
     assert_eq!(clickhouse_content, full_content);
     assert_eq!(clickhouse_thought, full_thought);
@@ -582,12 +588,14 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert!(
-        output
-            .iter()
-            .any(|c| matches!(c, StoredContentBlock::Text(_))),
-        "Missing text block in output: {output:#?}"
-    );
+    if provider.model_provider_name != "together" {
+        assert!(
+            output
+                .iter()
+                .any(|c| matches!(c, StoredContentBlock::Text(_))),
+            "Missing text block in output: {output:#?}"
+        );
+    }
     assert!(
         output
             .iter()
@@ -614,7 +622,8 @@ pub async fn test_reasoning_inference_request_json_mode_nonstreaming_with_provid
 ) {
     skip_for_postgres!();
     // Direct Anthropic uses output_format for json_mode=strict
-    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+    // AWS Bedrock uses json_mode=off (prompt-based JSON) to avoid prefill conflicts with thinking
+    // GCP Vertex Anthropic uses json_mode=off because it doesn't support structured outputs or JSON mode
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {
@@ -854,7 +863,8 @@ pub async fn test_reasoning_inference_request_json_mode_streaming_with_provider(
     }
 
     // Direct Anthropic uses output_format for json_mode=strict
-    // AWS Bedrock and GCP Vertex Anthropic use json_mode=off (prompt-based JSON) to avoid prefill conflicts
+    // AWS Bedrock uses json_mode=off (prompt-based JSON) to avoid prefill conflicts with thinking
+    // GCP Vertex Anthropic uses json_mode=off because it doesn't support structured outputs or JSON mode
 
     let episode_id = Uuid::now_v7();
     let extra_headers = if provider.is_modal_provider() {

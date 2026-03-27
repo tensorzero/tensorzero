@@ -32,7 +32,7 @@ thinking_budget_tokens = 1024
 type = "chat_completion"
 model = "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
-# GCP Vertex AI doesn't support structured outputs yet, so use json_mode=off to avoid prefill conflicts with thinking
+# GCP Vertex AI doesn't support structured outputs or JSON mode
 json_mode = "off"
 max_tokens = 2048
 thinking_budget_tokens = 1024

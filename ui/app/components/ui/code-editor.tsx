@@ -95,7 +95,15 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
   },
 });
 
-// Editor theme with monospace font
+// Editor theme with monospace font.
+//
+// IMPORTANT — Syntax highlighting depends on all CodeMirror/Lezer packages
+// sharing a single instance of `@lezer/highlight`. If multiple versions are
+// installed (check with `pnpm why @lezer/highlight`), the `Tag` objects used
+// by the language parser and the `HighlightStyle` will be different instances,
+// causing all tokens to render in the default foreground color (no colors).
+// Fix: add `"@lezer/highlight": "<version>"` to `pnpm.overrides` in the
+// workspace-root `package.json` to deduplicate.
 const THEME_MONO = githubLightInit({
   settings: {
     fontFamily: "var(--font-mono)",

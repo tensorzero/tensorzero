@@ -240,15 +240,13 @@ async fn main() -> anyhow::Result<()> {
         .database_url(std::env::var("DATABASE_URL")?.into())
         .queue_name("tools")
         .t0_client(t0_client)
+        .register_simple_tool_instance(SearchTool)?
+        .register_task_tool_instance(ResearchTool)?
         .build()
         .await?;
 
     // Create the queue (required before spawning)
     executor.durable().create_queue(None).await?;
-
-    // Register tools (pass instances)
-    executor.register_simple_tool_instance(SearchTool).await?;
-    executor.register_task_tool_instance(ResearchTool).await?;
 
     // Spawn a tool execution by name
     let episode_id = Uuid::now_v7();

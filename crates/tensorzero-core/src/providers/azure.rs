@@ -1138,9 +1138,12 @@ mod tests {
                 },
                 finish_reason: OpenAIFinishReason::Stop,
             }],
+            // Azure OpenAI supports automatic prompt caching (like OpenAI) via
+            // `prompt_tokens_details.cached_tokens`. See cache.rs for the full mapping.
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             }),
         };
         let generic_request = ModelInferenceRequest {

@@ -47,6 +47,9 @@ impl EvaluationStats {
             OutputFormat::Jsonl => {
                 let json = match &evaluation_update {
                     EvaluationUpdate::RunInfo(run_info) => serde_json::to_string(run_info)?,
+                    EvaluationUpdate::FatalError(msg) => {
+                        serde_json::to_string(&serde_json::json!({"message": msg}))?
+                    }
                     other => serde_json::to_string(other)?,
                 };
                 writeln!(writer, "{json}")?;
@@ -61,6 +64,9 @@ impl EvaluationStats {
                         progress_bar.inc(1);
                     }
                 }
+                EvaluationUpdate::FatalError(msg) => {
+                    writeln!(writer, "Fatal error: {msg}")?;
+                }
             },
         }
         match evaluation_update {
@@ -70,7 +76,7 @@ impl EvaluationStats {
             EvaluationUpdate::Error(evaluation_error) => {
                 self.evaluation_errors.push(evaluation_error);
             }
-            EvaluationUpdate::RunInfo(_) => {
+            EvaluationUpdate::RunInfo(_) | EvaluationUpdate::FatalError(_) => {
                 // No data to store
             }
         }
@@ -162,6 +168,11 @@ pub enum EvaluationUpdate {
     RunInfo(crate::RunInfo),
     Success(EvaluationInfo),
     Error(EvaluationError),
+    /// A fatal error that terminates the evaluation stream.
+    /// Used by the HTTP SSE client to propagate transport or server-side fatal errors
+    /// to the consumer, preventing silent partial results.
+    #[serde(skip)]
+    FatalError(String),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

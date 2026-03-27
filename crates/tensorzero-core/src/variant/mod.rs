@@ -1189,6 +1189,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1241,6 +1242,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let json_mode = JsonMode::On;
@@ -1416,6 +1418,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1494,6 +1497,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1533,6 +1538,7 @@ mod tests {
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1610,6 +1616,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1744,6 +1752,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1842,6 +1851,8 @@ mod tests {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
                 cost: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
             }
         );
         match inference_result {
@@ -1908,6 +1919,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         });
 
         // Create an input message
@@ -2077,6 +2089,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
+            evaluators: HashMap::new(),
         })));
 
         let request_messages = vec![RequestMessage {

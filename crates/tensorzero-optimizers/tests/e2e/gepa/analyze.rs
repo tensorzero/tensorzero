@@ -46,6 +46,7 @@ pub fn create_test_function_config() -> FunctionConfig {
         all_explicit_templates_names: std::collections::HashSet::new(),
         experimentation:
             tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+        evaluators: HashMap::new(),
     })
 }
 
@@ -73,6 +74,7 @@ pub fn create_test_json_function_config() -> FunctionConfig {
         all_explicit_template_names: std::collections::HashSet::new(),
         experimentation:
             tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+        evaluators: std::collections::HashMap::new(),
     })
 }
 
@@ -124,6 +126,7 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
         all_explicit_templates_names: std::collections::HashSet::new(),
         experimentation:
             tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+        evaluators: HashMap::new(),
     })
 }
 
@@ -188,6 +191,7 @@ pub fn create_test_function_config_with_static_tools() -> (
         all_explicit_templates_names: std::collections::HashSet::new(),
         experimentation:
             tensorzero_core::experimentation::ExperimentationConfigWithNamespaces::default(),
+        evaluators: HashMap::new(),
     });
 
     // Create static_tools HashMap

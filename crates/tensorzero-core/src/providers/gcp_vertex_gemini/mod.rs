@@ -823,6 +823,8 @@ fn make_provider_batch_inference_output(
     let usage = Usage {
         input_tokens: usage_metadata.prompt_token_count,
         output_tokens: usage_metadata.output_tokens(),
+        provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+        provider_cache_write_input_tokens: None,
         cost: None,
     };
 
@@ -2975,6 +2977,9 @@ struct GCPVertexGeminiUsageMetadata {
     candidates_token_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thoughts_token_count: Option<u32>,
+    /// GCP Vertex Gemini reports cached content tokens as `cachedContentTokenCount`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cached_content_token_count: Option<u32>,
 }
 
 impl GCPVertexGeminiUsageMetadata {
@@ -3082,6 +3087,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let usage = Usage {
             input_tokens: usage_metadata.prompt_token_count,
             output_tokens: usage_metadata.output_tokens(),
+            provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
 
@@ -3176,6 +3183,8 @@ fn convert_stream_response_with_metadata_to_chunk(
                 Some(Usage {
                     input_tokens: metadata.prompt_token_count,
                     output_tokens: metadata.output_tokens(),
+                    provider_cache_read_input_tokens: metadata.cached_content_token_count,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 })
             } else {
@@ -3254,6 +3263,7 @@ mod tests {
 
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolResult};
+    use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
     use std::sync::Arc;
@@ -3799,6 +3809,7 @@ mod tests {
                 prompt_token_count: None,
                 candidates_token_count: None,
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3853,6 +3864,8 @@ mod tests {
             Usage {
                 input_tokens: None,
                 output_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -3901,6 +3914,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -3969,6 +3983,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -4040,6 +4056,7 @@ mod tests {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -4099,6 +4116,8 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -4765,6 +4784,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4828,6 +4848,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -4879,6 +4900,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Duration::from_millis(100);
@@ -5048,6 +5070,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let mut last_tool_name = None;
@@ -5736,5 +5759,28 @@ mod tests {
             }
             _ => panic!("Expected a function call part"),
         }
+    }
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_usage_with_cache_tokens() {
+        let usage_metadata = GCPVertexGeminiUsageMetadata {
+            prompt_token_count: Some(200),
+            candidates_token_count: Some(80),
+            thoughts_token_count: None,
+            cached_content_token_count: Some(150),
+        };
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.output_tokens(),
+            provider_cache_read_input_tokens: usage_metadata.cached_content_token_count,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+
+        expect_that!(usage.input_tokens, eq(Some(200)));
+        expect_that!(usage.output_tokens, eq(Some(80)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(150)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(None::<u32>));
     }
 }
