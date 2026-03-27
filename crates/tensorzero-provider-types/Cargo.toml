@@ -1,0 +1,31 @@
+[package]
+name = "tensorzero-provider-types"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+futures.workspace = true
+mime.workspace = true
+rust_decimal = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
+sqlx.workspace = true
+tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-error = { path = "../tensorzero-error" }
+tensorzero-types = { path = "../tensorzero-types" }
+tensorzero-types-providers = { path = "../tensorzero-types-providers" }
+url = { workspace = true, features = ["serde"] }
+uuid.workspace = true
+
+ts-rs = { workspace = true, optional = true }
+
+[features]
+default = []
+e2e_tests = []
+ts-bindings = ["dep:ts-rs", "tensorzero-types/ts-bindings"]
+
+[lints]
+workspace = true

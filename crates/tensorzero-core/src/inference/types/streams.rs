@@ -19,75 +19,16 @@ use futures::Stream;
 use futures::StreamExt;
 use futures::stream::Peekable;
 use indexmap::{IndexMap, IndexSet};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 use super::InferenceResult;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ProviderInferenceResponseChunk {
-    pub content: Vec<ContentBlockChunk>,
-    pub usage: Option<Usage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    pub raw_response: String,
-    /// Time elapsed between making the request to the model provider and receiving this chunk.
-    /// Important: this is NOT latency from the start of the TensorZero request.
-    pub provider_latency: Duration,
-    pub finish_reason: Option<FinishReason>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum ContentBlockChunk {
-    Text(TextChunk),
-    ToolCall(ToolCallChunk),
-    Thought(ThoughtChunk),
-    Unknown(UnknownChunk),
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TextChunk {
-    pub id: String,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ThoughtChunk {
-    pub id: String,
-    pub text: Option<String>,
-    pub signature: Option<String>,
-    pub summary_id: Option<String>,
-    pub summary_text: Option<String>,
-
-    /// See `Thought.provider_type`
-    #[serde(
-        // This alias is written to the database, so we cannot remove it.
-        alias = "_internal_provider_type",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub provider_type: Option<String>,
-    /// Provider-specific opaque data for multi-turn reasoning support.
-    /// See `Thought.extra_data`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra_data: Option<Value>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct UnknownChunk {
-    pub id: String,
-    pub data: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_name: Option<String>,
-}
+pub use tensorzero_provider_types::{
+    ContentBlockChunk, ProviderInferenceResponseChunk, TextChunk, ThoughtChunk, UnknownChunk,
+};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ChatInferenceResultChunk {
@@ -731,6 +672,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
     };
     let content_blocks: Vec<_> = blocks.into_values().collect();
     let model_response = ProviderInferenceResponse::new(ProviderInferenceResponseArgs {
+        id: model_inference_id,
         output: content_blocks.clone(),
         system,
         input_messages,
@@ -741,7 +683,6 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         relay_raw_response: None,
         provider_latency,
         finish_reason,
-        id: model_inference_id,
     });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, provider_type, cached);
@@ -811,10 +752,9 @@ fn tool_call_chunk_to_tool_call(tool_call: ToolCallChunk) -> ToolCall {
 // (due to the fact that unsized coercions are not supported on `Peekable` or other user-defined types).
 // This would require `stream_<provider>` functions to first introduce a local variable with the correct
 // `Pin<Box<dyn Stream>>` type, and then call `.peekable()` on that.
-pub type ProviderInferenceResponseStreamInner =
-    Pin<Box<dyn Stream<Item = Result<ProviderInferenceResponseChunk, Error>> + Send>>;
-
-pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
+pub use tensorzero_provider_types::{
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponseStreamInner,
+};
 
 type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;

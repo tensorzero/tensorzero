@@ -933,6 +933,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -945,7 +946,6 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 finish_reason: Some(mistral_finish_reason_to_tensorzero_finish_reason(
                     finish_reason,
                 )),
-                id: model_inference_id,
             },
         ))
     }

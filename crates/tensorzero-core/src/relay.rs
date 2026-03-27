@@ -397,38 +397,39 @@ impl TensorzeroRelay {
         // Extract relay_raw_response entries from downstream response for passthrough
         let relay_raw_response = non_streaming.raw_response().cloned();
 
+        let output = match non_streaming {
+            InferenceResponse::Chat(chat) => chat
+                .content
+                .into_iter()
+                .flat_map(|c| match c {
+                    ContentBlockChatOutput::Text(text) => Some(ContentBlockOutput::Text(text)),
+                    ContentBlockChatOutput::ToolCall(tool_call) => {
+                        Some(ContentBlockOutput::ToolCall(ToolCall {
+                            id: tool_call.id,
+                            name: tool_call.raw_name,
+                            arguments: tool_call.raw_arguments,
+                        }))
+                    }
+                    ContentBlockChatOutput::Thought(thought) => {
+                        Some(ContentBlockOutput::Thought(thought))
+                    }
+                    ContentBlockChatOutput::Unknown(unknown) => {
+                        Some(ContentBlockOutput::Unknown(unknown))
+                    }
+                })
+                .collect(),
+            InferenceResponse::Json(json) => match json.output.raw {
+                Some(raw) => vec![ContentBlockOutput::Text(Text { text: raw })],
+                None => vec![],
+            },
+        };
+        let input_messages = request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
-                output: match non_streaming {
-                    InferenceResponse::Chat(chat) => chat
-                        .content
-                        .into_iter()
-                        .flat_map(|c| match c {
-                            ContentBlockChatOutput::Text(text) => {
-                                Some(ContentBlockOutput::Text(text))
-                            }
-                            ContentBlockChatOutput::ToolCall(tool_call) => {
-                                Some(ContentBlockOutput::ToolCall(ToolCall {
-                                    id: tool_call.id,
-                                    name: tool_call.raw_name,
-                                    arguments: tool_call.raw_arguments,
-                                }))
-                            }
-                            ContentBlockChatOutput::Thought(thought) => {
-                                Some(ContentBlockOutput::Thought(thought))
-                            }
-                            ContentBlockChatOutput::Unknown(unknown) => {
-                                Some(ContentBlockOutput::Unknown(unknown))
-                            }
-                        })
-                        .collect(),
-                    InferenceResponse::Json(json) => match json.output.raw {
-                        Some(raw) => vec![ContentBlockOutput::Text(Text { text: raw })],
-                        None => vec![],
-                    },
-                },
+                id: Uuid::now_v7(),
+                output,
                 system: request.system.clone(),
-                input_messages: request.messages.clone(),
+                input_messages,
                 raw_request: http_data.raw_request,
                 raw_response: http_data.raw_response.unwrap_or_default(),
                 usage,
@@ -436,7 +437,6 @@ impl TensorzeroRelay {
                 relay_raw_response,
                 provider_latency: latency,
                 finish_reason,
-                id: Uuid::now_v7(),
             },
         ))
     }
