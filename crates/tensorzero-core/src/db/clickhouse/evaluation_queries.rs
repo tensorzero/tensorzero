@@ -14,6 +14,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::EvaluationUsageStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
 use crate::db::evaluation_queries::InferenceEvaluationRunMetadata;
@@ -529,6 +530,69 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
 
         let mut params = HashMap::new();
         params.insert("datapoint_id", datapoint_id_str.as_str());
+        params.insert("function_name", function_name_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
+
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        let inference_table_name = function_type.table_name();
+
+        let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
+            function_name,
+            evaluation_run_ids,
+            None,
+            None,
+            None,
+        );
+
+        let sql_query = format!(
+            r"WITH {datapoint_id_subquery},
+            filtered_inference AS (
+                SELECT
+                    id,
+                    tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+                    processing_time_ms
+                FROM {inference_table_name}
+                WHERE id IN (SELECT inference_id FROM all_inference_ids)
+                AND function_name = {{function_name:String}}
+            ),
+            inference_usage AS (
+                SELECT
+                    mi.inference_id as inference_id,
+                    toInt64(sum(mi.input_tokens)) as input_tokens,
+                    toInt64(sum(mi.output_tokens)) as output_tokens,
+                    if(count(*) = countIf(isNotNull(mi.cost)), toFloat64(sum(mi.cost)), null) as cost
+                FROM ModelInference mi
+                WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY mi.inference_id
+            )
+            SELECT
+                toUUID(fi.evaluation_run_id) as evaluation_run_id,
+                toUInt32(count()) as inference_count,
+                toInt64(sum(iu.input_tokens)) as total_input_tokens,
+                toInt64(sum(iu.output_tokens)) as total_output_tokens,
+                if(count(*) = countIf(isNotNull(iu.cost)), toFloat64(sum(iu.cost)), null) as total_cost,
+                avg(fi.processing_time_ms) as avg_processing_time_ms
+            FROM filtered_inference fi
+            LEFT JOIN inference_usage iu ON iu.inference_id = fi.id
+            GROUP BY fi.evaluation_run_id
+            ORDER BY toUInt128(toUUID(fi.evaluation_run_id)) DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let function_name_str = function_name.to_string();
+        let mut params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
         params.insert("function_name", function_name_str.as_str());
 
         let response = self.run_query_synchronous(sql_query, &params).await?;

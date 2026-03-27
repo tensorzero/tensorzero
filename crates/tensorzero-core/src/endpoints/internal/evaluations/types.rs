@@ -150,3 +150,42 @@ pub struct EvaluationStatistics {
     pub ci_lower: Option<f64>,
     pub ci_upper: Option<f64>,
 }
+
+// =============================================================================
+// Get Evaluation Usage Statistics
+// =============================================================================
+
+/// Query parameters for getting evaluation usage statistics.
+#[derive(Debug, Deserialize)]
+pub struct GetEvaluationUsageStatisticsParams {
+    pub function_name: String,
+    /// Function type: "chat" or "json"
+    pub function_type: String,
+    /// Comma-separated list of evaluation run IDs
+    pub evaluation_run_ids: String,
+}
+
+/// Response containing evaluation usage statistics.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GetEvaluationUsageStatisticsResponse {
+    pub usage_statistics: Vec<EvaluationUsageStatistics>,
+}
+
+/// Aggregated usage statistics for a single evaluation run.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct EvaluationUsageStatistics {
+    pub evaluation_run_id: Uuid,
+    pub inference_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_input_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_output_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_cost: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_processing_time_ms: Option<f64>,
+}
