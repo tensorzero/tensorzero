@@ -34,6 +34,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessage;
+use crate::inference::types::RequestMessageExt;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,

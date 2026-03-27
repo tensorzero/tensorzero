@@ -21,6 +21,7 @@ use crate::inference::types::resolved_input::{
 use crate::relay::TensorzeroRelay;
 use crate::utils::retries::RetryConfig;
 
+use crate::inference::types::RequestMessageExt;
 use crate::inference::types::{
     ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
     Unknown,
