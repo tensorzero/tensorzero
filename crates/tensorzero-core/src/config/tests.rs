@@ -3512,6 +3512,37 @@ async fn test_deprecated_template_filesystem_access_enabled() {
     ));
 }
 
+/// Test that the deprecated GEPA `evaluation_name` option is still accepted
+/// and emits a deprecation warning.
+#[tokio::test]
+async fn test_deprecated_gepa_evaluation_name_warns() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let tempfile = NamedTempFile::new().unwrap();
+    write!(
+        &tempfile,
+        r#"
+            [optimizers.test_gepa]
+            type = "gepa"
+            function_name = "basic_test"
+            evaluation_name = "test_evaluation"
+            analysis_model = "openai::gpt-4.1-mini"
+            mutation_model = "openai::gpt-4.1-mini"
+        "#
+    )
+    .unwrap();
+
+    let _config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    assert!(logs_contain(
+        "The `evaluation_name` field on GEPA optimizers is deprecated"
+    ));
+}
+
 #[tokio::test]
 async fn test_nested_skip_credential_validation() {
     assert!(!skip_credential_validation());

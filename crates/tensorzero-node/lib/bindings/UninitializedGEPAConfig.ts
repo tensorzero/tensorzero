@@ -6,7 +6,8 @@ import type { RetryConfig } from "./RetryConfig";
  */
 export type UninitializedGEPAConfig = {
   function_name: string;
-  evaluation_name: string;
+  evaluation_name?: string;
+  evaluator_names?: Array<string>;
   initial_variants?: Array<string>;
   variant_prefix?: string;
   batch_size: number;

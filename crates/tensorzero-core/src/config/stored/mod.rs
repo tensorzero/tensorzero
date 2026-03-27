@@ -12,11 +12,13 @@ mod cache_config;
 mod embedding_model_config;
 mod gateway_config;
 mod observability_config;
+mod optimizer_info;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 pub use gateway_config::StoredGatewayConfig;
 pub use observability_config::StoredObservabilityConfig;
+pub use optimizer_info::{StoredGEPAConfig, StoredOptimizerConfig, StoredOptimizerInfo};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -31,7 +33,6 @@ use crate::config::{
 use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
-use crate::optimization::UninitializedOptimizerInfo;
 use crate::rate_limiting::UninitializedRateLimitingConfig;
 
 /// Top-level stored config type.
@@ -64,7 +65,7 @@ pub struct StoredConfig {
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
     #[serde(default)]
-    pub optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    pub optimizers: HashMap<String, StoredOptimizerInfo>,
 
     // Fields WITH deprecations or custom serde - use Stored* types
     #[serde(default)]
@@ -108,7 +109,7 @@ impl From<UninitializedConfig> for StoredConfig {
             tools,
             evaluations,
             provider_types,
-            optimizers,
+            optimizers: optimizers.into_iter().map(|(k, v)| (k, v.into())).collect(),
             rate_limiting,
             embedding_models: embedding_models
                 .into_iter()
@@ -161,7 +162,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             tools,
             evaluations,
             provider_types,
-            optimizers,
+            optimizers: optimizers.into_iter().map(|(k, v)| (k, v.into())).collect(),
             rate_limiting,
             embedding_models: embedding_models
                 .into_iter()
@@ -469,5 +470,32 @@ type = "exact_match"
         let _uninit: UninitializedConfig = stored
             .try_into()
             .expect("should convert to UninitializedConfig");
+    }
+
+    /// Historical GEPA snapshots with legacy `evaluation_name` should still parse.
+    #[test]
+    fn test_historical_stored_gepa_optimizer_with_evaluation_name() {
+        let toml_str = r#"
+            [optimizers.test_gepa]
+            type = "gepa"
+            function_name = "basic_test"
+            evaluation_name = "test_evaluation"
+            analysis_model = "openai::gpt-4.1-mini"
+            mutation_model = "openai::gpt-4.1-mini"
+        "#;
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("legacy GEPA optimizer should parse from snapshot");
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+
+        let optimizer = uninit
+            .optimizers
+            .get("test_gepa")
+            .expect("GEPA optimizer should exist after conversion");
+        let crate::optimization::UninitializedOptimizerConfig::GEPA(gepa) = &optimizer.inner else {
+            panic!("Expected GEPA optimizer config")
+        };
+        assert_eq!(gepa.evaluation_name.as_deref(), Some("test_evaluation"));
+        assert!(gepa.evaluator_names.is_none());
     }
 }
