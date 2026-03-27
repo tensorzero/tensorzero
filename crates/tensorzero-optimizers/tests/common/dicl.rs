@@ -9,9 +9,9 @@ use uuid::Uuid;
 use super::use_mock_provider_api;
 use tensorzero::{
     ClientExt, ClientInferenceParams, CreateChatDatapointRequest, CreateDatapointRequest,
-    DatasetDataSource, DynamicToolParams, InferenceOutput, InferenceOutputSource,
-    InferencesDataSource, Input, InputMessage, InputMessageContent,
-    LaunchOptimizationWorkflowParams, OptimizationDataSource, RenderedSample, Role, System,
+    DatasetDataSource, DynamicToolParams, InferenceOutput, Input, InputMessage,
+    InputMessageContent, LaunchOptimizationWorkflowParams, OptimizationDataSource, RenderedSample,
+    Role, System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
