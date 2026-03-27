@@ -24,6 +24,7 @@ jobs:
     secrets: inherit
 
   live-batch-tests:
+    needs: [build-gateway-container]
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       contents: read

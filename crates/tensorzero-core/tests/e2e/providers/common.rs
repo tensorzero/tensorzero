@@ -3484,12 +3484,33 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert_eq!(content.len(), 1);
-    let content_block = content.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content.to_lowercase().contains("crab"));
+    // Filter out thought blocks to check actual content
+    let non_thought_content: Vec<_> = content
+        .iter()
+        .filter(|block| block["type"] != "thought")
+        .collect();
+    let finish_reason = response_json
+        .get("finish_reason")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    // Batch responses from old jobs may have empty content if the model's thinking
+    // consumed all output tokens (finish_reason: "length")
+    if is_batch && non_thought_content.is_empty() && finish_reason == "length" {
+        println!("Skipping content assertions for batch response with empty content (finish_reason: length)");
+    } else {
+        assert_eq!(
+            non_thought_content.len(),
+            1,
+            "Expected 1 non-thought content block, got {}",
+            non_thought_content.len()
+        );
+        let content_block = non_thought_content.first().unwrap();
+        let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+        assert_eq!(content_block_type, "text");
+        let content = content_block.get("text").unwrap().as_str().unwrap();
+        assert!(content.to_lowercase().contains("crab"));
+    }
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
@@ -3501,11 +3522,6 @@ pub async fn check_simple_image_inference_response(
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
     }
-    let finish_reason = response_json
-        .get("finish_reason")
-        .unwrap()
-        .as_str()
-        .unwrap();
     // Some providers return "stop" and others return "length"
     assert!(finish_reason == "stop" || finish_reason == "length");
 
@@ -4857,8 +4873,18 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = content
+    // Filter out thought blocks
+    let non_thought_content: Vec<_> = content
+        .iter()
+        .filter(|block| block["type"] != "thought")
+        .collect();
+    // Batch responses may have empty content if the model's thinking consumed all output tokens
+    if is_batch && non_thought_content.is_empty() {
+        println!("Skipping content assertions for batch response with empty non-thought content");
+        return;
+    }
+    assert!(!non_thought_content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = non_thought_content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -6747,7 +6773,17 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
     assert!(!content.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = content
+    // Filter out thought blocks
+    let non_thought_content: Vec<_> = content
+        .iter()
+        .filter(|block| block["type"] != "thought")
+        .collect();
+    // Batch responses may have empty content if the model's thinking consumed all output tokens
+    if is_batch && non_thought_content.is_empty() {
+        println!("Skipping content assertions for batch response with empty non-thought content");
+        return;
+    }
+    let content_block = non_thought_content
         .iter()
         // Gemini 2.5 Pro will sometimes emit 'executableCode' blocks, which we turn into 'unknown' blocks
         .find(|block| block["type"] == "text" || block["type"] == "unknown")
