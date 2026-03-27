@@ -64,6 +64,29 @@ use tensorzero_core::{
 };
 use uuid::Uuid;
 
+/// Retries an async operation until it succeeds or the timeout is reached.
+/// Useful for operations that depend on ClickHouse eventual consistency.
+async fn retry_until_ok<T, E, F, Fut>(f: F, timeout_msg: &str) -> T
+where
+    E: std::fmt::Debug,
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+{
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        match f().await {
+            Ok(val) => return val,
+            Err(e) => {
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "{timeout_msg}: {e:?}",
+                );
+                sleep(Duration::from_millis(500)).await;
+            }
+        }
+    }
+}
+
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
 /// To avoid trampling between tests, we use a mapping from the fixture dataset names to the actual dataset names
 /// that are inserted. This way, we can have multiple tests reading the same fixtures, using the same database,
@@ -362,10 +385,17 @@ async fn run_evaluations_json() {
             dryrun: Some(false),
             episode_id: None,
         };
-        tensorzero_client
-            .feedback(human_feedback_payload)
-            .await
-            .unwrap();
+        // Retry feedback call: the gateway validates the evaluator_inference_id exists in
+        // ClickHouse, which may not be visible yet due to eventual consistency.
+        retry_until_ok(
+            || {
+                let payload = human_feedback_payload.clone();
+                let client = &tensorzero_client;
+                async move { client.feedback(payload).await }
+            },
+            "Timed out waiting for evaluator inference to be visible for feedback",
+        )
+        .await;
         let StoredInferenceDatabase::Json(evaluator_inference) =
             query_inference(&db, &config, evaluator_inference_id)
                 .await
@@ -1030,10 +1060,17 @@ async fn run_llm_judge_evaluation_chat() {
             dryrun: Some(false),
             episode_id: None,
         };
-        tensorzero_client
-            .feedback(human_feedback_payload)
-            .await
-            .unwrap();
+        // Retry feedback call: the gateway validates the evaluator_inference_id exists in
+        // ClickHouse, which may not be visible yet due to eventual consistency.
+        retry_until_ok(
+            || {
+                let payload = human_feedback_payload.clone();
+                let client = &tensorzero_client;
+                async move { client.feedback(payload).await }
+            },
+            "Timed out waiting for evaluator inference to be visible for feedback",
+        )
+        .await;
 
         let StoredInferenceDatabase::Json(evaluator_inference) =
             query_inference(&db, &config, evaluator_inference_id)

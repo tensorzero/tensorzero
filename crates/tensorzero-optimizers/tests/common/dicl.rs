@@ -1087,6 +1087,30 @@ pub async fn test_dicl_workflow_with_http_client() {
 /// Test DICL workflow with a provided client
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
+    // Create some write_haiku inferences so the DICL optimizer has training data.
+    // This test cannot rely on other tests having run first.
+    let topics = ["mountains", "rivers", "stars", "forests", "oceans"];
+    for topic in &topics {
+        let inference_params = ClientInferenceParams {
+            function_name: Some("write_haiku".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text {
+                        value: json!({"topic": topic}),
+                    }],
+                }],
+            },
+            stream: Some(false),
+            variant_name: Some("gpt_4o_mini".to_string()),
+            ..Default::default()
+        };
+        client.inference(inference_params).await.unwrap();
+    }
+    // Wait for inferences to be visible in ClickHouse
+    sleep(Duration::from_secs(5)).await;
+
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
         template_variant_name: "gpt_4o_mini".to_string(),
