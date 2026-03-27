@@ -1,0 +1,14 @@
+[project]
+name = "tensorzero-examples-docs-guides-optimization-reinforcement-fine-tuning"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.3.3",
+    "tensorzero>=2026.3.1",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.0",
+]
