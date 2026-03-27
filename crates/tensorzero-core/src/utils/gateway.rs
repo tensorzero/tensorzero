@@ -272,7 +272,18 @@ impl GatewayHandle {
             postgres_connection_info.clone(),
             primary_datastore,
         );
-        let config = Arc::new(Box::pin(config.into_config(&db)).await?);
+        let mut config = Box::pin(config.into_config(&db)).await?;
+
+        // Merge DB-sourced variants into the config (DB overrides file for same-named variants)
+        if let Some(pool) = postgres_connection_info.get_pool() {
+            crate::db::postgres::variant_version_queries::merge_db_variants_into_config(
+                &mut config,
+                pool,
+            )
+            .await?;
+        }
+
+        let config = Arc::new(config);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let valkey_cache_connection_info =
             setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info).await?;
