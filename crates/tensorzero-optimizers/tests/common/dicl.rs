@@ -23,7 +23,7 @@ use tensorzero_core::{
     inference::types::{
         Arguments, ContentBlockChatOutput, ContentBlockChunk, FunctionType, JsonInferenceOutput,
         ModelInput, ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, Usage,
+        StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Template, Text, Usage,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -1097,9 +1097,12 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text {
-                        value: json!({"topic": topic}),
-                    }],
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({ "topic": topic }).as_object().unwrap().clone(),
+                        ),
+                    })],
                 }],
             },
             stream: Some(false),
