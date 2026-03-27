@@ -365,16 +365,16 @@ jobs:
 
       - name: Print vLLM modal logs
         if: always()
-        run: cat vllm_modal_logs.txt
+        run: cat vllm_modal_logs.txt || echo "No vLLM modal logs available"
 
       - name: Print SGLang modal logs
         if: always()
-        run: cat sglang_modal_logs.txt
+        run: cat sglang_modal_logs.txt || echo "No SGLang modal logs available"
 
       - name: Print vLLM GPT-OSS modal logs
         if: always()
         continue-on-error: true
-        run: cat vllm_gpt_oss_modal_logs.txt
+        run: cat vllm_gpt_oss_modal_logs.txt || echo "No vLLM GPT-OSS modal logs available"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache from trusted runs (merge queue or cron)
