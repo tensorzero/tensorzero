@@ -402,7 +402,7 @@ See `raw_response` in the [response](#response) section for more details.
 
 If `true`, the response's `usage` object will include a `raw_usage` field containing an array of raw provider-specific usage data from each model inference.
 
-This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `cache_read_input_tokens`.
+This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens`.
 
 See `raw_usage` in the [response](#response) section for more details.
 
@@ -1004,6 +1004,8 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `provider_cache_read_input_tokens` (optional): The number of input tokens served from the provider's prompt cache. Only present when the provider reports cache metrics.
+- `provider_cache_write_input_tokens` (optional): The number of input tokens written to the provider's prompt cache. Only present when the provider reports cache metrics.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.
@@ -1080,6 +1082,8 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `provider_cache_read_input_tokens` (optional): The number of input tokens served from the provider's prompt cache. Only present when the provider reports cache metrics.
+- `provider_cache_write_input_tokens` (optional): The number of input tokens written to the provider's prompt cache. Only present when the provider reports cache metrics.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.
@@ -1178,6 +1182,8 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `provider_cache_read_input_tokens` (optional): The number of input tokens served from the provider's prompt cache. Only present when the provider reports cache metrics.
+- `provider_cache_write_input_tokens` (optional): The number of input tokens written to the provider's prompt cache. Only present when the provider reports cache metrics.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.
@@ -1239,6 +1245,8 @@ The object has the following fields:
 
 - `input_tokens`: The number of input tokens used for the inference.
 - `output_tokens`: The number of output tokens used for the inference.
+- `provider_cache_read_input_tokens` (optional): The number of input tokens served from the provider's prompt cache. Only present when the provider reports cache metrics.
+- `provider_cache_write_input_tokens` (optional): The number of input tokens written to the provider's prompt cache. Only present when the provider reports cache metrics.
 - `cost`: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
 
 See [Track usage and cost](/operations/track-usage-and-cost) for more information.

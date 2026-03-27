@@ -146,7 +146,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers.clone(),
         reasoning_usage_inference: reasoning_providers.clone(),
-        cache_input_tokens_inference: providers.clone(),
+        cache_input_tokens_inference: vec![], // Fireworks doesn't reliably support prompt caching
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

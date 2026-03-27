@@ -78,7 +78,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: vec![],
         reasoning_usage_inference: vec![],
-        cache_input_tokens_inference: standard_providers.clone(),
+        cache_input_tokens_inference: vec![], // Hyperbolic doesn't support prompt caching
         extra_body_inference: extra_body_providers,
         embeddings: vec![],
         inference_params_inference: standard_providers,
