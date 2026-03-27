@@ -403,9 +403,12 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     let inference_id = inference_id.unwrap();
     // We only check that the response contains digits rather than a specific answer,
     // since models can make arithmetic mistakes.
+    // Some providers (e.g. Together DeepSeek R1) put all content including the answer
+    // in the reasoning field during streaming, so we check both text and thought content.
+    let all_content = format!("{}{}", full_content, full_thought.as_deref().unwrap_or(""));
     assert!(
-        full_content.chars().any(|c| c.is_ascii_digit()),
-        "Expected numeric digits in content: {full_content}"
+        all_content.chars().any(|c| c.is_ascii_digit()),
+        "Expected numeric digits in content or thought: content={full_content:?}, thought={full_thought:?}"
     );
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
