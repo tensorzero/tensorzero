@@ -11,11 +11,13 @@
 mod cache_config;
 mod embedding_model_config;
 mod gateway_config;
+mod mcp_config;
 mod observability_config;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 pub use gateway_config::StoredGatewayConfig;
+pub use mcp_config::StoredMcpConfig;
 pub use observability_config::StoredObservabilityConfig;
 
 use serde::{Deserialize, Serialize};

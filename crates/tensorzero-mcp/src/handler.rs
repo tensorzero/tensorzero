@@ -74,9 +74,8 @@ impl TensorZeroMcpServer {
 #[tool_handler]
 impl ServerHandler for TensorZeroMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_instructions(
-                "TensorZero MCP Server - query observability data from TensorZero".to_string(),
-            )
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
+            "TensorZero MCP Server - query observability data from TensorZero".to_string(),
+        )
     }
 }

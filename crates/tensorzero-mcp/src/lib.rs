@@ -35,7 +35,7 @@ pub async fn spawn_mcp_http_server(
 
     let router = axum::Router::new().nest_service("/mcp", service);
 
-    let bind_address = SocketAddr::from(([0, 0, 0, 0], port));
+    let bind_address = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(bind_address)
         .await
         .map_err(|e| {
