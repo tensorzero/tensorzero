@@ -68,6 +68,11 @@ type EvaluationData = {
       ReturnType<typeof getTensorZeroClient>["getEvaluationStatistics"]
     >
   >["statistics"];
+  evaluation_usage_statistics: Awaited<
+    ReturnType<
+      ReturnType<typeof getTensorZeroClient>["getEvaluationUsageStatistics"]
+    >
+  >["usage_statistics"];
   total_datapoints: number;
 };
 
@@ -85,6 +90,7 @@ async function fetchEvaluationData(
       selected_evaluation_run_infos: [],
       evaluation_results: [],
       evaluation_statistics: [],
+      evaluation_usage_statistics: [],
       total_datapoints: 0,
     };
   }
@@ -113,6 +119,14 @@ async function fetchEvaluationData(
     )
     .then((response) => response.statistics);
 
+  const usageStatisticsPromise = tensorZeroClient
+    .getEvaluationUsageStatistics(
+      function_name,
+      function_type,
+      selected_evaluation_run_ids_array,
+    )
+    .then((response) => response.usage_statistics);
+
   const totalDatapointsPromise = tensorZeroClient.countDatapointsForEvaluation(
     function_name,
     selected_evaluation_run_ids_array,
@@ -122,11 +136,13 @@ async function fetchEvaluationData(
     selected_evaluation_run_infos,
     evaluation_results,
     evaluation_statistics,
+    evaluation_usage_statistics,
     total_datapoints,
   ] = await Promise.all([
     evaluationRunInfosPromise,
     resultsPromise,
     statisticsPromise,
+    usageStatisticsPromise,
     totalDatapointsPromise,
   ]);
 
@@ -134,6 +150,7 @@ async function fetchEvaluationData(
     selected_evaluation_run_infos,
     evaluation_results,
     evaluation_statistics,
+    evaluation_usage_statistics,
     total_datapoints,
   };
 }
@@ -389,6 +406,7 @@ function ResultsContent({
     selected_evaluation_run_infos,
     evaluation_results,
     evaluation_statistics,
+    evaluation_usage_statistics,
     total_datapoints,
   } = data;
 
@@ -441,6 +459,7 @@ function ResultsContent({
         selected_evaluation_run_infos={selected_evaluation_run_infos}
         evaluation_results={evaluation_results}
         evaluation_statistics={evaluation_statistics}
+        evaluation_usage_statistics={evaluation_usage_statistics}
         metric_names={metric_names}
         selectedRows={selectedRows}
         setSelectedRows={setSelectedRows}
