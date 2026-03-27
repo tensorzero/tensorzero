@@ -35,6 +35,9 @@ services:
     # Add your environment variables the .env file
     env_file:
       - ${ENV_FILE:-.env}
+    # If your gateway is deployed locally, set
+    # environment:
+    #   TENSORZERO_GATEWAY_URL: http://gateway:3000
     # Publish the UI to port 4000
     ports:
       - "4000:4000"
