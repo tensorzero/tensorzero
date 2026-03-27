@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { getEnv } from "~/utils/env.server";
+import { buildGatewayUrl } from "~/utils/gateway-url";
 import { apiKeyCookie, isSecureRequest } from "~/utils/api-key-override.server";
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -29,9 +30,9 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   // Validate the key by making a test request to the gateway
-  const validateUrl = new URL(
-    "/internal/ui_config",
+  const validateUrl = buildGatewayUrl(
     env.TENSORZERO_GATEWAY_URL,
+    "/internal/ui_config",
   );
   try {
     const response = await fetch(validateUrl, {

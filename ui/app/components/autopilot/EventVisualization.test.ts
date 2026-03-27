@@ -48,6 +48,10 @@ describe("detectEventVisualization", () => {
     const event = makeEvent({
       type: "tool_result",
       tool_call_event_id: "tc-1",
+      tool_call_name: "get_feedback_by_variant",
+      tool_call_arguments: {},
+      tool_call_authorization_source: { type: "automatic" as const },
+      tool_call_authorization_status: { type: "approved" as const },
       outcome: {
         type: "success",
         result: JSON.stringify(feedbackData),
@@ -61,6 +65,10 @@ describe("detectEventVisualization", () => {
     const event = makeEvent({
       type: "tool_result",
       tool_call_event_id: "tc-1",
+      tool_call_name: "some_tool",
+      tool_call_arguments: {},
+      tool_call_authorization_source: { type: "automatic" as const },
+      tool_call_authorization_status: { type: "approved" as const },
       outcome: {
         type: "success",
         result: JSON.stringify({ some: "other data" }),

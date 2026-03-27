@@ -76,8 +76,9 @@ test.describe("Variant Performance Visualization", () => {
     const { toolCallPayload, toolResultPayload } =
       buildFeedbackByVariantToolEvents(sessionId);
 
-    insertEvent(v7(), sessionId, toolCallPayload);
-    insertEvent(v7(), sessionId, toolResultPayload);
+    const toolCallEventId = toolCallPayload.side_info.tool_call_event_id;
+    await insertEvent(toolCallEventId, sessionId, toolCallPayload);
+    await insertEvent(v7(), sessionId, toolResultPayload);
 
     // Wait for the tool result card to appear (auto-expanded)
     await expect(

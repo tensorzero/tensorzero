@@ -105,7 +105,8 @@ test("should create a session, send a message, approve tool calls, and get a res
   await approveButton.click();
 
   // Verify the tool result appeared (confirming tool was approved and executed)
-  await expect(page.getByText("Tool Result").first()).toBeVisible({
+  // The tool_result event renders as "Tool Call" with a "Success" status badge
+  await expect(page.getByText("Success").first()).toBeVisible({
     timeout: 60000,
   });
 });
@@ -251,8 +252,8 @@ test.describe("YOLO mode", () => {
       timeout: 30000,
     });
 
-    // "Tool Result" appearing confirms tool was auto-approved and executed
-    await expect(page.getByText("Tool Result").first()).toBeVisible({
+    // "Success" badge appearing confirms tool was auto-approved and executed
+    await expect(page.getByText("Success").first()).toBeVisible({
       timeout: 60000,
     });
   });

@@ -458,6 +458,10 @@ mod tests {
                         variant_name: "test_variant".to_string(),
                         name: None,
                         staled_at: None,
+                        input_tokens: Some(100),
+                        output_tokens: Some(50),
+                        cost: Some(0.001),
+                        processing_time_ms: Some(200),
                     })])
                 })
             });
@@ -710,6 +714,10 @@ mod tests {
                         variant_name: "test_variant".to_string(),
                         name: None,
                         staled_at: None,
+                        input_tokens: Some(100),
+                        output_tokens: Some(50),
+                        cost: Some(0.001),
+                        processing_time_ms: Some(200),
                     })])
                 })
             });
