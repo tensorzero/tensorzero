@@ -8,7 +8,8 @@ use uuid::Uuid;
 
 use super::use_mock_provider_api;
 use tensorzero::{
-    ClientExt, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceOutputSource,
+    ClientExt, ClientInferenceParams, CreateChatDatapointRequest, CreateDatapointRequest,
+    DatasetDataSource, DynamicToolParams, InferenceOutput, InferenceOutputSource,
     InferencesDataSource, Input, InputMessage, InputMessageContent,
     LaunchOptimizationWorkflowParams, OptimizationDataSource, RenderedSample, Role, System,
 };
@@ -1087,44 +1088,46 @@ pub async fn test_dicl_workflow_with_http_client() {
 /// Test DICL workflow with a provided client
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
-    // Create some write_haiku inferences so the DICL optimizer has training data.
-    // This test cannot rely on other tests having run first.
+    // Create a dataset with training data instead of relying on existing inferences.
+    // Using inferences would require calling the real OpenAI API in this mock-only test context.
+    let dataset_name = format!("test_dicl_dataset_{}", Uuid::now_v7());
     let topics = ["mountains", "rivers", "stars", "forests", "oceans"];
-    for topic in &topics {
-        let inference_params = ClientInferenceParams {
-            function_name: Some("write_haiku".to_string()),
-            input: Input {
-                system: None,
-                messages: vec![InputMessage {
-                    role: Role::User,
-                    content: vec![InputMessageContent::Template(Template {
-                        name: "user".to_string(),
-                        arguments: Arguments(
-                            json!({ "topic": topic }).as_object().unwrap().clone(),
-                        ),
-                    })],
-                }],
-            },
-            stream: Some(false),
-            variant_name: Some("gpt_4o_mini".to_string()),
-            ..Default::default()
-        };
-        client.inference(inference_params).await.unwrap();
-    }
-    // Wait for inferences to be visible in ClickHouse
-    sleep(Duration::from_secs(5)).await;
+    let datapoints: Vec<CreateDatapointRequest> = topics
+        .iter()
+        .map(|topic| {
+            CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: "write_haiku".to_string(),
+                episode_id: None,
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Template(Template {
+                            name: "user".to_string(),
+                            arguments: Arguments(
+                                json!({ "topic": topic }).as_object().unwrap().clone(),
+                            ),
+                        })],
+                    }],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: format!("A haiku about {topic}"),
+                })]),
+                dynamic_tool_params: DynamicToolParams::default(),
+                tags: None,
+                name: None,
+            })
+        })
+        .collect();
+    client
+        .create_datapoints(dataset_name.clone(), datapoints)
+        .await
+        .unwrap();
 
     let params = LaunchOptimizationWorkflowParams {
         function_name: "write_haiku".to_string(),
         template_variant_name: "gpt_4o_mini".to_string(),
-        data_source: OptimizationDataSource::Inferences(InferencesDataSource {
-            output_source: InferenceOutputSource::Inference,
-            query_variant_name: None,
-            filters: None,
-            order_by: None,
-            limit: Some(10),
-            offset: None,
-        }),
+        data_source: OptimizationDataSource::Dataset(DatasetDataSource { dataset_name }),
         val_fraction: None,
         // We always mock the client tests since this is tested above
         optimizer_config: UninitializedOptimizerInfo {
