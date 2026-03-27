@@ -1127,5 +1127,17 @@ mod test_helpers_impl {
                 PrimaryDatastore::Disabled => {}
             }
         }
+
+        async fn prepare_variant_statistics(&self) {
+            match self.primary {
+                PrimaryDatastore::Postgres => {
+                    self.postgres.prepare_variant_statistics().await;
+                }
+                PrimaryDatastore::ClickHouse => {
+                    self.clickhouse.prepare_variant_statistics().await;
+                }
+                PrimaryDatastore::Disabled => {}
+            }
+        }
     }
 }

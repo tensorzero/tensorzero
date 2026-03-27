@@ -42,6 +42,7 @@ mod model_inference_queries;
 mod model_provider_statistics_queries;
 mod postgres;
 mod rate_limit_queries;
+mod variant_statistics_queries;
 mod workflow_evaluation_queries;
 
 // ===== CONNECTION HELPERS =====

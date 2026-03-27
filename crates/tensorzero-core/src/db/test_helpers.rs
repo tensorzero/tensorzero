@@ -25,6 +25,15 @@ pub trait TestDatabaseHelpers: Send + Sync {
     /// Postgres: triggers `refresh_model_provider_statistics_incremental` so the
     /// rollup table is up to date before querying.
     async fn prepare_model_provider_statistics(&self);
+
+    /// Prepares the variant statistics rollup for querying after an insert.
+    ///
+    /// ClickHouse: flushes the async insert queue so the materialized views have
+    /// processed the new rows.
+    ///
+    /// Postgres: triggers `refresh_variant_statistics_incremental` so the
+    /// rollup table is up to date before querying.
+    async fn prepare_variant_statistics(&self);
 }
 
 #[async_trait]
@@ -46,6 +55,11 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
 
     /// For ClickHouse, flush the async insert queue so the MV has processed the rows.
     async fn prepare_model_provider_statistics(&self) {
+        self.flush_pending_writes().await;
+    }
+
+    /// For ClickHouse, flush the async insert queue so the MVs have processed the rows.
+    async fn prepare_variant_statistics(&self) {
         self.flush_pending_writes().await;
     }
 }
@@ -70,6 +84,19 @@ impl TestDatabaseHelpers for PostgresConnectionInfo {
             .unwrap_or_else(|e| {
                 panic!("refresh_model_provider_statistics_incremental failed: {e}")
             });
+        }
+    }
+
+    /// For Postgres, trigger the incremental refresh so the rollup table is up to date.
+    #[expect(clippy::panic)]
+    async fn prepare_variant_statistics(&self) {
+        if let Some(pool) = self.get_pool() {
+            sqlx::query(
+                "SELECT tensorzero.refresh_variant_statistics_incremental(full_refresh => TRUE)",
+            )
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("refresh_variant_statistics_incremental failed: {e}"));
         }
     }
 }
