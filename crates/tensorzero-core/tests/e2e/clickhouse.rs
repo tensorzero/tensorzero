@@ -680,7 +680,7 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Poll until ModelProviderStatistics materialized view has processed the inserts
+    // Poll until the inserts are visible in ModelInference
     poll_for_result(
         || {
             let clickhouse = &clickhouse;
@@ -688,7 +688,7 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
                 clickhouse.flush_pending_writes().await;
                 let response = clickhouse
                     .run_query_synchronous_no_params(format!(
-                        "SELECT count() as cnt FROM ModelProviderStatistics FINAL \
+                        "SELECT count() as cnt FROM ModelInference \
                          WHERE model_name = '{test_model_name}' \
                          AND model_provider_name = '{test_provider_name}'"
                     ))
@@ -697,8 +697,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
                 Ok::<_, String>(response.response.trim().to_string())
             }
         },
-        |cnt| cnt != "0",
-        "Timed out waiting for ModelProviderStatistics to be populated",
+        |cnt| cnt == "2",
+        "Timed out waiting for ModelInference inserts to be visible",
     )
     .await;
 
@@ -816,7 +816,7 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Poll until ModelProviderStatistics materialized view has processed the inserts
+    // Poll until the inserts are visible in ModelInference
     poll_for_result(
         || {
             let clickhouse = &clickhouse;
@@ -824,7 +824,7 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
                 clickhouse.flush_pending_writes().await;
                 let response = clickhouse
                     .run_query_synchronous_no_params(format!(
-                        "SELECT count() as cnt FROM ModelProviderStatistics FINAL \
+                        "SELECT count() as cnt FROM ModelInference \
                          WHERE model_name = '{test_model_name}' \
                          AND model_provider_name = '{test_provider_name}'"
                     ))
@@ -833,8 +833,8 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
                 Ok::<_, String>(response.response.trim().to_string())
             }
         },
-        |cnt| cnt != "0",
-        "Timed out waiting for ModelProviderStatistics to be populated",
+        |cnt| cnt == "3",
+        "Timed out waiting for ModelInference inserts to be visible",
     )
     .await;
 
