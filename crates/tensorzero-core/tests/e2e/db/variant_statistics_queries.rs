@@ -254,7 +254,7 @@ fn make_json_inference(
         auxiliary_content: None,
         inference_params: None,
         processing_time_ms,
-        output_schema: None,
+        output_schema: Some(serde_json::json!({"type": "object"})),
         ttft_ms,
         tags: HashMap::new(),
         extra_body: None,
@@ -561,7 +561,7 @@ async fn test_variant_statistics_cross_minute(
     assert_eq!(total_count, 6, "6 total chat inferences");
     assert_eq!(total_input, 210, "10+20+30+40+50+60");
     assert_eq!(total_output, 105, "5+10+15+20+25+30");
-    assert_eq!(total_cwc, 3, "3 model inferences with cost");
+    assert_eq!(total_cwc, 4, "4 model inferences with cost (a1,a2,b1,b3)");
 
     // Minute A: count=2, tokens=30/15, cwc=2
     let min_a_row = stats
