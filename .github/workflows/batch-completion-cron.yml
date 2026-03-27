@@ -30,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install openai requests
+          pip install openai==2.30.0 requests==2.33.0
 
       - name: Create batch input file
         run: |
@@ -106,7 +106,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install google-cloud-aiplatform google-cloud-storage
+          pip install google-cloud-aiplatform==1.143.0 google-cloud-storage==3.10.1
 
       - name: Google Vertex AI Batch Inference
         env:
@@ -194,7 +194,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install anthropic
+          pip install anthropic==0.86.0
 
       - name: Anthropic Batch Inference
         env:
