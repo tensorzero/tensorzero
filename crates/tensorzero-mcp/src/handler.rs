@@ -7,11 +7,11 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 
+use tensorzero_core::endpoints::stored_inferences::v1::types::{
+    GetInferencesRequest, ListInferencesRequest,
+};
 use tensorzero_core::endpoints::stored_inferences::v1::{get_inferences, list_inferences};
 use tensorzero_core::utils::gateway::AppStateData;
-
-use crate::tools::get_inferences::GetInferencesParams;
-use crate::tools::list_inferences::ListInferencesParams;
 
 #[derive(Clone)]
 pub struct TensorZeroMcpServer {
@@ -31,11 +31,10 @@ impl TensorZeroMcpServer {
     #[tool(
         description = "List inferences stored in TensorZero with filtering, pagination, and sorting. Returns inference data including inputs, outputs, function/variant names, timestamps, and tags."
     )]
-    async fn mcp_list_inferences(
+    async fn list_inferences(
         &self,
-        Parameters(params): Parameters<ListInferencesParams>,
+        Parameters(request): Parameters<ListInferencesRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let request = params.into();
         let database = self.app_state.get_delegating_database();
         let response = list_inferences(&self.app_state.config, &database, request)
             .await
@@ -53,11 +52,10 @@ impl TensorZeroMcpServer {
     #[tool(
         description = "Retrieve specific inferences by their IDs. Returns full inference data including inputs, outputs, function/variant names, timestamps, and tags."
     )]
-    async fn mcp_get_inferences(
+    async fn get_inferences(
         &self,
-        Parameters(params): Parameters<GetInferencesParams>,
+        Parameters(request): Parameters<GetInferencesRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let request = params.into();
         let database = self.app_state.get_delegating_database();
         let response = get_inferences(&self.app_state.config, &database, request)
             .await
@@ -76,8 +74,9 @@ impl TensorZeroMcpServer {
 #[tool_handler]
 impl ServerHandler for TensorZeroMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "TensorZero MCP Server - query observability data from TensorZero".to_string(),
-        )
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_instructions(
+                "TensorZero MCP Server - query observability data from TensorZero".to_string(),
+            )
     }
 }

@@ -12,7 +12,6 @@ use tokio_util::task::TaskTracker;
 use tensorzero_core::utils::gateway::AppStateData;
 
 mod handler;
-mod tools;
 
 use handler::TensorZeroMcpServer;
 
