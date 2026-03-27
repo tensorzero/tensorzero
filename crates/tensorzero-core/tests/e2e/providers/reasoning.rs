@@ -485,7 +485,10 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
         }
     }
 
-    assert!(found_text, "Expected to find a text block");
+    // Some together models (e.g. DeepSeek R1) put all content in a thought block
+    if provider.model_provider_name != "together" {
+        assert!(found_text, "Expected to find a text block");
+    }
     assert!(found_thought, "Expected to find a thought block");
     assert_eq!(clickhouse_content, full_content);
     assert_eq!(clickhouse_thought, full_thought);
