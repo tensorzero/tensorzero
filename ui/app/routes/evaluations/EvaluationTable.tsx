@@ -43,6 +43,8 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
+import { formatCost } from "~/utils/cost";
+import { InputIcon, Output, Cost, Timer } from "~/components/icons/Icons";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -229,6 +231,13 @@ interface MetricValueInfo {
   is_human_feedback: boolean;
 }
 
+interface UsageInfo {
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+  processing_time_ms?: number;
+}
+
 // Interface for tracking selected rows
 export interface SelectedRowData {
   datapoint_id: string;
@@ -296,6 +305,7 @@ export function EvaluationTable({
         {
           generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
+          usage?: UsageInfo;
         }
       >
     >();
@@ -316,6 +326,18 @@ export function EvaluationTable({
         datapointMap.set(result.evaluation_run_id, {
           generated_output: result.generated_output,
           metrics: new Map(),
+          usage: {
+            input_tokens:
+              result.input_tokens != null
+                ? Number(result.input_tokens)
+                : undefined,
+            output_tokens:
+              result.output_tokens != null
+                ? Number(result.output_tokens)
+                : undefined,
+            cost: result.cost ?? undefined,
+            processing_time_ms: result.processing_time_ms ?? undefined,
+          },
         });
       }
 
@@ -431,6 +453,9 @@ export function EvaluationTable({
                         </TableHead>
                       );
                     })}
+                    <TableHead className="py-2 text-center align-top">
+                      Usage
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -449,6 +474,7 @@ export function EvaluationTable({
                           | JsonInferenceOutput
                           | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
+                        usage?: UsageInfo;
                       },
                     ][];
 
@@ -641,6 +667,11 @@ export function EvaluationTable({
                                   </TableCell>
                                 );
                               })}
+
+                              {/* Usage */}
+                              <TableCell className="align-middle">
+                                <UsageCell usage={data.usage} />
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -656,6 +687,64 @@ export function EvaluationTable({
     </ColorAssignerProvider>
   );
 }
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return tokens.toLocaleString();
+}
+
+function formatDuration(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${ms}ms`;
+}
+
+const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
+  if (!usage) return <span className="text-muted-foreground">-</span>;
+
+  const hasAnyData =
+    usage.input_tokens != null ||
+    usage.output_tokens != null ||
+    usage.cost != null ||
+    usage.processing_time_ms != null;
+
+  if (!hasAnyData) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <div className="text-muted-foreground flex items-center gap-3 text-xs whitespace-nowrap">
+      {usage.input_tokens != null && (
+        <span className="flex items-center gap-1">
+          <InputIcon size={12} />
+          {formatTokenCount(usage.input_tokens)} tok
+        </span>
+      )}
+      {usage.output_tokens != null && (
+        <span className="flex items-center gap-1">
+          <Output size={12} />
+          {formatTokenCount(usage.output_tokens)} tok
+        </span>
+      )}
+      {usage.cost != null && (
+        <span className="flex items-center gap-1">
+          <Cost size={12} />
+          {formatCost(usage.cost)}
+        </span>
+      )}
+      {usage.processing_time_ms != null && (
+        <span className="flex items-center gap-1">
+          <Timer size={12} />
+          {formatDuration(usage.processing_time_ms)}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const EvaluatorHeader = ({
   evaluation_name,
