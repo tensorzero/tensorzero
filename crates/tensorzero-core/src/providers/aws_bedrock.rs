@@ -899,21 +899,15 @@ fn convert_converse_response(
     // Extract usage - include cache tokens in input_tokens
     // AWS Bedrock reports cache tokens separately from input_tokens
     let total_input_tokens = response.usage.input_tokens as u32
-        + response.usage.provider_cache_read_input_tokens.unwrap_or(0) as u32
-        + response
-            .usage
-            .provider_cache_write_input_tokens
-            .unwrap_or(0) as u32;
+        + response.usage.cache_read_input_tokens.unwrap_or(0) as u32
+        + response.usage.cache_write_input_tokens.unwrap_or(0) as u32;
     let usage = Usage {
         input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
-        provider_cache_read_input_tokens: response
-            .usage
-            .provider_cache_read_input_tokens
-            .map(|v| v as u32),
+        provider_cache_read_input_tokens: response.usage.cache_read_input_tokens.map(|v| v as u32),
         provider_cache_write_input_tokens: response
             .usage
-            .provider_cache_write_input_tokens
+            .cache_write_input_tokens
             .map(|v| v as u32),
         cost: None,
     };
@@ -1281,18 +1275,18 @@ fn process_stream_event(
             // Include cache tokens in input_tokens
             // AWS Bedrock reports cache tokens separately from input_tokens
             let total_input_tokens = event.usage.input_tokens as u32
-                + event.usage.provider_cache_read_input_tokens.unwrap_or(0) as u32
-                + event.usage.provider_cache_write_input_tokens.unwrap_or(0) as u32;
+                + event.usage.cache_read_input_tokens.unwrap_or(0) as u32
+                + event.usage.cache_write_input_tokens.unwrap_or(0) as u32;
             let usage = Some(Usage {
                 input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
                 provider_cache_read_input_tokens: event
                     .usage
-                    .provider_cache_read_input_tokens
+                    .cache_read_input_tokens
                     .map(|v| v as u32),
                 provider_cache_write_input_tokens: event
                     .usage
-                    .provider_cache_write_input_tokens
+                    .cache_write_input_tokens
                     .map(|v| v as u32),
                 cost: None,
             });
@@ -1403,23 +1397,23 @@ mod tests {
             input_tokens: 50,
             output_tokens: 30,
             total_tokens: Some(80),
-            provider_cache_read_input_tokens: Some(40),
-            provider_cache_write_input_tokens: Some(10),
+            cache_read_input_tokens: Some(40),
+            cache_write_input_tokens: Some(10),
         };
 
         // Replicate the conversion logic from the provider:
         // total_input_tokens includes cache tokens since Bedrock reports them separately
         let total_input_tokens = bedrock_usage.input_tokens as u32
-            + bedrock_usage.provider_cache_read_input_tokens.unwrap_or(0) as u32
-            + bedrock_usage.provider_cache_write_input_tokens.unwrap_or(0) as u32;
+            + bedrock_usage.cache_read_input_tokens.unwrap_or(0) as u32
+            + bedrock_usage.cache_write_input_tokens.unwrap_or(0) as u32;
         let usage = Usage {
             input_tokens: Some(total_input_tokens),
             output_tokens: Some(bedrock_usage.output_tokens as u32),
             provider_cache_read_input_tokens: bedrock_usage
-                .provider_cache_read_input_tokens
+                .cache_read_input_tokens
                 .map(|v| v as u32),
             provider_cache_write_input_tokens: bedrock_usage
-                .provider_cache_write_input_tokens
+                .cache_write_input_tokens
                 .map(|v| v as u32),
             cost: None,
         };
