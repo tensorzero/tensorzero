@@ -1,7 +1,5 @@
 #![cfg(any(test, feature = "e2e_tests"))]
 
-use std::time::Duration;
-
 use tonic::async_trait;
 
 use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
@@ -39,9 +37,9 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
         }
     }
 
-    /// For ClickHouse, this sleeps for a given duration to ensure writes are visible.
+    /// For ClickHouse, this flushes the async insert queue to ensure writes are visible.
     async fn sleep_for_writes_to_be_visible(&self) {
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        self.flush_pending_writes().await;
     }
 
     /// For ClickHouse, flush the async insert queue so the MV has processed the rows.
