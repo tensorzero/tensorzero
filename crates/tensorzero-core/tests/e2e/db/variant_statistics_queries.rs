@@ -14,10 +14,13 @@ use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::endpoints::inference::InferenceParams;
+use tensorzero_core::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use tensorzero_core::inference::types::stored_input::StoredInput;
 use tensorzero_core::inference::types::{
     ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, StoredModelInference,
 };
+use tensorzero_core::tool::ToolCallConfigDatabaseInsert;
 use tonic::async_trait;
 
 // ===== TEST QUERY INFRASTRUCTURE =====
@@ -228,12 +231,12 @@ fn make_chat_inference(
         episode_id: uuid::Uuid::now_v7(),
         input: Some(StoredInput::default()),
         output: Some(vec![]),
-        tool_params: None,
-        inference_params: None,
+        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        inference_params: Some(InferenceParams::default()),
         processing_time_ms,
         ttft_ms,
         tags: HashMap::new(),
-        extra_body: None,
+        extra_body: Some(UnfilteredInferenceExtraBody::default()),
         snapshot_hash: None,
     }
 }
@@ -252,13 +255,13 @@ fn make_json_inference(
         episode_id: uuid::Uuid::now_v7(),
         input: Some(StoredInput::default()),
         output: None,
-        auxiliary_content: None,
-        inference_params: None,
+        auxiliary_content: Some(vec![]),
+        inference_params: Some(InferenceParams::default()),
         processing_time_ms,
         output_schema: Some(serde_json::json!({"type": "object"})),
         ttft_ms,
         tags: HashMap::new(),
-        extra_body: None,
+        extra_body: Some(UnfilteredInferenceExtraBody::default()),
         snapshot_hash: None,
     }
 }
