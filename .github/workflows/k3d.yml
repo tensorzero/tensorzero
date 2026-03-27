@@ -69,7 +69,7 @@ jobs:
           helm repo add altinity https://altinity.github.io/helm-charts
           helm repo update
           kubectl create namespace clickhouse
-          helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
+          helm install clickhouse altinity/clickhouse --version 0.3.10 -n clickhouse -f clickhouse-values.yaml --timeout 10m
           kubectl wait --for=condition=available deployment/clickhouse-operator -n clickhouse --timeout=300s
           kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
           kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
