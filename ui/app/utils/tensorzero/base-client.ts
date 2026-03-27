@@ -1,4 +1,5 @@
 import { GatewayConnectionError, TensorZeroServerError } from "./errors";
+import { buildGatewayUrl } from "../gateway-url";
 
 /**
  * Base client for TensorZero Gateway with shared infrastructure.
@@ -9,11 +10,12 @@ export class BaseTensorZeroClient {
   protected apiKey: string | null;
 
   /**
-   * @param baseUrl - The base URL of the TensorZero Gateway (e.g. "http://localhost:3000")
+   * @param baseUrl - The base URL of the TensorZero Gateway, which may include
+   *   a configured base path (e.g. "http://localhost:3000/tensorzero/api/v1")
    * @param apiKey - Optional API key for bearer authentication
    */
   constructor(baseUrl: string, apiKey?: string) {
-    // Remove any trailing slash for consistency.
+    // Remove any trailing slash for consistency before joining relative paths.
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey ?? null;
   }
@@ -28,7 +30,7 @@ export class BaseTensorZeroClient {
     },
   ) {
     const { method, signal } = init;
-    const url = `${this.baseUrl}${path}`;
+    const url = buildGatewayUrl(this.baseUrl, path);
 
     // For methods which expect payloads, always pass a body value even when it
     // is empty to deal with consistency issues in various runtimes.

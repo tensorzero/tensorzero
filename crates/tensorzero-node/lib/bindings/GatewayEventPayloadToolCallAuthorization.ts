@@ -14,12 +14,10 @@ export type GatewayEventPayloadToolCallAuthorization = {
   status: GatewayToolCallAuthorizationStatus;
   /**
    * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
    */
-  tool_call_name?: string;
+  tool_call_name: string;
   /**
    * Populated by the server from the originating tool call event.
-   * Optional for backwards compatibility until the API is deployed with enrichment.
    */
-  tool_call_arguments?: JsonValue;
+  tool_call_arguments: JsonValue;
 };
