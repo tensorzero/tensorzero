@@ -14,11 +14,13 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     select_all_model_inferences_by_chat_episode_id_clickhouse, select_chat_inference_clickhouse,
     select_chat_inferences_clickhouse,
 };
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::inference::types::{Role, Text};
 use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+use crate::utils::poll_for_result::poll_for_result;
 use crate::utils::skip_for_postgres;
 
 #[tokio::test]
@@ -46,14 +48,21 @@ async fn test_dummy_only_replicated_clickhouse() {
         panic!("Expected non-streaming response");
     };
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    // Check if ClickHouse is ok - ChatInference Table
-    let clickhouse = get_clickhouse().await;
-    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
-        .await
-        .unwrap();
+    // Poll until the trailing write from the API lands in ClickHouse
+    let clickhouse = &client
+        .get_app_state_data()
+        .expect("Expected embedded gateway")
+        .clickhouse_connection_info;
+    let inference_id = response.inference_id();
+    let result = poll_for_result(
+        || async {
+            Ok::<_, String>(select_chat_inference_clickhouse(clickhouse, inference_id).await)
+        },
+        |r| r.is_some(),
+        "Timed out waiting for ChatInference to appear in ClickHouse",
+    )
+    .await
+    .unwrap();
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -174,19 +183,30 @@ async fn test_clickhouse_bulk_insert() {
     }
     assert_eq!(expected_inference_ids.len(), inference_count);
 
+    // Clone the ClickHouse connection before dropping the client so we can query after shutdown
+    let clickhouse_client = client
+        .get_app_state_data()
+        .expect("Expected embedded gateway")
+        .clickhouse_connection_info
+        .clone();
+
     assert_eq!(Arc::strong_count(&client), 1);
     eprintln!("Dropping client");
     // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
     // and allow the batch writer to shut down.
     drop(client);
     eprintln!("Dropped client");
-    // Wait for ClickHouse to finish processing batch writes.
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-    let clickhouse_client = get_clickhouse().await;
-    let inferences = select_chat_inferences_clickhouse(&clickhouse_client, episode_id)
-        .await
-        .unwrap();
+    // Poll until all batch writes have been flushed to ClickHouse
+    let inferences = poll_for_result(
+        || async {
+            Ok::<_, String>(select_chat_inferences_clickhouse(&clickhouse_client, episode_id).await)
+        },
+        |rows| rows.as_ref().is_some_and(|r| r.len() == inference_count),
+        "Timed out waiting for all batch-written inferences to appear in ClickHouse",
+    )
+    .await
+    .unwrap();
     let actual_inference_ids = inferences
         .iter()
         .map(|i| {
@@ -263,20 +283,30 @@ async fn test_materialized_views_have_snapshot_hash() {
     let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id = Uuid::parse_str(episode_id).unwrap();
 
-    // Wait for trailing writes to complete
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
+    // Poll until the trailing write lands in the InferenceById materialized view
     let clickhouse = get_clickhouse().await;
 
     // Assert InferenceById materialized view has snapshot_hash
-    let query = format!(
-        "SELECT snapshot_hash FROM InferenceById WHERE id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
-    );
-    let response = clickhouse
-        .run_query_synchronous_no_params(query)
-        .await
-        .unwrap();
-    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    let view_result = poll_for_result(
+        || {
+            let query = format!(
+                "SELECT snapshot_hash FROM InferenceById WHERE id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
+            );
+            let clickhouse = &clickhouse;
+            async move {
+                clickhouse.flush_pending_writes().await;
+                let response = clickhouse
+                    .run_query_synchronous_no_params(query)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                serde_json::from_str::<serde_json::Value>(&response.response)
+                    .map_err(|e| e.to_string())
+            }
+        },
+        |v| !v["snapshot_hash"].is_null(),
+        "Timed out waiting for InferenceById snapshot_hash",
+    )
+    .await;
     assert!(
         !view_result["snapshot_hash"].is_null(),
         "InferenceById should have snapshot_hash"

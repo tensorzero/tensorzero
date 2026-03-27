@@ -1,12 +1,5 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
 
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::future::Future;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-
 use async_trait::async_trait;
 use googletest::expect_that;
 use googletest::gtest;
@@ -15,9 +8,13 @@ use paste::paste;
 use rust_decimal::Decimal;
 use secrecy::ExposeSecret;
 use serde_json::json;
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::future::Future;
+use std::str::FromStr;
+use std::sync::Arc;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tokio::runtime::Handle;
-use tokio::time::sleep;
 use uuid::Uuid;
 
 use tensorzero_core::config::BatchWritesConfig;
@@ -44,8 +41,11 @@ use tensorzero_core::db::clickhouse::migration_manager::{
 };
 use tensorzero_core::db::clickhouse::test_helpers::{CLICKHOUSE_URL, get_clickhouse};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
+
+use crate::utils::poll_for_result::poll_for_result;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -513,8 +513,27 @@ async fn run_migration_0050_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Wait for materialized views to populate TagInference
-    sleep(Duration::from_millis(1000)).await;
+    // Poll until materialized views have populated TagInference
+    poll_for_result(
+        || {
+            let clickhouse = &clickhouse;
+            async move {
+                clickhouse.flush_pending_writes().await;
+                let response = clickhouse
+                    .run_query_synchronous_no_params(
+                        format!("SELECT count() as cnt FROM TagInference WHERE inference_id = '{chat_inference_id}' FORMAT JSONEachRow"),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let val: serde_json::Value = serde_json::from_str(response.response.trim())
+                    .map_err(|e| e.to_string())?;
+                Ok::<_, String>(val)
+            }
+        },
+        |v| v["cnt"].as_str().is_some_and(|c| c != "0"),
+        "Timed out waiting for TagInference to be populated by materialized view",
+    )
+    .await;
 
     let clean_start = run_migration().await;
 
@@ -661,8 +680,27 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Wait for ClickHouse to process the inserts
-    sleep(Duration::from_millis(500)).await;
+    // Poll until ModelProviderStatistics materialized view has processed the inserts
+    poll_for_result(
+        || {
+            let clickhouse = &clickhouse;
+            async move {
+                clickhouse.flush_pending_writes().await;
+                let response = clickhouse
+                    .run_query_synchronous_no_params(format!(
+                        "SELECT count() as cnt FROM ModelProviderStatistics FINAL \
+                         WHERE model_name = '{test_model_name}' \
+                         AND model_provider_name = '{test_provider_name}'"
+                    ))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok::<_, String>(response.response.trim().to_string())
+            }
+        },
+        |cnt| cnt != "0",
+        "Timed out waiting for ModelProviderStatistics to be populated",
+    )
+    .await;
 
     let clean_start = run_migration().await;
 
@@ -778,8 +816,27 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Wait for ClickHouse to process the inserts
-    sleep(Duration::from_millis(500)).await;
+    // Poll until ModelProviderStatistics materialized view has processed the inserts
+    poll_for_result(
+        || {
+            let clickhouse = &clickhouse;
+            async move {
+                clickhouse.flush_pending_writes().await;
+                let response = clickhouse
+                    .run_query_synchronous_no_params(format!(
+                        "SELECT count() as cnt FROM ModelProviderStatistics FINAL \
+                         WHERE model_name = '{test_model_name}' \
+                         AND model_provider_name = '{test_provider_name}'"
+                    ))
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok::<_, String>(response.response.trim().to_string())
+            }
+        },
+        |cnt| cnt != "0",
+        "Timed out waiting for ModelProviderStatistics to be populated",
+    )
+    .await;
 
     let clean_start = run_migration().await;
 
@@ -920,7 +977,6 @@ async fn test_rollback_apply_rollback() {
 
         // This migration drops the entire database during rollback, so we need to re-create it
         if migration.name() == "Migration0000" {
-            sleep(Duration::from_millis(500)).await;
             clickhouse
                 .create_database_and_migrations_table()
                 .await
@@ -1205,16 +1261,30 @@ async fn test_clickhouse_migration_manager() {
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let response = clickhouse
-        .run_query_synchronous_no_params(
-            "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'".to_string(),
-        )
-        .await
-        .unwrap();
-    let input_token_total: u64 = response.response.trim().parse().unwrap();
-    // input_tokens should increase by exactly 123
-    assert_eq!(input_token_total, baseline_input_tokens + 123);
+    // Poll until CumulativeUsage materialized view has processed the insert
+    let _input_token_total: u64 = poll_for_result(
+        || {
+            let clickhouse = &clickhouse;
+            async move {
+                clickhouse.flush_pending_writes().await;
+                let response = clickhouse
+                    .run_query_synchronous_no_params(
+                        "SELECT count FROM CumulativeUsage FINAL WHERE type='input_tokens'"
+                            .to_string(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                response
+                    .response
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|e| e.to_string())
+            }
+        },
+        |&total| total == baseline_input_tokens + 123,
+        "Timed out waiting for CumulativeUsage input_tokens to update",
+    )
+    .await;
     let response = clickhouse
         .run_query_synchronous_no_params(
             "SELECT count FROM CumulativeUsage FINAL WHERE type='output_tokens'".to_string(),
