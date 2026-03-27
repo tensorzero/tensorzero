@@ -30,6 +30,10 @@ pub struct GatewayArgs {
     #[arg(long, env = "TENSORZERO_GATEWAY_BIND_ADDRESS")]
     pub bind_address: Option<SocketAddr>,
 
+    /// Run the MCP server over stdio instead of (or in addition to) HTTP.
+    #[arg(long)]
+    pub mcp_stdio: bool,
+
     /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,

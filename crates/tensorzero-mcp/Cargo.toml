@@ -1,0 +1,25 @@
+[package]
+name = "tensorzero-mcp"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tensorzero-core = { path = "../tensorzero-core" }
+rmcp = { path = "/home/ubuntu/rust-sdk/crates/rmcp", features = [
+    "server",
+    "macros",
+    "transport-streamable-http-server",
+    "transport-io",
+] }
+axum = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

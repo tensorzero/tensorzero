@@ -199,6 +199,28 @@ pub struct UninitializedGatewayConfig {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub cache: ModelInferenceCacheConfig,
+    #[serde(default)]
+    pub mcp: Option<McpConfig>,
+}
+
+/// Configuration for the embedded MCP (Model Context Protocol) server.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpConfig {
+    /// Whether the MCP HTTP server is enabled. Defaults to `true`.
+    #[serde(default = "default_mcp_enabled")]
+    pub enabled: bool,
+    /// The port the MCP HTTP server binds to. Defaults to `3001`.
+    #[serde(default = "default_mcp_port")]
+    pub port: u16,
+}
+
+fn default_mcp_enabled() -> bool {
+    true
+}
+
+fn default_mcp_port() -> u16 {
+    3001
 }
 
 impl UninitializedGatewayConfig {
@@ -258,6 +280,7 @@ impl UninitializedGatewayConfig {
             relay,
             metrics: self.metrics,
             cache: self.cache,
+            mcp: self.mcp,
         })
     }
 }
@@ -284,6 +307,7 @@ pub struct GatewayConfig {
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
     pub cache: ModelInferenceCacheConfig,
+    pub mcp: Option<McpConfig>,
 }
 
 impl Default for GatewayConfig {
@@ -304,6 +328,7 @@ impl Default for GatewayConfig {
             relay: Default::default(),
             metrics: Default::default(),
             cache: Default::default(),
+            mcp: Default::default(),
         }
     }
 }

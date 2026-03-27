@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::config::gateway::{AuthConfig, MetricsConfig, UninitializedGatewayConfig};
+use crate::config::gateway::{AuthConfig, McpConfig, MetricsConfig, UninitializedGatewayConfig};
 use crate::config::{ExportConfig, TemplateFilesystemAccess, UninitializedRelayConfig};
 
 use super::cache_config::StoredCacheConfig;
@@ -38,6 +38,8 @@ pub struct StoredGatewayConfig {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub cache: StoredCacheConfig,
+    #[serde(default)]
+    pub mcp: Option<McpConfig>,
 }
 
 impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
@@ -58,6 +60,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache,
+            mcp,
         } = config;
         Self {
             bind_address,
@@ -75,6 +78,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
+            mcp,
         }
     }
 }
@@ -97,6 +101,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache,
+            mcp,
         } = stored;
         Self {
             bind_address,
@@ -114,6 +119,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
+            mcp,
         }
     }
 }

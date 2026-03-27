@@ -644,7 +644,7 @@ dependencies = [
  "log",
  "num-rational",
  "num-traits",
- "pastey",
+ "pastey 0.1.1",
  "rayon",
  "thiserror 2.0.18",
  "v_frame",
@@ -2809,6 +2809,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-core",
+ "tensorzero-mcp",
  "tensorzero-optimizers",
  "tensorzero-unsafe-helpers",
  "tokio",
@@ -4785,6 +4786,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
+name = "pastey"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
+
+[[package]]
 name = "pathdiff"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5919,6 +5926,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmcp"
+version = "1.3.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "futures",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "pastey 0.2.1",
+ "pin-project-lite",
+ "rand 0.10.0",
+ "rmcp-macros",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "sse-stream",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower-service",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "rmcp-macros"
+version = "1.3.0"
+dependencies = [
+ "darling 0.23.0",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6116,6 +6163,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
+ "chrono",
  "dyn-clone",
  "ref-cast",
  "schemars_derive",
@@ -7138,6 +7186,21 @@ dependencies = [
  "tracing-opentelemetry",
  "ts-rs",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "tensorzero-mcp"
+version = "2026.3.4"
+dependencies = [
+ "axum",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tensorzero-core",
+ "tokio",
+ "tokio-util",
+ "tracing",
  "uuid",
 ]
 
