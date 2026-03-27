@@ -14,6 +14,7 @@ use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::inference::types::stored_input::StoredInput;
 use tensorzero_core::inference::types::{
     ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, StoredModelInference,
 };
@@ -225,8 +226,8 @@ fn make_chat_inference(
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
         episode_id: uuid::Uuid::now_v7(),
-        input: None,
-        output: None,
+        input: Some(StoredInput::default()),
+        output: Some(vec![]),
         tool_params: None,
         inference_params: None,
         processing_time_ms,
@@ -249,7 +250,7 @@ fn make_json_inference(
         function_name: function_name.to_string(),
         variant_name: variant_name.to_string(),
         episode_id: uuid::Uuid::now_v7(),
-        input: None,
+        input: Some(StoredInput::default()),
         output: None,
         auxiliary_content: None,
         inference_params: None,
