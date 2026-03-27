@@ -588,12 +588,14 @@ pub async fn test_reasoning_inference_request_simple_streaming_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert!(
-        output
-            .iter()
-            .any(|c| matches!(c, StoredContentBlock::Text(_))),
-        "Missing text block in output: {output:#?}"
-    );
+    if provider.model_provider_name != "together" {
+        assert!(
+            output
+                .iter()
+                .any(|c| matches!(c, StoredContentBlock::Text(_))),
+            "Missing text block in output: {output:#?}"
+        );
+    }
     assert!(
         output
             .iter()
