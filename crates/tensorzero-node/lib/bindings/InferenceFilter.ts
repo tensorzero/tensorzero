@@ -7,6 +7,8 @@ import type { TimeFilter } from "./TimeFilter";
 
 /**
  * Filters for querying inferences.
+ * NOTE: This is stored in DB. Please do not make breaking changes.
+ * If we have to, we should make a separate storage type and convert.
  */
 export type InferenceFilter =
   | ({ type: "float_metric" } & FloatMetricFilter)

@@ -34,12 +34,11 @@ use crate::{
     inference::{
         InferenceProvider,
         types::{
-            ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
-            ModelInferenceRequest, ModelInferenceRequestJsonMode,
-            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, RequestMessage, Text, TextChunk, Thought,
-            ThoughtChunk,
+            ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse, ProviderInferenceResponseArgs,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+            Text, TextChunk, Thought, ThoughtChunk,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -827,18 +826,6 @@ fn fireworks_tool_call_to_tensorzero(fireworks_tool_call: FireworksResponseToolC
     }
 }
 
-impl From<FireworksFinishReason> for FinishReason {
-    fn from(reason: FireworksFinishReason) -> Self {
-        match reason {
-            FireworksFinishReason::Stop => FinishReason::Stop,
-            FireworksFinishReason::Length => FinishReason::Length,
-            FireworksFinishReason::ToolCalls => FinishReason::ToolCall,
-            FireworksFinishReason::ContentFilter => FinishReason::ContentFilter,
-            FireworksFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
 /// Streams the Fireworks response events and converts them into ProviderInferenceResponseChunks
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_fireworks(
@@ -934,7 +921,7 @@ fn fireworks_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -1120,6 +1107,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -1129,8 +1117,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(FireworksFinishReason::into),
-                id: model_inference_id,
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -1159,7 +1146,7 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
     use crate::providers::openai::OpenAIToolType;
     use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
