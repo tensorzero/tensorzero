@@ -206,6 +206,57 @@ pub struct StoredVariantVersion {
     pub namespace: Option<Namespace>,
 }
 
+impl StoredVariantVersion {
+    /// Collect all prompt_template_version IDs referenced by this variant.
+    /// Used to batch-load prompt templates from the database.
+    pub fn referenced_prompt_template_ids(&self) -> Vec<Uuid> {
+        let mut ids = Vec::new();
+        match &self.config {
+            StoredVariantConfig::ChatCompletion(c) | StoredVariantConfig::ChainOfThought(c) => {
+                collect_cc_prompt_ids(c, &mut ids);
+            }
+            StoredVariantConfig::BestOfNSampling(c) => {
+                collect_cc_prompt_ids(&c.evaluator.inner, &mut ids);
+            }
+            StoredVariantConfig::MixtureOfN(c) => {
+                collect_cc_prompt_ids(&c.fuser.inner, &mut ids);
+            }
+            StoredVariantConfig::Dicl(c) => {
+                if let Some(ref si) = c.system_instructions {
+                    ids.push(si.prompt_template_version_id);
+                }
+            }
+        }
+        ids
+    }
+}
+
+fn collect_cc_prompt_ids(c: &StoredChatCompletionVariantConfig, ids: &mut Vec<Uuid>) {
+    if let Some(ref t) = c.system_template {
+        ids.push(t.prompt_template_version_id);
+    }
+    if let Some(ref t) = c.user_template {
+        ids.push(t.prompt_template_version_id);
+    }
+    if let Some(ref t) = c.assistant_template {
+        ids.push(t.prompt_template_version_id);
+    }
+    if let Some(ref w) = c.input_wrappers {
+        if let Some(ref t) = w.user {
+            ids.push(t.prompt_template_version_id);
+        }
+        if let Some(ref t) = w.assistant {
+            ids.push(t.prompt_template_version_id);
+        }
+        if let Some(ref t) = w.system {
+            ids.push(t.prompt_template_version_id);
+        }
+    }
+    for ct in c.templates.inner.values() {
+        ids.push(ct.path.prompt_template_version_id);
+    }
+}
+
 // ─── Schema version dispatch ─────────────────────────────────────────────────
 
 /// Deserialize a `StoredVariantVersion` from a JSONB value, dispatching on `schema_version`.

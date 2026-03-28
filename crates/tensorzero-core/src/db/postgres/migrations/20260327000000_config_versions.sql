@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS tensorzero.prompt_template_version_dependencies (
 -- and rehydrates it into UninitializedVariantInfo.
 CREATE TABLE IF NOT EXISTS tensorzero.variant_versions (
     id UUID PRIMARY KEY,
+    -- The function this variant belongs to (e.g. "my_chat_function").
+    -- Used for joins and filtering; the function config itself stays on disk.
+    function_name TEXT NOT NULL,
     -- The variant name (e.g. "gpt4o_variant")
     variant_name TEXT NOT NULL,
     -- Schema version for JSONB deserialization dispatch. Bumped on breaking schema changes.
@@ -41,5 +44,6 @@ CREATE TABLE IF NOT EXISTS tensorzero.variant_versions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for looking up variant versions by name (e.g. to find all versions of a given variant)
-CREATE INDEX IF NOT EXISTS idx_variant_versions_variant_name ON tensorzero.variant_versions (variant_name);
+-- Index for looking up variant versions by function + variant name
+CREATE INDEX IF NOT EXISTS idx_variant_versions_function_variant
+    ON tensorzero.variant_versions (function_name, variant_name);
