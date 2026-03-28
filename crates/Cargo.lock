@@ -7113,6 +7113,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.28",
  "reqwest-sse-stream",
+ "rmcp",
  "rust_decimal",
  "rustls",
  "schemars 1.2.1",
