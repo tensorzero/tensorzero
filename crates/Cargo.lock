@@ -7191,6 +7191,7 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "tensorzero-auth",
  "tensorzero-core",
  "tokio",
  "tokio-util",

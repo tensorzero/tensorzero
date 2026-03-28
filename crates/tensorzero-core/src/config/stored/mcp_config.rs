@@ -10,28 +10,40 @@ use crate::config::gateway::McpConfig;
 pub struct StoredMcpConfig {
     #[serde(default = "default_mcp_enabled")]
     pub enabled: bool,
-    #[serde(default = "default_mcp_port")]
-    pub port: u16,
+    #[serde(default = "default_mcp_bind_address")]
+    pub bind_address: std::net::SocketAddr,
 }
 
 fn default_mcp_enabled() -> bool {
     true
 }
 
-fn default_mcp_port() -> u16 {
-    3001
+fn default_mcp_bind_address() -> std::net::SocketAddr {
+    std::net::SocketAddr::from(([0, 0, 0, 0], 3001))
 }
 
 impl From<McpConfig> for StoredMcpConfig {
     fn from(config: McpConfig) -> Self {
-        let McpConfig { enabled, port } = config;
-        Self { enabled, port }
+        let McpConfig {
+            enabled,
+            bind_address,
+        } = config;
+        Self {
+            enabled,
+            bind_address,
+        }
     }
 }
 
 impl From<StoredMcpConfig> for McpConfig {
     fn from(stored: StoredMcpConfig) -> Self {
-        let StoredMcpConfig { enabled, port } = stored;
-        Self { enabled, port }
+        let StoredMcpConfig {
+            enabled,
+            bind_address,
+        } = stored;
+        Self {
+            enabled,
+            bind_address,
+        }
     }
 }

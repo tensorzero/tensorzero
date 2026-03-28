@@ -210,17 +210,17 @@ pub struct McpConfig {
     /// Whether the MCP HTTP server is enabled. Defaults to `true`.
     #[serde(default = "default_mcp_enabled")]
     pub enabled: bool,
-    /// The port the MCP HTTP server binds to. Defaults to `3001`.
-    #[serde(default = "default_mcp_port")]
-    pub port: u16,
+    /// The socket address the MCP HTTP server binds to. Defaults to `0.0.0.0:3001`.
+    #[serde(default = "default_mcp_bind_address")]
+    pub bind_address: std::net::SocketAddr,
 }
 
 fn default_mcp_enabled() -> bool {
     true
 }
 
-fn default_mcp_port() -> u16 {
-    3001
+fn default_mcp_bind_address() -> std::net::SocketAddr {
+    std::net::SocketAddr::from(([0, 0, 0, 0], 3001))
 }
 
 impl UninitializedGatewayConfig {

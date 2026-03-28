@@ -407,7 +407,7 @@ async fn run() -> Result<(), ExitCode> {
     {
         let app_state = std::sync::Arc::new(gateway_handle.app_state.clone());
         tensorzero_mcp::spawn_mcp_http_server(
-            mcp_config.port,
+            mcp_config.bind_address,
             app_state,
             &gateway_handle.app_state.deferred_tasks,
             gateway_handle.app_state.shutdown_token.clone(),
@@ -537,12 +537,10 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print whether MCP server is enabled
-    if let Some(ref mcp_config) = config.gateway.mcp {
-        if mcp_config.enabled {
-            tracing::info!("├ MCP Server: enabled (port {})", mcp_config.port);
-        } else {
-            tracing::info!("├ MCP Server: disabled");
-        }
+    if let Some(ref mcp_config) = config.gateway.mcp
+        && mcp_config.enabled
+    {
+        tracing::info!("├ MCP Server: enabled ({})", mcp_config.bind_address);
     } else {
         tracing::info!("├ MCP Server: disabled");
     }
