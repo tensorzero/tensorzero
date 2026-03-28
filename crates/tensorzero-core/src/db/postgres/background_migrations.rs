@@ -13,7 +13,7 @@
 
 use sqlx::{PgPool, Row};
 
-use crate::config::variant_versions::{StoredVariantConfig, deserialize_stored_variant_version};
+use crate::config::variant_versions::{CURRENT_SCHEMA_VERSION, deserialize_stored_variant_version};
 use crate::error::{Error, ErrorDetails};
 
 /// Advisory lock key for the deprecate_chain_of_thought migration.
@@ -173,28 +173,29 @@ async fn release_advisory_lock(pool: &PgPool, lock_key: i64) {
 
 // ─── deprecate_chain_of_thought ──────────────────────────────────────────────
 
-/// Rewrite `chain_of_thought` variant version rows to `chat_completion`.
+/// Rewrite schema_version=1 variant version rows to schema_version=2.
 ///
-/// Loads all variant_versions rows in batches, deserializes each via serde,
-/// and rewrites any `ChainOfThought` variants as `ChatCompletion` with
-/// `reasoning_effort` defaulted to `"medium"`. Rows that are already
-/// `ChatCompletion` (or any other type) are skipped without modification.
+/// Loads v1 rows in batches, deserializes each via the v1 serde path (which
+/// handles `ChainOfThought`), converts to v2 via `into_latest()` (which
+/// canonicalizes CoT → ChatCompletion with `reasoning_effort` defaulted to
+/// `"medium"`), serializes back, and updates the row with schema_version=2.
 ///
-/// All filtering happens in typed Rust — no raw JSONB queries.
+/// Rows already at schema_version >= 2 are skipped via the SQL WHERE clause.
 async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
     let mut total_migrated: i64 = 0;
     let mut last_id: Option<uuid::Uuid> = None;
 
     loop {
-        // Fetch a batch of rows, paginated by id (UUIDv7 = time-ordered)
+        // Only fetch v1 rows — v2+ are already in the latest format
         let rows = if let Some(cursor) = last_id {
             sqlx::query(
                 "SELECT id, schema_version, config
                  FROM tensorzero.variant_versions
-                 WHERE id > $1
+                 WHERE schema_version < $1 AND id > $2
                  ORDER BY id
-                 LIMIT $2",
+                 LIMIT $3",
             )
+            .bind(CURRENT_SCHEMA_VERSION)
             .bind(cursor)
             .bind(BATCH_SIZE)
             .fetch_all(pool)
@@ -203,9 +204,11 @@ async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
             sqlx::query(
                 "SELECT id, schema_version, config
                  FROM tensorzero.variant_versions
+                 WHERE schema_version < $1
                  ORDER BY id
-                 LIMIT $1",
+                 LIMIT $2",
             )
+            .bind(CURRENT_SCHEMA_VERSION)
             .bind(BATCH_SIZE)
             .fetch_all(pool)
             .await
@@ -229,21 +232,11 @@ async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
                 .get::<sqlx::types::Json<serde_json::Value>, _>("config")
                 .0;
 
-            // Deserialize using the standard serde path
-            let mut stored = deserialize_stored_variant_version(schema_version, config)?;
+            // Deserialize via the standard dispatcher — v1 rows go through
+            // into_latest() which handles ChainOfThought → ChatCompletion
+            let stored = deserialize_stored_variant_version(schema_version, config)?;
 
-            // Only transform ChainOfThought rows — skip everything else
-            let StoredVariantConfig::ChainOfThought(cc_config) = stored.config else {
-                continue;
-            };
-
-            let mut new_config = cc_config;
-            if new_config.reasoning_effort.is_none() {
-                new_config.reasoning_effort = Some("medium".to_string());
-            }
-            stored.config = StoredVariantConfig::ChatCompletion(new_config);
-
-            // Serialize back via serde and write
+            // Serialize as v2 and write back with bumped schema_version
             let new_json = serde_json::to_value(&stored).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!("Failed to serialize migrated variant version `{id}`: {e}"),
@@ -252,11 +245,12 @@ async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
 
             sqlx::query(
                 "UPDATE tensorzero.variant_versions
-                 SET config = $2
+                 SET config = $2, schema_version = $3
                  WHERE id = $1",
             )
             .bind(id)
             .bind(sqlx::types::Json(&new_json))
+            .bind(CURRENT_SCHEMA_VERSION)
             .execute(pool)
             .await
             .map_err(|e| {
@@ -268,7 +262,10 @@ async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
             total_migrated += 1;
         }
 
-        tracing::debug!(total_migrated, "Processed batch of variant_versions rows");
+        tracing::debug!(
+            total_migrated,
+            "Processed batch of v1 variant_versions rows"
+        );
     }
 
     Ok(total_migrated)

@@ -38,7 +38,8 @@ use crate::variant::mixture_of_n::{UninitializedFuserConfig, UninitializedMixtur
 use crate::error::{Error, ErrorDetails};
 
 /// Current schema version for newly written variant versions.
-pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+/// Bumped from 1 → 2 to remove `chain_of_thought` as a valid variant type.
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 // ─── StoredPromptRef ─────────────────────────────────────────────────────────
 
@@ -172,10 +173,10 @@ pub struct StoredDiclVariantConfig {
     pub max_distance: Option<f32>,
 }
 
-/// Variant config enum, serialized as adjacently-tagged JSONB.
-/// The `"type"` key discriminates variants; the `"config"` key holds variant-specific fields.
-///
-/// Serde handles both serialization and deserialization — no manual dispatch needed.
+// ─── Schema version 2 (current) ──────────────────────────────────────────────
+
+/// Variant config enum (schema_version=2). No `ChainOfThought` — it was
+/// canonicalized to `ChatCompletion` in the expand release and removed here.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", content = "config")]
 pub enum StoredVariantConfig {
@@ -187,32 +188,9 @@ pub enum StoredVariantConfig {
     MixtureOfN(StoredMixtureOfNVariantConfig),
     #[serde(rename = "dicl")]
     Dicl(StoredDiclVariantConfig),
-    /// ChainOfThought is deprecated (#5298 / 2026.2+) and functionally identical to
-    /// ChatCompletion. On read, it is rehydrated as ChatCompletion with
-    /// `reasoning_effort` defaulted to `"medium"`.
-    ///
-    /// ## Deprecation timeline (expand-and-contract)
-    ///
-    /// 1. **Expand release:** Write path canonicalizes ChainOfThought → ChatCompletion
-    ///    (with `reasoning_effort` defaulted to `"medium"`). Read path handles both.
-    /// 2. **Contract release (this release):** Background migration
-    ///    (`deprecate_chain_of_thought_v1` in `background_migrations.rs`) rewrites
-    ///    `"type": "chain_of_thought"` → `"type": "chat_completion"` in the JSONB config.
-    ///    Runs once post-startup, coordinated via advisory lock. The reader is kept for
-    ///    safety during blue/green rollout with the expand release.
-    /// 3. **Cleanup release (next):** Remove this variant and its rehydrate arm, but only after:
-    ///    - The background migration has completed on all environments
-    ///      (`SELECT completed_at FROM background_migrations WHERE name = 'deprecate_chain_of_thought_v1'`).
-    ///    - All gateways are running the contract release or later.
-    ///    - `SELECT COUNT(*) FROM variant_versions WHERE config->>'type' = 'chain_of_thought'`
-    ///      returns 0.
-    ///    - At least one full release cycle has passed since the contract release.
-    #[serde(rename = "chain_of_thought")]
-    ChainOfThought(StoredChatCompletionVariantConfig),
 }
 
-/// The top-level JSONB blob stored in `variant_versions.config`.
-/// Contains the variant config (with type tag) plus outer fields from `UninitializedVariantInfo`.
+/// The top-level JSONB blob stored in `variant_versions.config` (schema_version=2).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct StoredVariantVersion {
     #[serde(flatten)]
@@ -229,7 +207,7 @@ impl StoredVariantVersion {
     pub fn referenced_prompt_template_ids(&self) -> Vec<Uuid> {
         let mut ids = Vec::new();
         match &self.config {
-            StoredVariantConfig::ChatCompletion(c) | StoredVariantConfig::ChainOfThought(c) => {
+            StoredVariantConfig::ChatCompletion(c) => {
                 collect_cc_prompt_ids(c, &mut ids);
             }
             StoredVariantConfig::BestOfNSampling(c) => {
@@ -245,6 +223,62 @@ impl StoredVariantVersion {
             }
         }
         ids
+    }
+}
+
+// ─── Schema version 1 (legacy) ──────────────────────────────────────────────
+
+/// Variant config enum for schema_version=1. Includes `ChainOfThought` which
+/// was removed in schema_version=2.
+///
+/// Remove this type after the background migration has rewritten all v1 rows to v2
+/// and `SELECT COUNT(*) FROM variant_versions WHERE schema_version = 1` returns 0.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(tag = "type", content = "config")]
+enum StoredVariantConfigV1 {
+    #[serde(rename = "chat_completion")]
+    ChatCompletion(StoredChatCompletionVariantConfig),
+    #[serde(rename = "best_of_n_sampling")]
+    BestOfNSampling(StoredBestOfNVariantConfig),
+    #[serde(rename = "mixture_of_n")]
+    MixtureOfN(StoredMixtureOfNVariantConfig),
+    #[serde(rename = "dicl")]
+    Dicl(StoredDiclVariantConfig),
+    #[serde(rename = "chain_of_thought")]
+    ChainOfThought(StoredChatCompletionVariantConfig),
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct StoredVariantVersionV1 {
+    #[serde(flatten)]
+    config: StoredVariantConfigV1,
+    #[serde(default)]
+    timeouts: Option<TimeoutsConfig>,
+    #[serde(default)]
+    namespace: Option<Namespace>,
+}
+
+impl StoredVariantVersionV1 {
+    /// Convert a v1 stored variant to the latest (v2) format.
+    /// ChainOfThought → ChatCompletion with `reasoning_effort` defaulted to `"medium"`.
+    fn into_latest(self) -> StoredVariantVersion {
+        let config = match self.config {
+            StoredVariantConfigV1::ChatCompletion(c) => StoredVariantConfig::ChatCompletion(c),
+            StoredVariantConfigV1::BestOfNSampling(c) => StoredVariantConfig::BestOfNSampling(c),
+            StoredVariantConfigV1::MixtureOfN(c) => StoredVariantConfig::MixtureOfN(c),
+            StoredVariantConfigV1::Dicl(c) => StoredVariantConfig::Dicl(c),
+            StoredVariantConfigV1::ChainOfThought(mut c) => {
+                if c.reasoning_effort.is_none() {
+                    c.reasoning_effort = Some("medium".to_string());
+                }
+                StoredVariantConfig::ChatCompletion(c)
+            }
+        };
+        StoredVariantVersion {
+            config,
+            timeouts: self.timeouts,
+            namespace: self.namespace,
+        }
     }
 }
 
@@ -277,14 +311,25 @@ fn collect_cc_prompt_ids(c: &StoredChatCompletionVariantConfig, ids: &mut Vec<Uu
 // ─── Schema version dispatch ─────────────────────────────────────────────────
 
 /// Deserialize a `StoredVariantVersion` from a JSONB value, dispatching on `schema_version`.
+/// V1 rows are converted to the latest format on read (ChainOfThought → ChatCompletion).
 pub fn deserialize_stored_variant_version(
     schema_version: i32,
     config: serde_json::Value,
 ) -> Result<StoredVariantVersion, Error> {
     match schema_version {
-        1 => serde_json::from_value(config).map_err(|e| {
+        1 => {
+            let v1: StoredVariantVersionV1 = serde_json::from_value(config).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Failed to deserialize variant version (schema_version=1): {e}"
+                    ),
+                })
+            })?;
+            Ok(v1.into_latest())
+        }
+        2 => serde_json::from_value(config).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize variant version (schema_version=1): {e}"),
+                message: format!("Failed to deserialize variant version (schema_version=2): {e}"),
             })
         }),
         _ => Err(Error::new(ErrorDetails::Config {
@@ -548,17 +593,6 @@ pub fn rehydrate_variant(
         }
         StoredVariantConfig::Dicl(c) => {
             UninitializedVariantConfig::Dicl(rehydrate_dicl(c, prompt_rows)?)
-        }
-        // Legacy ChainOfThought rows rehydrate as ChatCompletion.
-        // Default reasoning_effort to "medium" to preserve reasoning behavioral intent.
-        // We don't set thinking_budget_tokens because it requires a provider-specific
-        // value and can conflict with reasoning_effort on some providers.
-        StoredVariantConfig::ChainOfThought(c) => {
-            let mut cc = rehydrate_chat_completion(c, prompt_rows)?;
-            if cc.reasoning_effort.is_none() {
-                cc.reasoning_effort = Some("medium".to_string());
-            }
-            UninitializedVariantConfig::ChatCompletion(cc)
         }
     };
     Ok(UninitializedVariantInfo {
