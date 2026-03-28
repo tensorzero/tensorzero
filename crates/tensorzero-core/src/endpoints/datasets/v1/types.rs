@@ -503,6 +503,36 @@ pub struct DeleteDatapointsResponse {
     pub num_deleted_datapoints: u64,
 }
 
+/// Combined request for listing datapoints that includes the dataset name.
+/// In the HTTP API, `dataset_name` comes from the URL path, but tools and
+/// embedded clients need it in a single request struct.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct ListDatapointsToolParams {
+    /// The name of the dataset to list datapoints from.
+    pub dataset_name: String,
+    /// Request parameters for listing datapoints (filtering, pagination, ordering).
+    #[serde(flatten)]
+    pub request: ListDatapointsRequest,
+}
+
+/// Combined request for getting datapoints that includes the optional dataset name.
+/// In the HTTP API, `dataset_name` comes from the URL path, but tools and
+/// embedded clients need it in a single request struct.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct GetDatapointsToolParams {
+    /// The name of the dataset (optional, but recommended for performance).
+    #[serde(default)]
+    pub dataset_name: Option<String>,
+    /// The IDs of the datapoints to retrieve.
+    pub ids: Vec<Uuid>,
+}
+
 /// Request to list datasets with optional filtering and pagination.
 /// Used by the `GET /internal/datasets` endpoint.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

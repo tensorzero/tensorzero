@@ -9,6 +9,10 @@ use rmcp::{
 use tensorzero_core::error::Error;
 use tracing::instrument;
 
+use tensorzero_core::endpoints::datasets::v1::types::{
+    GetDatapointsRequest, GetDatapointsToolParams, ListDatapointsToolParams, ListDatasetsRequest,
+};
+use tensorzero_core::endpoints::datasets::v1::{get_datapoints, list_datapoints, list_datasets};
 use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, ListInferencesRequest,
 };
@@ -71,6 +75,70 @@ impl TensorZeroMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let database = self.app_state.get_delegating_database();
         let response = match get_inferences(&self.app_state.config, &database, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "List available datasets with optional filtering by function name and pagination. Returns dataset names, datapoint counts, and last updated timestamps."
+    )]
+    #[instrument(skip_all)]
+    async fn list_datasets(
+        &self,
+        Parameters(request): Parameters<ListDatasetsRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let response = match list_datasets(&database, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "List datapoints in a dataset with optional filtering and pagination. Can filter by function name, tags, time ranges, and order results."
+    )]
+    #[instrument(skip_all)]
+    async fn list_datapoints(
+        &self,
+        Parameters(params): Parameters<ListDatapointsToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let response = match list_datapoints(&database, params.dataset_name, params.request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Retrieve specific datapoints by their IDs. Optionally provide a dataset name for better query performance."
+    )]
+    #[instrument(skip_all)]
+    async fn get_datapoints(
+        &self,
+        Parameters(params): Parameters<GetDatapointsToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let request = GetDatapointsRequest { ids: params.ids };
+        let response = match get_datapoints(&database, params.dataset_name, request).await {
             Ok(response) => response,
             Err(e) => return handle_tool_error(e),
         };

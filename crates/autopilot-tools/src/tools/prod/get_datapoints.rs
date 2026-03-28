@@ -6,24 +6,10 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero::GetDatapointsResponse;
-use uuid::Uuid;
+use schemars::Schema;
+use tensorzero::{GetDatapointsResponse, GetDatapointsToolParams};
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the get_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct GetDatapointsToolParams {
-    /// The name of the dataset (optional, but recommended for performance).
-    #[serde(default)]
-    pub dataset_name: Option<String>,
-    /// The IDs of the datapoints to retrieve.
-    pub ids: Vec<Uuid>,
-}
 
 /// Tool for getting specific datapoints by their IDs.
 ///

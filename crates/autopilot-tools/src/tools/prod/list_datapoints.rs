@@ -6,23 +6,10 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
+use schemars::Schema;
+use tensorzero::{GetDatapointsResponse, ListDatapointsToolParams};
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the list_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct ListDatapointsToolParams {
-    /// The name of the dataset to list datapoints from.
-    pub dataset_name: String,
-    /// Request parameters for listing datapoints (filtering, pagination, ordering).
-    #[serde(flatten)]
-    pub request: ListDatapointsRequest,
-}
 
 /// Tool for listing datapoints in a dataset.
 ///

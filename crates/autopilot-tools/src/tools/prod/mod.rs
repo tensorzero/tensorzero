@@ -35,7 +35,7 @@ pub use delete_datapoints::{DeleteDatapointsTool, DeleteDatapointsToolParams};
 pub use feedback::{FeedbackTool, FeedbackToolParams};
 pub use gepa::{GepaTool, StandaloneGepaTool};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
-pub use get_datapoints::{GetDatapointsTool, GetDatapointsToolParams};
+pub use get_datapoints::GetDatapointsTool;
 pub use get_feedback_by_target_id::{GetFeedbackByTargetIdTool, GetFeedbackByTargetIdToolParams};
 pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
 pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
@@ -47,11 +47,13 @@ pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,
     LaunchOptimizationWorkflowToolParams,
 };
-pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
+pub use list_datapoints::ListDatapointsTool;
 pub use list_datasets::{ListDatasetsTool, ListDatasetsToolParams};
 pub use list_episodes::{ListEpisodesTool, ListEpisodesToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
 pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
+pub use tensorzero::GetDatapointsToolParams;
+pub use tensorzero::ListDatapointsToolParams;
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
 pub use upload_dataset::{
     UploadDatasetFormat, UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams,
