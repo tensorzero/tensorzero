@@ -395,12 +395,6 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    // Start MCP stdio server if requested (blocks until client disconnects, then exits)
-    if args.mcp_stdio {
-        let app_state = std::sync::Arc::new(gateway_handle.app_state.clone());
-        return tensorzero_mcp::run_mcp_stdio(app_state).await;
-    }
-
     // Start MCP HTTP server if configured
     if let Some(ref mcp_config) = config.gateway.mcp
         && mcp_config.enabled

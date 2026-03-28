@@ -3,8 +3,6 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use axum::middleware;
-use rmcp::ServiceExt;
-use rmcp::transport::io::stdio;
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use tokio_util::sync::CancellationToken;
@@ -86,22 +84,6 @@ pub async fn spawn_mcp_http_server(
             tracing::error!("MCP HTTP server error: {e}");
         }
     });
-
-    Ok(())
-}
-
-/// Run the MCP server over stdio. This blocks until the client disconnects.
-pub async fn run_mcp_stdio(app_state: Arc<AppStateData>) -> Result<(), ExitCode> {
-    let server = TensorZeroMcpServer::new(app_state);
-    let service = server.serve(stdio()).await.map_err(|e| {
-        tracing::error!("Failed to start MCP stdio server: {e}");
-        ExitCode::FAILURE
-    })?;
-
-    service.waiting().await.map_err(|e| {
-        tracing::error!("MCP stdio server error: {e}");
-        ExitCode::FAILURE
-    })?;
 
     Ok(())
 }
