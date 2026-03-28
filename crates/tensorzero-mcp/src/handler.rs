@@ -14,7 +14,7 @@ use tensorzero_core::endpoints::stored_inferences::v1::{get_inferences, list_inf
 use tensorzero_core::utils::gateway::AppStateData;
 
 #[derive(Clone)]
-pub struct TensorZeroMcpServer {
+pub(crate) struct TensorZeroMcpServer {
     app_state: Arc<AppStateData>,
     tool_router: ToolRouter<Self>,
 }
