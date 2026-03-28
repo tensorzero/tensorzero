@@ -62,11 +62,11 @@ async fn test_mcp_list_inferences_with_limit() {
 
 #[gtest]
 #[tokio::test]
-async fn test_mcp_list_inferences_empty() {
+async fn test_mcp_list_inferences_unknown_function() {
     let mcp = McpTestClient::connect().await;
     let nonexistent = format!("nonexistent_function_{}", Uuid::now_v7());
-    let response: Value = mcp
-        .call_tool(
+    let result = mcp
+        .call_tool_raw(
             "list_inferences",
             json!({
                 "function_name": nonexistent,
@@ -74,10 +74,7 @@ async fn test_mcp_list_inferences_empty() {
         )
         .await;
 
-    let inferences = response["inferences"]
-        .as_array()
-        .expect("Expected `inferences` array");
-    expect_that!(inferences.len(), eq(0));
+    expect_that!(result.is_error.unwrap_or(false), eq(true));
 
     mcp.cancel().await;
 }

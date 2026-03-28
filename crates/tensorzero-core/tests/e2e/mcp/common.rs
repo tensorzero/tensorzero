@@ -16,6 +16,8 @@ impl McpTestClient {
         Self { client }
     }
 
+    /// Call an MCP tool, assert it succeeded, and deserialize the response.
+    /// Panics on error responses — use `call_tool_raw` for tests that expect failures.
     pub async fn call_tool<T: DeserializeOwned>(&self, name: &str, params: Value) -> T {
         let result = self.call_tool_raw(name, params).await;
         assert!(
@@ -32,6 +34,8 @@ impl McpTestClient {
         serde_json::from_str(text).expect("Failed to deserialize MCP tool response")
     }
 
+    /// Call an MCP tool and return the raw `CallToolResult` without assertions or deserialization.
+    /// Use this for tests that need to inspect error responses.
     pub async fn call_tool_raw(&self, name: &str, params: Value) -> CallToolResult {
         let args = params
             .as_object()
@@ -40,10 +44,11 @@ impl McpTestClient {
         let mut params = rmcp::model::CallToolRequestParams::default();
         params.name = name.to_string().into();
         params.arguments = Some(args);
-        self.client
-            .call_tool(params)
-            .await
-            .expect("MCP call_tool RPC failed")
+        match self.client.call_tool(params).await {
+            Ok(result) => result,
+            // JSON-RPC errors (e.g. deserialization failures) are treated as tool errors
+            Err(e) => CallToolResult::error(vec![rmcp::model::Content::text(format!("{e:?}"))]),
+        }
     }
 
     pub async fn list_tools(&self) -> Vec<rmcp::model::Tool> {

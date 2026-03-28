@@ -6,6 +6,7 @@ use rmcp::{
     model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
 };
+use tensorzero_core::error::Error;
 use tracing::instrument;
 
 use tensorzero_core::endpoints::stored_inferences::v1::types::{
@@ -13,6 +14,16 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::{
 };
 use tensorzero_core::endpoints::stored_inferences::v1::{get_inferences, list_inferences};
 use tensorzero_core::utils::gateway::AppStateData;
+
+/// Converts a TensorZero error into either a tool-level error result (for client errors)
+/// or an MCP protocol error (for server errors).
+fn handle_tool_error(e: Error) -> Result<CallToolResult, McpError> {
+    if e.status_code().is_client_error() {
+        Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
+    } else {
+        Err(McpError::internal_error(e.to_string(), None))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct TensorZeroMcpServer {
@@ -38,14 +49,10 @@ impl TensorZeroMcpServer {
         Parameters(request): Parameters<ListInferencesRequest>,
     ) -> Result<CallToolResult, McpError> {
         let database = self.app_state.get_delegating_database();
-        // Business logic errors (e.g. invalid filters) are returned as `Err(McpError::internal_error)`.
-        // Consider returning `CallToolResult` with `is_error: true` for user-facing validation
-        // errors vs. `Err(McpError)` for protocol-level failures if finer error semantics are needed.
-        let response = list_inferences(&self.app_state.config, &database, request)
-            .await
-            .map_err(|e| {
-                McpError::internal_error(format!("Failed to list inferences: {e}"), None)
-            })?;
+        let response = match list_inferences(&self.app_state.config, &database, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
 
         let json = serde_json::to_string(&response).map_err(|e| {
             McpError::internal_error(format!("Failed to serialize response: {e}"), None)
@@ -63,14 +70,10 @@ impl TensorZeroMcpServer {
         Parameters(request): Parameters<GetInferencesRequest>,
     ) -> Result<CallToolResult, McpError> {
         let database = self.app_state.get_delegating_database();
-        // Business logic errors (e.g. malformed UUIDs) are returned as `Err(McpError::internal_error)`.
-        // Consider returning `CallToolResult` with `is_error: true` for user-facing validation
-        // errors vs. `Err(McpError)` for protocol-level failures if finer error semantics are needed.
-        let response = get_inferences(&self.app_state.config, &database, request)
-            .await
-            .map_err(|e| {
-                McpError::internal_error(format!("Failed to get inferences: {e}"), None)
-            })?;
+        let response = match get_inferences(&self.app_state.config, &database, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
 
         let json = serde_json::to_string(&response).map_err(|e| {
             McpError::internal_error(format!("Failed to serialize response: {e}"), None)
