@@ -226,62 +226,6 @@ impl StoredVariantVersion {
     }
 }
 
-// ─── Schema version 1 (legacy) ──────────────────────────────────────────────
-
-/// Variant config enum for schema_version=1. Includes `ChainOfThought` which
-/// was removed in schema_version=2.
-///
-/// Remove this type after the background migration has rewritten all v1 rows to v2
-/// and `SELECT COUNT(*) FROM variant_versions WHERE schema_version = 1` returns 0.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", content = "config")]
-enum StoredVariantConfigV1 {
-    #[serde(rename = "chat_completion")]
-    ChatCompletion(StoredChatCompletionVariantConfig),
-    #[serde(rename = "best_of_n_sampling")]
-    BestOfNSampling(StoredBestOfNVariantConfig),
-    #[serde(rename = "mixture_of_n")]
-    MixtureOfN(StoredMixtureOfNVariantConfig),
-    #[serde(rename = "dicl")]
-    Dicl(StoredDiclVariantConfig),
-    #[serde(rename = "chain_of_thought")]
-    ChainOfThought(StoredChatCompletionVariantConfig),
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct StoredVariantVersionV1 {
-    #[serde(flatten)]
-    config: StoredVariantConfigV1,
-    #[serde(default)]
-    timeouts: Option<TimeoutsConfig>,
-    #[serde(default)]
-    namespace: Option<Namespace>,
-}
-
-impl StoredVariantVersionV1 {
-    /// Convert a v1 stored variant to the latest (v2) format.
-    /// ChainOfThought → ChatCompletion with `reasoning_effort` defaulted to `"medium"`.
-    fn into_latest(self) -> StoredVariantVersion {
-        let config = match self.config {
-            StoredVariantConfigV1::ChatCompletion(c) => StoredVariantConfig::ChatCompletion(c),
-            StoredVariantConfigV1::BestOfNSampling(c) => StoredVariantConfig::BestOfNSampling(c),
-            StoredVariantConfigV1::MixtureOfN(c) => StoredVariantConfig::MixtureOfN(c),
-            StoredVariantConfigV1::Dicl(c) => StoredVariantConfig::Dicl(c),
-            StoredVariantConfigV1::ChainOfThought(mut c) => {
-                if c.reasoning_effort.is_none() {
-                    c.reasoning_effort = Some("medium".to_string());
-                }
-                StoredVariantConfig::ChatCompletion(c)
-            }
-        };
-        StoredVariantVersion {
-            config,
-            timeouts: self.timeouts,
-            namespace: self.namespace,
-        }
-    }
-}
-
 fn collect_cc_prompt_ids(c: &StoredChatCompletionVariantConfig, ids: &mut Vec<Uuid>) {
     if let Some(ref t) = c.system_template {
         ids.push(t.prompt_template_version_id);
@@ -311,22 +255,14 @@ fn collect_cc_prompt_ids(c: &StoredChatCompletionVariantConfig, ids: &mut Vec<Uu
 // ─── Schema version dispatch ─────────────────────────────────────────────────
 
 /// Deserialize a `StoredVariantVersion` from a JSONB value, dispatching on `schema_version`.
-/// V1 rows are converted to the latest format on read (ChainOfThought → ChatCompletion).
 pub fn deserialize_stored_variant_version(
     schema_version: i32,
     config: serde_json::Value,
 ) -> Result<StoredVariantVersion, Error> {
     match schema_version {
-        1 => {
-            let v1: StoredVariantVersionV1 = serde_json::from_value(config).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Failed to deserialize variant version (schema_version=1): {e}"
-                    ),
-                })
-            })?;
-            Ok(v1.into_latest())
-        }
+        // V1 support was removed after the `deprecate_chain_of_thought_v1` background
+        // migration rewrote all v1 rows to v2. If v1 rows somehow remain, this will
+        // return an error — check that the migration completed successfully.
         2 => serde_json::from_value(config).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to deserialize variant version (schema_version=2): {e}"),

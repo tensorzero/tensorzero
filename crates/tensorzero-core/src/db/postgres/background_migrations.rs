@@ -11,32 +11,20 @@
 //!    returns the number of rows affected.
 //! 3. Register it in `run_all`.
 
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 
-use crate::config::variant_versions::{CURRENT_SCHEMA_VERSION, deserialize_stored_variant_version};
 use crate::error::{Error, ErrorDetails};
-
-/// Advisory lock key for the deprecate_chain_of_thought migration.
-/// Chosen as a fixed constant — must be unique across all background migrations.
-const DEPRECATE_COT_LOCK_KEY: i64 = 0x545A_4243_4F54_0001; // "TZBCoT" + 0001
-
-const DEPRECATE_COT_NAME: &str = "deprecate_chain_of_thought_v1";
-
-/// Batch size for processing rows in background migrations.
-const BATCH_SIZE: i64 = 100;
 
 /// Run all registered background migrations.
 /// Call this once after gateway startup (non-blocking — skips if another instance is running).
+#[expect(clippy::unused_async)]
 pub async fn run_all(pool: &PgPool) -> Result<(), Error> {
-    run_if_needed(pool, DEPRECATE_COT_NAME, DEPRECATE_COT_LOCK_KEY, |pool| {
-        Box::pin(migrate_chain_of_thought(pool))
-    })
-    .await?;
-
+    let _ = pool;
     Ok(())
 }
 
 /// Generic runner: checks completion, acquires advisory lock, runs migration, records result.
+#[expect(dead_code)] // Infrastructure for future migrations
 async fn run_if_needed<F>(
     pool: &PgPool,
     name: &str,
@@ -50,7 +38,6 @@ where
         Box<dyn std::future::Future<Output = Result<i64, Error>> + Send + '_>,
     >,
 {
-    // Check if already completed
     let completed = sqlx::query_scalar::<_, bool>(
         "SELECT completed_at IS NOT NULL FROM tensorzero.background_migrations WHERE name = $1",
     )
@@ -71,7 +58,6 @@ where
         return Ok(());
     }
 
-    // Try to acquire advisory lock (non-blocking, session-scoped)
     let acquired = sqlx::query_scalar::<_, bool>("SELECT pg_try_advisory_lock($1)")
         .bind(lock_key)
         .fetch_one(pool)
@@ -92,7 +78,7 @@ where
         return Ok(());
     }
 
-    // Double-check after acquiring lock (another instance may have completed between our check and lock)
+    // Double-check after acquiring lock
     let completed = sqlx::query_scalar::<_, bool>(
         "SELECT completed_at IS NOT NULL FROM tensorzero.background_migrations WHERE name = $1",
     )
@@ -106,12 +92,10 @@ where
     })?;
 
     if completed == Some(true) {
-        // Release lock and return
         release_advisory_lock(pool, lock_key).await;
         return Ok(());
     }
 
-    // Record that we started (upsert in case a previous attempt crashed)
     sqlx::query(
         "INSERT INTO tensorzero.background_migrations (name, started_at)
          VALUES ($1, NOW())
@@ -128,7 +112,6 @@ where
 
     tracing::info!(migration = name, "Starting background migration");
 
-    // Run the migration
     let rows_affected = match migration_fn(pool).await {
         Ok(rows) => rows,
         Err(e) => {
@@ -138,7 +121,6 @@ where
         }
     };
 
-    // Mark as completed
     sqlx::query(
         "UPDATE tensorzero.background_migrations
          SET completed_at = NOW(), rows_affected = $2
@@ -169,104 +151,4 @@ async fn release_advisory_lock(pool: &PgPool, lock_key: i64) {
         .bind(lock_key)
         .execute(pool)
         .await;
-}
-
-// ─── deprecate_chain_of_thought ──────────────────────────────────────────────
-
-/// Rewrite schema_version=1 variant version rows to schema_version=2.
-///
-/// Loads v1 rows in batches, deserializes each via the v1 serde path (which
-/// handles `ChainOfThought`), converts to v2 via `into_latest()` (which
-/// canonicalizes CoT → ChatCompletion with `reasoning_effort` defaulted to
-/// `"medium"`), serializes back, and updates the row with schema_version=2.
-///
-/// Rows already at schema_version >= 2 are skipped via the SQL WHERE clause.
-async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
-    let mut total_migrated: i64 = 0;
-    let mut last_id: Option<uuid::Uuid> = None;
-
-    loop {
-        // Only fetch v1 rows — v2+ are already in the latest format
-        let rows = if let Some(cursor) = last_id {
-            sqlx::query(
-                "SELECT id, schema_version, config
-                 FROM tensorzero.variant_versions
-                 WHERE schema_version < $1 AND id > $2
-                 ORDER BY id
-                 LIMIT $3",
-            )
-            .bind(CURRENT_SCHEMA_VERSION)
-            .bind(cursor)
-            .bind(BATCH_SIZE)
-            .fetch_all(pool)
-            .await
-        } else {
-            sqlx::query(
-                "SELECT id, schema_version, config
-                 FROM tensorzero.variant_versions
-                 WHERE schema_version < $1
-                 ORDER BY id
-                 LIMIT $2",
-            )
-            .bind(CURRENT_SCHEMA_VERSION)
-            .bind(BATCH_SIZE)
-            .fetch_all(pool)
-            .await
-        }
-        .map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to fetch variant_versions rows: {e}"),
-            })
-        })?;
-
-        if rows.is_empty() {
-            break;
-        }
-
-        for row in &rows {
-            let id: uuid::Uuid = row.get("id");
-            last_id = Some(id);
-
-            let schema_version: i32 = row.get("schema_version");
-            let config: serde_json::Value = row
-                .get::<sqlx::types::Json<serde_json::Value>, _>("config")
-                .0;
-
-            // Deserialize via the standard dispatcher — v1 rows go through
-            // into_latest() which handles ChainOfThought → ChatCompletion
-            let stored = deserialize_stored_variant_version(schema_version, config)?;
-
-            // Serialize as v2 and write back with bumped schema_version
-            let new_json = serde_json::to_value(&stored).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to serialize migrated variant version `{id}`: {e}"),
-                })
-            })?;
-
-            sqlx::query(
-                "UPDATE tensorzero.variant_versions
-                 SET config = $2, schema_version = $3
-                 WHERE id = $1",
-            )
-            .bind(id)
-            .bind(sqlx::types::Json(&new_json))
-            .bind(CURRENT_SCHEMA_VERSION)
-            .execute(pool)
-            .await
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to update migrated variant version `{id}`: {e}"),
-                })
-            })?;
-
-            total_migrated += 1;
-        }
-
-        tracing::debug!(
-            total_migrated,
-            "Processed batch of v1 variant_versions rows"
-        );
-    }
-
-    Ok(total_migrated)
 }
