@@ -505,20 +505,26 @@ pub async fn write_variant_version_in_tx(
             write_chat_completion_config(tx, variant_version_id, config, &key_to_id).await?;
         }
         UninitializedVariantConfig::ChainOfThought(config) => {
+            // ChainOfThought is deprecated — store as chat_completion with reasoning
+            // enabled. Default reasoning_effort to "medium" if the user hasn't set
+            // either reasoning param, so the variant retains chain-of-thought behavior.
             write_variant_version_row(
                 tx,
                 variant_version_id,
-                "chain_of_thought",
+                "chat_completion",
                 info,
                 function_name,
                 variant_name,
                 creation_source,
             )
             .await?;
+            let mut inner = config.inner.clone();
+            if inner.reasoning_effort.is_none() && inner.thinking_budget_tokens.is_none() {
+                inner.reasoning_effort = Some("medium".to_string());
+            }
             let key_to_id =
-                write_prompt_templates_for_chat_completion(tx, &config.inner, creation_source)
-                    .await?;
-            write_chat_completion_config(tx, variant_version_id, &config.inner, &key_to_id).await?;
+                write_prompt_templates_for_chat_completion(tx, &inner, creation_source).await?;
+            write_chat_completion_config(tx, variant_version_id, &inner, &key_to_id).await?;
         }
         UninitializedVariantConfig::BestOfNSampling(config) => {
             write_variant_version_row(
@@ -1001,14 +1007,13 @@ pub async fn read_variant_version(
                 ..cc_config
             })
         }
+        // chain_of_thought is deprecated — treat as chat_completion on read.
+        // Old gateways may have written rows with this type before the deprecation migration.
         "chain_of_thought" => {
             let (cc_config, _weight) = read_chat_completion_inner(pool, variant_version_id).await?;
-            use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
-            UninitializedVariantConfig::ChainOfThought(UninitializedChainOfThoughtConfig {
-                inner: UninitializedChatCompletionConfig {
-                    weight: variant_row.weight,
-                    ..cc_config
-                },
+            UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+                weight: variant_row.weight,
+                ..cc_config
             })
         }
         "best_of_n_sampling" => {
@@ -1418,4 +1423,3 @@ pub fn merge_db_variants(
         variants.insert(variant_name, variant_info);
     }
 }
-
