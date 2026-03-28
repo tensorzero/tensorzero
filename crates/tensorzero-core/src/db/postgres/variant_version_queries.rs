@@ -1008,7 +1008,9 @@ pub async fn read_variant_version(
             })
         }
         // chain_of_thought is deprecated — treat as chat_completion on read.
-        // Old gateways may have written rows with this type before the deprecation migration.
+        // The background migration (deprecate_chain_of_thought_v1) converts these
+        // rows post-startup. This arm is kept for safety during blue-green rollout.
+        // Remove once all environments have run the background migration.
         "chain_of_thought" => {
             let (cc_config, _weight) = read_chat_completion_inner(pool, variant_version_id).await?;
             UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
