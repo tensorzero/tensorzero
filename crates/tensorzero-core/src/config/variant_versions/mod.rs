@@ -193,12 +193,20 @@ pub enum StoredVariantConfig {
     ///
     /// ## Deprecation timeline (expand-and-contract)
     ///
-    /// 1. **This release (expand):** Write path canonicalizes ChainOfThought → ChatCompletion
+    /// 1. **Expand release:** Write path canonicalizes ChainOfThought → ChatCompletion
     ///    (with `reasoning_effort` defaulted to `"medium"`). Read path handles both.
-    /// 2. **Next release (contract):** SQL migration rewrites `"type": "chain_of_thought"` →
-    ///    `"type": "chat_completion"` in the JSONB config column.
-    /// 3. **Release after that:** Remove this variant once the migration has run and
-    ///    no rows contain `"type": "chain_of_thought"`.
+    /// 2. **Contract release (this release):** Background migration
+    ///    (`deprecate_chain_of_thought_v1` in `background_migrations.rs`) rewrites
+    ///    `"type": "chain_of_thought"` → `"type": "chat_completion"` in the JSONB config.
+    ///    Runs once post-startup, coordinated via advisory lock. The reader is kept for
+    ///    safety during blue/green rollout with the expand release.
+    /// 3. **Cleanup release (next):** Remove this variant and its rehydrate arm, but only after:
+    ///    - The background migration has completed on all environments
+    ///      (`SELECT completed_at FROM background_migrations WHERE name = 'deprecate_chain_of_thought_v1'`).
+    ///    - All gateways are running the contract release or later.
+    ///    - `SELECT COUNT(*) FROM variant_versions WHERE config->>'type' = 'chain_of_thought'`
+    ///      returns 0.
+    ///    - At least one full release cycle has passed since the contract release.
     #[serde(rename = "chain_of_thought")]
     ChainOfThought(StoredChatCompletionVariantConfig),
 }
