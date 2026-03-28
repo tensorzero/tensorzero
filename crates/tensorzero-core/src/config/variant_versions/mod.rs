@@ -32,7 +32,6 @@ use crate::config::UninitializedVariantInfo;
 use crate::variant::best_of_n_sampling::{
     UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
 };
-use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig};
 
@@ -188,8 +187,18 @@ pub enum StoredVariantConfig {
     MixtureOfN(StoredMixtureOfNVariantConfig),
     #[serde(rename = "dicl")]
     Dicl(StoredDiclVariantConfig),
-    /// ChainOfThought stores the same JSONB shape as ChatCompletion (its inner type).
-    /// Deprecated (#5298 / 2026.2+) — use `chat_completion` with reasoning instead.
+    /// ChainOfThought is deprecated (#5298 / 2026.2+) and functionally identical to
+    /// ChatCompletion. On read, it is rehydrated as ChatCompletion with
+    /// `reasoning_effort` defaulted to `"medium"`.
+    ///
+    /// ## Deprecation timeline (expand-and-contract)
+    ///
+    /// 1. **This release (expand):** Write path canonicalizes ChainOfThought → ChatCompletion
+    ///    (with `reasoning_effort` defaulted to `"medium"`). Read path handles both.
+    /// 2. **Next release (contract):** SQL migration rewrites `"type": "chain_of_thought"` →
+    ///    `"type": "chat_completion"` in the JSONB config column.
+    /// 3. **Release after that:** Remove this variant once the migration has run and
+    ///    no rows contain `"type": "chain_of_thought"`.
     #[serde(rename = "chain_of_thought")]
     ChainOfThought(StoredChatCompletionVariantConfig),
 }
@@ -364,8 +373,16 @@ pub fn to_stored_variant_version(
         UninitializedVariantConfig::Dicl(c) => {
             StoredVariantConfig::Dicl(to_stored_dicl(c, prompt_ids)?)
         }
+        // ChainOfThought is deprecated — canonicalize to ChatCompletion on write.
+        // Default reasoning_effort to "medium" to preserve reasoning behavioral intent.
+        // We don't set thinking_budget_tokens because it requires a provider-specific
+        // value and can conflict with reasoning_effort on some providers.
         UninitializedVariantConfig::ChainOfThought(c) => {
-            StoredVariantConfig::ChainOfThought(to_stored_chat_completion(&c.inner, prompt_ids)?)
+            let mut stored = to_stored_chat_completion(&c.inner, prompt_ids)?;
+            if stored.reasoning_effort.is_none() {
+                stored.reasoning_effort = Some("medium".to_string());
+            }
+            StoredVariantConfig::ChatCompletion(stored)
         }
     };
     Ok(StoredVariantVersion {
@@ -524,10 +541,16 @@ pub fn rehydrate_variant(
         StoredVariantConfig::Dicl(c) => {
             UninitializedVariantConfig::Dicl(rehydrate_dicl(c, prompt_rows)?)
         }
+        // Legacy ChainOfThought rows rehydrate as ChatCompletion.
+        // Default reasoning_effort to "medium" to preserve reasoning behavioral intent.
+        // We don't set thinking_budget_tokens because it requires a provider-specific
+        // value and can conflict with reasoning_effort on some providers.
         StoredVariantConfig::ChainOfThought(c) => {
-            UninitializedVariantConfig::ChainOfThought(UninitializedChainOfThoughtConfig {
-                inner: rehydrate_chat_completion(c, prompt_rows)?,
-            })
+            let mut cc = rehydrate_chat_completion(c, prompt_rows)?;
+            if cc.reasoning_effort.is_none() {
+                cc.reasoning_effort = Some("medium".to_string());
+            }
+            UninitializedVariantConfig::ChatCompletion(cc)
         }
     };
     Ok(UninitializedVariantInfo {
