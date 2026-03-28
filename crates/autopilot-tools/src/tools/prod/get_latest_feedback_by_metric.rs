@@ -6,21 +6,12 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero_core::endpoints::feedback::internal::LatestFeedbackIdByMetricResponse;
-use uuid::Uuid;
+use schemars::Schema;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetLatestFeedbackByMetricToolParams, LatestFeedbackIdByMetricResponse,
+};
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct GetLatestFeedbackByMetricToolParams {
-    /// The target ID (inference ID) to get feedback for.
-    pub target_id: Uuid,
-}
 
 /// Tool for getting the latest feedback ID for each metric for a target.
 ///

@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use schemars::JsonSchema;
+
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -17,6 +19,17 @@ use crate::utils::gateway::{AppState, AppStateData};
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LatestFeedbackIdByMetricResponse {
     pub feedback_id_by_metric: HashMap<String, String>,
+}
+
+/// Combined request for getting the latest feedback ID per metric.
+/// In the HTTP API, `target_id` comes from the URL path,
+/// but tools and embedded clients need it in a single request struct.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GetLatestFeedbackByMetricToolParams {
+    /// The target ID (inference ID) to get feedback for.
+    pub target_id: Uuid,
 }
 
 /// HTTP handler for getting the latest feedback ID for each metric for a target

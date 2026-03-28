@@ -370,6 +370,24 @@ class GetDatapointsRequest:
 
 
 @dataclass(kw_only=True)
+class GetDatapointsToolParams:
+    """
+    Combined request for getting datapoints that includes the optional dataset name.
+    In the HTTP API, `dataset_name` comes from the URL path, but tools and
+    embedded clients need it in a single request struct.
+    """
+
+    ids: list[str]
+    """
+    The IDs of the datapoints to retrieve.
+    """
+    dataset_name: str | None = None
+    """
+    The name of the dataset (optional, but recommended for performance).
+    """
+
+
+@dataclass(kw_only=True)
 class InferenceFilterFloatMetric(FloatMetricFilter):
     """
     Filter by the value of a float metric
@@ -2214,6 +2232,65 @@ class ListDatapointsRequest:
     Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
     """
 
+    filter: DatapointFilter | None = None
+    """
+    Optional filter to apply when querying datapoints.
+    Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter datapoints by.
+    If provided, only datapoints from this function will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of datapoints to return.
+    Defaults to 20.
+    """
+    offset: int | None = None
+    """
+    The number of datapoints to skip before starting to return results.
+    Defaults to 0.
+    """
+    order_by: list[DatapointOrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
+    """
+    page_size: int | None = None
+    """
+    The maximum number of datapoints to return. Defaults to 20.
+    Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the datapoints' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
+    """
+
+
+@dataclass(kw_only=True)
+class ListDatapointsToolParams:
+    """
+    Combined request for listing datapoints that includes the dataset name.
+    In the HTTP API, `dataset_name` comes from the URL path, but tools and
+    embedded clients need it in a single request struct.
+    """
+
+    dataset_name: str
+    """
+    The name of the dataset to list datapoints from.
+    """
     filter: DatapointFilter | None = None
     """
     Optional filter to apply when querying datapoints.

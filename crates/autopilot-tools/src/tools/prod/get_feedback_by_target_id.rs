@@ -6,24 +6,12 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero_core::endpoints::feedback::internal::GetFeedbackByTargetIdResponse;
-use uuid::Uuid;
+use schemars::Schema;
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdResponse, GetFeedbackByTargetIdToolParams,
+};
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the get_feedback_by_target_id tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct GetFeedbackByTargetIdToolParams {
-    /// The target ID (inference or episode) to get feedback for.
-    pub target_id: Uuid,
-    /// Maximum number of feedback entries to return.
-    #[serde(default)]
-    pub limit: Option<u32>,
-}
 
 /// Tool for getting all feedback for a target (inference or episode).
 ///

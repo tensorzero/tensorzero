@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
+use schemars::JsonSchema;
+
 use crate::db::feedback::{FeedbackQueries, FeedbackRow};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -22,6 +24,20 @@ pub struct GetFeedbackByTargetIdParams {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct GetFeedbackByTargetIdResponse {
     pub feedback: Vec<FeedbackRow>,
+}
+
+/// Combined request for getting feedback by target ID.
+/// In the HTTP API, `target_id` comes from the URL path and pagination from query params,
+/// but tools and embedded clients need them in a single request struct.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct GetFeedbackByTargetIdToolParams {
+    /// The target ID (inference or episode) to get feedback for.
+    pub target_id: Uuid,
+    /// Maximum number of feedback entries to return.
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 /// HTTP handler for getting feedback by target ID

@@ -1,4 +1,10 @@
 mod common;
+mod get_datapoints;
+mod get_feedback_by_target_id;
 mod get_inferences;
+mod get_latest_feedback_by_metric;
+mod list_datapoints;
+mod list_datasets;
+mod list_episodes;
 mod list_inferences;
 mod list_tools;

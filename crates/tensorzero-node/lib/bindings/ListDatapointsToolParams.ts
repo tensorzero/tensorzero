@@ -3,7 +3,9 @@ import type { DatapointFilter } from "./DatapointFilter";
 import type { DatapointOrderBy } from "./DatapointOrderBy";
 
 /**
- * Parameters for the list_datapoints tool (visible to LLM).
+ * Combined request for listing datapoints that includes the dataset name.
+ * In the HTTP API, `dataset_name` comes from the URL path, but tools and
+ * embedded clients need it in a single request struct.
  */
 export type ListDatapointsToolParams = {
   /**

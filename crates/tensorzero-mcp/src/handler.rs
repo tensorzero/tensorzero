@@ -13,6 +13,13 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     GetDatapointsRequest, GetDatapointsToolParams, ListDatapointsToolParams, ListDatasetsRequest,
 };
 use tensorzero_core::endpoints::datasets::v1::{get_datapoints, list_datapoints, list_datasets};
+use tensorzero_core::endpoints::episodes::internal::{
+    ListEpisodesRequest, ListEpisodesResponse, list_episodes,
+};
+use tensorzero_core::endpoints::feedback::internal::{
+    GetFeedbackByTargetIdToolParams, GetLatestFeedbackByMetricToolParams,
+    get_feedback_by_target_id, get_latest_feedback_id_by_metric,
+};
 use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, ListInferencesRequest,
 };
@@ -139,6 +146,83 @@ impl TensorZeroMcpServer {
         let database = self.app_state.get_delegating_database();
         let request = GetDatapointsRequest { ids: params.ids };
         let response = match get_datapoints(&database, params.dataset_name, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "List episodes with pagination and optional filtering by function name. Returns episode IDs, inference counts, time ranges, and last inference IDs."
+    )]
+    #[instrument(skip_all)]
+    async fn list_episodes(
+        &self,
+        Parameters(request): Parameters<ListEpisodesRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let episodes = match list_episodes(
+            &database,
+            &self.app_state.config,
+            request.limit,
+            request.before,
+            request.after,
+            request.function_name,
+            request.filters,
+        )
+        .await
+        {
+            Ok(episodes) => episodes,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let response = ListEpisodesResponse { episodes };
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Get all feedback for a given target (inference or episode). Returns boolean metrics, float metrics, comments, and demonstrations."
+    )]
+    #[instrument(skip_all)]
+    async fn get_feedback_by_target_id(
+        &self,
+        Parameters(params): Parameters<GetFeedbackByTargetIdToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let response =
+            match get_feedback_by_target_id(&database, params.target_id, None, None, params.limit)
+                .await
+            {
+                Ok(response) => response,
+                Err(e) => return handle_tool_error(e),
+            };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Get the latest feedback ID for each metric for a given target (inference). Returns a map from metric name to the latest feedback ID."
+    )]
+    #[instrument(skip_all)]
+    async fn get_latest_feedback_by_metric(
+        &self,
+        Parameters(params): Parameters<GetLatestFeedbackByMetricToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let response = match get_latest_feedback_id_by_metric(&database, params.target_id).await {
             Ok(response) => response,
             Err(e) => return handle_tool_error(e),
         };

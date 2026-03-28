@@ -11,7 +11,16 @@ async fn test_mcp_list_tools() {
     let tool_names: Vec<String> = tools.iter().map(|t| t.name.to_string()).collect();
     expect_that!(
         tool_names,
-        unordered_elements_are![eq("list_inferences"), eq("get_inferences")]
+        unordered_elements_are![
+            eq("list_inferences"),
+            eq("get_inferences"),
+            eq("list_datasets"),
+            eq("list_datapoints"),
+            eq("get_datapoints"),
+            eq("list_episodes"),
+            eq("get_feedback_by_target_id"),
+            eq("get_latest_feedback_by_metric"),
+        ]
     );
 
     for tool in &tools {
