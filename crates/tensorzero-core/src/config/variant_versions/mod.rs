@@ -187,28 +187,10 @@ pub enum StoredVariantConfig {
     MixtureOfN(StoredMixtureOfNVariantConfig),
     #[serde(rename = "dicl")]
     Dicl(StoredDiclVariantConfig),
-    /// ChainOfThought is deprecated (#5298 / 2026.2+) and functionally identical to
-    /// ChatCompletion. On read, it is rehydrated as ChatCompletion with
-    /// `reasoning_effort` defaulted to `"medium"`.
-    ///
-    /// ## Deprecation timeline (expand-and-contract)
-    ///
-    /// 1. **Expand release:** Write path canonicalizes ChainOfThought → ChatCompletion
-    ///    (with `reasoning_effort` defaulted to `"medium"`). Read path handles both.
-    /// 2. **Contract release (this release):** Background migration
-    ///    (`deprecate_chain_of_thought_v1` in `background_migrations.rs`) rewrites
-    ///    `"type": "chain_of_thought"` → `"type": "chat_completion"` in the JSONB config.
-    ///    Runs once post-startup, coordinated via advisory lock. The reader is kept for
-    ///    safety during blue/green rollout with the expand release.
-    /// 3. **Cleanup release (next):** Remove this variant and its rehydrate arm, but only after:
-    ///    - The background migration has completed on all environments
-    ///      (`SELECT completed_at FROM background_migrations WHERE name = 'deprecate_chain_of_thought_v1'`).
-    ///    - All gateways are running the contract release or later.
-    ///    - `SELECT COUNT(*) FROM variant_versions WHERE config->>'type' = 'chain_of_thought'`
-    ///      returns 0.
-    ///    - At least one full release cycle has passed since the contract release.
-    #[serde(rename = "chain_of_thought")]
-    ChainOfThought(StoredChatCompletionVariantConfig),
+    // ChainOfThought was removed in the cleanup release after the
+    // `deprecate_chain_of_thought_v1` background migration rewrote all
+    // `"type": "chain_of_thought"` rows to `"type": "chat_completion"`.
+    // The expand release canonicalized writes; the contract release migrated data.
 }
 
 /// The top-level JSONB blob stored in `variant_versions.config`.
@@ -229,7 +211,7 @@ impl StoredVariantVersion {
     pub fn referenced_prompt_template_ids(&self) -> Vec<Uuid> {
         let mut ids = Vec::new();
         match &self.config {
-            StoredVariantConfig::ChatCompletion(c) | StoredVariantConfig::ChainOfThought(c) => {
+            StoredVariantConfig::ChatCompletion(c) => {
                 collect_cc_prompt_ids(c, &mut ids);
             }
             StoredVariantConfig::BestOfNSampling(c) => {
@@ -548,17 +530,6 @@ pub fn rehydrate_variant(
         }
         StoredVariantConfig::Dicl(c) => {
             UninitializedVariantConfig::Dicl(rehydrate_dicl(c, prompt_rows)?)
-        }
-        // Legacy ChainOfThought rows rehydrate as ChatCompletion.
-        // Default reasoning_effort to "medium" to preserve reasoning behavioral intent.
-        // We don't set thinking_budget_tokens because it requires a provider-specific
-        // value and can conflict with reasoning_effort on some providers.
-        StoredVariantConfig::ChainOfThought(c) => {
-            let mut cc = rehydrate_chat_completion(c, prompt_rows)?;
-            if cc.reasoning_effort.is_none() {
-                cc.reasoning_effort = Some("medium".to_string());
-            }
-            UninitializedVariantConfig::ChatCompletion(cc)
         }
     };
     Ok(UninitializedVariantInfo {
