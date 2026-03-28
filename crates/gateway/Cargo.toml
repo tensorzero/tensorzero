@@ -25,6 +25,7 @@ autopilot-client = { path = "../autopilot-client" }
 autopilot-worker = { path = "../autopilot-worker" }
 autopilot-tools = { path = "../autopilot-tools" }
 durable-tools = { path = "../durable-tools" }
+tensorzero-mcp = { path = "../tensorzero-mcp" }
 sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
 secrecy = { workspace = true }
 serde = { workspace = true }
@@ -43,6 +44,10 @@ default = []
 ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizers/ts-bindings", "autopilot-worker/ts-bindings", "evaluations/ts-bindings"]
 
 [dev-dependencies]
+rmcp = { version = "1.3.0", features = [
+    "client",
+    "transport-streamable-http-client-reqwest",
+] }
 reqwest.workspace = true
 tempfile = { workspace = true }
 tensorzero = { path = "../tensorzero-client", features = ["e2e_tests"] }
