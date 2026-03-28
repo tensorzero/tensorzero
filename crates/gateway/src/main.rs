@@ -395,25 +395,12 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    // Start MCP HTTP server if configured
-    if let Some(ref mcp_config) = config.gateway.mcp
-        && mcp_config.enabled
-    {
-        let app_state = std::sync::Arc::new(gateway_handle.app_state.clone());
-        tensorzero_mcp::spawn_mcp_http_server(
-            mcp_config.bind_address,
-            app_state,
-            &gateway_handle.app_state.deferred_tasks,
-            gateway_handle.app_state.shutdown_token.clone(),
-        )
-        .await?;
-    }
-
     let (router, in_flight_requests_data) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
         metrics_handle,
+        gateway_handle.app_state.shutdown_token.clone(),
     );
 
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
@@ -528,15 +515,6 @@ async fn run() -> Result<(), ExitCode> {
         }
     } else {
         tracing::info!("├ Autopilot Tool Whitelist Approver: disabled");
-    }
-
-    // Print whether MCP server is enabled
-    if let Some(ref mcp_config) = config.gateway.mcp
-        && mcp_config.enabled
-    {
-        tracing::info!("├ MCP Server: enabled ({})", mcp_config.bind_address);
-    } else {
-        tracing::info!("├ MCP Server: disabled");
     }
 
     // Print whether OpenTelemetry is enabled

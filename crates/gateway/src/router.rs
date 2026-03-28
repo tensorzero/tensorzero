@@ -22,6 +22,7 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
 };
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use tokio_util::sync::CancellationToken;
 use tower_http::decompression::RequestDecompressionLayer;
 use tracing::Instrument;
 
@@ -32,6 +33,7 @@ pub fn build_axum_router(
     otel_tracer: Option<Arc<TracerWrapper>>,
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
+    shutdown_token: CancellationToken,
 ) -> (Router, InFlightRequestsData) {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
@@ -40,6 +42,10 @@ pub fn build_axum_router(
     } else {
         Router::new().nest(base_path, api_routes)
     };
+
+    // Serve the MCP endpoint on the same port at `/mcp`
+    let mcp_router = tensorzero_mcp::build_mcp_router(Arc::new(app_state.clone()), shutdown_token);
+    router = router.nest_service("/mcp", mcp_router);
 
     router = router.fallback(endpoints::fallback::handle_404);
 

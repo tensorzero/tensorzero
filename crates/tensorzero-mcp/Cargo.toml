@@ -7,14 +7,12 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
-tensorzero-auth = { path = "../tensorzero-auth" }
 rmcp = { version = "1.3.0", features = [
     "server",
     "macros",
     "transport-streamable-http-server",
 ] }
 axum = { workspace = true }
-tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

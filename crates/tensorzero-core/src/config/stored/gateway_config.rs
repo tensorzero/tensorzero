@@ -4,7 +4,6 @@ use crate::config::gateway::{AuthConfig, MetricsConfig, UninitializedGatewayConf
 use crate::config::{ExportConfig, TemplateFilesystemAccess, UninitializedRelayConfig};
 
 use super::cache_config::StoredCacheConfig;
-use super::mcp_config::StoredMcpConfig;
 use super::observability_config::StoredObservabilityConfig;
 
 /// Stored version of `UninitializedGatewayConfig`.
@@ -39,8 +38,6 @@ pub struct StoredGatewayConfig {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub cache: StoredCacheConfig,
-    #[serde(default)]
-    pub mcp: Option<StoredMcpConfig>,
 }
 
 impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
@@ -61,7 +58,6 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache,
-            mcp,
         } = config;
         Self {
             bind_address,
@@ -79,7 +75,6 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
-            mcp: mcp.map(Into::into),
         }
     }
 }
@@ -102,7 +97,6 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache,
-            mcp,
         } = stored;
         Self {
             bind_address,
@@ -120,7 +114,6 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
-            mcp: mcp.map(Into::into),
         }
     }
 }

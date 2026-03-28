@@ -1084,7 +1084,6 @@ mod tests {
             relay: None,
             metrics: Default::default(),
             cache: Default::default(),
-            mcp: None,
         };
 
         let config = Config {
@@ -1157,7 +1156,6 @@ mod tests {
             relay: None,
             metrics: Default::default(),
             cache: Default::default(),
-            mcp: None,
         };
 
         let config = Config {
@@ -1196,7 +1194,6 @@ mod tests {
             relay: None,
             metrics: Default::default(),
             cache: Default::default(),
-            mcp: None,
         };
         let config = Config {
             gateway: gateway_config,
@@ -1235,7 +1232,6 @@ mod tests {
             relay: None,
             metrics: Default::default(),
             cache: Default::default(),
-            mcp: None,
         };
         let config = Config {
             gateway: gateway_config,
