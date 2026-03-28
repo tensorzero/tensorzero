@@ -24,5 +24,5 @@ pub fn build_mcp_router(
         StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token()),
     );
 
-    axum::Router::new().nest_service("/", service)
+    axum::Router::new().fallback_service(service)
 }
