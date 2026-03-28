@@ -422,7 +422,11 @@ async fn write_variant_version_row(
         UninitializedVariantConfig::BestOfNSampling(c) => c.weight,
         UninitializedVariantConfig::MixtureOfN(c) => c.weight,
         UninitializedVariantConfig::Dicl(c) => c.weight,
-        UninitializedVariantConfig::ChainOfThought(c) => c.inner.weight,
+        UninitializedVariantConfig::ChainOfThought(c) => {
+            // ChainOfThought is deprecated and stored as chat_completion.
+            // This arm exists only because the Rust enum still has the variant.
+            c.inner.weight
+        }
     };
 
     let (non_streaming_total_ms, streaming_ttft_ms, streaming_total_ms) = match &info.timeouts {
@@ -505,7 +509,7 @@ pub async fn write_variant_version_in_tx(
             write_chat_completion_config(tx, variant_version_id, config, &key_to_id).await?;
         }
         UninitializedVariantConfig::ChainOfThought(config) => {
-            // ChainOfThought is deprecated — store as chat_completion with reasoning
+            // ChainOfThought is deprecated — stored as chat_completion with reasoning
             // enabled. Default reasoning_effort to "medium" if the user hasn't set
             // either reasoning param, so the variant retains chain-of-thought behavior.
             write_variant_version_row(
@@ -1001,17 +1005,6 @@ pub async fn read_variant_version(
 
     let inner = match variant_row.variant_type.as_str() {
         "chat_completion" => {
-            let (cc_config, _weight) = read_chat_completion_inner(pool, variant_version_id).await?;
-            UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
-                weight: variant_row.weight,
-                ..cc_config
-            })
-        }
-        // chain_of_thought is deprecated — treat as chat_completion on read.
-        // The background migration (deprecate_chain_of_thought_v1) converts these
-        // rows post-startup. This arm is kept for safety during blue-green rollout.
-        // Remove once all environments have run the background migration.
-        "chain_of_thought" => {
             let (cc_config, _weight) = read_chat_completion_inner(pool, variant_version_id).await?;
             UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
                 weight: variant_row.weight,

@@ -15,27 +15,17 @@ use sqlx::PgPool;
 
 use crate::error::{Error, ErrorDetails};
 
-/// Advisory lock key for the deprecate_chain_of_thought migration.
-/// Chosen as a fixed constant — must be unique across all background migrations.
-const DEPRECATE_COT_LOCK_KEY: i64 = 0x545A_4243_4F54_0001; // "TZBCoT" + 0001
-
-const DEPRECATE_COT_NAME: &str = "deprecate_chain_of_thought_v1";
-
-/// Batch size for processing rows in background migrations.
-const BATCH_SIZE: i64 = 100;
-
 /// Run all registered background migrations.
 /// Call this once after gateway startup (non-blocking — skips if another instance is running).
-pub async fn run_all(pool: &PgPool) -> Result<(), Error> {
-    run_if_needed(pool, DEPRECATE_COT_NAME, DEPRECATE_COT_LOCK_KEY, |pool| {
-        Box::pin(migrate_chain_of_thought(pool))
-    })
-    .await?;
-
+#[expect(clippy::unused_async)]
+pub async fn run_all(_pool: &PgPool) -> Result<(), Error> {
+    // All background migrations have been completed and removed.
+    // Register new migrations here as needed.
     Ok(())
 }
 
 /// Generic runner: checks completion, acquires advisory lock, runs migration, records result.
+#[expect(dead_code)] // Will be used when a new background migration is added
 async fn run_if_needed<F>(
     pool: &PgPool,
     name: &str,
@@ -167,77 +157,4 @@ async fn release_advisory_lock(pool: &PgPool, lock_key: i64) {
         .bind(lock_key)
         .execute(pool)
         .await;
-}
-
-// ─── deprecate_chain_of_thought ──────────────────────────────────────────────
-
-/// Rewrite `chain_of_thought` variant version rows to `chat_completion`.
-///
-/// For each row where `variant_type = 'chain_of_thought'`:
-/// 1. Set `reasoning_effort = 'medium'` on the config row if neither `reasoning_effort`
-///    nor `thinking_budget_tokens` is already set.
-/// 2. Flip `variant_type` to `chat_completion`.
-///
-/// Processes in batches to avoid long transactions.
-async fn migrate_chain_of_thought(pool: &PgPool) -> Result<i64, Error> {
-    let mut total_rows: i64 = 0;
-
-    loop {
-        let rows: Vec<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT id FROM tensorzero.variant_versions
-             WHERE variant_type = 'chain_of_thought'
-             LIMIT $1",
-        )
-        .bind(BATCH_SIZE)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to fetch chain_of_thought rows: {e}"),
-            })
-        })?;
-
-        if rows.is_empty() {
-            break;
-        }
-
-        let batch_size = rows.len() as i64;
-
-        for (id,) in &rows {
-            let mut tx = pool.begin().await?;
-
-            // Set reasoning_effort = 'medium' if neither reasoning param is already set.
-            sqlx::query(
-                "UPDATE tensorzero.variant_chat_completion_configs
-                 SET reasoning_effort = 'medium'
-                 WHERE variant_version_id = $1
-                   AND reasoning_effort IS NULL
-                   AND thinking_budget_tokens IS NULL",
-            )
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-
-            // Flip the type.
-            sqlx::query(
-                "UPDATE tensorzero.variant_versions
-                 SET variant_type = 'chat_completion'
-                 WHERE id = $1 AND variant_type = 'chain_of_thought'",
-            )
-            .bind(id)
-            .execute(&mut *tx)
-            .await?;
-
-            tx.commit().await?;
-        }
-
-        total_rows += batch_size;
-        tracing::debug!(
-            batch_size,
-            total_rows,
-            "Processed batch of chain_of_thought rows"
-        );
-    }
-
-    Ok(total_rows)
 }
