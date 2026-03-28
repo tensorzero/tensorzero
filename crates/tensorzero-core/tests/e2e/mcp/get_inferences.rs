@@ -1,41 +1,13 @@
 use googletest::prelude::*;
-use reqwest::Client;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::common::McpTestClient;
-use crate::common::get_gateway_endpoint;
-
-/// Insert an inference and return the inference_id.
-async fn insert_inference(function_name: &str) -> String {
-    let client = Client::new();
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&json!({
-            "function_name": function_name,
-            "input": {
-                "system": {"assistant_name": "TestBot"},
-                "messages": [{"role": "user", "content": "Hello"}]
-            },
-            "stream": false,
-        }))
-        .send()
-        .await
-        .unwrap();
-
-    assert!(
-        response.status().is_success(),
-        "Inference request failed: {:?}",
-        response.status()
-    );
-    let body: Value = response.json().await.unwrap();
-    body["inference_id"].as_str().unwrap().to_string()
-}
+use super::common::{McpTestClient, insert_inference};
 
 #[gtest]
 #[tokio::test]
 async fn test_mcp_get_inferences_by_id() {
-    let inference_id = insert_inference("basic_test").await;
+    let (inference_id, _) = insert_inference("basic_test").await;
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp
@@ -62,8 +34,8 @@ async fn test_mcp_get_inferences_by_id() {
 #[gtest]
 #[tokio::test]
 async fn test_mcp_get_inferences_multiple_ids() {
-    let id1 = insert_inference("basic_test").await;
-    let id2 = insert_inference("basic_test").await;
+    let (id1, _) = insert_inference("basic_test").await;
+    let (id2, _) = insert_inference("basic_test").await;
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp

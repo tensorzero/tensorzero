@@ -1,6 +1,6 @@
 use rmcp::{RoleClient, ServiceExt, model::CallToolResult, service::RunningService};
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::common::get_gateway_endpoint;
 
@@ -57,4 +57,32 @@ impl McpTestClient {
     pub async fn cancel(self) {
         let _ = self.client.cancel().await;
     }
+}
+
+/// Insert an inference and return (inference_id, episode_id).
+pub async fn insert_inference(function_name: &str) -> (String, String) {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&json!({
+            "function_name": function_name,
+            "input": {
+                "system": {"assistant_name": "TestBot"},
+                "messages": [{"role": "user", "content": "Hello"}]
+            },
+            "stream": false,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        response.status().is_success(),
+        "Inference request failed: {:?}",
+        response.status()
+    );
+    let body: Value = response.json().await.unwrap();
+    let inference_id = body["inference_id"].as_str().unwrap().to_string();
+    let episode_id = body["episode_id"].as_str().unwrap().to_string();
+    (inference_id, episode_id)
 }
