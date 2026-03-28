@@ -13,6 +13,7 @@ use self::batching::PostgresBatchSender;
 use super::BatchWriterHandle;
 use super::HealthCheckable;
 
+pub mod background_migrations;
 pub mod batch_inference;
 pub mod batching;
 pub mod config_queries;
