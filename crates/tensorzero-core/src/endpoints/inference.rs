@@ -158,6 +158,52 @@ pub struct Params {
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
 }
 
+/// Slim parameters for the inference tool, used by MCP and autopilot tools.
+/// This is a subset of `Params` with only the fields relevant for tool callers.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct InferenceToolParams {
+    /// The function name to call. Exactly one of `function_name` or `model_name` required.
+    #[serde(default)]
+    pub function_name: Option<String>,
+    /// Model name shorthand (e.g., "openai::gpt-4"). Alternative to `function_name`.
+    #[serde(default)]
+    pub model_name: Option<String>,
+    /// The input for inference.
+    pub input: Input,
+    /// Inference parameters (temperature, max_tokens, etc.).
+    #[serde(default)]
+    pub params: InferenceParams,
+    /// Pin a specific variant (optional, normally let API select).
+    #[serde(default)]
+    pub variant_name: Option<String>,
+    /// Dynamic tool parameters (allowed_tools, additional_tools, tool_choice, parallel_tool_calls).
+    #[serde(flatten, default)]
+    pub dynamic_tool_params: DynamicToolParams,
+    /// Output schema override (for JSON functions).
+    #[serde(default)]
+    pub output_schema: Option<Value>,
+}
+
+impl InferenceToolParams {
+    /// Convert into full inference `Params` with defaults for unset fields.
+    pub fn into_params(self, tags: HashMap<String, String>) -> Params {
+        Params {
+            function_name: self.function_name,
+            model_name: self.model_name,
+            input: self.input,
+            stream: Some(false),
+            params: self.params,
+            variant_name: self.variant_name,
+            dynamic_tool_params: self.dynamic_tool_params,
+            output_schema: self.output_schema,
+            tags,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug)]
 struct InferenceMetadata {
     pub function_name: String,

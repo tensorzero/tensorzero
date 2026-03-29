@@ -6,39 +6,11 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use schemars::Schema;
 use tensorzero::{FeedbackParams, FeedbackResponse};
-use uuid::Uuid;
+pub use tensorzero_core::endpoints::feedback::FeedbackToolParams;
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the feedback tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct FeedbackToolParams {
-    /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-    #[serde(default)]
-    pub episode_id: Option<Uuid>,
-    /// The inference ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-    #[serde(default)]
-    pub inference_id: Option<Uuid>,
-    /// The name of the metric to provide feedback for.
-    /// Use "comment" for free-text comments, "demonstration" for demonstration feedback,
-    /// or a configured metric name for float/boolean feedback.
-    pub metric_name: String,
-    /// The value of the feedback. Type depends on metric_name:
-    /// - "comment": string
-    /// - "demonstration": string or array of content blocks
-    /// - float metric: number
-    /// - boolean metric: boolean
-    pub value: Value,
-    /// If true, the feedback will not be stored (useful for testing).
-    #[serde(default)]
-    pub dryrun: Option<bool>,
-}
 
 /// Tool for calling TensorZero feedback endpoint.
 ///

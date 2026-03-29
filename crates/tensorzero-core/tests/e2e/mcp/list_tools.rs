@@ -25,6 +25,8 @@ async fn test_mcp_list_tools() {
             eq("update_datapoints"),
             eq("delete_datapoints"),
             eq("create_datapoints_from_inferences"),
+            eq("feedback"),
+            eq("inference"),
         ]
     );
 

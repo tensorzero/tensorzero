@@ -2,9 +2,7 @@
 import type { CreateDatapointRequest } from "./CreateDatapointRequest";
 
 /**
- * Combined request for creating datapoints that includes the dataset name.
- * In the HTTP API, `dataset_name` comes from the URL path, but tools and
- * embedded clients need it in a single request struct.
+ * Parameters for the create_datapoints tool (visible to LLM).
  */
 export type CreateDatapointsToolParams = {
   /**
@@ -12,7 +10,7 @@ export type CreateDatapointsToolParams = {
    */
   dataset_name: string;
   /**
-   * The datapoints to create.
+   * The datapoints to create. Can be Chat or Json type.
    */
   datapoints: Array<CreateDatapointRequest>;
 };

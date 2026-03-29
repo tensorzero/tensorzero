@@ -108,6 +108,48 @@ pub struct FeedbackResponse {
     pub feedback_id: Uuid,
 }
 
+/// Slim parameters for the feedback tool, used by MCP and autopilot tools.
+/// This is a subset of `Params` with only the fields relevant for tool callers.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct FeedbackToolParams {
+    /// The episode ID to provide feedback for. Exactly one of `episode_id` or `inference_id` must be set.
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
+    /// The inference ID to provide feedback for. Exactly one of `episode_id` or `inference_id` must be set.
+    #[serde(default)]
+    pub inference_id: Option<Uuid>,
+    /// The name of the metric to provide feedback for.
+    /// Use "comment" for free-text comments, "demonstration" for demonstrations,
+    /// or a configured metric name for float/boolean feedback values.
+    pub metric_name: String,
+    /// The value of the feedback. Type depends on `metric_name`:
+    /// - "comment": string
+    /// - "demonstration": string or array of content blocks
+    /// - float metric: number
+    /// - boolean metric: boolean
+    pub value: Value,
+    /// If true, the feedback will not be stored (useful for testing).
+    #[serde(default)]
+    pub dryrun: Option<bool>,
+}
+
+impl FeedbackToolParams {
+    /// Convert into full feedback `Params` with defaults for unset fields.
+    pub fn into_params(self, tags: HashMap<String, String>) -> Params {
+        Params {
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            metric_name: self.metric_name,
+            value: self.value,
+            dryrun: self.dryrun,
+            tags,
+            ..Default::default()
+        }
+    }
+}
+
 /// A handler for the feedback endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(

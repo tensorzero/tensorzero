@@ -9,6 +9,9 @@ use rmcp::{
 use tensorzero_core::error::Error;
 use tracing::instrument;
 
+use tensorzero_core::endpoints::feedback::{FeedbackToolParams, feedback};
+use tensorzero_core::endpoints::inference::{InferenceOutput, InferenceToolParams, inference};
+
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferencesToolParams,
     CreateDatapointsRequest, CreateDatapointsToolParams, DeleteDatapointsRequest,
@@ -339,6 +342,73 @@ impl TensorZeroMcpServer {
             request,
         )
         .await
+        {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Run a non-streaming inference using a TensorZero function or model. Returns the model response including content, usage, and metadata."
+    )]
+    #[instrument(skip_all)]
+    async fn inference(
+        &self,
+        Parameters(params): Parameters<InferenceToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let app_state = &self.app_state;
+        let inference_params = params.into_params(Default::default());
+        let output = match inference(
+            app_state.config.clone(),
+            &app_state.http_client,
+            app_state.clickhouse_connection_info.clone(),
+            app_state.postgres_connection_info.clone(),
+            app_state.cache_manager.clone(),
+            app_state.deferred_tasks.clone(),
+            app_state.rate_limiting_manager.clone(),
+            app_state.primary_datastore,
+            inference_params,
+            None,
+        )
+        .await
+        {
+            Ok(output) => output,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let response = match output.output {
+            InferenceOutput::NonStreaming(response) => response,
+            InferenceOutput::Streaming(_) => {
+                return Err(McpError::internal_error(
+                    "Unexpected streaming response from non-streaming inference".to_string(),
+                    None,
+                ));
+            }
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Submit feedback for an inference or episode. Supports comments, demonstrations, and float/boolean metric values."
+    )]
+    #[instrument(skip_all)]
+    async fn feedback(
+        &self,
+        Parameters(params): Parameters<FeedbackToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let feedback_params = params.into_params(Default::default());
+        let response = match feedback(self.app_state.as_ref().clone(), feedback_params, None).await
         {
             Ok(response) => response,
             Err(e) => return handle_tool_error(e),

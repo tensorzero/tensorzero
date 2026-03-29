@@ -7,15 +7,16 @@ import type { ToolChoice } from "./ToolChoice";
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * Parameters for the inference tool (visible to LLM).
+ * Slim parameters for the inference tool, used by MCP and autopilot tools.
+ * This is a subset of `Params` with only the fields relevant for tool callers.
  */
 export type InferenceToolParams = {
   /**
-   * The function name to call. Exactly one of function_name or model_name required.
+   * The function name to call. Exactly one of `function_name` or `model_name` required.
    */
   function_name: string | null;
   /**
-   * Model name shorthand (e.g., "openai::gpt-4"). Alternative to function_name.
+   * Model name shorthand (e.g., "openai::gpt-4"). Alternative to `function_name`.
    */
   model_name: string | null;
   /**

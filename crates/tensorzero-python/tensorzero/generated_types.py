@@ -117,14 +117,12 @@ class DeleteDatapointsResponse:
 @dataclass(kw_only=True)
 class DeleteDatapointsToolParams:
     """
-    Combined request for deleting datapoints that includes the dataset name.
-    In the HTTP API, `dataset_name` comes from the URL path, but tools and
-    embedded clients need it in a single request struct.
+    Parameters for the delete_datapoints tool (visible to LLM).
     """
 
     dataset_name: str
     """
-    The name of the dataset containing the datapoints to delete.
+    The name of the dataset containing the datapoints.
     """
     ids: list[str]
     """
@@ -999,29 +997,6 @@ class CreateDatapointsFromInferenceRequestParamsInferenceIds:
     Create datapoints from specific inference IDs.
     """
 
-    inference_ids: list[str]
-    """
-    The inference IDs to create datapoints from.
-    """
-    type: Literal["inference_ids"] = "inference_ids"
-    output_source: InferenceOutputSource | None = None
-    """
-    When creating the datapoint, this specifies the source of the output for the datapoint.
-    If not provided, by default we will use the original inference output as the datapoint's output
-    (equivalent to `inference`).
-    """
-
-
-@dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceIds2:
-    """
-    Create datapoints from specific inference IDs.
-    """
-
-    dataset_name: str
-    """
-    The name of the dataset to create datapoints in.
-    """
     inference_ids: list[str]
     """
     The inference IDs to create datapoints from.
@@ -2071,18 +2046,16 @@ class UpdateDatapointsRequest:
 @dataclass(kw_only=True)
 class UpdateDatapointsToolParams:
     """
-    Combined request for updating datapoints that includes the dataset name.
-    In the HTTP API, `dataset_name` comes from the URL path, but tools and
-    embedded clients need it in a single request struct.
+    Parameters for the update_datapoints tool (visible to LLM).
     """
 
     datapoints: list[UpdateDatapointRequest]
     """
-    The datapoints to update.
+    The datapoints to update. Can be Chat or Json type.
     """
     dataset_name: str
     """
-    The name of the dataset containing the datapoints to update.
+    The name of the dataset containing the datapoints.
     """
 
 
@@ -2114,14 +2087,12 @@ class CreateDatapointsRequest:
 @dataclass(kw_only=True)
 class CreateDatapointsToolParams:
     """
-    Combined request for creating datapoints that includes the dataset name.
-    In the HTTP API, `dataset_name` comes from the URL path, but tools and
-    embedded clients need it in a single request struct.
+    Parameters for the create_datapoints tool (visible to LLM).
     """
 
     datapoints: list[CreateDatapointRequest]
     """
-    The datapoints to create.
+    The datapoints to create. Can be Chat or Json type.
     """
     dataset_name: str
     """
@@ -2233,93 +2204,20 @@ CreateDatapointsFromInferenceRequestParams = (
 
 
 @dataclass(kw_only=True)
-class CreateDatapointsFromInferenceRequestParamsInferenceQuery2:
+class CreateDatapointsFromInferencesToolParams:
     """
-    Create datapoints from an inference query.
+    Parameters for the create_datapoints_from_inferences tool (visible to LLM).
     """
 
     dataset_name: str
     """
     The name of the dataset to create datapoints in.
     """
-    type: Literal["inference_query"] = "inference_query"
-    after: str | None = None
+    params: CreateDatapointsFromInferenceRequestParams
     """
-    Optional inference ID to paginate after (exclusive).
-    Returns inferences with IDs after this one (later in time).
-    Cannot be used together with `before` or `offset`.
+    Parameters specifying which inferences to create datapoints from.
+    Can be either specific inference IDs or a query to find inferences.
     """
-    before: str | None = None
-    """
-    Optional inference ID to paginate before (exclusive).
-    Returns inferences with IDs before this one (earlier in time).
-    Cannot be used together with `after` or `offset`.
-    """
-    episode_id: str | None = None
-    """
-    Optional episode ID to filter inferences by.
-    If provided, only inferences from this episode will be returned.
-    """
-    filter: InferenceFilter | None = None
-    """
-    **Deprecated:** Use `filters` instead. This field will be removed in a future release.
-    """
-    filters: InferenceFilter | None = None
-    """
-    Optional filter to apply when querying inferences.
-    Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
-    """
-    function_name: str | None = None
-    """
-    Optional function name to filter inferences by.
-    If provided, only inferences from this function will be returned.
-    """
-    limit: int | None = None
-    """
-    The maximum number of inferences to return.
-    Defaults to 20.
-    """
-    offset: int | None = None
-    """
-    The number of inferences to skip before starting to return results.
-    Defaults to 0.
-    """
-    order_by: list[OrderBy] | None = None
-    """
-    Optional ordering criteria for the results.
-    Supports multiple sort criteria (e.g., sort by timestamp then by metric).
-    """
-    output_source: InferenceOutputSource | None = "inference"
-    """
-    Source of the inference output. Determines whether to return the original
-    inference output or demonstration feedback (manually-curated output) if available.
-    Defaults to `Inference` if not specified.
-    """
-    search_query_experimental: str | None = None
-    """
-    Text query to filter. Case-insensitive substring search over the inferences' input and output.
-
-    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
-    We recommend against depending on this feature for critical use cases.
-
-    Important limitations:
-    - This requires an exact substring match; we do not tokenize this query string.
-    - This doesn't search for any content in the template itself.
-    - Quality is based on term frequency > 0, without any relevance scoring.
-    - There are no performance guarantees (it's best effort only). Today, with no other
-      filters, it will perform a full table scan, which may be extremely slow depending
-      on the data volume.
-    """
-    variant_name: str | None = None
-    """
-    Optional variant name to filter inferences by.
-    If provided, only inferences from this variant will be returned.
-    """
-
-
-CreateDatapointsFromInferencesToolParams = (
-    CreateDatapointsFromInferenceRequestParamsInferenceIds2 | CreateDatapointsFromInferenceRequestParamsInferenceQuery2
-)
 
 
 @dataclass(kw_only=True)

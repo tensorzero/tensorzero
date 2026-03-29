@@ -2,17 +2,15 @@
 import type { UpdateDatapointRequest } from "./UpdateDatapointRequest";
 
 /**
- * Combined request for updating datapoints that includes the dataset name.
- * In the HTTP API, `dataset_name` comes from the URL path, but tools and
- * embedded clients need it in a single request struct.
+ * Parameters for the update_datapoints tool (visible to LLM).
  */
 export type UpdateDatapointsToolParams = {
   /**
-   * The name of the dataset containing the datapoints to update.
+   * The name of the dataset containing the datapoints.
    */
   dataset_name: string;
   /**
-   * The datapoints to update.
+   * The datapoints to update. Can be Chat or Json type.
    */
   datapoints: Array<UpdateDatapointRequest>;
 };
