@@ -7,21 +7,10 @@ use autopilot_client::AutopilotSideInfo;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
+use schemars::Schema;
 use tensorzero::DeleteDatapointsResponse;
-use uuid::Uuid;
 
-/// Parameters for the delete_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct DeleteDatapointsToolParams {
-    /// The name of the dataset containing the datapoints.
-    pub dataset_name: String,
-    /// The IDs of the datapoints to delete.
-    pub ids: Vec<Uuid>,
-}
+pub use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsToolParams;
 
 /// Tool for deleting datapoints from a dataset.
 ///

@@ -338,8 +338,9 @@ pub struct GetDatapointsResponse {
 
 /// Request to create datapoints from inferences.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[export_schema]
 pub struct CreateDatapointsFromInferenceRequest {
     #[serde(flatten)]
     pub params: CreateDatapointsFromInferenceRequestParams,
@@ -531,6 +532,55 @@ pub struct GetDatapointsToolParams {
     pub dataset_name: Option<String>,
     /// The IDs of the datapoints to retrieve.
     pub ids: Vec<Uuid>,
+}
+
+/// Parameters for the create_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct CreateDatapointsToolParams {
+    /// The name of the dataset to create datapoints in.
+    pub dataset_name: String,
+    /// The datapoints to create. Can be Chat or Json type.
+    pub datapoints: Vec<CreateDatapointRequest>,
+}
+
+/// Parameters for the update_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct UpdateDatapointsToolParams {
+    /// The name of the dataset containing the datapoints.
+    pub dataset_name: String,
+    /// The datapoints to update. Can be Chat or Json type.
+    pub datapoints: Vec<UpdateDatapointRequest>,
+}
+
+/// Parameters for the delete_datapoints tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct DeleteDatapointsToolParams {
+    /// The name of the dataset containing the datapoints.
+    pub dataset_name: String,
+    /// The IDs of the datapoints to delete.
+    pub ids: Vec<Uuid>,
+}
+
+/// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[export_schema]
+pub struct CreateDatapointsFromInferencesToolParams {
+    /// The name of the dataset to create datapoints in.
+    pub dataset_name: String,
+    /// Parameters specifying which inferences to create datapoints from.
+    /// Can be either specific inference IDs or a query to find inferences.
+    pub params: CreateDatapointsFromInferenceRequestParams,
 }
 
 /// Request to list datasets with optional filtering and pagination.

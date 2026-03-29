@@ -7,21 +7,10 @@ use autopilot_client::AutopilotSideInfo;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
+use schemars::Schema;
+use tensorzero::CreateDatapointsResponse;
 
-/// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateDatapointsFromInferencesToolParams {
-    /// The name of the dataset to create datapoints in.
-    pub dataset_name: String,
-    /// Parameters specifying which inferences to create datapoints from.
-    /// Can be either specific inference IDs or a query to find inferences.
-    pub params: CreateDatapointsFromInferenceRequestParams,
-}
+pub use tensorzero_core::endpoints::datasets::v1::types::CreateDatapointsFromInferencesToolParams;
 
 /// Tool for creating datapoints from existing inferences.
 ///

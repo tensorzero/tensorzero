@@ -21,6 +21,10 @@ async fn test_mcp_list_tools() {
             eq("get_feedback_by_target_id"),
             eq("get_latest_feedback_by_metric"),
             eq("get_feedback_by_variant"),
+            eq("create_datapoints"),
+            eq("update_datapoints"),
+            eq("delete_datapoints"),
+            eq("create_datapoints_from_inferences"),
         ]
     );
 

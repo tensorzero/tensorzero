@@ -6,22 +6,11 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
-use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
+use schemars::Schema;
+use tensorzero::UpdateDatapointsResponse;
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the update_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct UpdateDatapointsToolParams {
-    /// The name of the dataset containing the datapoints.
-    pub dataset_name: String,
-    /// The datapoints to update. Can be Chat or Json type.
-    pub datapoints: Vec<UpdateDatapointRequest>,
-}
+pub use tensorzero_core::endpoints::datasets::v1::types::UpdateDatapointsToolParams;
 
 /// Tool for updating existing datapoints.
 ///

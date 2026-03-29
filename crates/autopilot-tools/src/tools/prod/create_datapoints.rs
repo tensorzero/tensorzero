@@ -7,22 +7,11 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
+use schemars::Schema;
 use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the create_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct CreateDatapointsToolParams {
-    /// The name of the dataset to create datapoints in.
-    pub dataset_name: String,
-    /// The datapoints to create. Can be Chat or Json type.
-    pub datapoints: Vec<CreateDatapointRequest>,
-}
+pub use tensorzero_core::endpoints::datasets::v1::types::CreateDatapointsToolParams;
 
 /// Tool for creating datapoints in a dataset.
 ///

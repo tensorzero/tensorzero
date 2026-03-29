@@ -10,9 +10,16 @@ use tensorzero_core::error::Error;
 use tracing::instrument;
 
 use tensorzero_core::endpoints::datasets::v1::types::{
-    GetDatapointsRequest, GetDatapointsToolParams, ListDatapointsToolParams, ListDatasetsRequest,
+    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferencesToolParams,
+    CreateDatapointsRequest, CreateDatapointsToolParams, DeleteDatapointsRequest,
+    DeleteDatapointsToolParams, GetDatapointsRequest, GetDatapointsToolParams,
+    ListDatapointsToolParams, ListDatasetsRequest, UpdateDatapointsRequest,
+    UpdateDatapointsToolParams,
 };
-use tensorzero_core::endpoints::datasets::v1::{get_datapoints, list_datapoints, list_datasets};
+use tensorzero_core::endpoints::datasets::v1::{
+    create_datapoints, create_from_inferences, delete_datapoints, get_datapoints, list_datapoints,
+    list_datasets, update_datapoints,
+};
 use tensorzero_core::endpoints::episodes::internal::{
     ListEpisodesRequest, ListEpisodesResponse, list_episodes,
 };
@@ -224,6 +231,115 @@ impl TensorZeroMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let database = self.app_state.get_delegating_database();
         let response = match get_latest_feedback_id_by_metric(&database, params.target_id).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Create new datapoints in a dataset. Supports both chat and JSON datapoint types with input, output, tags, and metadata."
+    )]
+    #[instrument(skip_all)]
+    async fn create_datapoints(
+        &self,
+        Parameters(params): Parameters<CreateDatapointsToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let request = CreateDatapointsRequest {
+            datapoints: params.datapoints,
+        };
+        let response = match create_datapoints(
+            &self.app_state.config,
+            &self.app_state.http_client,
+            &database,
+            &params.dataset_name,
+            request,
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Update existing datapoints in a dataset. Creates new versions of datapoints with updated input, output, tags, or metadata."
+    )]
+    #[instrument(skip_all)]
+    async fn update_datapoints(
+        &self,
+        Parameters(params): Parameters<UpdateDatapointsToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let request = UpdateDatapointsRequest {
+            datapoints: params.datapoints,
+        };
+        let response = match update_datapoints(&self.app_state, &params.dataset_name, request).await
+        {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Delete datapoints from a dataset by their IDs. This is a soft delete that marks datapoints as stale."
+    )]
+    #[instrument(skip_all)]
+    async fn delete_datapoints(
+        &self,
+        Parameters(params): Parameters<DeleteDatapointsToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let request = DeleteDatapointsRequest { ids: params.ids };
+        let response = match delete_datapoints(&database, &params.dataset_name, request).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Create datapoints from existing inferences. Can specify inference IDs directly or use a query to find inferences. Supports choosing the output source (inference output or demonstration feedback)."
+    )]
+    #[instrument(skip_all)]
+    async fn create_datapoints_from_inferences(
+        &self,
+        Parameters(params): Parameters<CreateDatapointsFromInferencesToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let request = CreateDatapointsFromInferenceRequest {
+            params: params.params,
+        };
+        let response = match create_from_inferences(
+            &self.app_state.config,
+            &database,
+            params.dataset_name,
+            request,
+        )
+        .await
+        {
             Ok(response) => response,
             Err(e) => return handle_tool_error(e),
         };
