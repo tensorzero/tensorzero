@@ -20,6 +20,7 @@ async fn test_mcp_list_tools() {
             eq("list_episodes"),
             eq("get_feedback_by_target_id"),
             eq("get_latest_feedback_by_metric"),
+            eq("get_feedback_by_variant"),
         ]
     );
 

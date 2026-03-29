@@ -11,25 +11,11 @@ use async_trait::async_trait;
 use durable_tools::{NonControlToolError, SimpleTool, SimpleToolContext, ToolMetadata, ToolResult};
 
 use crate::error::AutopilotToolError;
-use schemars::{JsonSchema, Schema};
-use serde::{Deserialize, Serialize};
+use schemars::Schema;
 use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::endpoints::feedback::internal::GetFeedbackByVariantToolParams;
 
 use autopilot_client::AutopilotSideInfo;
-
-/// Parameters for the get_feedback_by_variant tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct GetFeedbackByVariantToolParams {
-    /// The name of the metric to query.
-    pub metric_name: String,
-    /// The name of the function to query.
-    pub function_name: String,
-    /// Optional filter for specific variants. If not provided, all variants are included.
-    #[serde(default)]
-    pub variant_names: Option<Vec<String>>,
-}
 
 /// Tool for getting feedback statistics by variant for a function and metric.
 ///

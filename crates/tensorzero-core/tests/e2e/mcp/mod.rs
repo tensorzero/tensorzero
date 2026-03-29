@@ -1,6 +1,7 @@
 mod common;
 mod get_datapoints;
 mod get_feedback_by_target_id;
+mod get_feedback_by_variant;
 mod get_inferences;
 mod get_latest_feedback_by_metric;
 mod list_datapoints;

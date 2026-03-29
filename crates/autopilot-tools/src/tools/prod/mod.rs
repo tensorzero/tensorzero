@@ -37,7 +37,7 @@ pub use gepa::{GepaTool, StandaloneGepaTool};
 pub use get_config::{GetConfigTool, GetConfigToolParams};
 pub use get_datapoints::GetDatapointsTool;
 pub use get_feedback_by_target_id::GetFeedbackByTargetIdTool;
-pub use get_feedback_by_variant::{GetFeedbackByVariantTool, GetFeedbackByVariantToolParams};
+pub use get_feedback_by_variant::GetFeedbackByVariantTool;
 pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
 pub use get_latest_feedback_by_metric::GetLatestFeedbackByMetricTool;
 pub use inference::{InferenceTool, InferenceToolParams};
@@ -53,6 +53,7 @@ pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
 pub use tensorzero::GetDatapointsToolParams;
 pub use tensorzero::ListDatapointsToolParams;
 pub use tensorzero_core::endpoints::feedback::internal::GetFeedbackByTargetIdToolParams;
+pub use tensorzero_core::endpoints::feedback::internal::GetFeedbackByVariantToolParams;
 pub use tensorzero_core::endpoints::feedback::internal::GetLatestFeedbackByMetricToolParams;
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
 pub use upload_dataset::{

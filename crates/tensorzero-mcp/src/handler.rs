@@ -17,8 +17,9 @@ use tensorzero_core::endpoints::episodes::internal::{
     ListEpisodesRequest, ListEpisodesResponse, list_episodes,
 };
 use tensorzero_core::endpoints::feedback::internal::{
-    GetFeedbackByTargetIdToolParams, GetLatestFeedbackByMetricToolParams,
-    get_feedback_by_target_id, get_latest_feedback_id_by_metric,
+    GetFeedbackByTargetIdToolParams, GetFeedbackByVariantToolParams,
+    GetLatestFeedbackByMetricToolParams, get_feedback_by_target_id, get_feedback_by_variant,
+    get_latest_feedback_id_by_metric,
 };
 use tensorzero_core::endpoints::stored_inferences::v1::types::{
     GetInferencesRequest, ListInferencesRequest,
@@ -223,6 +224,34 @@ impl TensorZeroMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let database = self.app_state.get_delegating_database();
         let response = match get_latest_feedback_id_by_metric(&database, params.target_id).await {
+            Ok(response) => response,
+            Err(e) => return handle_tool_error(e),
+        };
+
+        let json = serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
+        })?;
+
+        Ok(CallToolResult::success(vec![Content::text(json)]))
+    }
+
+    #[tool(
+        description = "Get feedback statistics (mean, variance, count) by variant for a function and metric. Useful for analyzing variant performance."
+    )]
+    #[instrument(skip_all)]
+    async fn get_feedback_by_variant(
+        &self,
+        Parameters(params): Parameters<GetFeedbackByVariantToolParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let database = self.app_state.get_delegating_database();
+        let response = match get_feedback_by_variant(
+            &database,
+            &params.metric_name,
+            &params.function_name,
+            params.variant_names.as_ref(),
+        )
+        .await
+        {
             Ok(response) => response,
             Err(e) => return handle_tool_error(e),
         };

@@ -204,6 +204,7 @@ export * from "./GetEvaluationStatisticsResponse";
 export * from "./GetFeedbackBoundsResponse";
 export * from "./GetFeedbackByTargetIdResponse";
 export * from "./GetFeedbackByTargetIdToolParams";
+export * from "./GetFeedbackByVariantResponse";
 export * from "./GetFeedbackByVariantToolParams";
 export * from "./GetFunctionThroughputByVariantResponse";
 export * from "./GetHumanFeedbackResponse";
