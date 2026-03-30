@@ -22,6 +22,7 @@ pub mod dicl_queries;
 pub mod evaluation_queries;
 pub mod experimentation;
 pub mod feedback;
+pub mod function_version_queries;
 mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;

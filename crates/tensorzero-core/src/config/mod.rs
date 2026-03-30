@@ -2136,6 +2136,11 @@ impl UninitializedSchemas {
                 .collect(),
         }
     }
+
+    /// Iterates over (schema_name, path_data) pairs.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&str, &ResolvedTomlPathData)> {
+        self.inner.iter().map(|(k, v)| (k.as_str(), &v.path))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

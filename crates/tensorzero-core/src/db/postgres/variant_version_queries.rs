@@ -158,24 +158,24 @@ pub struct DiclConfigRow {
 
 /// Collects all `ResolvedTomlPathData` references from a variant so they can be stored
 /// as `prompt_template_versions` rows.
-struct PromptTemplateCollector {
-    templates: HashMap<String, (String, String)>, // template_key -> (template_key, source_body)
+pub(crate) struct PromptTemplateCollector {
+    pub(crate) templates: HashMap<String, (String, String)>, // template_key -> (template_key, source_body)
 }
 
 impl PromptTemplateCollector {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             templates: HashMap::new(),
         }
     }
 
-    fn add(&mut self, path_data: &ResolvedTomlPathData) {
+    pub(crate) fn add(&mut self, path_data: &ResolvedTomlPathData) {
         let key = path_data.get_template_key();
         let body = path_data.data().to_string();
         self.templates.insert(key.clone(), (key, body));
     }
 
-    fn add_option(&mut self, path_data: Option<&ResolvedTomlPathData>) {
+    pub(crate) fn add_option(&mut self, path_data: Option<&ResolvedTomlPathData>) {
         if let Some(pd) = path_data {
             self.add(pd);
         }
@@ -186,7 +186,7 @@ impl PromptTemplateCollector {
 
 /// Inserts a prompt template version row and returns its UUID.
 /// If a template with the same key is already tracked, reuses the existing UUID.
-async fn insert_prompt_template_version(
+pub(crate) async fn insert_prompt_template_version(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     id: Uuid,
     template_key: &str,
@@ -230,14 +230,14 @@ async fn write_prompt_templates_for_chat_completion(
     Ok(key_to_id)
 }
 
-fn prompt_id_for(
+pub(crate) fn prompt_id_for(
     key_to_id: &HashMap<String, Uuid>,
     path_data: Option<&ResolvedTomlPathData>,
 ) -> Option<Uuid> {
     path_data.and_then(|pd| key_to_id.get(&pd.get_template_key()).copied())
 }
 
-fn prompt_key_for(path_data: Option<&ResolvedTomlPathData>) -> Option<String> {
+pub(crate) fn prompt_key_for(path_data: Option<&ResolvedTomlPathData>) -> Option<String> {
     path_data.map(|pd| pd.get_template_key())
 }
 
@@ -345,7 +345,7 @@ async fn write_chat_completion_config(
 }
 
 /// Writes extra_body replacement rows using the provided SQL insert statement.
-async fn write_extra_body_rows(
+pub(crate) async fn write_extra_body_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     variant_version_id: Uuid,
     extra_body: Option<&ExtraBodyConfig>,
@@ -374,7 +374,7 @@ async fn write_extra_body_rows(
 }
 
 /// Writes extra_headers rows using the provided SQL insert statement.
-async fn write_extra_headers_rows(
+pub(crate) async fn write_extra_headers_rows(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     variant_version_id: Uuid,
     extra_headers: Option<&ExtraHeadersConfig>,
@@ -745,7 +745,7 @@ pub async fn write_variant_version_in_tx(
 
 // ---- Read path ----
 
-fn rehydrate_prompt_ref(
+pub(crate) fn rehydrate_prompt_ref(
     prompt_id: Option<Uuid>,
     template_key: Option<&String>,
     prompt_rows: &HashMap<Uuid, PromptTemplateVersionRow>,
@@ -897,7 +897,9 @@ fn rehydrate_chat_completion_config(
     })
 }
 
-fn rehydrate_extra_body(rows: &[ExtraBodyRow]) -> Result<Option<ExtraBodyConfig>, Error> {
+pub(crate) fn rehydrate_extra_body(
+    rows: &[ExtraBodyRow],
+) -> Result<Option<ExtraBodyConfig>, Error> {
     use crate::inference::types::extra_body::{ExtraBodyReplacement, ExtraBodyReplacementKind};
 
     if rows.is_empty() {
@@ -930,7 +932,9 @@ fn rehydrate_extra_body(rows: &[ExtraBodyRow]) -> Result<Option<ExtraBodyConfig>
     Ok(Some(ExtraBodyConfig { data }))
 }
 
-fn rehydrate_extra_headers(rows: &[ExtraHeaderRow]) -> Result<Option<ExtraHeadersConfig>, Error> {
+pub(crate) fn rehydrate_extra_headers(
+    rows: &[ExtraHeaderRow],
+) -> Result<Option<ExtraHeadersConfig>, Error> {
     use crate::inference::types::extra_headers::{ExtraHeader, ExtraHeaderKind};
 
     if rows.is_empty() {
@@ -1276,7 +1280,7 @@ async fn read_dicl_inner(
 }
 
 /// Loads prompt template version rows by their IDs.
-async fn load_prompt_template_versions(
+pub(crate) async fn load_prompt_template_versions(
     pool: &PgPool,
     ids: &[Uuid],
 ) -> Result<HashMap<Uuid, PromptTemplateVersionRow>, Error> {
@@ -1418,4 +1422,3 @@ pub fn merge_db_variants(
         variants.insert(variant_name, variant_info);
     }
 }
-
