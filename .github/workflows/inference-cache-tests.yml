@@ -93,6 +93,21 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
+      - name: Provider proxy cache stats
+        if: always()
+        run: |
+          LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs provider-proxy 2>&1)
+          HITS=$(echo "$LOGS" | grep -c "Cache hit:" || true)
+          MISSES=$(echo "$LOGS" | grep -c "Cache miss:" || true)
+          TOTAL=$((HITS + MISSES))
+          echo "### Provider Proxy Cache Stats (cache-tests, backend=${{ matrix.cache_backend }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hits:** $HITS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Misses:** $MISSES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "- **Hit rate:** $(( HITS * 100 / TOTAL ))%" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Print logs
         if: always()
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs -t
