@@ -58,8 +58,6 @@ impl LazyFileExt for LazyFile {
     }
 }
 
-// FileUrl and FileFuture are re-exported from tensorzero_provider_types above
-
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
     Text(Text),

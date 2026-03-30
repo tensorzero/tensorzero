@@ -255,10 +255,6 @@ impl FunctionTool {
     }
 }
 
-// `OpenAICustomTool`, `OpenAICustomToolFormat`, `OpenAIGrammarDefinition`,
-// `OpenAIGrammarSyntax`, `ProviderToolScopeModelProvider`, `ProviderToolScope`,
-// and `ProviderTool` are defined in `tensorzero-provider-types` and re-exported
-// via `crate::tool` (tool/mod.rs).
 pub use tensorzero_provider_types::{
     OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition, OpenAIGrammarSyntax,
     ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider,

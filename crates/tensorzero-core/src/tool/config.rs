@@ -103,7 +103,6 @@ pub struct DynamicImplicitToolConfig {
     pub parameters: JSONSchema,
 }
 
-// `AllowedTools`, `AllowedToolsChoice` are re-exported from `tensorzero-provider-types`
 pub use tensorzero_provider_types::{AllowedTools, AllowedToolsChoice};
 
 /// Contains all information required to tell an LLM what tools it can call

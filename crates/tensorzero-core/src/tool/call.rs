@@ -83,10 +83,8 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
         tool_call: ToolCall,
         tool_cfg: Option<&ProviderToolCallConfig>,
     ) -> InferenceResponseToolCall {
-        // Check if this is a function tool
         let function_tool = tool_cfg.and_then(|t| t.get_function_tool(&tool_call.name));
 
-        // Check if this is a custom tool
         let is_custom_tool = tool_cfg
             .map(|t| {
                 t.openai_custom_tools
@@ -95,14 +93,12 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
             })
             .unwrap_or(false);
 
-        // Set parsed_name if tool exists (either function or custom)
         let parsed_name = if function_tool.is_some() || is_custom_tool {
             Some(tool_call.name.clone())
         } else {
             None
         };
 
-        // Validate arguments against the JSON schema from FunctionToolDef
         let parsed_arguments = if let Some(tool) = function_tool {
             if let Ok(arguments) = serde_json::from_str::<serde_json::Value>(&tool_call.arguments) {
                 match jsonschema::validator_for(&tool.parameters) {

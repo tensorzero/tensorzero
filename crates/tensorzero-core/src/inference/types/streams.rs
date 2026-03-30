@@ -26,7 +26,6 @@ use uuid::Uuid;
 
 use super::InferenceResult;
 
-// Chunk types are re-exported from tensorzero_provider_types
 pub use tensorzero_provider_types::{
     ContentBlockChunk, ProviderInferenceResponseChunk, TextChunk, ThoughtChunk, UnknownChunk,
 };

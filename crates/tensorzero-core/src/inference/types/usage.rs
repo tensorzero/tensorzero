@@ -1,6 +1,5 @@
 use rust_decimal::Decimal;
 
-// Re-export from tensorzero-provider-types
 pub use tensorzero_provider_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
 
 pub use tensorzero_types::{ApiType, RawResponseEntry};

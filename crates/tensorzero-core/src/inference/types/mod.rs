@@ -133,7 +133,6 @@ pub use streams::{
 };
 pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
-// Re-export types from tensorzero-provider-types
 pub use tensorzero_provider_types::{
     AllowedTools, AllowedToolsChoice, BatchStatus, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FileFuture, FileUrl, FinishReason, FlattenUnknown, FunctionToolDef,
@@ -808,8 +807,6 @@ impl RateLimitedInputContent for InputMessage {
     }
 }
 
-// ContentBlock is re-exported from tensorzero_provider_types
-
 pub trait ContentBlockExt {
     async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error>;
     async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error>;
@@ -919,8 +916,6 @@ impl ResolvedContentBlock {
     }
 }
 
-// FlattenUnknown and ContentBlockOutput are re-exported from tensorzero_provider_types
-
 /// Holds the variants types of `ContentBlockOutput` without any data
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ContentBlockOutputType {
@@ -977,8 +972,6 @@ impl ContentBlockChatOutput {
     }
 }
 
-// RequestMessage is re-exported from tensorzero_provider_types
-
 pub trait RequestMessageExt {
     async fn into_stored_message(self) -> Result<StoredRequestMessage, Error>;
     async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error>;
@@ -1023,9 +1016,6 @@ impl RateLimitedInputContent for RequestMessage {
             .sum()
     }
 }
-
-// Display for RequestMessage is in tensorzero-provider-types
-// ModelInferenceRequest and ModelInferenceRequestJsonMode are re-exported from tensorzero_provider_types
 
 impl RateLimitedRequest for ModelInferenceRequest<'_> {
     fn estimated_resource_usage(
@@ -1118,8 +1108,6 @@ impl ModelInput {
     }
 }
 
-// FinishReason and ProviderInferenceResponse are re-exported from tensorzero_provider_types
-
 pub trait ProviderInferenceResponseExt {
     fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
 }
@@ -1141,8 +1129,6 @@ impl ProviderInferenceResponseExt for ProviderInferenceResponse {
         }
     }
 }
-
-// Latency is re-exported from tensorzero_provider_types
 
 /// Runtime type for model inference responses during inference execution.
 ///
@@ -1467,15 +1453,11 @@ impl From<String> for ContentBlockChatOutput {
     }
 }
 
-// From<String> for ContentBlock is in tensorzero-provider-types
-
 impl From<String> for StoredContentBlock {
     fn from(text: String) -> Self {
         StoredContentBlock::Text(Text { text })
     }
 }
-
-// From<String> for ContentBlockOutput is in tensorzero-provider-types
 
 impl ModelInferenceResponse {
     pub fn new(
