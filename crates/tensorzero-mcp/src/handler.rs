@@ -66,26 +66,19 @@ impl ServerHandler for TensorZeroMcpServer {
 /// `TaskTool`s are skipped for now.
 struct McpToolVisitor {
     router: ToolRouter<TensorZeroMcpServer>,
-    pool: sqlx::PgPool,
     client: Arc<dyn TensorZeroClient>,
     heartbeater: Arc<dyn Heartbeater>,
     registry: Arc<ToolRegistry>,
 }
 
 impl McpToolVisitor {
-    fn new(app_state: &AppStateData) -> Result<Self, String> {
-        let pool = app_state
-            .postgres_connection_info
-            .get_pool()
-            .ok_or("Postgres pool not available")?
-            .clone();
-        Ok(Self {
+    fn new(app_state: &AppStateData) -> Self {
+        Self {
             router: ToolRouter::new(),
-            pool,
             client: Arc::new(EmbeddedClient::new(app_state.clone())),
             heartbeater: Arc::new(NoopHeartbeater),
             registry: Arc::new(ToolRegistry::new()),
-        })
+        }
     }
 
     fn into_router(self) -> ToolRouter<TensorZeroMcpServer> {
@@ -130,14 +123,12 @@ impl ToolVisitor for McpToolVisitor {
         T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
     {
         let tool_attr = tool_attr_from_metadata(&T::default())?;
-        let pool = self.pool.clone();
         let client = self.client.clone();
         let heartbeater = self.heartbeater.clone();
         let registry = self.registry.clone();
         let route = ToolRoute::new_dyn(
             tool_attr,
             move |ctx: ToolCallContext<'_, TensorZeroMcpServer>| {
-                let pool = pool.clone();
                 let client = client.clone();
                 let heartbeater = heartbeater.clone();
                 let registry = registry.clone();
@@ -150,7 +141,7 @@ impl ToolVisitor for McpToolVisitor {
                         )?;
 
                     let simple_ctx =
-                        SimpleToolContext::new(&pool, &client, &heartbeater, &registry);
+                        SimpleToolContext::new_without_pool(&client, &heartbeater, &registry);
 
                     let idempotency_key = Uuid::now_v7().to_string();
                     let result =
@@ -188,7 +179,7 @@ impl ToolVisitor for McpToolVisitor {
 pub(crate) async fn build_tool_router(
     app_state: &AppStateData,
 ) -> Result<ToolRouter<TensorZeroMcpServer>, String> {
-    let mut visitor = McpToolVisitor::new(app_state)?;
+    let mut visitor = McpToolVisitor::new(app_state);
     autopilot_tools::for_each_tool(&mut visitor).await?;
     Ok(visitor.into_router())
 }
