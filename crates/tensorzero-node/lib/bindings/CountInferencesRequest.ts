@@ -22,7 +22,7 @@ export type CountInferencesRequest = {
    * Source of the inference output. When set to "demonstration", only inferences
    * with demonstration feedback will be counted.
    */
-  output_source: InferenceOutputSource;
+  output_source?: InferenceOutputSource;
   /**
    * Optional filter to apply when counting inferences.
    */

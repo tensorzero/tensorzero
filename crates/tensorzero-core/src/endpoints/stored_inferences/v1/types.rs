@@ -41,6 +41,7 @@ pub struct ListInferencesRequest {
     /// inference output or demonstration feedback (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
 
     /// The maximum number of inferences to return.
@@ -167,6 +168,7 @@ pub struct GetInferencesRequest {
     /// (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
 }
 

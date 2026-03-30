@@ -22,5 +22,5 @@ export type GetInferencesRequest = {
    * (manually-curated output) if available.
    * Defaults to `Inference` if not specified.
    */
-  output_source: InferenceOutputSource;
+  output_source?: InferenceOutputSource;
 };

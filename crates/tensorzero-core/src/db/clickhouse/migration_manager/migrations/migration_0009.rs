@@ -1,9 +1,8 @@
-use std::time::Duration;
-
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
+use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use async_trait::async_trait;
 
@@ -58,7 +57,7 @@ impl Migration for Migration0009<'_> {
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
-        let view_offset = Duration::from_secs(15);
+        let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -67,8 +66,8 @@ impl Migration for Migration0009<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_secs();
+            + ViewOffsetDeadline::offset())
+        .as_secs();
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -272,8 +271,7 @@ impl Migration for Migration0009<'_> {
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
         if !clean_start {
-            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
             let insert_boolean_metric_feedback = async {
                 let query = format!(
                     r"
