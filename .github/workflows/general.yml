@@ -1535,7 +1535,8 @@ jobs:
         check-docs-broken-links,
         check-node-bindings,
         check-production-deployment-docker-compose,
-        check-python-client-build,
+        # TODO - re-enable this once https://status.redhat.com/incidents/04vm68m00t61 is resolved
+        # check-python-client-build,
         check-python-schemas,
         check-version-consistency,
         clickhouse-tests,
