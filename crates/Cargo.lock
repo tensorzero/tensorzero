@@ -7192,13 +7192,18 @@ dependencies = [
 name = "tensorzero-mcp"
 version = "2026.3.4"
 dependencies = [
+ "async-trait",
+ "autopilot-client",
+ "autopilot-tools",
  "axum",
+ "durable-tools",
  "rmcp",
  "serde",
  "serde_json",
+ "sqlx",
  "tensorzero-core",
  "tokio-util",
- "tracing",
+ "uuid",
 ]
 
 [[package]]
