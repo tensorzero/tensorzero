@@ -29,6 +29,7 @@ pub struct CountInferencesRequest {
     /// Source of the inference output. When set to "demonstration", only inferences
     /// with demonstration feedback will be counted.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
 
     /// Optional filter to apply when counting inferences.
