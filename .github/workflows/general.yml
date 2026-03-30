@@ -1519,8 +1519,7 @@ jobs:
       actions: read
       contents: read
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
+    needs: [
         detect-changes,
         autopilot-e2e,
         build-gateway-container,
