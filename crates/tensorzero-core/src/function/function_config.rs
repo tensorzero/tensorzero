@@ -468,6 +468,13 @@ impl FunctionConfig {
         }
     }
 
+    pub fn variants_mut(&mut self) -> &mut HashMap<String, Arc<VariantInfo>> {
+        match self {
+            FunctionConfig::Chat(params) => &mut params.variants,
+            FunctionConfig::Json(params) => &mut params.variants,
+        }
+    }
+
     pub fn evaluators(&self) -> &HashMap<String, EvaluatorConfig> {
         match self {
             FunctionConfig::Chat(params) => &params.evaluators,

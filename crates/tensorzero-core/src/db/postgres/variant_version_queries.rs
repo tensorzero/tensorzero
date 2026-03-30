@@ -252,3 +252,61 @@ pub async fn load_and_rehydrate_variants(
 
     Ok(result)
 }
+
+/// Load the latest variant version for every (function_name, variant_name) pair
+/// across ALL functions, resolve prompt templates, and rehydrate.
+///
+/// Returns a map from (function_name, variant_name) → `UninitializedVariantInfo`.
+/// Used at startup to merge DB-authoritative variants into the TOML-loaded config.
+pub async fn load_all_active_variants(
+    pool: &PgPool,
+) -> Result<HashMap<(String, String), UninitializedVariantInfo>, Error> {
+    // Get the latest variant version per (function_name, variant_name) across all functions.
+    let rows = sqlx::query(
+        r"SELECT DISTINCT ON (function_name, variant_name)
+                function_name, variant_name, schema_version, config
+          FROM tensorzero.variant_versions
+          ORDER BY function_name, variant_name, id DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to load all active variant versions: {e}"),
+        })
+    })?;
+
+    if rows.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // Deserialize all stored variants
+    let mut stored_variants: Vec<(String, String, StoredVariantVersion)> =
+        Vec::with_capacity(rows.len());
+    for row in &rows {
+        let function_name: String = row.get("function_name");
+        let variant_name: String = row.get("variant_name");
+        let schema_version: i32 = row.get("schema_version");
+        let config: serde_json::Value = row.get::<Json<serde_json::Value>, _>("config").0;
+        let stored = deserialize_stored_variant_version(schema_version, config)?;
+        stored_variants.push((function_name, variant_name, stored));
+    }
+
+    // Collect all referenced prompt template IDs across all variants
+    let all_prompt_ids: Vec<Uuid> = stored_variants
+        .iter()
+        .flat_map(|(_, _, sv)| sv.referenced_prompt_template_ids())
+        .collect();
+
+    // Batch-load all prompt templates
+    let prompt_rows = load_prompt_template_versions(pool, &all_prompt_ids).await?;
+
+    // Rehydrate each variant
+    let mut result = HashMap::with_capacity(stored_variants.len());
+    for (function_name, variant_name, stored_variant) in &stored_variants {
+        let variant_info = rehydrate_variant(stored_variant, &prompt_rows)?;
+        result.insert((function_name.clone(), variant_name.clone()), variant_info);
+    }
+
+    Ok(result)
+}

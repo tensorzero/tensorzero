@@ -251,7 +251,7 @@ impl GatewayHandle {
     }
 
     async fn new_with_databases(
-        config: UnwrittenConfig,
+        mut config: UnwrittenConfig,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
@@ -261,6 +261,14 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
+
+        // Merge DB-authoritative variants into the config before finalizing.
+        // This must happen after the postgres pool is ready but before into_config().
+        if let Some(pool) = postgres_connection_info.get_pool()
+            && let Err(e) = config.merge_db_variants(pool).await
+        {
+            tracing::warn!("Failed to load DB variants (table may not exist yet): {e}");
+        }
 
         let primary_datastore = PrimaryDatastore::resolve(
             &config.gateway.observability,
