@@ -1206,7 +1206,7 @@ pub async fn write_completed_batch_inference<'a>(
         };
         model_inference_rows_to_write.extend(
             inference_result
-                .get_model_inferences(config.hash.clone())
+                .get_model_inferences(function_name, &variant_name, config.hash.clone())
                 .await,
         );
         match inference_result {

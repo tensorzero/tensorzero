@@ -1689,6 +1689,8 @@ async fn test_get_evaluation_results_usage_aggregation(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: inference1_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -1712,6 +1714,8 @@ async fn test_get_evaluation_results_usage_aggregation(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: inference1_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -1735,6 +1739,8 @@ async fn test_get_evaluation_results_usage_aggregation(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: inference2_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -1758,6 +1764,8 @@ async fn test_get_evaluation_results_usage_aggregation(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: inference2_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
