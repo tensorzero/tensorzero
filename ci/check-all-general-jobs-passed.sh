@@ -14,6 +14,8 @@ set -euo pipefail
 # These jobs show up in the PR but are intentionally non-blocking.
 ALLOWED_FAIL=(
   "cargo-deny"
+  # TODO - remove this once https://status.redhat.com/incidents/04vm68m00t61 is resolved
+  "check-python-client-build"
 )
 
 # Jobs that are allowed to be skipped even in the merge queue.
