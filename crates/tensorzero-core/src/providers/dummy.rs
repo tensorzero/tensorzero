@@ -31,8 +31,8 @@ use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, Usage, batch::StartBatchProviderInferenceResponse,
-    current_timestamp,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, current_timestamp,
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
@@ -696,24 +696,26 @@ impl InferenceProvider for DummyProvider {
         } else {
             Some(FinishReason::Stop)
         };
-        Ok(ProviderInferenceResponse {
-            id,
-            output: content,
-            raw_request,
-            raw_response,
-            usage,
-            provider_latency: latency,
-            system,
-            input_messages,
-            finish_reason,
-            raw_usage: Some(vec![RawUsageEntry {
-                model_inference_id: id,
-                provider_type: "dummy".to_string(),
-                api_type: ApiType::ChatCompletions,
-                data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
-            }]),
-            relay_raw_response: None,
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id,
+                output: content,
+                raw_request,
+                raw_response,
+                usage,
+                provider_latency: latency,
+                system,
+                input_messages,
+                finish_reason,
+                raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id: id,
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+                }]),
+                relay_raw_response: None,
+            },
+        ))
     }
 
     async fn infer_stream<'a>(

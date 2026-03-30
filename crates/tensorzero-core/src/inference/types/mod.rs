@@ -141,10 +141,10 @@ pub use tensorzero_provider_types::{
     ModelInferenceRequestJsonMode, OpenAICustomTool, OpenAICustomToolFormat,
     OpenAIGrammarDefinition, OpenAIGrammarSyntax, PeekableProviderInferenceResponseStream,
     PendingObjectStoreFile, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
-    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, ProviderTool, ProviderToolCallConfig, ProviderToolScope,
-    ProviderToolScopeModelProvider, RequestMessage, StartBatchProviderInferenceResponse, TextChunk,
-    ThoughtChunk, ToolConfigRef, UnknownChunk,
+    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, ProviderTool,
+    ProviderToolCallConfig, ProviderToolScope, ProviderToolScopeModelProvider, RequestMessage,
+    StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, ToolConfigRef, UnknownChunk,
 };
 
 /*

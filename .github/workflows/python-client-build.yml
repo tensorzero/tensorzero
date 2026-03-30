@@ -267,7 +267,7 @@ jobs:
           done
       - name: Run twine on sdist
         run: |
-          uv pip install twine
+          uv pip install twine==6.2.0
           uv run twine check ./crates/tensorzero-python/dist/tensorzero-*.tar.gz
 
   check-artifacts:

@@ -27,7 +27,7 @@ use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Usage,
     batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
@@ -731,7 +731,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = Usage::from(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         let raw_request = sanitize_raw_request(&messages, raw_request);
@@ -1484,7 +1484,7 @@ mod tests {
             prompt_cache_miss_tokens: Some(20),
         };
 
-        let usage: Usage = deepseek_usage.into();
+        let usage: Usage = Usage::from(deepseek_usage);
 
         expect_that!(usage.input_tokens, eq(Some(100)));
         expect_that!(usage.output_tokens, eq(Some(50)));
