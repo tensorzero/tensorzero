@@ -9,7 +9,7 @@ use super::ClickHouseConnectionInfo;
 use super::migration_manager::migrations::migration_0037::{QUANTILES, quantiles_sql_args};
 use super::table_name::TableName;
 use crate::db::model_inferences::ModelInferenceQueries;
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::StoredModelInference;
 
@@ -267,6 +267,110 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
 
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         QUANTILES
+    }
+
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+        let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"
+                ),
+            ),
+            TimeWindow::Hour => (
+                "toStartOfHour(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"
+                ),
+            ),
+            TimeWindow::Day => (
+                "toStartOfDay(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"
+                ),
+            ),
+            TimeWindow::Week => (
+                "toStartOfWeek(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"
+                ),
+            ),
+            TimeWindow::Month => (
+                "toStartOfMonth(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"
+                ),
+            ),
+            TimeWindow::Cumulative => ("toDateTime('1970-01-01 00:00:00')", "1 = 1".to_string()),
+        };
+
+        let model_filter = match model_name {
+            Some(_) => "AND model_name = {model_name:String}",
+            None => "",
+        };
+        let provider_filter = match model_provider_name {
+            Some(_) => "AND model_provider_name = {provider_name:String}",
+            None => "",
+        };
+
+        let query = format!(
+            r"
+            SELECT
+                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                model_name,
+                model_provider_name,
+                sumMerge(total_input_tokens) as input_tokens,
+                sumMerge(total_provider_cache_read_input_tokens) as cache_read_input_tokens,
+                sumMerge(total_provider_cache_write_input_tokens) as cache_write_input_tokens,
+                countMerge(count) as count
+            FROM ModelProviderStatistics
+            WHERE {time_filter}
+              {model_filter}
+              {provider_filter}
+            GROUP BY period_start, model_name, model_provider_name
+            ORDER BY period_start DESC, model_name, model_provider_name
+            FORMAT JSONEachRow
+            ",
+        );
+
+        let mut params: HashMap<&str, &str> = HashMap::new();
+        if let Some(name) = model_name {
+            params.insert("model_name", name);
+        }
+        if let Some(name) = model_provider_name {
+            params.insert("provider_name", name);
+        }
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        let mut points: Vec<CacheStatisticsTimePoint> = response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Compute cache_read_ratio in Rust to avoid division by zero in SQL
+        for point in &mut points {
+            point.cache_read_ratio = match (point.cache_read_input_tokens, point.input_tokens) {
+                (Some(read), Some(total)) if total > 0 => Some(read as f64 / total as f64),
+                _ => None,
+            };
+        }
+
+        Ok(points)
     }
 }
 
