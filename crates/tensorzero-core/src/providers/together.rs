@@ -19,11 +19,11 @@ use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -871,20 +871,21 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let usage = response.usage.into();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
-        let raw_request = sanitize_raw_request(&input_messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response: raw_response.clone(),
-            raw_usage,
-            relay_raw_response: None,
-            usage,
-            provider_latency: latency,
-            finish_reason: finish_reason.map(Into::into),
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                raw_usage,
+                relay_raw_response: None,
+                usage,
+                provider_latency: latency,
+                finish_reason: finish_reason.map(Into::into),
+            },
+        ))
     }
 }
 

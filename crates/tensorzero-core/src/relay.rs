@@ -38,8 +38,8 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         ContentBlock, ContentBlockChatOutput, ContentBlockOutput, Latency,
-        ModelInferenceRequestJsonMode, ProviderInferenceResponse, Text, file::sanitize_raw_request,
-        resolved_input::LazyFile,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+        Text, resolved_input::LazyFile,
     },
     tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef},
     variant::JsonMode,
@@ -424,20 +424,21 @@ impl TensorzeroRelay {
             },
         };
         let input_messages = request.messages.clone();
-        let raw_request = sanitize_raw_request(&input_messages, http_data.raw_request);
-        Ok(ProviderInferenceResponse {
-            id: Uuid::now_v7(),
-            output,
-            system: request.system.clone(),
-            input_messages,
-            raw_request,
-            raw_response: http_data.raw_response.unwrap_or_default(),
-            usage,
-            raw_usage: raw_usage_entries,
-            relay_raw_response,
-            provider_latency: latency,
-            finish_reason,
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: Uuid::now_v7(),
+                output,
+                system: request.system.clone(),
+                input_messages,
+                raw_request: http_data.raw_request,
+                raw_response: http_data.raw_response.unwrap_or_default(),
+                usage,
+                raw_usage: raw_usage_entries,
+                relay_raw_response,
+                provider_latency: latency,
+                finish_reason,
+            },
+        ))
     }
 
     // Constructs the input for the downstream gateway `POST /inference` request

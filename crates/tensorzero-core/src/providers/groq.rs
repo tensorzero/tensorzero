@@ -23,14 +23,13 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Thought, ThoughtChunk, Unknown, Usage,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown, Usage,
     batch::StartBatchProviderInferenceResponse,
     resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
@@ -1350,22 +1349,23 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let usage = groq_usage_to_tensorzero_usage(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
-        let raw_request = sanitize_raw_request(&messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system,
-            input_messages: messages,
-            raw_request,
-            raw_response: raw_response.clone(),
-            raw_usage,
-            relay_raw_response: None,
-            usage,
-            provider_latency: latency,
-            finish_reason: Some(groq_finish_reason_to_tensorzero_finish_reason(
-                finish_reason,
-            )),
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                raw_usage,
+                relay_raw_response: None,
+                usage,
+                provider_latency: latency,
+                finish_reason: Some(groq_finish_reason_to_tensorzero_finish_reason(
+                    finish_reason,
+                )),
+            },
+        ))
     }
 }
 

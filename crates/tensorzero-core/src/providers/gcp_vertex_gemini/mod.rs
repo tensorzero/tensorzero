@@ -49,7 +49,6 @@ use crate::inference::types::batch::{
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
@@ -59,8 +58,8 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
-    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    RequestMessage, Usage, batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
 use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
@@ -3103,20 +3102,21 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             provider_name,
         )?;
 
-        let raw_request = sanitize_raw_request(&input_messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            raw_usage,
-            relay_raw_response: None,
-            provider_latency: latency,
-            finish_reason,
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                raw_usage,
+                relay_raw_response: None,
+                provider_latency: latency,
+                finish_reason,
+            },
+        ))
     }
 }
 

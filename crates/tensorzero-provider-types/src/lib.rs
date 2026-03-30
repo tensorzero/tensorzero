@@ -376,6 +376,7 @@ pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceRes
 /// then transforms the provider response into a `ProviderInferenceResponse`.
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[non_exhaustive]
 pub struct ProviderInferenceResponse {
     pub id: Uuid,
     pub output: Vec<ContentBlockOutput>,

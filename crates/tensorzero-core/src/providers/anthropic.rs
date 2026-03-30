@@ -26,14 +26,14 @@ use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
-use crate::inference::types::file::sanitize_raw_request;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile, LazyFileExt};
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk, Usage,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, FinishReason, FunctionType, Latency,
@@ -1397,22 +1397,23 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             )
         });
         let usage = response.usage.into_usage();
-        let raw_request = sanitize_raw_request(&input_messages, raw_request);
-        Ok(ProviderInferenceResponse {
-            id: model_inference_id,
-            output: content,
-            system: generic_request.system.clone(),
-            input_messages,
-            raw_request,
-            raw_response,
-            raw_usage,
-            relay_raw_response: None,
-            usage,
-            provider_latency: latency,
-            finish_reason: response
-                .stop_reason
-                .map(AnthropicStopReason::into_finish_reason),
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id: model_inference_id,
+                output: content,
+                system: generic_request.system.clone(),
+                input_messages,
+                raw_request,
+                raw_response,
+                raw_usage,
+                relay_raw_response: None,
+                usage,
+                provider_latency: latency,
+                finish_reason: response
+                    .stop_reason
+                    .map(AnthropicStopReason::into_finish_reason),
+            },
+        ))
     }
 }
 
