@@ -188,6 +188,24 @@ impl Migration for Migration0053<'_> {
 
         // 4. Backfill historical data if not a clean start
         if !clean_start {
+            // Skip backfill if source tables are empty (e.g. rollback tests on fresh DBs).
+            let has_data = self
+                .clickhouse
+                .run_query_synchronous_no_params(
+                    "SELECT count() FROM ModelInference LIMIT 1".to_string(),
+                )
+                .await?
+                .response
+                .trim()
+                != "0";
+
+            if !has_data {
+                tracing::info!(
+                    "Skipping `VariantStatistics` backfill: no data in `ModelInference`"
+                );
+                return Ok(());
+            }
+
             tokio::time::sleep(view_offset).await;
 
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
