@@ -18,7 +18,8 @@ use tensorzero_core::endpoints::inference::InferenceParams;
 use tensorzero_core::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use tensorzero_core::inference::types::stored_input::StoredInput;
 use tensorzero_core::inference::types::{
-    ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, StoredModelInference,
+    ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    StoredModelInference,
 };
 use tensorzero_core::tool::ToolCallConfigDatabaseInsert;
 use tonic::async_trait;
@@ -254,7 +255,10 @@ fn make_json_inference(
         variant_name: variant_name.to_string(),
         episode_id: uuid::Uuid::now_v7(),
         input: Some(StoredInput::default()),
-        output: None,
+        output: Some(JsonInferenceOutput {
+            raw: None,
+            parsed: None,
+        }),
         auxiliary_content: Some(vec![]),
         inference_params: Some(InferenceParams::default()),
         processing_time_ms,

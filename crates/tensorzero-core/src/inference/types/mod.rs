@@ -1438,7 +1438,9 @@ pub enum InferenceDatabaseInsert {
 pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub function_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub variant_name: String,
     pub raw_request: Option<String>,
     pub raw_response: Option<String>,
