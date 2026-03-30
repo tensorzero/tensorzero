@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use sqlx::PgPool;
@@ -15,6 +15,16 @@ use crate::evaluations::{
     LLMJudgeOutputType, RegexConfig, ToolUseConfig, UninitializedEvaluatorConfig,
     UninitializedLLMJudgeChatCompletionVariantConfig, UninitializedLLMJudgeConfig,
     UninitializedLLMJudgeVariantConfig, UninitializedLLMJudgeVariantInfo,
+};
+use crate::experimentation::adaptive_experimentation::{
+    AdaptiveExperimentationAlgorithm, UninitializedAdaptiveExperimentationConfig,
+};
+use crate::experimentation::static_experimentation::{
+    StaticExperimentationConfig, WeightedVariants,
+};
+use crate::experimentation::track_and_stop::UninitializedTrackAndStopExperimentationConfig;
+use crate::experimentation::{
+    UninitializedExperimentationConfig, UninitializedExperimentationConfigWithNamespaces,
 };
 use crate::utils::retries::RetryConfig;
 use tensorzero_types::inference_params::{JsonMode, ServiceTier};
@@ -145,6 +155,57 @@ pub struct EvaluatorLLMJudgeCCRow {
     pub verbosity: Option<String>,
     pub num_retries: i32,
     pub max_retry_delay_s: f32,
+}
+
+// ---- Experimentation row types ----
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationRow {
+    pub id: Uuid,
+    pub function_version_id: Uuid,
+    pub namespace: Option<String>,
+    pub experimentation_type: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationStaticVariantRow {
+    pub experimentation_id: Uuid,
+    pub variant_name: String,
+    pub weight: f64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationStaticFallbackRow {
+    pub experimentation_id: Uuid,
+    pub variant_name: String,
+    pub position: i32,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationAdaptiveConfigRow {
+    pub experimentation_id: Uuid,
+    pub algorithm: String,
+    pub metric: String,
+    pub min_samples_per_variant: i64,
+    pub delta: f64,
+    pub epsilon: f64,
+    pub update_period_s: i64,
+    pub min_prob: Option<f64>,
+    pub max_samples_per_variant: Option<i64>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationAdaptiveCandidateRow {
+    pub experimentation_id: Uuid,
+    pub variant_name: String,
+    pub position: i32,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ExperimentationAdaptiveFallbackRow {
+    pub experimentation_id: Uuid,
+    pub variant_name: String,
+    pub position: i32,
 }
 
 // ---- ToolChoice helpers ----
@@ -494,6 +555,15 @@ pub async fn write_function_version_in_tx(
         .await?;
     }
 
+    // Write experimentation config
+    let experimentation = match config {
+        UninitializedFunctionConfig::Chat(c) => c.experimentation.as_ref(),
+        UninitializedFunctionConfig::Json(c) => c.experimentation.as_ref(),
+    };
+    if let Some(exp) = experimentation {
+        write_experimentation(tx, function_version_id, exp).await?;
+    }
+
     // Write evaluators
     let evaluators = match config {
         UninitializedFunctionConfig::Chat(c) => &c.evaluators,
@@ -522,6 +592,193 @@ pub async fn write_function_version_in_tx(
     .await?;
 
     Ok(function_version_id)
+}
+
+// ---- Experimentation write path ----
+
+async fn write_experimentation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    function_version_id: Uuid,
+    config: &UninitializedExperimentationConfigWithNamespaces,
+) -> Result<(), Error> {
+    // Write the base config (namespace = NULL)
+    write_single_experimentation(tx, function_version_id, None, &config.base).await?;
+
+    // Write namespace overrides
+    for (namespace, ns_config) in &config.namespaces {
+        write_single_experimentation(tx, function_version_id, Some(namespace), ns_config).await?;
+    }
+
+    Ok(())
+}
+
+async fn write_single_experimentation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    function_version_id: Uuid,
+    namespace: Option<&str>,
+    config: &UninitializedExperimentationConfig,
+) -> Result<(), Error> {
+    let experimentation_id = Uuid::now_v7();
+
+    // Normalize legacy types on write
+    let (experimentation_type, normalized) = normalize_experimentation_config(config);
+
+    sqlx::query(
+        r"INSERT INTO tensorzero.function_version_experimentation
+           (id, function_version_id, namespace, experimentation_type)
+           VALUES ($1, $2, $3, $4)",
+    )
+    .bind(experimentation_id)
+    .bind(function_version_id)
+    .bind(namespace)
+    .bind(experimentation_type)
+    .execute(&mut **tx)
+    .await?;
+
+    match &normalized {
+        NormalizedExperimentation::Static {
+            candidate_variants,
+            fallback_variants,
+        } => {
+            for (variant_name, weight) in candidate_variants {
+                sqlx::query(
+                    r"INSERT INTO tensorzero.experimentation_static_variants
+                       (experimentation_id, variant_name, weight)
+                       VALUES ($1, $2, $3)",
+                )
+                .bind(experimentation_id)
+                .bind(variant_name)
+                .bind(*weight)
+                .execute(&mut **tx)
+                .await?;
+            }
+            for (i, variant_name) in fallback_variants.iter().enumerate() {
+                sqlx::query(
+                    r"INSERT INTO tensorzero.experimentation_static_fallbacks
+                       (experimentation_id, variant_name, position)
+                       VALUES ($1, $2, $3)",
+                )
+                .bind(experimentation_id)
+                .bind(variant_name)
+                .bind(i as i32)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+        NormalizedExperimentation::Adaptive(adaptive) => {
+            sqlx::query(
+                r"INSERT INTO tensorzero.experimentation_adaptive_configs
+                   (experimentation_id, algorithm, metric,
+                    min_samples_per_variant, delta, epsilon, update_period_s,
+                    min_prob, max_samples_per_variant)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            )
+            .bind(experimentation_id)
+            .bind("track_and_stop")
+            .bind(adaptive.inner.metric())
+            .bind(adaptive.inner.min_samples_per_variant() as i64)
+            .bind(adaptive.inner.delta())
+            .bind(adaptive.inner.epsilon())
+            .bind(adaptive.inner.update_period_s() as i64)
+            .bind(adaptive.inner.min_prob())
+            .bind(adaptive.inner.max_samples_per_variant().map(|v| v as i64))
+            .execute(&mut **tx)
+            .await?;
+
+            for (i, variant_name) in adaptive.inner.candidate_variants().iter().enumerate() {
+                sqlx::query(
+                    r"INSERT INTO tensorzero.experimentation_adaptive_candidates
+                       (experimentation_id, variant_name, position)
+                       VALUES ($1, $2, $3)",
+                )
+                .bind(experimentation_id)
+                .bind(variant_name)
+                .bind(i as i32)
+                .execute(&mut **tx)
+                .await?;
+            }
+
+            for (i, variant_name) in adaptive.inner.fallback_variants().iter().enumerate() {
+                sqlx::query(
+                    r"INSERT INTO tensorzero.experimentation_adaptive_fallbacks
+                       (experimentation_id, variant_name, position)
+                       VALUES ($1, $2, $3)",
+                )
+                .bind(experimentation_id)
+                .bind(variant_name)
+                .bind(i as i32)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Intermediate type for normalized experimentation config (legacy types resolved).
+enum NormalizedExperimentation {
+    Static {
+        candidate_variants: BTreeMap<String, f64>,
+        fallback_variants: Vec<String>,
+    },
+    Adaptive(UninitializedAdaptiveExperimentationConfig),
+}
+
+/// Normalizes legacy experimentation types to Static/Adaptive.
+fn normalize_experimentation_config(
+    config: &UninitializedExperimentationConfig,
+) -> (&'static str, NormalizedExperimentation) {
+    match config {
+        UninitializedExperimentationConfig::Static(c) => (
+            "static",
+            NormalizedExperimentation::Static {
+                candidate_variants: c.candidate_variants.inner().clone(),
+                fallback_variants: c.fallback_variants.clone(),
+            },
+        ),
+        UninitializedExperimentationConfig::Adaptive(c) => {
+            ("adaptive", NormalizedExperimentation::Adaptive(c.clone()))
+        }
+        // Legacy types: normalize on write by converting through the into_static_config path
+        UninitializedExperimentationConfig::StaticWeights(c) => {
+            let static_config = c.clone().into_static_config();
+            (
+                "static",
+                NormalizedExperimentation::Static {
+                    candidate_variants: static_config.candidate_variants.inner().clone(),
+                    fallback_variants: static_config.fallback_variants.clone(),
+                },
+            )
+        }
+        UninitializedExperimentationConfig::Uniform(c) => {
+            let static_config = c.clone().into_static_config();
+            match static_config {
+                Some(sc) => (
+                    "static",
+                    NormalizedExperimentation::Static {
+                        candidate_variants: sc.candidate_variants.inner().clone(),
+                        fallback_variants: sc.fallback_variants.clone(),
+                    },
+                ),
+                // Uniform with no candidates/fallbacks = empty static
+                None => (
+                    "static",
+                    NormalizedExperimentation::Static {
+                        candidate_variants: BTreeMap::new(),
+                        fallback_variants: Vec::new(),
+                    },
+                ),
+            }
+        }
+        UninitializedExperimentationConfig::TrackAndStop(c) => (
+            "adaptive",
+            NormalizedExperimentation::Adaptive(UninitializedAdaptiveExperimentationConfig {
+                algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
+                inner: c.clone(),
+            }),
+        ),
+    }
 }
 
 // ---- Evaluator write path ----
@@ -970,6 +1227,9 @@ pub async fn read_function_version(
     // Load evaluators
     let evaluators = read_evaluators(pool, function_version_id).await?;
 
+    // Load experimentation config
+    let experimentation = read_experimentation(pool, function_version_id).await?;
+
     // Build the config based on function_type
     let config = match fv_row.function_type.as_str() {
         "chat" => UninitializedFunctionConfig::Chat(UninitializedFunctionConfigChat {
@@ -982,7 +1242,7 @@ pub async fn read_function_version(
             tool_choice: string_to_tool_choice(&fv_row.tool_choice),
             parallel_tool_calls: fv_row.parallel_tool_calls,
             description: fv_row.description,
-            experimentation: None,
+            experimentation,
             evaluators,
         }),
         "json" => UninitializedFunctionConfig::Json(UninitializedFunctionConfigJson {
@@ -993,7 +1253,7 @@ pub async fn read_function_version(
             schemas,
             output_schema,
             description: fv_row.description,
-            experimentation: None,
+            experimentation,
             evaluators,
         }),
         other => {
@@ -1303,4 +1563,216 @@ async fn read_evaluator_llm_judge_cc(
         extra_body,
         extra_headers,
     })
+}
+
+// ---- Experimentation read path ----
+
+async fn read_experimentation(
+    pool: &PgPool,
+    function_version_id: Uuid,
+) -> Result<Option<UninitializedExperimentationConfigWithNamespaces>, Error> {
+    let rows: Vec<ExperimentationRow> = sqlx::query_as(
+        r"SELECT id, function_version_id, namespace, experimentation_type
+           FROM tensorzero.function_version_experimentation
+           WHERE function_version_id = $1",
+    )
+    .bind(function_version_id)
+    .fetch_all(pool)
+    .await?;
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let mut base: Option<UninitializedExperimentationConfig> = None;
+    let mut namespaces = HashMap::new();
+
+    for row in &rows {
+        let config = match row.experimentation_type.as_str() {
+            "static" => read_static_experimentation(pool, row.id).await?,
+            "adaptive" => read_adaptive_experimentation(pool, row.id).await?,
+            other => {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: format!("Unknown experimentation type `{other}`"),
+                }));
+            }
+        };
+
+        match &row.namespace {
+            None => base = Some(config),
+            Some(ns) => {
+                namespaces.insert(ns.clone(), config);
+            }
+        }
+    }
+
+    let base = base.ok_or_else(|| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!(
+                "Experimentation config for function version `{function_version_id}` \
+                 has namespace overrides but no base config"
+            ),
+        })
+    })?;
+
+    Ok(Some(UninitializedExperimentationConfigWithNamespaces {
+        base,
+        namespaces,
+    }))
+}
+
+async fn read_static_experimentation(
+    pool: &PgPool,
+    experimentation_id: Uuid,
+) -> Result<UninitializedExperimentationConfig, Error> {
+    let variant_rows: Vec<ExperimentationStaticVariantRow> = sqlx::query_as(
+        r"SELECT experimentation_id, variant_name, weight
+           FROM tensorzero.experimentation_static_variants
+           WHERE experimentation_id = $1",
+    )
+    .bind(experimentation_id)
+    .fetch_all(pool)
+    .await?;
+
+    let fallback_rows: Vec<ExperimentationStaticFallbackRow> = sqlx::query_as(
+        r"SELECT experimentation_id, variant_name, position
+           FROM tensorzero.experimentation_static_fallbacks
+           WHERE experimentation_id = $1
+           ORDER BY position",
+    )
+    .bind(experimentation_id)
+    .fetch_all(pool)
+    .await?;
+
+    let candidate_variants = WeightedVariants::from_map(
+        variant_rows
+            .iter()
+            .map(|v| (v.variant_name.clone(), v.weight))
+            .collect(),
+    );
+
+    let fallback_variants: Vec<String> = fallback_rows
+        .iter()
+        .map(|f| f.variant_name.clone())
+        .collect();
+
+    Ok(UninitializedExperimentationConfig::Static(
+        StaticExperimentationConfig {
+            candidate_variants,
+            fallback_variants,
+        },
+    ))
+}
+
+async fn read_adaptive_experimentation(
+    pool: &PgPool,
+    experimentation_id: Uuid,
+) -> Result<UninitializedExperimentationConfig, Error> {
+    let ac_row: ExperimentationAdaptiveConfigRow = sqlx::query_as(
+        r"SELECT experimentation_id, algorithm, metric,
+                  min_samples_per_variant, delta, epsilon, update_period_s,
+                  min_prob, max_samples_per_variant
+           FROM tensorzero.experimentation_adaptive_configs
+           WHERE experimentation_id = $1",
+    )
+    .bind(experimentation_id)
+    .fetch_one(pool)
+    .await?;
+
+    let candidate_rows: Vec<ExperimentationAdaptiveCandidateRow> = sqlx::query_as(
+        r"SELECT experimentation_id, variant_name, position
+           FROM tensorzero.experimentation_adaptive_candidates
+           WHERE experimentation_id = $1
+           ORDER BY position",
+    )
+    .bind(experimentation_id)
+    .fetch_all(pool)
+    .await?;
+
+    let fallback_rows: Vec<ExperimentationAdaptiveFallbackRow> = sqlx::query_as(
+        r"SELECT experimentation_id, variant_name, position
+           FROM tensorzero.experimentation_adaptive_fallbacks
+           WHERE experimentation_id = $1
+           ORDER BY position",
+    )
+    .bind(experimentation_id)
+    .fetch_all(pool)
+    .await?;
+
+    let candidate_variants: Vec<String> = candidate_rows
+        .iter()
+        .map(|c| c.variant_name.clone())
+        .collect();
+    let fallback_variants: Vec<String> = fallback_rows
+        .iter()
+        .map(|f| f.variant_name.clone())
+        .collect();
+
+    let inner = UninitializedTrackAndStopExperimentationConfig::from_fields(
+        ac_row.metric,
+        candidate_variants,
+        fallback_variants,
+        ac_row.min_samples_per_variant as u64,
+        ac_row.delta,
+        ac_row.epsilon,
+        ac_row.update_period_s as u64,
+        ac_row.min_prob,
+        ac_row.max_samples_per_variant.map(|v| v as u64),
+    );
+
+    Ok(UninitializedExperimentationConfig::Adaptive(
+        UninitializedAdaptiveExperimentationConfig {
+            algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
+            inner,
+        },
+    ))
+}
+
+// ===========================================================================
+// Load latest / merge helpers
+// ===========================================================================
+
+/// Row for the "active version per function" query.
+#[derive(Debug, sqlx::FromRow)]
+struct ActiveFunctionVersionRow {
+    active_version_id: Uuid,
+    name: String,
+}
+
+/// Loads the active function version for each function that has one.
+/// Returns a map from function_name -> UninitializedFunctionConfig.
+pub async fn load_all_active_function_versions(
+    pool: &PgPool,
+) -> Result<HashMap<String, UninitializedFunctionConfig>, Error> {
+    let rows: Vec<ActiveFunctionVersionRow> = sqlx::query_as(
+        r"SELECT name, active_version_id
+           FROM tensorzero.functions
+           WHERE active_version_id IS NOT NULL AND deleted_at IS NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut result = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let (function_name, config) = read_function_version(pool, row.active_version_id).await?;
+        debug_assert_eq!(function_name, row.name);
+        result.insert(function_name, config);
+    }
+
+    Ok(result)
+}
+
+/// Merges database-sourced function configs into an uninitialized config.
+///
+/// For each DB function:
+/// - If the function exists in the config, its variants and evaluators from the DB
+///   are merged (DB wins on conflicts).
+/// - If the function doesn't exist in the config, it is added.
+pub fn merge_db_functions(
+    config: &mut crate::config::UninitializedConfig,
+    db_functions: HashMap<String, UninitializedFunctionConfig>,
+) {
+    for (function_name, db_function_config) in db_functions {
+        config.functions.insert(function_name, db_function_config);
+    }
 }

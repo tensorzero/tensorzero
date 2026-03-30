@@ -291,6 +291,70 @@ pub struct UninitializedTrackAndStopExperimentationConfig {
     max_samples_per_variant: Option<u64>,
 }
 
+impl UninitializedTrackAndStopExperimentationConfig {
+    /// Constructs from individual fields (used when rehydrating from database).
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn from_fields(
+        metric: String,
+        candidate_variants: Vec<String>,
+        fallback_variants: Vec<String>,
+        min_samples_per_variant: u64,
+        delta: f64,
+        epsilon: f64,
+        update_period_s: u64,
+        min_prob: Option<f64>,
+        max_samples_per_variant: Option<u64>,
+    ) -> Self {
+        Self {
+            metric,
+            candidate_variants,
+            fallback_variants,
+            min_samples_per_variant,
+            delta,
+            epsilon,
+            update_period_s,
+            min_prob,
+            max_samples_per_variant,
+        }
+    }
+
+    pub(crate) fn metric(&self) -> &str {
+        &self.metric
+    }
+
+    pub(crate) fn candidate_variants(&self) -> &[String] {
+        &self.candidate_variants
+    }
+
+    pub(crate) fn fallback_variants(&self) -> &[String] {
+        &self.fallback_variants
+    }
+
+    pub(crate) fn min_samples_per_variant(&self) -> u64 {
+        self.min_samples_per_variant
+    }
+
+    pub(crate) fn delta(&self) -> f64 {
+        self.delta
+    }
+
+    pub(crate) fn epsilon(&self) -> f64 {
+        self.epsilon
+    }
+
+    pub(crate) fn update_period_s(&self) -> u64 {
+        self.update_period_s
+    }
+
+    pub(crate) fn min_prob(&self) -> Option<f64> {
+        self.min_prob
+    }
+
+    pub(crate) fn max_samples_per_variant(&self) -> Option<u64> {
+        self.max_samples_per_variant
+    }
+}
+
 fn default_min_samples_per_variant() -> u64 {
     10
 }

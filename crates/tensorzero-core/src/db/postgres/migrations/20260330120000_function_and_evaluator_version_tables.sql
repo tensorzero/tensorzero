@@ -63,6 +63,71 @@ CREATE TABLE IF NOT EXISTS tensorzero.function_version_variants (
 );
 
 -- ============================================================
+-- EXPERIMENTATION TABLES
+-- ============================================================
+-- Each function version has at most one base experimentation config,
+-- plus optional namespace-specific overrides.
+-- Maps to UninitializedExperimentationConfigWithNamespaces {
+--   base: UninitializedExperimentationConfig,
+--   namespaces: HashMap<String, UninitializedExperimentationConfig>
+-- }
+-- Legacy types (StaticWeights, Uniform, TrackAndStop) are normalized
+-- to Static/Adaptive on write.
+
+CREATE TABLE IF NOT EXISTS tensorzero.function_version_experimentation (
+    id UUID PRIMARY KEY, -- UUIDv7
+    function_version_id UUID NOT NULL REFERENCES tensorzero.function_versions(id),
+    namespace TEXT, -- NULL = base config; non-NULL = namespace-specific override
+    experimentation_type TEXT NOT NULL CHECK (experimentation_type IN ('static', 'adaptive')),
+    UNIQUE (function_version_id, namespace)
+);
+
+-- Weighted variant assignments for 'static' experimentation
+CREATE TABLE IF NOT EXISTS tensorzero.experimentation_static_variants (
+    experimentation_id UUID NOT NULL REFERENCES tensorzero.function_version_experimentation(id),
+    variant_name TEXT NOT NULL,
+    weight DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (experimentation_id, variant_name)
+);
+
+-- Fallback variants for 'static' experimentation (ordered)
+CREATE TABLE IF NOT EXISTS tensorzero.experimentation_static_fallbacks (
+    experimentation_id UUID NOT NULL REFERENCES tensorzero.function_version_experimentation(id),
+    variant_name TEXT NOT NULL,
+    position INT NOT NULL,
+    PRIMARY KEY (experimentation_id, variant_name)
+);
+
+-- Adaptive experimentation config (currently only TrackAndStop algorithm)
+CREATE TABLE IF NOT EXISTS tensorzero.experimentation_adaptive_configs (
+    experimentation_id UUID PRIMARY KEY REFERENCES tensorzero.function_version_experimentation(id),
+    algorithm TEXT NOT NULL DEFAULT 'track_and_stop' CHECK (algorithm IN ('track_and_stop')),
+    metric TEXT NOT NULL,
+    min_samples_per_variant BIGINT NOT NULL DEFAULT 10,
+    delta DOUBLE PRECISION NOT NULL DEFAULT 0.05,
+    epsilon DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    update_period_s BIGINT NOT NULL DEFAULT 300,
+    min_prob DOUBLE PRECISION,
+    max_samples_per_variant BIGINT
+);
+
+-- Candidate variants for adaptive experimentation (ordered)
+CREATE TABLE IF NOT EXISTS tensorzero.experimentation_adaptive_candidates (
+    experimentation_id UUID NOT NULL REFERENCES tensorzero.experimentation_adaptive_configs(experimentation_id),
+    variant_name TEXT NOT NULL,
+    position INT NOT NULL,
+    PRIMARY KEY (experimentation_id, variant_name)
+);
+
+-- Fallback variants for adaptive experimentation (ordered)
+CREATE TABLE IF NOT EXISTS tensorzero.experimentation_adaptive_fallbacks (
+    experimentation_id UUID NOT NULL REFERENCES tensorzero.experimentation_adaptive_configs(experimentation_id),
+    variant_name TEXT NOT NULL,
+    position INT NOT NULL,
+    PRIMARY KEY (experimentation_id, variant_name)
+);
+
+-- ============================================================
 -- EVALUATOR TABLES
 -- ============================================================
 -- Each function version has 0..N evaluators.
