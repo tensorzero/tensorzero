@@ -392,15 +392,15 @@ impl TaskTool for InferenceTaskTool {
 // Execute Erased Tests
 // ============================================================================
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> sqlx::Result<()> {
+#[tokio::test]
+async fn execute_erased_deserializes_and_serializes_correctly() {
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"message": "hello"});
     // Unit type () deserializes from null, not {}
     let side_info = serde_json::json!(null);
@@ -411,18 +411,17 @@ async fn execute_erased_deserializes_and_serializes_correctly(pool: PgPool) -> s
         .unwrap();
 
     assert_eq!(result["echoed"], "hello");
-    Ok(())
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::Result<()> {
+#[tokio::test]
+async fn execute_erased_returns_error_on_invalid_params() {
     let tool = EchoSimpleTool;
 
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
     // Missing required "message" field
     let llm_params = serde_json::json!({"wrong_field": "hello"});
     let side_info = serde_json::json!(null);
@@ -432,7 +431,6 @@ async fn execute_erased_returns_error_on_invalid_params(pool: PgPool) -> sqlx::R
         .await;
 
     assert!(result.is_err());
-    Ok(())
 }
 
 // ============================================================================
@@ -775,8 +773,8 @@ async fn calling_same_tool_multiple_times_generates_unique_idempotency_keys(
 // Inference Tests
 // ============================================================================
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<()> {
+#[tokio::test]
+async fn simple_tool_calls_inference_successfully() {
     let mock_response = create_mock_chat_response("Hello from TensorZero!");
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_with_response(mock_response));
 
@@ -784,7 +782,7 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"prompt": "Say hello"});
     let side_info = serde_json::json!(null);
 
@@ -794,11 +792,10 @@ async fn simple_tool_calls_inference_successfully(pool: PgPool) -> sqlx::Result<
         .expect("SimpleTool inference call should succeed");
 
     assert_eq!(result["response"], "Hello from TensorZero!");
-    Ok(())
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()> {
+#[tokio::test]
+async fn simple_tool_propagates_inference_error() {
     // Mock returns error when response is None
     let t0_client: Arc<dyn TensorZeroClient> = Arc::new(mock_client_error_on_call());
 
@@ -806,7 +803,7 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
     let llm_params = serde_json::json!({"prompt": "This will fail"});
     let side_info = serde_json::json!(null);
 
@@ -815,7 +812,6 @@ async fn simple_tool_propagates_inference_error(pool: PgPool) -> sqlx::Result<()
         .await;
 
     assert!(result.is_err(), "Expected inference error to propagate");
-    Ok(())
 }
 
 #[sqlx::test(migrator = "MIGRATOR")]

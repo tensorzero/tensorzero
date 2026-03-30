@@ -5,9 +5,7 @@ mod common;
 use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
-use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError, ToolRegistry};
-use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
 use tensorzero::{BooleanMetricFilter, InferenceFilter};
 use tensorzero_core::db::EpisodeByIdRow;
@@ -18,8 +16,8 @@ use common::{MockTensorZeroClient, create_mock_list_episodes_response};
 
 // ===== ListEpisodesTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_basic() {
     let episode_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
     let now = Utc::now();
@@ -57,7 +55,7 @@ async fn test_list_episodes_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -82,8 +80,8 @@ async fn test_list_episodes_tool_basic(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_with_before_pagination() {
     let mock_response = create_mock_list_episodes_response(vec![]);
     let cursor_id = Uuid::now_v7();
 
@@ -113,7 +111,7 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -133,8 +131,8 @@ async fn test_list_episodes_tool_with_before_pagination(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_with_after_pagination() {
     let mock_response = create_mock_list_episodes_response(vec![]);
     let cursor_id = Uuid::now_v7();
 
@@ -164,7 +162,7 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -184,8 +182,8 @@ async fn test_list_episodes_tool_with_after_pagination(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_error() {
     let llm_params = ListEpisodesToolParams {
         limit: 10,
         before: None,
@@ -211,7 +209,7 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -227,8 +225,8 @@ async fn test_list_episodes_tool_error(pool: PgPool) {
 
 // ===== Filter Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_with_function_name() {
     let episode_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
     let now = Utc::now();
@@ -266,7 +264,7 @@ async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -295,8 +293,8 @@ async fn test_list_episodes_tool_with_function_name(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_with_boolean_filter() {
     let episode_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
     let now = Utc::now();
@@ -337,7 +335,7 @@ async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -369,8 +367,8 @@ async fn test_list_episodes_tool_with_boolean_filter(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
+#[tokio::test]
+async fn test_list_episodes_tool_with_combined_filters() {
     let mock_response = create_mock_list_episodes_response(vec![]);
 
     let llm_params = ListEpisodesToolParams {
@@ -404,7 +402,7 @@ async fn test_list_episodes_tool_with_combined_filters(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

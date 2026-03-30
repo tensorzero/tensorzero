@@ -5,10 +5,8 @@ mod common;
 use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
-use durable::MIGRATOR;
 use durable_tools::{ActionInput, ActionResponse};
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError, ToolRegistry};
-use sqlx::PgPool;
 use tensorzero::{
     GetInferencesRequest, GetInferencesResponse, InferenceOutputSource, Input, InputMessage,
     InputMessageContent, ListInferencesRequest, Role,
@@ -24,8 +22,8 @@ use common::{MockTensorZeroClient, create_mock_chat_response};
 
 use crate::common::create_mock_stored_chat_inference;
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
+#[tokio::test]
+async fn test_inference_tool_with_snapshot_hash() {
     // Create mock response
     let mock_response = create_mock_chat_response("Hello from action!");
 
@@ -90,7 +88,7 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -109,8 +107,8 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
 
 // ===== ListInferencesTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_inferences_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_list_inferences_tool_basic() {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
@@ -139,7 +137,7 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -154,8 +152,8 @@ async fn test_list_inferences_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_inferences_tool_with_filters(pool: PgPool) {
+#[tokio::test]
+async fn test_list_inferences_tool_with_filters() {
     let mock_response = GetInferencesResponse { inferences: vec![] };
 
     let llm_params = ListInferencesToolParams {
@@ -193,7 +191,7 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -208,8 +206,8 @@ async fn test_list_inferences_tool_with_filters(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
+#[tokio::test]
+async fn test_list_inferences_tool_with_cursor_pagination() {
     let mock_response = GetInferencesResponse { inferences: vec![] };
     let cursor_id = Uuid::now_v7();
 
@@ -239,7 +237,7 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -254,8 +252,8 @@ async fn test_list_inferences_tool_with_cursor_pagination(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_inferences_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_list_inferences_tool_error() {
     let llm_params = ListInferencesToolParams {
         request: ListInferencesRequest::default(),
     };
@@ -277,7 +275,7 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -293,8 +291,8 @@ async fn test_list_inferences_tool_error(pool: PgPool) {
 
 // ===== GetInferencesTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_inferences_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_get_inferences_tool_basic() {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
@@ -332,7 +330,7 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -347,8 +345,8 @@ async fn test_get_inferences_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
+#[tokio::test]
+async fn test_get_inferences_tool_with_function_name() {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "specific_function", "test_variant");
@@ -382,7 +380,7 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -397,8 +395,8 @@ async fn test_get_inferences_tool_with_function_name(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
+#[tokio::test]
+async fn test_get_inferences_tool_with_output_source() {
     let inference_id = Uuid::now_v7();
     let inference =
         create_mock_stored_chat_inference(inference_id, "test_function", "test_variant");
@@ -432,7 +430,7 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -447,8 +445,8 @@ async fn test_get_inferences_tool_with_output_source(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_inferences_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_get_inferences_tool_error() {
     let llm_params = GetInferencesToolParams {
         request: GetInferencesRequest {
             ids: vec![Uuid::now_v7()],
@@ -474,7 +472,7 @@ async fn test_get_inferences_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

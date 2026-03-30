@@ -5,12 +5,10 @@ mod common;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use durable::MIGRATOR;
 use durable_tools::{
     ActionInput, ActionResponse, CacheEnabledMode, DatapointResult, ErasedSimpleTool,
     RunEvaluationResponse, SimpleToolContext, ToolRegistry,
 };
-use sqlx::PgPool;
 use uuid::Uuid;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
@@ -40,8 +38,8 @@ fn create_mock_run_evaluation_response() -> RunEvaluationResponse {
 }
 
 /// Test that RunEvaluationTool calls the action endpoint with the correct snapshot hash.
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_snapshot_hash() {
     // Create mock response
     let mock_response = create_mock_run_evaluation_response();
 
@@ -97,7 +95,7 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -114,8 +112,8 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_dataset_name() {
     // Create mock response
     let mock_response = create_mock_run_evaluation_response();
     let expected_response = mock_response.clone();
@@ -176,7 +174,7 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -198,8 +196,8 @@ async fn test_run_evaluation_tool_with_dataset_name(pool: PgPool) {
     assert!(response.stats.contains_key("accuracy"));
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_datapoint_ids() {
     // Create mock response
     let mock_response = create_mock_run_evaluation_response();
 
@@ -261,7 +259,7 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -278,8 +276,8 @@ async fn test_run_evaluation_tool_with_datapoint_ids(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_precision_targets_and_cache() {
     // Create mock response
     let mock_response = create_mock_run_evaluation_response();
 
@@ -340,7 +338,7 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -357,8 +355,8 @@ async fn test_run_evaluation_tool_with_precision_targets_and_cache(pool: PgPool)
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_error_handling() {
     // Prepare test data
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -398,7 +396,7 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool - should fail
     let result = tool
@@ -416,8 +414,8 @@ async fn test_run_evaluation_tool_error_handling(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_datapoint_results() {
     // Create mock response with per-datapoint results
     let datapoint_id_1 = Uuid::now_v7();
     let datapoint_id_2 = Uuid::now_v7();
@@ -539,7 +537,7 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     // Execute the tool
     let result = tool
@@ -621,8 +619,8 @@ async fn test_run_evaluation_tool_with_datapoint_results(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_rejects_both_evaluation_name_and_evaluator_names(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_rejects_both_evaluation_name_and_evaluator_names() {
     let llm_params = RunEvaluationToolParams {
         evaluation_name: Some("test_evaluation".to_string()),
         function_name: Some("my_function".to_string()),
@@ -652,7 +650,7 @@ async fn test_run_evaluation_tool_rejects_both_evaluation_name_and_evaluator_nam
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -672,8 +670,8 @@ async fn test_run_evaluation_tool_rejects_both_evaluation_name_and_evaluator_nam
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_run_evaluation_tool_with_function_name_and_evaluator_names(pool: PgPool) {
+#[tokio::test]
+async fn test_run_evaluation_tool_with_function_name_and_evaluator_names() {
     let mock_response = create_mock_run_evaluation_response();
 
     let session_id = Uuid::now_v7();
@@ -721,7 +719,7 @@ async fn test_run_evaluation_tool_with_function_name_and_evaluator_names(pool: P
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

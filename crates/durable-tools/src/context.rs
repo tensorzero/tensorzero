@@ -378,12 +378,8 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
                 let state = &step_state.state;
 
                 // Create SimpleToolContext
-                let simple_ctx = SimpleToolContext::new(
-                    &state.pool,
-                    &state.t0_client,
-                    &heartbeater,
-                    &state.tool_registry,
-                );
+                let simple_ctx =
+                    SimpleToolContext::new(&state.t0_client, &heartbeater, &state.tool_registry);
 
                 // Generate idempotency key using task_id and call_id
                 let idempotency_key = format!("{task_id}:{tool_name}:{call_id}");
@@ -577,12 +573,11 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
 ///
 /// `SimpleTools` run inside a `TaskTool`'s `step()` checkpoint, so they don't
 /// have access to checkpointing operations themselves. They can access the
-/// database pool for queries and the TensorZero client for inference calls.
+/// TensorZero client for inference calls.
 ///
 /// A heartbeater is available for long-running operations (e.g., evaluations)
 /// that need to extend the task lease to prevent timeout.
 pub struct SimpleToolContext<'a> {
-    pool: &'a PgPool,
     t0_client: &'a Arc<dyn TensorZeroClient>,
     heartbeater: &'a Arc<dyn Heartbeater>,
     tool_registry: &'a ToolRegistry,
@@ -591,22 +586,15 @@ pub struct SimpleToolContext<'a> {
 impl<'a> SimpleToolContext<'a> {
     /// Create a new simple tool context.
     pub fn new(
-        pool: &'a PgPool,
         t0_client: &'a Arc<dyn TensorZeroClient>,
         heartbeater: &'a Arc<dyn Heartbeater>,
         tool_registry: &'a ToolRegistry,
     ) -> Self {
         Self {
-            pool,
             t0_client,
             heartbeater,
             tool_registry,
         }
-    }
-
-    /// Get a reference to the database pool.
-    pub fn pool(&self) -> &PgPool {
-        self.pool
     }
 
     /// Get the TensorZero client for direct access to all client operations.

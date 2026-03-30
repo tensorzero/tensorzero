@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
-use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, ToolRegistry};
-use sqlx::PgPool;
 use tensorzero::{GetConfigResponse, WriteConfigResponse};
 use uuid::Uuid;
 
@@ -17,8 +15,8 @@ use autopilot_tools::tools::{
 };
 use common::MockTensorZeroClient;
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_config_tool_with_hash(pool: PgPool) {
+#[tokio::test]
+async fn test_get_config_tool_with_hash() {
     let response = GetConfigResponse {
         hash: "1234567".to_string(),
         config: serde_json::json!({}),
@@ -49,7 +47,7 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -64,8 +62,8 @@ async fn test_get_config_tool_with_hash(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
+#[tokio::test]
+async fn test_write_config_tool_sets_autopilot_tags() {
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
@@ -116,7 +114,7 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

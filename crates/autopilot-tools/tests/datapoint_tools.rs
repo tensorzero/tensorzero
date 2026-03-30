@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
-use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError, ToolRegistry};
-use sqlx::PgPool;
 use tensorzero::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceRequestParams,
     ListDatapointsRequest, ListDatasetsRequest, UpdateChatDatapointRequest, UpdateDatapointRequest,
@@ -31,8 +29,8 @@ use common::{
 
 // ===== CreateDatapointsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_tool_basic() {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
@@ -70,7 +68,7 @@ async fn test_create_datapoints_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -85,8 +83,8 @@ async fn test_create_datapoints_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_tool_adds_autopilot_tags() {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
@@ -136,7 +134,7 @@ async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     tool.execute_erased(
         serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
@@ -148,8 +146,8 @@ async fn test_create_datapoints_tool_adds_autopilot_tags(pool: PgPool) {
     .expect("CreateDatapointsTool execution should succeed");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_tool_user_tags_take_precedence() {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
 
@@ -208,7 +206,7 @@ async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     tool.execute_erased(
         serde_json::to_value(&llm_params).expect("Failed to serialize llm_params"),
@@ -220,8 +218,8 @@ async fn test_create_datapoints_tool_user_tags_take_precedence(pool: PgPool) {
     .expect("CreateDatapointsTool execution should succeed");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_tool_error() {
     let llm_params = CreateDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
         datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
@@ -252,7 +250,7 @@ async fn test_create_datapoints_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -268,8 +266,8 @@ async fn test_create_datapoints_tool_error(pool: PgPool) {
 
 // ===== GetDatapointsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_datapoints_tool_with_dataset_name(pool: PgPool) {
+#[tokio::test]
+async fn test_get_datapoints_tool_with_dataset_name() {
     let datapoint_id = Uuid::now_v7();
     let datapoint = create_mock_chat_datapoint(datapoint_id, "test_dataset", "test_function");
     let mock_response = create_mock_get_datapoints_response(vec![datapoint]);
@@ -299,7 +297,7 @@ async fn test_get_datapoints_tool_with_dataset_name(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -314,8 +312,8 @@ async fn test_get_datapoints_tool_with_dataset_name(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_datapoints_tool_without_dataset_name(pool: PgPool) {
+#[tokio::test]
+async fn test_get_datapoints_tool_without_dataset_name() {
     let datapoint_id = Uuid::now_v7();
     let datapoint = create_mock_chat_datapoint(datapoint_id, "test_dataset", "test_function");
     let mock_response = create_mock_get_datapoints_response(vec![datapoint]);
@@ -343,7 +341,7 @@ async fn test_get_datapoints_tool_without_dataset_name(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -358,8 +356,8 @@ async fn test_get_datapoints_tool_without_dataset_name(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_datapoints_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_get_datapoints_tool_error() {
     let llm_params = GetDatapointsToolParams {
         dataset_name: Some("test_dataset".to_string()),
         ids: vec![Uuid::now_v7()],
@@ -382,7 +380,7 @@ async fn test_get_datapoints_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -398,8 +396,8 @@ async fn test_get_datapoints_tool_error(pool: PgPool) {
 
 // ===== ListDatapointsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datapoints_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datapoints_tool_basic() {
     let datapoint_id = Uuid::now_v7();
     let datapoint = create_mock_chat_datapoint(datapoint_id, "test_dataset", "test_function");
     let mock_response = create_mock_get_datapoints_response(vec![datapoint]);
@@ -427,7 +425,7 @@ async fn test_list_datapoints_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -442,8 +440,8 @@ async fn test_list_datapoints_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datapoints_tool_with_filters() {
     let mock_response = create_mock_get_datapoints_response(vec![]);
 
     let llm_params = ListDatapointsToolParams {
@@ -479,7 +477,7 @@ async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -494,8 +492,8 @@ async fn test_list_datapoints_tool_with_filters(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datapoints_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datapoints_tool_error() {
     let llm_params = ListDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
         request: ListDatapointsRequest::default(),
@@ -518,7 +516,7 @@ async fn test_list_datapoints_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -534,8 +532,8 @@ async fn test_list_datapoints_tool_error(pool: PgPool) {
 
 // ===== UpdateDatapointsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_update_datapoints_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_update_datapoints_tool_basic() {
     let original_id = Uuid::now_v7();
     let new_id = Uuid::now_v7();
     let mock_response = create_mock_update_datapoints_response(vec![new_id]);
@@ -570,7 +568,7 @@ async fn test_update_datapoints_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -585,8 +583,8 @@ async fn test_update_datapoints_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_update_datapoints_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_update_datapoints_tool_error() {
     let llm_params = UpdateDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
         datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
@@ -616,7 +614,7 @@ async fn test_update_datapoints_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -632,8 +630,8 @@ async fn test_update_datapoints_tool_error(pool: PgPool) {
 
 // ===== DeleteDatapointsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_delete_datapoints_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_delete_datapoints_tool_basic() {
     let datapoint_id = Uuid::now_v7();
     let mock_response = create_mock_delete_datapoints_response(1);
 
@@ -662,7 +660,7 @@ async fn test_delete_datapoints_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -677,8 +675,8 @@ async fn test_delete_datapoints_tool_basic(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_delete_datapoints_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_delete_datapoints_tool_error() {
     let llm_params = DeleteDatapointsToolParams {
         dataset_name: "test_dataset".to_string(),
         ids: vec![Uuid::now_v7()],
@@ -701,7 +699,7 @@ async fn test_delete_datapoints_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -717,8 +715,8 @@ async fn test_delete_datapoints_tool_error(pool: PgPool) {
 
 // ===== CreateDatapointsFromInferencesTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_from_inferences_tool_with_ids(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_from_inferences_tool_with_ids() {
     let datapoint_id = Uuid::now_v7();
     let inference_id = Uuid::now_v7();
     let mock_response = create_mock_create_datapoints_response(vec![datapoint_id]);
@@ -758,7 +756,7 @@ async fn test_create_datapoints_from_inferences_tool_with_ids(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -773,8 +771,8 @@ async fn test_create_datapoints_from_inferences_tool_with_ids(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_create_datapoints_from_inferences_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_create_datapoints_from_inferences_tool_error() {
     let llm_params = CreateDatapointsFromInferencesToolParams {
         dataset_name: "test_dataset".to_string(),
         params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
@@ -800,7 +798,7 @@ async fn test_create_datapoints_from_inferences_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -816,8 +814,8 @@ async fn test_create_datapoints_from_inferences_tool_error(pool: PgPool) {
 
 // ===== ListDatasetsTool Tests =====
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datasets_tool_basic(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datasets_tool_basic() {
     let dataset1 = create_mock_dataset_metadata("dataset_1", 100, "2024-01-01T00:00:00Z");
     let dataset2 = create_mock_dataset_metadata("dataset_2", 50, "2024-01-02T00:00:00Z");
     let mock_response = create_mock_list_datasets_response(vec![dataset1, dataset2]);
@@ -843,7 +841,7 @@ async fn test_list_datasets_tool_basic(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -865,8 +863,8 @@ async fn test_list_datasets_tool_basic(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datasets_tool_with_function_filter(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datasets_tool_with_function_filter() {
     let dataset = create_mock_dataset_metadata("filtered_dataset", 25, "2024-01-03T00:00:00Z");
     let mock_response = create_mock_list_datasets_response(vec![dataset]);
 
@@ -896,7 +894,7 @@ async fn test_list_datasets_tool_with_function_filter(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -911,8 +909,8 @@ async fn test_list_datasets_tool_with_function_filter(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datasets_tool_with_pagination(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datasets_tool_with_pagination() {
     let mock_response = create_mock_list_datasets_response(vec![]);
 
     let llm_params = ListDatasetsToolParams {
@@ -941,7 +939,7 @@ async fn test_list_datasets_tool_with_pagination(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -956,8 +954,8 @@ async fn test_list_datasets_tool_with_pagination(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datasets_tool_empty_response(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datasets_tool_empty_response() {
     let mock_response = create_mock_list_datasets_response(vec![]);
 
     let llm_params = ListDatasetsToolParams {
@@ -981,7 +979,7 @@ async fn test_list_datasets_tool_empty_response(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -1001,8 +999,8 @@ async fn test_list_datasets_tool_empty_response(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_list_datasets_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_list_datasets_tool_error() {
     let llm_params = ListDatasetsToolParams {
         request: ListDatasetsRequest::default(),
     };
@@ -1024,7 +1022,7 @@ async fn test_list_datasets_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(

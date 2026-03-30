@@ -6,10 +6,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use autopilot_client::{AutopilotSideInfo, OptimizationWorkflowSideInfo};
-use durable::MIGRATOR;
 use durable_tools::{ErasedSimpleTool, SimpleToolContext, TensorZeroClientError, ToolRegistry};
 use serde_json::json;
-use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
 use tensorzero_core::db::feedback::{
     BooleanMetricFeedbackRow, CommentFeedbackRow, CommentTargetType, FeedbackRow,
@@ -31,8 +29,8 @@ use common::{
 
 // ========== FeedbackTool Tests ==========
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_feedback_tool_comment(pool: PgPool) {
+#[tokio::test]
+async fn test_feedback_tool_comment() {
     let feedback_id = Uuid::now_v7();
     let mock_response = create_mock_feedback_response(feedback_id);
 
@@ -74,7 +72,7 @@ async fn test_feedback_tool_comment(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -93,8 +91,8 @@ async fn test_feedback_tool_comment(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_feedback_tool_float_metric(pool: PgPool) {
+#[tokio::test]
+async fn test_feedback_tool_float_metric() {
     let feedback_id = Uuid::now_v7();
     let mock_response = create_mock_feedback_response(feedback_id);
 
@@ -133,7 +131,7 @@ async fn test_feedback_tool_float_metric(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -148,8 +146,8 @@ async fn test_feedback_tool_float_metric(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_feedback_tool_boolean_metric(pool: PgPool) {
+#[tokio::test]
+async fn test_feedback_tool_boolean_metric() {
     let feedback_id = Uuid::now_v7();
     let mock_response = create_mock_feedback_response(feedback_id);
 
@@ -187,7 +185,7 @@ async fn test_feedback_tool_boolean_metric(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -202,8 +200,8 @@ async fn test_feedback_tool_boolean_metric(pool: PgPool) {
     assert!(result.is_object(), "Result should be a JSON object");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_feedback_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_feedback_tool_error() {
     let llm_params = FeedbackToolParams {
         episode_id: None,
         inference_id: Some(Uuid::now_v7()),
@@ -229,7 +227,7 @@ async fn test_feedback_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -245,8 +243,8 @@ async fn test_feedback_tool_error(pool: PgPool) {
 
 // ========== GetLatestFeedbackByMetricTool Tests ==========
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
+#[tokio::test]
+async fn test_get_latest_feedback_by_metric_tool_success() {
     let target_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -280,7 +278,7 @@ async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -299,8 +297,8 @@ async fn test_get_latest_feedback_by_metric_tool_success(pool: PgPool) {
     assert_eq!(feedback_map.len(), 2, "Should have 2 metrics");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_latest_feedback_by_metric_tool_empty_result(pool: PgPool) {
+#[tokio::test]
+async fn test_get_latest_feedback_by_metric_tool_empty_result() {
     let target_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -329,7 +327,7 @@ async fn test_get_latest_feedback_by_metric_tool_empty_result(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -348,8 +346,8 @@ async fn test_get_latest_feedback_by_metric_tool_empty_result(pool: PgPool) {
     assert!(feedback_map.is_empty(), "Should have empty feedback map");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_get_latest_feedback_by_metric_tool_error() {
     let llm_params = GetLatestFeedbackByMetricToolParams {
         target_id: Uuid::now_v7(),
     };
@@ -371,7 +369,7 @@ async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -387,8 +385,8 @@ async fn test_get_latest_feedback_by_metric_tool_error(pool: PgPool) {
 
 // ========== GetFeedbackByVariantTool Tests ==========
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_variant_tool_success() {
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
@@ -423,7 +421,7 @@ async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -442,8 +440,8 @@ async fn test_get_feedback_by_variant_tool_success(pool: PgPool) {
     assert_eq!(array[1]["variant_name"], "variant_b");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_variant_tool_with_variant_filter() {
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
@@ -477,7 +475,7 @@ async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -495,8 +493,8 @@ async fn test_get_feedback_by_variant_tool_with_variant_filter(pool: PgPool) {
     assert_eq!(array[0]["variant_name"], "variant_a");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_variant_tool_empty_result() {
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
 
@@ -523,7 +521,7 @@ async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -540,8 +538,8 @@ async fn test_get_feedback_by_variant_tool_empty_result(pool: PgPool) {
     assert!(array.is_empty(), "Should have no variants");
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_variant_tool_error() {
     let llm_params = GetFeedbackByVariantToolParams {
         metric_name: "accuracy".to_string(),
         function_name: "test_function".to_string(),
@@ -569,7 +567,7 @@ async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -585,8 +583,8 @@ async fn test_get_feedback_by_variant_tool_error(pool: PgPool) {
 
 // ========== GetFeedbackByTargetIdTool Tests ==========
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_target_id_tool_inference_level(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_target_id_tool_inference_level() {
     let inference_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -637,7 +635,7 @@ async fn test_get_feedback_by_target_id_tool_inference_level(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -664,8 +662,8 @@ async fn test_get_feedback_by_target_id_tool_inference_level(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_target_id_tool_episode_level(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_target_id_tool_episode_level() {
     let episode_id = Uuid::now_v7();
     let session_id = Uuid::now_v7();
     let tool_call_event_id = Uuid::now_v7();
@@ -716,7 +714,7 @@ async fn test_get_feedback_by_target_id_tool_episode_level(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
@@ -743,8 +741,8 @@ async fn test_get_feedback_by_target_id_tool_episode_level(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn test_get_feedback_by_target_id_tool_error(pool: PgPool) {
+#[tokio::test]
+async fn test_get_feedback_by_target_id_tool_error() {
     let llm_params = GetFeedbackByTargetIdToolParams {
         target_id: Uuid::now_v7(),
         limit: None,
@@ -767,7 +765,7 @@ async fn test_get_feedback_by_target_id_tool_error(pool: PgPool) {
     let noop_heartbeater: Arc<dyn durable_tools::Heartbeater> =
         Arc::new(durable_tools::NoopHeartbeater);
     let registry = ToolRegistry::new();
-    let ctx = SimpleToolContext::new(&pool, &t0_client, &noop_heartbeater, &registry);
+    let ctx = SimpleToolContext::new(&t0_client, &noop_heartbeater, &registry);
 
     let result = tool
         .execute_erased(
