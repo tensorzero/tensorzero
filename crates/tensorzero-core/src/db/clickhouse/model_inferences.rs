@@ -447,4 +447,205 @@ mod tests {
 
         assert_eq!(result.len(), 1, "Should return one datapoint");
     }
+
+    #[tokio::test]
+    async fn test_get_cache_statistics_timeseries_query_structure_and_deserialization() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Verify query structure
+                assert_query_contains(query, "toStartOfDay(minute)");
+                assert_query_contains(query, "sumMerge(total_input_tokens) as input_tokens");
+                assert_query_contains(
+                    query,
+                    "sumMerge(total_provider_cache_read_input_tokens) as cache_read_input_tokens",
+                );
+                assert_query_contains(
+                    query,
+                    "sumMerge(total_provider_cache_write_input_tokens) as cache_write_input_tokens",
+                );
+                assert_query_contains(query, "countMerge(count) as count");
+                assert_query_contains(query, "FROM ModelProviderStatistics");
+                assert_query_contains(
+                    query,
+                    "GROUP BY period_start, model_name, model_provider_name",
+                );
+                assert_query_contains(query, "INTERVAL 7 DAY");
+                assert!(params.is_empty(), "No filter params expected");
+                true
+            })
+            .returning(|_, _| {
+                // Return two rows: one with cache tokens, one without
+                let row1 = r#"{"period_start":"2026-03-29T00:00:00Z","model_name":"gpt-4","model_provider_name":"openai","input_tokens":1000,"cache_read_input_tokens":800,"cache_write_input_tokens":200,"count":50}"#;
+                let row2 = r#"{"period_start":"2026-03-29T00:00:00Z","model_name":"claude","model_provider_name":"anthropic","input_tokens":500,"cache_read_input_tokens":null,"cache_write_input_tokens":null,"count":25}"#;
+                Ok(ClickHouseResponse {
+                    response: format!("{row1}\n{row2}"),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_cache_statistics_timeseries(crate::db::TimeWindow::Day, 7, None, None)
+            .await
+            .expect("Should successfully query cache statistics");
+
+        assert_eq!(result.len(), 2, "Should return two data points");
+
+        // First row: has cache tokens, ratio should be computed
+        assert_eq!(result[0].model_name, "gpt-4");
+        assert_eq!(result[0].model_provider_name, "openai");
+        assert_eq!(result[0].input_tokens, Some(1000));
+        assert_eq!(result[0].cache_read_input_tokens, Some(800));
+        assert_eq!(result[0].cache_write_input_tokens, Some(200));
+        assert_eq!(result[0].count, Some(50));
+        let ratio = result[0]
+            .cache_read_ratio
+            .expect("cache_read_ratio should be computed when both input_tokens and cache_read_input_tokens are present");
+        assert!(
+            (ratio - 0.8).abs() < f64::EPSILON,
+            "cache_read_ratio should be 800/1000 = 0.8, got {ratio}"
+        );
+
+        // Second row: no cache tokens, ratio should be None
+        assert_eq!(result[1].model_name, "claude");
+        assert_eq!(result[1].model_provider_name, "anthropic");
+        assert_eq!(result[1].input_tokens, Some(500));
+        assert_eq!(result[1].cache_read_input_tokens, None);
+        assert_eq!(result[1].cache_write_input_tokens, None);
+        assert_eq!(result[1].count, Some(25));
+        assert!(
+            result[1].cache_read_ratio.is_none(),
+            "cache_read_ratio should be None when cache_read_input_tokens is null"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_statistics_timeseries_with_filters() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                assert_query_contains(query, "AND model_name = {model_name:String}");
+                assert_query_contains(query, "AND model_provider_name = {provider_name:String}");
+                assert_eq!(
+                    params.get("model_name"),
+                    Some(&"gpt-4"),
+                    "model_name param should be passed"
+                );
+                assert_eq!(
+                    params.get("provider_name"),
+                    Some(&"openai"),
+                    "provider_name param should be passed"
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_cache_statistics_timeseries(
+                crate::db::TimeWindow::Hour,
+                24,
+                Some("gpt-4"),
+                Some("openai"),
+            )
+            .await
+            .expect("Should successfully query with filters");
+
+        assert!(
+            result.is_empty(),
+            "Should return empty when no data matches"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_statistics_timeseries_cumulative() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                assert_query_contains(query, "toDateTime('1970-01-01 00:00:00')");
+                assert_query_contains(query, "1 = 1");
+                // Should NOT contain time-based interval filter
+                assert!(
+                    !query.contains("INTERVAL"),
+                    "Cumulative query should not have INTERVAL filter"
+                );
+                true
+            })
+            .returning(|_, _| {
+                let row = r#"{"period_start":"1970-01-01T00:00:00Z","model_name":"gpt-4","model_provider_name":"openai","input_tokens":5000,"cache_read_input_tokens":0,"cache_write_input_tokens":100,"count":200}"#;
+                Ok(ClickHouseResponse {
+                    response: row.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_cache_statistics_timeseries(crate::db::TimeWindow::Cumulative, 0, None, None)
+            .await
+            .expect("Should successfully query cumulative");
+
+        assert_eq!(result.len(), 1, "Should return one cumulative point");
+        assert_eq!(result[0].input_tokens, Some(5000));
+        assert_eq!(result[0].cache_read_input_tokens, Some(0));
+        // 0 cache reads / 5000 total = 0.0
+        let ratio = result[0]
+            .cache_read_ratio
+            .expect("cache_read_ratio should be computed even when zero");
+        assert!(
+            ratio.abs() < f64::EPSILON,
+            "cache_read_ratio should be 0.0 when cache_read_input_tokens is 0, got {ratio}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_statistics_zero_input_tokens_no_division_by_zero() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                let row = r#"{"period_start":"2026-03-29T00:00:00Z","model_name":"m","model_provider_name":"p","input_tokens":0,"cache_read_input_tokens":0,"cache_write_input_tokens":0,"count":1}"#;
+                Ok(ClickHouseResponse {
+                    response: row.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .get_cache_statistics_timeseries(crate::db::TimeWindow::Day, 1, None, None)
+            .await
+            .expect("Should not panic on zero input_tokens");
+
+        assert_eq!(result.len(), 1);
+        assert!(
+            result[0].cache_read_ratio.is_none(),
+            "cache_read_ratio should be None when input_tokens is 0 to avoid division by zero"
+        );
+    }
 }

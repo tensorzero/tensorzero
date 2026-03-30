@@ -1342,6 +1342,82 @@ mod tests {
     // Model inference query tests (existing)
     // =========================================================================
 
+    // =========================================================================
+    // Cache statistics query tests
+    // =========================================================================
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_hour_no_filters() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Hour, 24, None, None);
+        assert_query_equals(
+            qb.sql().as_str(),
+            r"SELECT date_trunc('hour', minute) as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE minute >= (
+            SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.model_provider_statistics
+        ) - INTERVAL '24 hours'
+        GROUP BY period_start, model_name, model_provider_name
+        ORDER BY period_start DESC, model_name, model_provider_name",
+        );
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_day_with_model_filter() {
+        let qb =
+            build_cache_statistics_timeseries_query(&TimeWindow::Day, 7, Some("my_model"), None);
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('day', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '7 days'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_does_not_contain(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_week_with_both_filters() {
+        let qb = build_cache_statistics_timeseries_query(
+            &TimeWindow::Week,
+            4,
+            Some("my_model"),
+            Some("my_provider"),
+        );
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('week', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '4 weeks'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_contains(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_month() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Month, 12, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('month', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '12 months'");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_minute() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Minute, 60, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('minute', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '60 minutes'");
+    }
+
+    // =========================================================================
+    // Model inference query tests (existing)
+    // =========================================================================
+
     #[test]
     fn test_build_get_model_inferences_query() {
         let inference_id = Uuid::nil();
