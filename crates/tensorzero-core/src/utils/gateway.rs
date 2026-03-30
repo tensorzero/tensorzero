@@ -842,21 +842,22 @@ async fn setup_autopilot_client(
 ) -> Result<Option<Arc<AutopilotClient>>, Error> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
-            let pool = postgres_connection_info.get_pool().ok_or_else(|| {
-                Error::new(ErrorDetails::AppState {
-                    message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
-                        .to_string(),
-                })
-            })?;
+            let Some(pool) = postgres_connection_info.get_pool() else {
+                tracing::warn!(
+                    "Autopilot client not initialized: `TENSORZERO_AUTOPILOT_API_KEY` is set but Postgres is not available. \
+                     Set `TENSORZERO_POSTGRES_URL` to enable autopilot."
+                );
+                return Ok(None);
+            };
 
             // Require `deployment_id` (from ClickHouse) for autopilot
-            if deployment_id.is_none() {
-                return Err(Error::new(ErrorDetails::AppState {
-                    message:
-                        "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
-                            .to_string(),
-                }));
-            }
+            let Some(deployment_id) = deployment_id else {
+                tracing::warn!(
+                    "Autopilot client not initialized: ClickHouse deployment ID is not available. \
+                     Please make sure that ClickHouse is running and accessible."
+                );
+                return Ok(None);
+            };
             let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
                 .unwrap_or_else(|_| "autopilot".to_string());
 
@@ -866,7 +867,7 @@ async fn setup_autopilot_client(
                 .spawn_queue_name(queue_name)
                 .available_tools(available_tools)
                 .tool_whitelist(tool_whitelist)
-                .deployment_id(deployment_id.cloned().unwrap_or_default())
+                .deployment_id(deployment_id.clone())
                 .tensorzero_version(crate::endpoints::status::TENSORZERO_VERSION.to_string());
 
             // Allow custom base URL for testing
