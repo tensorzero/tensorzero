@@ -66,7 +66,6 @@ pub enum OptimizationDataSource {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferencesDataSource {
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_variant_name: Option<String>,
