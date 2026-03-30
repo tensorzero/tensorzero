@@ -38,6 +38,8 @@ pub struct StoredGatewayConfig {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub cache: StoredCacheConfig,
+    #[serde(default)]
+    pub openai_models_owned_by: Option<String>,
 }
 
 impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
@@ -58,6 +60,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache,
+            openai_models_owned_by,
         } = config;
         Self {
             bind_address,
@@ -75,6 +78,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
+            openai_models_owned_by,
         }
     }
 }
@@ -97,6 +101,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache,
+            openai_models_owned_by,
         } = stored;
         Self {
             bind_address,
@@ -114,6 +119,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             relay,
             metrics,
             cache: cache.into(),
+            openai_models_owned_by,
         }
     }
 }

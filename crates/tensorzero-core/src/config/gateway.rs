@@ -199,6 +199,10 @@ pub struct UninitializedGatewayConfig {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub cache: ModelInferenceCacheConfig,
+    /// Default value for the "owned_by" field in the OpenAI-compatible /models API response.
+    /// Defaults to "tensorzero" if not specified.
+    #[serde(default)]
+    pub openai_models_owned_by: Option<String>,
 }
 
 impl UninitializedGatewayConfig {
@@ -258,6 +262,7 @@ impl UninitializedGatewayConfig {
             relay,
             metrics: self.metrics,
             cache: self.cache,
+            openai_models_owned_by: self.openai_models_owned_by.unwrap_or_else(|| "tensorzero".to_string()),
         })
     }
 }
@@ -284,6 +289,7 @@ pub struct GatewayConfig {
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
     pub cache: ModelInferenceCacheConfig,
+    pub openai_models_owned_by: String,
 }
 
 impl Default for GatewayConfig {
@@ -304,6 +310,7 @@ impl Default for GatewayConfig {
             relay: Default::default(),
             metrics: Default::default(),
             cache: Default::default(),
+            openai_models_owned_by: "tensorzero".to_string(),
         }
     }
 }

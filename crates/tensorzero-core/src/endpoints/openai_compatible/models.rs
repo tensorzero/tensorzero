@@ -8,29 +8,29 @@ use crate::error::{Error, ErrorDetails};
 use crate::model_table::RESERVED_MODEL_PREFIXES;
 use crate::utils::gateway::{AppState, AppStateData};
 
-fn extract_provider_from_model_name(model_name: &str) -> String {
-    for prefix in RESERVED_MODEL_PREFIXES.iter() {
-        if let Some(provider_and_model) = model_name.strip_prefix(prefix) {
-            if !provider_and_model.is_empty() {
-                let provider = &prefix[..prefix.len() - 2];
-                return provider.to_string();
-            }
-        }
-    }
-    "tensorzero".to_string()
+const MODEL_ID_PREFIX: &str = "tensorzero::model_name::";
+
+fn format_model_id(model_name: &str) -> String {
+    format!("{}{}", MODEL_ID_PREFIX, model_name)
 }
 
 fn get_all_models(config: &Config) -> Vec<OpenAIModel> {
     let mut models = Vec::new();
+    let owned_by = config.gateway.openai_models_owned_by.clone();
 
     for (model_name, _model_config) in config.models.iter_static_models() {
-        let owned_by = extract_provider_from_model_name(model_name);
-        models.push(OpenAIModel::new(model_name.to_string(), owned_by));
+        let id = format_model_id(model_name);
+        models.push(OpenAIModel::new(id, owned_by.clone()));
     }
 
     for (model_name, _model_config) in config.embedding_models.iter_static_models() {
-        let owned_by = extract_provider_from_model_name(model_name);
-        models.push(OpenAIModel::new(model_name.to_string(), owned_by));
+        let id = format_model_id(model_name);
+        models.push(OpenAIModel::new(id, owned_by.clone()));
+    }
+
+    for (function_name, _function_config) in &config.functions {
+        let id = format_model_id(function_name);
+        models.push(OpenAIModel::new(id, owned_by.clone()));
     }
 
     models.sort_by(|a, b| a.id.cmp(&b.id));
@@ -38,15 +38,26 @@ fn get_all_models(config: &Config) -> Vec<OpenAIModel> {
 }
 
 fn find_model(config: &Config, model_name: &str) -> Option<OpenAIModel> {
-    if config.models.table.contains_key(model_name)
-        || config.embedding_models.table.contains_key(model_name)
-    {
-        let owned_by = extract_provider_from_model_name(model_name);
-        return Some(OpenAIModel::new(model_name.to_string(), owned_by));
+    let owned_by = config.gateway.openai_models_owned_by.clone();
+
+    if config.models.table.contains_key(model_name) {
+        let id = format_model_id(model_name);
+        return Some(OpenAIModel::new(id, owned_by));
+    }
+
+    if config.embedding_models.table.contains_key(model_name) {
+        let id = format_model_id(model_name);
+        return Some(OpenAIModel::new(id, owned_by));
+    }
+
+    if config.functions.contains_key(model_name) {
+        let id = format_model_id(model_name);
+        return Some(OpenAIModel::new(id, owned_by));
     }
 
     if let Some(provider_type) = check_shorthand(model_name) {
-        return Some(OpenAIModel::new(model_name.to_string(), provider_type.to_string()));
+        let id = format_model_id(model_name);
+        return Some(OpenAIModel::new(id, provider_type.to_string()));
     }
 
     None

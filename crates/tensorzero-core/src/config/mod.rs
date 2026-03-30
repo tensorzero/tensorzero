@@ -930,6 +930,7 @@ impl RuntimeOverlay {
             relay,
             metrics,
             cache,
+            openai_models_owned_by,
         } = &config.gateway;
 
         Self {
@@ -954,6 +955,7 @@ impl RuntimeOverlay {
                 relay: relay.as_ref().map(|relay| relay.original_config.clone()),
                 metrics: metrics.clone(),
                 cache: cache.clone(),
+                openai_models_owned_by: Some(openai_models_owned_by.clone()),
             },
             clickhouse: config.clickhouse.clone(),
             postgres: config.postgres.clone(),
