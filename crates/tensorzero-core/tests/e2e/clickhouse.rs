@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tokio::runtime::Handle;
 use uuid::Uuid;
@@ -45,7 +46,7 @@ use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
 
-use crate::utils::poll_for_result::poll_for_result;
+use crate::utils::poll_for_result::{poll_for_result, poll_for_result_with_interval_and_timeout};
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -680,8 +681,9 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Poll until ModelProviderStatistics materialized view has processed the inserts
-    poll_for_result(
+    // Poll until ModelProviderStatistics materialized view has processed the inserts.
+    // Use a longer timeout than the default because CI can be slow to flush + merge parts.
+    poll_for_result_with_interval_and_timeout(
         || {
             let clickhouse = &clickhouse;
             async move {
@@ -698,6 +700,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             }
         },
         |cnt| cnt != "0",
+        Duration::from_millis(500),
+        Duration::from_secs(60),
         "Timed out waiting for ModelProviderStatistics to be populated",
     )
     .await;
@@ -816,8 +820,9 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         .await
         .unwrap();
 
-    // Poll until ModelProviderStatistics materialized view has processed the inserts
-    poll_for_result(
+    // Poll until ModelProviderStatistics materialized view has processed the inserts.
+    // Use a longer timeout than the default because CI can be slow to flush + merge parts.
+    poll_for_result_with_interval_and_timeout(
         || {
             let clickhouse = &clickhouse;
             async move {
@@ -834,6 +839,8 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             }
         },
         |cnt| cnt != "0",
+        Duration::from_millis(500),
+        Duration::from_secs(60),
         "Timed out waiting for ModelProviderStatistics to be populated",
     )
     .await;
