@@ -43,16 +43,20 @@ pub async fn build_axum_router(
         Router::new().nest(base_path, api_routes)
     };
 
-    // Serve the MCP endpoint on the same port, respecting `base_path`
-    let mcp_router = tensorzero_mcp::build_mcp_router(Arc::new(app_state.clone()), shutdown_token)
-        .await
-        .map_err(|e| Error::new(ErrorDetails::InternalError { message: e }))?;
-    let mcp_path = if base_path.is_empty() {
-        "/mcp".to_string()
-    } else {
-        format!("{base_path}/mcp")
-    };
-    router = router.nest_service(&mcp_path, mcp_router);
+    // Serve the MCP endpoint on the same port, respecting `base_path`.
+    // MCP requires Postgres for tool execution, so only register if a pool is available.
+    if app_state.postgres_connection_info.get_pool().is_some() {
+        let mcp_router =
+            tensorzero_mcp::build_mcp_router(Arc::new(app_state.clone()), shutdown_token)
+                .await
+                .map_err(|e| Error::new(ErrorDetails::InternalError { message: e }))?;
+        let mcp_path = if base_path.is_empty() {
+            "/mcp".to_string()
+        } else {
+            format!("{base_path}/mcp")
+        };
+        router = router.nest_service(&mcp_path, mcp_router);
+    }
 
     router = router.fallback(endpoints::fallback::handle_404);
 
