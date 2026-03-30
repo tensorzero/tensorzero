@@ -68,6 +68,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
+pub mod function_versions;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -2116,8 +2117,8 @@ pub enum UninitializedFunctionConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct UninitializedSchema {
-    path: ResolvedTomlPathData,
+pub struct UninitializedSchema {
+    pub path: ResolvedTomlPathData,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -2136,6 +2137,11 @@ impl UninitializedSchemas {
                 .map(|(k, path)| (k, UninitializedSchema { path }))
                 .collect(),
         }
+    }
+
+    /// Iterate over (name, schema) pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &UninitializedSchema)> {
+        self.inner.iter()
     }
 }
 

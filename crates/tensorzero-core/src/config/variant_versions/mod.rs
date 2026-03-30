@@ -375,7 +375,7 @@ pub fn to_stored_variant_version(
     })
 }
 
-fn resolve_prompt_ref(
+pub fn resolve_prompt_ref(
     path_data: &ResolvedTomlPathData,
     prompt_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredPromptRef, Error> {
@@ -391,7 +391,7 @@ fn resolve_prompt_ref(
     })
 }
 
-fn resolve_prompt_ref_opt(
+pub fn resolve_prompt_ref_opt(
     path_data: Option<&ResolvedTomlPathData>,
     prompt_ids: &HashMap<String, Uuid>,
 ) -> Result<Option<StoredPromptRef>, Error> {
@@ -537,7 +537,7 @@ pub fn rehydrate_variant(
     })
 }
 
-fn rehydrate_prompt_ref(
+pub fn rehydrate_prompt_ref(
     pref: &StoredPromptRef,
     prompt_rows: &HashMap<Uuid, PromptTemplateVersionRow>,
 ) -> Result<ResolvedTomlPathData, Error> {
@@ -557,7 +557,7 @@ fn rehydrate_prompt_ref(
     ))
 }
 
-fn rehydrate_prompt_ref_opt(
+pub fn rehydrate_prompt_ref_opt(
     pref: Option<&StoredPromptRef>,
     prompt_rows: &HashMap<Uuid, PromptTemplateVersionRow>,
 ) -> Result<Option<ResolvedTomlPathData>, Error> {
