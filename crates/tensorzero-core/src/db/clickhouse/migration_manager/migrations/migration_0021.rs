@@ -1,8 +1,6 @@
-use std::time::Duration;
-
 use async_trait::async_trait;
 
-use super::{check_column_exists, check_table_exists, get_default_expression};
+use super::{ViewOffsetDeadline, check_column_exists, check_table_exists, get_default_expression};
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
@@ -103,7 +101,7 @@ impl Migration for Migration0021<'_> {
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
-        let view_offset = Duration::from_secs(15);
+        let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -112,8 +110,8 @@ impl Migration for Migration0021<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_secs();
+            + ViewOffsetDeadline::offset())
+        .as_secs();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -232,8 +230,7 @@ impl Migration for Migration0021<'_> {
             .await?;
 
         if !clean_start {
-            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
 
             let insert_chat_inference = async {
                 let query = format!(

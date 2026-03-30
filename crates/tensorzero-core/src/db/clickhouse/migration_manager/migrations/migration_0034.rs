@@ -5,7 +5,8 @@ use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::time::Duration;
+
+use super::ViewOffsetDeadline;
 
 /// This migration adds a `CumulativeUsage` table and `CumulativeUsageView` materialized view
 /// This will allow the sum of tokens in the ModelInference table to be amortized and
@@ -42,7 +43,7 @@ impl Migration for Migration0034<'_> {
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
-        let view_offset = Duration::from_secs(15);
+        let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -51,8 +52,8 @@ impl Migration for Migration0034<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_nanos();
+            + ViewOffsetDeadline::offset())
+        .as_nanos();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -109,7 +110,7 @@ impl Migration for Migration0034<'_> {
         // NOTE: this migration is subsumed by 0035 so we do not need to run the backfill for this table any more
         // If we are not clean starting, we must backfill this table
         if !clean_start {
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
             // Check if the materialized view we wrote is still in the table.
             // If this is the case, we should compute the backfilled sums and add them to the table.
             // Otherwise, we should warn that our view was not written (probably because a concurrent client did this first)
