@@ -34,6 +34,11 @@ impl Namespace {
                 message: "Namespace identifier cannot be empty".to_string(),
             }));
         }
+        if namespace.starts_with("tensorzero::") {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Namespace cannot start with `tensorzero::`: {namespace}"),
+            }));
+        }
         Ok(Self(namespace))
     }
 
@@ -215,6 +220,20 @@ mod tests {
     }
 
     #[test]
+    fn test_namespace_tensorzero_prefix_rejected() {
+        let ns = Namespace::new("tensorzero::internal");
+        assert!(
+            ns.is_err(),
+            "Namespace starting with `tensorzero::` should be rejected"
+        );
+        let err_msg = ns.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("tensorzero::"),
+            "Error should mention the prefix, got: {err_msg}"
+        );
+    }
+
+    #[test]
     fn test_namespace_serde_roundtrip() {
         let ns = Namespace::new("my_namespace").unwrap();
         let serialized = serde_json::to_string(&ns).unwrap();
@@ -230,6 +249,15 @@ mod tests {
     fn test_namespace_deserialize_empty_rejected() {
         let result = serde_json::from_str::<Namespace>("\"\"");
         assert!(result.is_err(), "Deserializing an empty string should fail");
+    }
+
+    #[test]
+    fn test_namespace_deserialize_tensorzero_prefix_rejected() {
+        let result = serde_json::from_str::<Namespace>("\"tensorzero::foo\"");
+        assert!(
+            result.is_err(),
+            "Deserializing a namespace starting with `tensorzero::` should fail"
+        );
     }
 
     /// Helper: build a minimal Chat function with the given variants and experimentation config.

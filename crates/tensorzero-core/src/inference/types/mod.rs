@@ -48,10 +48,9 @@
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
-use file::sanitize_raw_request;
 pub use file::{
     Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
-    ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+    ObjectStoragePointer, UrlFile,
 };
 // Re-export content types from tensorzero-types
 pub use tensorzero_types::{
@@ -67,7 +66,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
-pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+pub use resolved_input::{
+    LazyFileExt, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+};
 use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::de::Error as _;
@@ -94,8 +95,7 @@ use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::resolved_input::{
-    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent, write_file,
+    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent, write_file,
 };
 use crate::inference::types::storage::{StorageKind, StorageKindExt};
 use crate::inference::types::stored_input::StoredFile;
@@ -133,12 +133,18 @@ pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
 pub use streams::{
-    ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk, InferenceResultChunk,
-    InferenceResultStream, JsonInferenceResultChunk, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
-    UnknownChunk, collect_chunks, stream_with_deadline,
+    ChatInferenceResultChunk, CollectChunksArgs, InferenceResultChunk, InferenceResultStream,
+    JsonInferenceResultChunk, collect_chunks, stream_with_deadline,
 };
 pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
+
+pub use tensorzero_provider_types::{
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileFuture, FileUrl, FinishReason,
+    FlattenUnknown, Latency, LazyFile, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, PendingObjectStoreFile, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, ThoughtChunk, UnknownChunk,
+};
 
 /*
  * Data flow in TensorZero
@@ -801,26 +807,13 @@ impl RateLimitedInputContent for InputMessage {
     }
 }
 
-/// Core representation of the types of content that could go into a model provider
-/// The `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it
-/// test-only to prevent production code from panicking.
-/// This *does not* implement `Deserialize`, since we need object store information
-/// to produce a `LazyFile::Url`
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentBlock {
-    Text(Text),
-    ToolCall(ToolCall),
-    ToolResult(ToolResult),
-    #[serde(alias = "image")]
-    File(Box<LazyFile>),
-    Thought(Thought),
-    Unknown(Unknown),
+pub trait ContentBlockExt {
+    async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error>;
+    async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error>;
 }
 
-impl ContentBlock {
-    pub async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error> {
+impl ContentBlockExt for ContentBlock {
+    async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error> {
         match self {
             ContentBlock::Text(text) => Ok(StoredContentBlock::Text(text)),
             ContentBlock::ToolCall(tool_call) => Ok(StoredContentBlock::ToolCall(tool_call)),
@@ -838,7 +831,7 @@ impl ContentBlock {
         }
     }
 
-    pub async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error> {
+    async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error> {
         match self {
             ContentBlock::Text(text) => Ok(ResolvedContentBlock::Text(text)),
             ContentBlock::ToolCall(tool_call) => Ok(ResolvedContentBlock::ToolCall(tool_call)),
@@ -923,23 +916,6 @@ impl ResolvedContentBlock {
     }
 }
 
-/// A helper type for dealing with `ContentBlock::Unknown` in model providers.
-/// This flattens the wrapped `Value` when serializing and deserializing.
-///
-/// During deserialization, we'll first attempt to deserialize a `T`
-/// (e.g. `AnthropicContentBlock`), and fall back to `Unknown` with the raw
-/// json `Value` if that fails.
-///
-/// During serialization, a `FlattenUnknown::Unknown` will have the wrapped
-/// `Value` serialized, allowing us to send an arbitrary json value to
-/// a provider.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum FlattenUnknown<'a, T> {
-    Normal(T),
-    Unknown(Cow<'a, Value>),
-}
-
 /// Holds the variants types of `ContentBlockOutput` without any data
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ContentBlockOutputType {
@@ -947,19 +923,6 @@ enum ContentBlockOutputType {
     ToolCall,
     Thought,
     Unknown,
-}
-
-/// Types of content blocks that can be returned by a model provider
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-pub enum ContentBlockOutput {
-    Text(Text),
-    ToolCall(ToolCall),
-    Thought(Thought),
-    Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
@@ -1009,34 +972,31 @@ impl ContentBlockChatOutput {
     }
 }
 
-/// A RequestMessage is a message sent to a model
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-pub struct RequestMessage {
-    pub role: Role,
-    pub content: Vec<ContentBlock>,
+pub trait RequestMessageExt {
+    async fn into_stored_message(self) -> Result<StoredRequestMessage, Error>;
+    async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error>;
 }
 
-impl RequestMessage {
-    pub async fn into_stored_message(self) -> Result<StoredRequestMessage, Error> {
+impl RequestMessageExt for RequestMessage {
+    async fn into_stored_message(self) -> Result<StoredRequestMessage, Error> {
         Ok(StoredRequestMessage {
             role: self.role,
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(ContentBlock::into_stored_content_block),
+                    .map(ContentBlockExt::into_stored_content_block),
             )
             .await?,
         })
     }
 
-    pub async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error> {
+    async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error> {
         Ok(ResolvedRequestMessage {
             role: self.role,
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(ContentBlock::into_resolved_content_block),
+                    .map(ContentBlockExt::into_resolved_content_block),
             )
             .await?,
         })
@@ -1055,22 +1015,6 @@ impl RateLimitedInputContent for RequestMessage {
             .map(RateLimitedInputContent::estimated_input_token_usage)
             .sum()
     }
-}
-
-impl std::fmt::Display for RequestMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ModelInferenceRequestJsonMode {
-    #[default]
-    Off,
-    On,
-    Strict,
 }
 
 /// Top-level TensorZero type for an inference request to a particular model.
@@ -1206,52 +1150,12 @@ impl ModelInput {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "text", rename_all = "snake_case")]
-pub enum FinishReason {
-    Stop,
-    StopSequence,
-    Length,
-    ToolCall,
-    ContentFilter,
-    Unknown,
+pub trait ProviderInferenceResponseExt {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
 }
 
-/// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
-/// that is suitable for serialization directly into a request to the provider.
-///
-/// In both non-streaming and streaming inference, each ModelProvider receives data from the provider in a
-/// a (private) provider-specific format that is then transformed into a ProviderInferenceResponse (non-streaming)
-/// or a stream of ProviderInferenceResponseChunks (streaming).
-
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-pub struct ProviderInferenceResponse {
-    pub id: Uuid,
-    pub output: Vec<ContentBlockOutput>,
-    pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
-    pub raw_request: String,
-    pub raw_response: String,
-    pub usage: Usage,
-    /// Time elapsed between making the request to the model provider and receiving the response.
-    /// Important: this is NOT latency from the start of the TensorZero request.
-    pub provider_latency: Latency,
-    pub finish_reason: Option<FinishReason>,
-    /// Raw usage entries for `include_raw_usage` feature.
-    /// Constructed from provider raw usage entries or passed through from relay.
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    /// Raw response entries for `include_raw_response` feature.
-    /// Passed through from relay - when present, these should be used instead of
-    /// generating new entries from the model inference result.
-    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
-}
-
-impl ProviderInferenceResponse {
-    pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+impl ProviderInferenceResponseExt for ProviderInferenceResponse {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
         let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
         match self.usage.total_tokens() {
             Some(tokens) => Ok(RateLimitResourceUsage::Exact {
@@ -1266,19 +1170,6 @@ impl ProviderInferenceResponse {
             }),
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum Latency {
-    Streaming {
-        ttft: Duration,
-        response_time: Duration,
-    },
-    NonStreaming {
-        response_time: Duration,
-    },
-    Batch,
 }
 
 /// Runtime type for model inference responses during inference execution.
@@ -1604,21 +1495,9 @@ impl From<String> for ContentBlockChatOutput {
     }
 }
 
-impl From<String> for ContentBlock {
-    fn from(text: String) -> Self {
-        ContentBlock::Text(Text { text })
-    }
-}
-
 impl From<String> for StoredContentBlock {
     fn from(text: String) -> Self {
         StoredContentBlock::Text(Text { text })
-    }
-}
-
-impl From<String> for ContentBlockOutput {
-    fn from(text: String) -> Self {
-        ContentBlockOutput::Text(Text { text })
     }
 }
 
@@ -1790,42 +1669,6 @@ impl StoredModelInference {
             // timestamp is a materialized column, not set during insert
             timestamp: None,
         })
-    }
-}
-
-pub struct ProviderInferenceResponseArgs {
-    pub output: Vec<ContentBlockOutput>,
-    pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
-    pub raw_request: String,
-    pub raw_response: String,
-    pub usage: Usage,
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
-    /// Time elapsed between making the request to the model provider and receiving the response.
-    /// Important: this is NOT latency from the start of the TensorZero request.
-    pub provider_latency: Latency,
-    pub finish_reason: Option<FinishReason>,
-    pub id: Uuid,
-}
-
-impl ProviderInferenceResponse {
-    pub fn new(args: ProviderInferenceResponseArgs) -> Self {
-        let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
-
-        Self {
-            id: args.id,
-            output: args.output,
-            system: args.system,
-            input_messages: args.input_messages,
-            raw_request: sanitized_raw_request,
-            raw_response: args.raw_response,
-            usage: args.usage,
-            provider_latency: args.provider_latency,
-            finish_reason: args.finish_reason,
-            raw_usage: args.raw_usage,
-            relay_raw_response: args.relay_raw_response,
-        }
     }
 }
 
@@ -2093,44 +1936,6 @@ pub fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-impl ProviderInferenceResponseChunk {
-    pub fn new(
-        content: Vec<ContentBlockChunk>,
-        usage: Option<Usage>,
-        raw_response: String,
-        latency: Duration,
-        finish_reason: Option<FinishReason>,
-    ) -> Self {
-        Self {
-            content,
-            usage,
-            raw_usage: None,
-            raw_response,
-            provider_latency: latency,
-            finish_reason,
-        }
-    }
-
-    /// Creates a new chunk with raw_usage passthrough (relay or synthesized streams)
-    pub fn new_with_raw_usage(
-        content: Vec<ContentBlockChunk>,
-        usage: Option<Usage>,
-        raw_response: String,
-        latency: Duration,
-        finish_reason: Option<FinishReason>,
-        raw_usage: Option<Vec<RawUsageEntry>>,
-    ) -> Self {
-        Self {
-            content,
-            usage,
-            raw_usage,
-            raw_response,
-            provider_latency: latency,
-            finish_reason,
-        }
-    }
-}
-
 impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
@@ -2153,17 +1958,6 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
             ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
-        }
-    }
-}
-
-impl From<JsonMode> for ModelInferenceRequestJsonMode {
-    fn from(json_enforcement: JsonMode) -> Self {
-        match json_enforcement {
-            JsonMode::On => ModelInferenceRequestJsonMode::On,
-            JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
-            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }

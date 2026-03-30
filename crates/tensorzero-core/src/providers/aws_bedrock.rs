@@ -23,12 +23,14 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
@@ -37,7 +39,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
     Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
+use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use crate::tool::{
@@ -924,6 +926,7 @@ fn convert_converse_response(
 
     Ok(ProviderInferenceResponse::new(
         ProviderInferenceResponseArgs {
+            id: model_inference_id,
             output: content,
             system: ctx.system,
             input_messages: ctx.input_messages,
@@ -934,7 +937,6 @@ fn convert_converse_response(
             relay_raw_response: None,
             provider_latency: latency,
             finish_reason: Some(convert_stop_reason(response.stop_reason)),
-            id: model_inference_id,
         },
     ))
 }

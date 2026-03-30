@@ -27,6 +27,7 @@ mod image_url;
 mod inference;
 mod inference_clickhouse;
 mod inference_evaluation_human_feedback;
+mod mcp;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
