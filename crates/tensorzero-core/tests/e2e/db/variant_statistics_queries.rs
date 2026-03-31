@@ -21,7 +21,7 @@ use tensorzero_core::inference::types::{
     ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     StoredModelInference,
 };
-use tensorzero_core::serde_util::deserialize_u64;
+use tensorzero_core::serde_util::{deserialize_option_u64, deserialize_u64};
 use tensorzero_core::tool::ToolCallConfigDatabaseInsert;
 use tonic::async_trait;
 
@@ -62,8 +62,10 @@ struct ClickHouseVariantStatsRow {
     variant_name: String,
     #[serde(deserialize_with = "deserialize_u64")]
     count: u64,
-    total_input_tokens: Option<i64>,
-    total_output_tokens: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_option_u64")]
+    total_input_tokens: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_option_u64")]
+    total_output_tokens: Option<u64>,
     #[serde(default, with = "rust_decimal::serde::float_option")]
     total_cost: Option<Decimal>,
     #[serde(deserialize_with = "deserialize_u64")]
@@ -76,8 +78,8 @@ impl From<ClickHouseVariantStatsRow> for VariantStatsTestRow {
             function_name: ch.function_name,
             variant_name: ch.variant_name,
             count: ch.count,
-            total_input_tokens: ch.total_input_tokens.map(|v| v as u64),
-            total_output_tokens: ch.total_output_tokens.map(|v| v as u64),
+            total_input_tokens: ch.total_input_tokens,
+            total_output_tokens: ch.total_output_tokens,
             total_cost: ch.total_cost,
             count_with_cost: ch.count_with_cost,
         }
