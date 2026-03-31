@@ -30,7 +30,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_stored_config::StoredTimeoutsConfig;
+use tensorzero_stored_config::{
+    StoredNonStreamingTimeouts, StoredStreamingTimeouts, StoredTimeoutsConfig,
+};
 use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -230,6 +232,23 @@ impl TimeoutsConfig {
         }
 
         Ok(())
+    }
+}
+
+impl From<&TimeoutsConfig> for StoredTimeoutsConfig {
+    fn from(config: &TimeoutsConfig) -> Self {
+        StoredTimeoutsConfig {
+            non_streaming: config
+                .non_streaming
+                .as_ref()
+                .map(|ns| StoredNonStreamingTimeouts {
+                    total_ms: ns.total_ms,
+                }),
+            streaming: config.streaming.as_ref().map(|s| StoredStreamingTimeouts {
+                ttft_ms: s.ttft_ms,
+                total_ms: s.total_ms,
+            }),
+        }
     }
 }
 
@@ -2255,6 +2274,14 @@ impl UninitializedSchemas {
                 .map(|(k, path)| (k, UninitializedSchema { path }))
                 .collect(),
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &ResolvedTomlPathData)> {
+        self.inner.iter().map(|(name, schema)| (name, &schema.path))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 

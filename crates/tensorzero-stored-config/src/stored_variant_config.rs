@@ -10,7 +10,7 @@ use crate::{
     StoredTimeoutsConfig,
 };
 
-/// Reference to a `variant_versions_config` row.
+/// Reference to a `variant_configs` row.
 /// Replaces inline variant configs in stored function config.
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct StoredVariantRef {
     pub variant_version_id: Uuid,
 }
 
-/// Wrapper stored in `variant_versions_config.config`.
+/// Wrapper stored in `variant_configs.config`.
 /// Uses an explicit `variant` field instead of `#[serde(flatten)]`.
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

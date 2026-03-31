@@ -400,6 +400,26 @@ pub use dynamic::ExtraBody as DynamicExtraBody;
 
 // ─── Stored → Uninitialized conversions ──────────────────────────────────────
 
+impl From<&ExtraBodyConfig> for StoredExtraBodyConfig {
+    fn from(config: &ExtraBodyConfig) -> Self {
+        StoredExtraBodyConfig {
+            data: config
+                .data
+                .iter()
+                .map(|replacement| StoredExtraBodyReplacement {
+                    pointer: replacement.pointer.clone(),
+                    kind: match &replacement.kind {
+                        ExtraBodyReplacementKind::Value(value) => {
+                            StoredExtraBodyReplacementKind::Value(value.clone())
+                        }
+                        ExtraBodyReplacementKind::Delete => StoredExtraBodyReplacementKind::Delete,
+                    },
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<StoredExtraBodyReplacementKind> for ExtraBodyReplacementKind {
     fn from(stored: StoredExtraBodyReplacementKind) -> Self {
         match stored {

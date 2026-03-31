@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Reference to a `prompt_template_versions_config` row.
+/// Reference to a `prompt_template_configs` row.
 /// Replaces `ResolvedTomlPathData` in all stored config types.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredPromptRef {
@@ -23,13 +23,4 @@ pub struct StoredPromptTemplate {
     pub content_hash: Vec<u8>,
     pub creation_source: String,
     pub source_autopilot_session_id: Option<Uuid>,
-}
-
-/// A dependency edge between two prompt template versions.
-/// Used when one template includes or extends another.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct StoredPromptTemplateDependency {
-    pub prompt_template_version_id: Uuid,
-    pub dependency_prompt_template_version_id: Uuid,
-    pub dependency_key: String,
 }

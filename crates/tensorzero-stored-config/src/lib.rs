@@ -19,6 +19,8 @@ mod stored_storage_kind;
 mod stored_tool_config;
 pub mod stored_variant_config;
 
+pub mod postgres;
+
 pub use stored_autopilot_config::StoredAutopilotConfig;
 pub use stored_clickhouse_config::StoredClickHouseConfig;
 pub use stored_cost::{
@@ -77,9 +79,7 @@ pub use stored_optimizer_info::{
     StoredTogetherTrainingMethod, StoredTogetherTrainingType,
 };
 pub use stored_postgres_config::StoredPostgresConfig;
-pub use stored_prompt_template::{
-    StoredPromptRef, StoredPromptTemplate, StoredPromptTemplateDependency,
-};
+pub use stored_prompt_template::{StoredPromptRef, StoredPromptTemplate};
 pub use stored_provider_types_config::{
     StoredApiKeyDefaults, StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,
     StoredGCPBatchConfigCloudStorage, StoredGCPBatchConfigType, StoredGCPCredentialDefaults,

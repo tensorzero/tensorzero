@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use tensorzero_types::ToolChoice;
 
 use crate::{StoredEvaluatorConfig, StoredPromptRef, StoredVariantRef};
 
-/// Stored in `function_versions_config.config`.
+/// Stored in `function_configs.config`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -52,6 +53,19 @@ pub enum StoredToolChoice {
     Auto,
     Required,
     Specific { name: String },
+}
+
+impl From<&ToolChoice> for StoredToolChoice {
+    fn from(value: &ToolChoice) -> Self {
+        match value {
+            ToolChoice::None => Self::None,
+            ToolChoice::Auto => Self::Auto,
+            ToolChoice::Required => Self::Required,
+            ToolChoice::Specific(tool_name) => Self::Specific {
+                name: tool_name.clone(),
+            },
+        }
+    }
 }
 
 // --- Experimentation ---

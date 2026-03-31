@@ -1,0 +1,3 @@
+[migrate]
+migrations-dir = "src/postgres/migrations"
+table-name = "tensorzero_stored_config__sqlx_migrations"
