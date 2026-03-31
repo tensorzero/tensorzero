@@ -982,6 +982,13 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "test-embeddings"
 
+[embedding_models.prometheus-test-embedding-model-dryrun]
+routing = ["dummy"]
+
+[embedding_models.prometheus-test-embedding-model-dryrun.providers.dummy]
+type = "dummy"
+model_name = "test-embeddings"
+
 [embedding_models.gemini_embedding_001_openrouter]
 routing = ["openrouter"]
 

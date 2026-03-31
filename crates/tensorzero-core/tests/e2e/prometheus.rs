@@ -670,8 +670,9 @@ async fn test_prometheus_metrics_embeddings_batch() {
 
 #[tokio::test]
 async fn test_prometheus_metrics_embeddings_dryrun() {
-    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
-    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    // Use a dedicated model so concurrent embedding tests don't interfere with counter reads
+    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model-dryrun\"}";
+    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model-dryrun\"}";
     let client = Client::new();
 
     let requests_before = get_metric_u32(&client, requests_metric).await;
@@ -679,7 +680,7 @@ async fn test_prometheus_metrics_embeddings_dryrun() {
 
     // Run embeddings with dryrun
     let embeddings_payload = serde_json::json!({
-        "model": "prometheus-test-embedding-model",
+        "model": "prometheus-test-embedding-model-dryrun",
         "input": "Hello, world!",
         "tensorzero::dryrun": true,
     });
