@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy a TensorZero gateway
+description: Deploy TensorZero
 ---
 
 TODO: Implement deploy skill
