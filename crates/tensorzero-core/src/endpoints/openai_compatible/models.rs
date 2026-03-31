@@ -9,9 +9,19 @@ use crate::model_table::RESERVED_MODEL_PREFIXES;
 use crate::utils::gateway::{AppState, AppStateData};
 
 const MODEL_ID_PREFIX: &str = "tensorzero::model_name::";
+const EMBEDDING_MODEL_ID_PREFIX: &str = "tensorzero::embedding_model_name::";
+const FUNCTION_ID_PREFIX: &str = "tensorzero::function_name::";
 
 fn format_model_id(model_name: &str) -> String {
     format!("{}{}", MODEL_ID_PREFIX, model_name)
+}
+
+fn format_embedding_model_id(model_name: &str) -> String {
+    format!("{}{}", EMBEDDING_MODEL_ID_PREFIX, model_name)
+}
+
+fn format_function_id(function_name: &str) -> String {
+    format!("{}{}", FUNCTION_ID_PREFIX, function_name)
 }
 
 fn get_all_models(config: &Config) -> Vec<OpenAIModel> {
@@ -24,12 +34,15 @@ fn get_all_models(config: &Config) -> Vec<OpenAIModel> {
     }
 
     for (model_name, _model_config) in config.embedding_models.iter_static_models() {
-        let id = format_model_id(model_name);
+        let id = format_embedding_model_id(model_name);
         models.push(OpenAIModel::new(id, owned_by.clone()));
     }
 
     for (function_name, _function_config) in &config.functions {
-        let id = format_model_id(function_name);
+        if function_name.starts_with("tensorzero::") {
+            continue;
+        }
+        let id = format_function_id(function_name);
         models.push(OpenAIModel::new(id, owned_by.clone()));
     }
 
@@ -46,13 +59,34 @@ fn find_model(config: &Config, model_name: &str) -> Option<OpenAIModel> {
     }
 
     if config.embedding_models.table.contains_key(model_name) {
-        let id = format_model_id(model_name);
+        let id = format_embedding_model_id(model_name);
         return Some(OpenAIModel::new(id, owned_by));
     }
 
-    if config.functions.contains_key(model_name) {
-        let id = format_model_id(model_name);
+    if config.functions.contains_key(model_name) && !model_name.starts_with("tensorzero::") {
+        let id = format_function_id(model_name);
         return Some(OpenAIModel::new(id, owned_by));
+    }
+
+    if let Some(name) = model_name.strip_prefix(MODEL_ID_PREFIX) {
+        if config.models.table.contains_key(name) {
+            let id = format_model_id(name);
+            return Some(OpenAIModel::new(id, owned_by));
+        }
+    }
+
+    if let Some(name) = model_name.strip_prefix(EMBEDDING_MODEL_ID_PREFIX) {
+        if config.embedding_models.table.contains_key(name) {
+            let id = format_embedding_model_id(name);
+            return Some(OpenAIModel::new(id, owned_by));
+        }
+    }
+
+    if let Some(name) = model_name.strip_prefix(FUNCTION_ID_PREFIX) {
+        if config.functions.contains_key(name) && !name.starts_with("tensorzero::") {
+            let id = format_function_id(name);
+            return Some(OpenAIModel::new(id, owned_by));
+        }
     }
 
     if let Some(provider_type) = check_shorthand(model_name) {
