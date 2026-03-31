@@ -2409,6 +2409,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-core",
  "tensorzero-derive",
+ "tensorzero-provider-types",
  "tokio",
  "tokio-util",
  "tracing",

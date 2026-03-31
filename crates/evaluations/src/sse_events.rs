@@ -123,3 +123,251 @@ impl EvaluationRunUsageSummary {
         self.total_inference_time_ms += info.inference_time_ms;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::str::FromStr;
+
+    use googletest::prelude::*;
+    use rust_decimal::Decimal;
+    use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
+    use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::stats::EvaluationInfo;
+
+    /// Build a minimal `EvaluationInfo` with the given usage and timing.
+    /// We construct a real `InferenceResponse` and a fake datapoint via JSON round-trip.
+    fn make_evaluation_info(
+        input_tokens: Option<u32>,
+        output_tokens: Option<u32>,
+        cost: Option<Decimal>,
+        inference_time_ms: f64,
+    ) -> EvaluationInfo {
+        let usage = tensorzero_provider_types::Usage {
+            input_tokens,
+            output_tokens,
+            cost,
+            ..Default::default()
+        };
+        let response = InferenceResponse::Chat(ChatInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test_variant".to_string(),
+            content: vec![ContentBlockChatOutput::Text(Text {
+                text: "hello".to_string(),
+            })],
+            usage,
+            raw_usage: None,
+            original_response: None,
+            raw_response: None,
+            finish_reason: None,
+        });
+
+        // Build a minimal datapoint via JSON deserialization
+        let datapoint: tensorzero_core::endpoints::datasets::Datapoint =
+            serde_json::from_value(serde_json::json!({
+                "type": "chat",
+                "id": Uuid::now_v7(),
+                "dataset_name": "test_ds",
+                "function_name": "test_fn",
+                "input": {"messages": []},
+                "auxiliary": "",
+                "tags": {},
+                "is_deleted": false,
+                "is_custom": false,
+                "created_at": "2025-01-01T00:00:00Z",
+                "updated_at": "2025-01-01T00:00:00Z"
+            }))
+            .expect("valid datapoint JSON");
+
+        EvaluationInfo {
+            datapoint,
+            response,
+            evaluations: HashMap::new(),
+            evaluator_errors: HashMap::new(),
+            inference_time_ms,
+        }
+    }
+
+    #[gtest]
+    fn test_accumulate_empty() {
+        let summary = EvaluationRunUsageSummary::default();
+        expect_that!(summary.count, eq(0));
+        expect_that!(summary.total_input_tokens, none());
+        expect_that!(summary.total_output_tokens, none());
+        expect_that!(summary.total_cost, none());
+        expect_that!(summary.total_inference_time_ms, eq(0.0));
+    }
+
+    #[gtest]
+    fn test_accumulate_single_with_full_usage() {
+        let mut summary = EvaluationRunUsageSummary::default();
+        let info = make_evaluation_info(
+            Some(100),
+            Some(50),
+            Some(Decimal::from_str("0.005").expect("valid decimal")),
+            150.0,
+        );
+        summary.accumulate(&info);
+
+        expect_that!(summary.count, eq(1));
+        expect_that!(summary.total_input_tokens, some(eq(100)));
+        expect_that!(summary.total_output_tokens, some(eq(50)));
+        expect_that!(
+            summary.total_cost,
+            some(eq(Decimal::from_str("0.005").expect("valid decimal")))
+        );
+        expect_that!(summary.total_inference_time_ms, eq(150.0));
+    }
+
+    #[gtest]
+    fn test_accumulate_multiple() {
+        let mut summary = EvaluationRunUsageSummary::default();
+
+        let info1 = make_evaluation_info(
+            Some(100),
+            Some(50),
+            Some(Decimal::from_str("0.005").expect("valid decimal")),
+            100.0,
+        );
+        let info2 = make_evaluation_info(
+            Some(200),
+            Some(80),
+            Some(Decimal::from_str("0.010").expect("valid decimal")),
+            200.0,
+        );
+
+        summary.accumulate(&info1);
+        summary.accumulate(&info2);
+
+        expect_that!(summary.count, eq(2));
+        expect_that!(summary.total_input_tokens, some(eq(300)));
+        expect_that!(summary.total_output_tokens, some(eq(130)));
+        expect_that!(
+            summary.total_cost,
+            some(eq(Decimal::from_str("0.015").expect("valid decimal")))
+        );
+        expect_that!(summary.total_inference_time_ms, eq(300.0));
+    }
+
+    #[gtest]
+    fn test_accumulate_with_none_usage() {
+        let mut summary = EvaluationRunUsageSummary::default();
+
+        // First inference has no usage at all
+        let info1 = make_evaluation_info(None, None, None, 50.0);
+        // Second has partial usage
+        let info2 = make_evaluation_info(Some(100), None, None, 75.0);
+
+        summary.accumulate(&info1);
+        summary.accumulate(&info2);
+
+        expect_that!(summary.count, eq(2));
+        expect_that!(
+            summary.total_input_tokens,
+            some(eq(100)),
+            "only the second inference had input tokens"
+        );
+        expect_that!(
+            summary.total_output_tokens,
+            none(),
+            "neither inference had output tokens"
+        );
+        expect_that!(summary.total_cost, none(), "neither inference had cost");
+        expect_that!(summary.total_inference_time_ms, eq(125.0));
+    }
+
+    #[gtest]
+    fn test_complete_event_serialization_round_trip() {
+        let run_id = Uuid::now_v7();
+        let event = EvaluationRunEvent::Complete(EvaluationRunCompleteEvent {
+            evaluation_run_id: run_id,
+            usage: EvaluationRunUsageSummary {
+                count: 5,
+                total_input_tokens: Some(1000),
+                total_output_tokens: Some(500),
+                total_cost: Some(Decimal::from_str("0.05").expect("valid decimal")),
+                total_inference_time_ms: 750.0,
+            },
+        });
+
+        let json = serde_json::to_string(&event).expect("serialization should succeed");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
+
+        expect_that!(parsed["type"], eq("complete"));
+        expect_that!(parsed["evaluation_run_id"], eq(run_id.to_string().as_str()));
+        expect_that!(parsed["usage"]["count"], eq(5));
+        expect_that!(parsed["usage"]["total_input_tokens"], eq(1000));
+        expect_that!(parsed["usage"]["total_output_tokens"], eq(500));
+        expect_that!(parsed["usage"]["total_cost"], eq(0.05));
+        expect_that!(parsed["usage"]["total_inference_time_ms"], eq(750.0));
+    }
+
+    #[gtest]
+    fn test_complete_event_omits_none_fields() {
+        let run_id = Uuid::now_v7();
+        let event = EvaluationRunEvent::Complete(EvaluationRunCompleteEvent {
+            evaluation_run_id: run_id,
+            usage: EvaluationRunUsageSummary::default(),
+        });
+
+        let json = serde_json::to_string(&event).expect("serialization should succeed");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
+
+        expect_that!(parsed["usage"]["count"], eq(0));
+        // None fields should be omitted (skip_serializing_if)
+        expect_that!(parsed["usage"].get("total_input_tokens"), none());
+        expect_that!(parsed["usage"].get("total_output_tokens"), none());
+        expect_that!(parsed["usage"].get("total_cost"), none());
+    }
+
+    #[gtest]
+    fn test_success_event_includes_inference_time() {
+        let run_id = Uuid::now_v7();
+        let event = EvaluationRunEvent::Success(EvaluationRunSuccessEvent {
+            evaluation_run_id: run_id,
+            datapoint: serde_json::json!({}),
+            response: serde_json::json!({}),
+            evaluations: HashMap::new(),
+            evaluator_errors: HashMap::new(),
+            inference_time_ms: 123.456,
+        });
+
+        let json = serde_json::to_string(&event).expect("serialization should succeed");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
+
+        expect_that!(parsed["type"], eq("success"));
+        expect_that!(parsed["inference_time_ms"], eq(123.456));
+    }
+
+    #[gtest]
+    fn test_complete_event_deserialization() {
+        let json = serde_json::json!({
+            "type": "complete",
+            "evaluation_run_id": "01963691-9d3c-7793-a8be-3937ebb849c1",
+            "usage": {
+                "count": 10,
+                "total_input_tokens": 5000,
+                "total_output_tokens": 2500,
+                "total_cost": 0.123,
+                "total_inference_time_ms": 1500.5
+            }
+        });
+
+        let event: EvaluationRunEvent =
+            serde_json::from_value(json).expect("deserialization should succeed");
+        match event {
+            EvaluationRunEvent::Complete(complete) => {
+                expect_that!(complete.usage.count, eq(10));
+                expect_that!(complete.usage.total_input_tokens, some(eq(5000)));
+                expect_that!(complete.usage.total_output_tokens, some(eq(2500)));
+                expect_that!(complete.usage.total_cost, some(anything()));
+                expect_that!(complete.usage.total_inference_time_ms, eq(1500.5));
+            }
+            other => panic!("Expected Complete event, got {other:?}"),
+        }
+    }
+}
