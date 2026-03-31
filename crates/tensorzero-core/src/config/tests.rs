@@ -3455,6 +3455,36 @@ async fn test_built_in_functions_loaded() {
     }
 }
 
+#[tokio::test]
+async fn test_database_config_input_loads_via_shared_pipeline() {
+    let uninitialized = UninitializedConfig::try_from(get_sample_valid_config())
+        .expect("sample config should deserialize to UninitializedConfig");
+    let user_function_count = uninitialized
+        .functions
+        .as_ref()
+        .map(HashMap::len)
+        .unwrap_or(0);
+
+    let config = Box::pin(Config::load_from_toml(ConfigInput::Database(Box::new(
+        uninitialized,
+    ))))
+    .await
+    .expect("database config input should load successfully");
+
+    assert!(
+        config.functions.contains_key("weather_helper"),
+        "expected user-defined function to load from database config input"
+    );
+    assert!(
+        config.functions.contains_key("tensorzero::hello_chat"),
+        "expected built-in functions to still be injected for database config input"
+    );
+    assert!(
+        config.functions.len() > user_function_count,
+        "expected built-in function injection to increase the function count"
+    );
+}
+
 /// Test that built-in functions can be retrieved via get_function
 #[tokio::test]
 async fn test_get_built_in_function() {

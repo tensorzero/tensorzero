@@ -4,6 +4,7 @@ use clap::Parser;
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use secrecy::ExposeSecret;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::types::chrono::{DateTime, Utc};
 use std::fmt::Display;
 use std::future::{Future, IntoFuture};
@@ -31,6 +32,7 @@ use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{self, Error, ErrorDetails};
+use tensorzero_core::feature_flags;
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
 
@@ -42,6 +44,102 @@ use cli::GatewayArgs;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+async fn load_startup_config(
+    args: &GatewayArgs,
+) -> Result<
+    (
+        tensorzero_core::config::unwritten::UnwrittenConfig,
+        Option<ConfigFileGlob>,
+    ),
+    ExitCode,
+> {
+    if args.default_config && args.config_file.is_some() {
+        tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+        return Err(ExitCode::FAILURE);
+    }
+
+    if let Some(path) = args.config_file.as_ref() {
+        let glob = ConfigFileGlob::new_from_path(path)
+            .log_err_pretty("Failed to process config file glob")?;
+        let unwritten_config = Config::load_and_verify_from_path(&glob)
+            .await
+            .ok() // Don't print the error here, since it was already printed when it was constructed
+            .log_err_pretty(&format!(
+                "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                glob.glob,
+                glob.paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ))?;
+        return Ok((unwritten_config, Some(glob)));
+    }
+
+    if args.default_config {
+        tracing::warn!(
+            "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
+        );
+        let unwritten_config = Config::new_empty()
+            .await
+            .log_err_pretty("Failed to load default config")?;
+        return Ok((unwritten_config, None));
+    }
+
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        let unwritten_config = load_startup_config_from_database()
+            .await
+            .log_err_pretty("Failed to load configuration from database")?;
+        return Ok((unwritten_config, None));
+    }
+
+    tracing::error!("You must specify either `--config-file` or `--default-config`.");
+    Err(ExitCode::FAILURE)
+}
+
+fn merge_db_config_load_errors(errors: Vec<Error>) -> Error {
+    let mut errors = errors.into_iter();
+    let Some(first_error) = errors.next() else {
+        return Error::new(ErrorDetails::Config {
+            message: "Failed to load configuration from database".to_string(),
+        });
+    };
+    let remaining_messages = errors.map(|error| error.to_string()).collect::<Vec<_>>();
+    if remaining_messages.is_empty() {
+        return first_error;
+    }
+    let first_message = first_error.to_string();
+    Error::new(ErrorDetails::Config {
+        message: format!(
+            "Failed to load configuration from database:\n- {}\n- {}",
+            first_message,
+            remaining_messages.join("\n- ")
+        ),
+    })
+}
+
+async fn load_startup_config_from_database()
+-> Result<tensorzero_core::config::unwritten::UnwrittenConfig, Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::PostgresConnectionInitialization {
+            message:
+                "Missing environment variable `TENSORZERO_POSTGRES_URL` required to load configuration from database."
+                    .to_string(),
+        })
+    })?;
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|error| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: error.to_string(),
+            })
+        })?;
+    Config::load_from_db(&pool, true)
+        .await
+        .map_err(merge_db_config_load_errors)
+}
 
 #[expect(clippy::print_stdout)]
 fn print_key(key: &secrecy::SecretString) {
@@ -189,7 +287,7 @@ async fn run() -> Result<(), ExitCode> {
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
     // We start with empty headers and update them after loading the config
-    let delayed_log_config = observability::setup_observability(args.log_format, true)
+    let delayed_log_config = observability::setup_observability(args.log_format.clone(), true)
         .await
         .log_err_pretty("Failed to set up logs")?;
 
@@ -233,44 +331,7 @@ async fn run() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
-    // Handle `--config-file` or `--default-config`
-    let (unwritten_config, glob) = match (args.default_config, args.config_file) {
-        (true, Some(_)) => {
-            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
-            return Err(ExitCode::FAILURE);
-        }
-        (false, None) => {
-            tracing::error!("You must specify either `--config-file` or `--default-config`.");
-            return Err(ExitCode::FAILURE);
-        }
-        (true, None) => {
-            tracing::warn!(
-                "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
-            );
-            (
-                Config::new_empty()
-                    .await
-                    .log_err_pretty("Failed to load default config")?,
-                None,
-            )
-        }
-        (false, Some(path)) => {
-            let glob = ConfigFileGlob::new_from_path(&path)
-                .log_err_pretty("Failed to process config file glob")?;
-            (
-
-                    Config::load_and_verify_from_path(&glob)
-                        .await
-                        .ok() // Don't print the error here, since it was already printed when it was constructed
-                        .log_err_pretty(&format!(
-                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                            glob.glob,
-                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                        ))?,
-                Some(glob),
-            )
-        }
-    };
+    let (unwritten_config, glob) = load_startup_config(&args).await?;
 
     let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
         .log_err_pretty("Failed to set up metrics")?;
@@ -401,7 +462,7 @@ async fn run() -> Result<(), ExitCode> {
     let base_path = base_path.trim_end_matches("/");
 
     if args.early_exit_commands.validate_and_exit {
-        tracing::info!("Config file is valid. Exiting.");
+        tracing::info!("Configuration is valid. Exiting.");
         return Ok(());
     }
 
@@ -458,7 +519,11 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print the configuration being used
-    print_configuration_info(glob.as_ref());
+    if glob.is_none() && !args.default_config {
+        tracing::info!("├ Configuration: database");
+    } else {
+        print_configuration_info(glob.as_ref());
+    }
 
     // Print observability backend and ClickHouse status
     let observability_backend = match gateway_handle.app_state.primary_datastore {
