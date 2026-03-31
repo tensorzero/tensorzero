@@ -16,7 +16,7 @@ use crate::variant::VariantInfo;
 
 /// Legacy `type = "uniform"` config. Converts to `StaticExperimentationConfig` with equal weights.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct LegacyUniformExperimentationConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,7 +45,7 @@ impl LegacyUniformExperimentationConfig {
 
 /// Legacy `type = "static_weights"` config. Converts to `StaticExperimentationConfig` directly.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LegacyStaticWeightsExperimentationConfig {
     candidate_variants: BTreeMap<String, f64>,

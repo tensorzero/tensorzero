@@ -30,7 +30,7 @@ use super::track_and_stop::{TrackAndStopConfig, UninitializedTrackAndStopExperim
 /// Algorithm used for adaptive experimentation.
 /// Currently only `TrackAndStop` is supported.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptiveExperimentationAlgorithm {
@@ -41,7 +41,7 @@ pub enum AdaptiveExperimentationAlgorithm {
 /// Uninitialized adaptive experimentation config.
 /// Wraps a track-and-stop config (the only algorithm currently supported) with
 /// an additional `algorithm` field.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedAdaptiveExperimentationConfig {
