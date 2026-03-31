@@ -193,6 +193,19 @@ TENSORZERO_POSTGRES_URL="postgres://[username]:[password]@[hostname]:[port]/[dat
 TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
 ```
 
+<Warning>
+
+**Supabase Free Tier**
+
+Supabase's direct connection URL requires IPv4, which is not available on the free tier.
+Use the session pooler URL instead: in your Supabase dashboard, go to `Connect → Connection string` and select `Session pooler`.
+
+If migrations fail with `prepared statement "sqlx_s_1" already exists`, switch to port `5432` in the connection string.
+See [this Supabase issue](https://github.com/supabase/supavisor/issues/239#issuecomment-2085235022) for details.
+Migrations may be slower through the session pooler.
+
+</Warning>
+
 </Step>
 
 <Step title="Apply Postgres migrations">
@@ -237,20 +250,6 @@ docker run --rm --network host \
 You should re-run this command when upgrading TensorZero from an earlier version.
 
 </Note>
-
-<AccordionGroup>
-
-<Accordion title="Notes for Supabase">
-
-**Use the session pooler connection string.** Supabase's direct connection URL may not work on the free tier due to IPv4 restrictions. Use the **session pooler** URL instead: in your Supabase dashboard, go to **Connect → Connection string** and select **Session pooler** as the method.
-
-**Migrations may fail with `prepared statement already exists`.** If you see `prepared statement "sqlx_s_1" already exists` when running migrations through the session pooler, use port `5432` in your connection string. See [this Supabase issue](https://github.com/supabase/supavisor/issues/239#issuecomment-2085235022) for more details.
-
-Migrations may also run slower through the session pooler compared to a direct connection.
-
-</Accordion>
-
-</AccordionGroup>
 
 </Step>
 
