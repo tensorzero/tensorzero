@@ -2842,9 +2842,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries.clone()),
             raw_response: None,
@@ -2897,9 +2897,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -2936,9 +2936,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -2972,9 +2972,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             raw_usage: None,
             raw_response: None,
@@ -3022,9 +3022,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
             raw_response: None,
@@ -3114,9 +3114,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3218,9 +3218,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3304,9 +3304,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -3391,9 +3391,9 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             ..Default::default()
         });
@@ -3509,9 +3509,9 @@ mod tests {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(5),
-                    cost: None,
                     provider_cache_read_input_tokens: None,
                     provider_cache_write_input_tokens: None,
+                    cost: None,
                 },
                 latency: Latency::NonStreaming {
                     response_time: Duration::from_millis(100),

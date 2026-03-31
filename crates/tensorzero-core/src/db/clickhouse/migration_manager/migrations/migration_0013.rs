@@ -1,9 +1,8 @@
-use std::time::Duration;
-
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 
+use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use async_trait::async_trait;
 
@@ -118,7 +117,7 @@ impl Migration for Migration0013<'_> {
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
-        let view_offset = Duration::from_secs(15);
+        let _view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -127,8 +126,8 @@ impl Migration for Migration0013<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_secs();
+            + ViewOffsetDeadline::offset())
+        .as_secs();
         let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
         let chat_count: usize = self
             .clickhouse
@@ -352,8 +351,7 @@ impl Migration for Migration0013<'_> {
 
         /*
         if !self.clean_start {
-            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
 
             let insert_chat_inference = async {
                 let query = format!(

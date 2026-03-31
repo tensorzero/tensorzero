@@ -5,6 +5,46 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
+/// Default offset for materialized view recreation during migrations.
+///
+/// When a migration drops and recreates a MV, there's a window where inserts
+/// are not captured. The MV is created with `WHERE id >= T` (where T = now + offset),
+/// and the backfill covers `WHERE id < T`. We must wait until T has passed before
+/// running the backfill so that no new rows can have `id < T`.
+///
+/// The offset only needs to exceed the time to drop + create the MV (typically < 1s,
+/// up to a few seconds on ClickHouse Cloud with replication).
+const VIEW_OFFSET: Duration = Duration::from_secs(5);
+
+/// Tracks a future deadline for MV backfill operations.
+///
+/// Created before the MV drop/recreate work starts. Call [`wait`](Self::wait)
+/// after the MV is recreated — it only sleeps the remaining time until the
+/// deadline, not the full offset duration.
+pub(crate) struct ViewOffsetDeadline {
+    deadline: tokio::time::Instant,
+}
+
+impl ViewOffsetDeadline {
+    /// Creates a new deadline `VIEW_OFFSET` seconds from now.
+    pub(crate) fn new() -> Self {
+        Self {
+            deadline: tokio::time::Instant::now() + VIEW_OFFSET,
+        }
+    }
+
+    /// Waits until the deadline has passed. If the deadline is already in the
+    /// past (because the MV work took longer than the offset), returns immediately.
+    pub(crate) async fn wait(self) {
+        tokio::time::sleep_until(self.deadline).await;
+    }
+
+    /// Returns the offset duration (for computing the future timestamp).
+    pub(crate) fn offset() -> Duration {
+        VIEW_OFFSET
+    }
+}
+
 pub mod migration_0000;
 pub mod migration_0002;
 pub mod migration_0003;
