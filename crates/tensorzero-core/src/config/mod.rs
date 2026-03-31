@@ -75,7 +75,6 @@ pub mod provider_types;
 pub mod rate_limiting;
 pub mod snapshot;
 mod span_map;
-pub mod stored;
 #[cfg(test)]
 mod tests;
 pub mod unwritten;
