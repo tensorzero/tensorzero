@@ -377,7 +377,7 @@ pub fn create_test_evaluation_info(
         response,
         evaluations: HashMap::new(),
         evaluator_errors: HashMap::new(),
-        inference_time_ms: 0.0,
+        processing_time_ms: 0.0,
     }
 }
 
@@ -883,7 +883,7 @@ async fn test_analyze_input_format_scenarios() {
             response,
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
-            inference_time_ms: 0.0,
+            processing_time_ms: 0.0,
         }
     };
 

@@ -12,7 +12,7 @@ export type EvaluationRunUsageSummary = {
   total_output_tokens?: bigint;
   total_cost?: number | null;
   /**
-   * Total wall-clock inference time in milliseconds
+   * Total wall-clock processing time in milliseconds
    */
-  total_inference_time_ms: number;
+  total_processing_time_ms: number;
 };

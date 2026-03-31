@@ -117,7 +117,7 @@ fn success_event_from_info(
         response,
         evaluations: info.evaluations,
         evaluator_errors: info.evaluator_errors,
-        inference_time_ms: info.inference_time_ms,
+        processing_time_ms: info.processing_time_ms,
     })
 }
 

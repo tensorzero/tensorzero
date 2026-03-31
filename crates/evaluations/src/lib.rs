@@ -750,7 +750,7 @@ pub async fn run_evaluation_core_streaming(
                         (*success.datapoint).clone(),
                         (*success.inference_response).clone(),
                         success.evaluation_result,
-                        success.inference_time_ms,
+                        success.processing_time_ms,
                     )))
                 }
                 BatchItemResult::Error(error) => {
@@ -1074,7 +1074,7 @@ pub struct DatapointVariantResult {
     /// Results from all evaluators (evaluator_name -> result)
     pub evaluation_result: evaluators::EvaluationResult,
     /// Wall-clock time for the inference call, in milliseconds
-    pub inference_time_ms: f64,
+    pub processing_time_ms: f64,
 }
 
 /// Error from processing a single (datapoint, variant) pair.
@@ -1194,7 +1194,7 @@ pub async fn process_batch(
                         anyhow!("Error inferring for datapoint {}: {e}", datapoint.id())
                     })?,
                 );
-                let inference_time_ms = inference_start.elapsed().as_secs_f64() * 1000.0;
+                let processing_time_ms = inference_start.elapsed().as_secs_f64() * 1000.0;
 
                 // Run evaluators
                 let evaluation_result = evaluate_inference(
@@ -1234,7 +1234,7 @@ pub async fn process_batch(
                     variant,
                     inference_response,
                     evaluation_result,
-                    inference_time_ms,
+                    processing_time_ms,
                 })
             });
 

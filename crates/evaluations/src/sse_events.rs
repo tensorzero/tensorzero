@@ -56,7 +56,7 @@ pub struct EvaluationRunSuccessEvent {
     pub evaluations: HashMap<String, Option<Value>>,
     pub evaluator_errors: HashMap<String, String>,
     /// Wall-clock time for the inference call, in milliseconds
-    pub inference_time_ms: f64,
+    pub processing_time_ms: f64,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -103,8 +103,8 @@ pub struct EvaluationRunUsageSummary {
     )]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub total_cost: Option<Decimal>,
-    /// Total wall-clock inference time in milliseconds
-    pub total_inference_time_ms: f64,
+    /// Total wall-clock processing time in milliseconds
+    pub total_processing_time_ms: f64,
 }
 
 impl EvaluationRunUsageSummary {
@@ -120,7 +120,7 @@ impl EvaluationRunUsageSummary {
         if let Some(cost) = usage.cost {
             *self.total_cost.get_or_insert(Decimal::ZERO) += cost;
         }
-        self.total_inference_time_ms += info.inference_time_ms;
+        self.total_processing_time_ms += info.processing_time_ms;
     }
 }
 
@@ -144,7 +144,7 @@ mod tests {
         input_tokens: Option<u32>,
         output_tokens: Option<u32>,
         cost: Option<Decimal>,
-        inference_time_ms: f64,
+        processing_time_ms: f64,
     ) -> EvaluationInfo {
         let usage = tensorzero_provider_types::Usage {
             input_tokens,
@@ -188,7 +188,7 @@ mod tests {
             response,
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
-            inference_time_ms,
+            processing_time_ms,
         }
     }
 
@@ -199,7 +199,7 @@ mod tests {
         expect_that!(summary.total_input_tokens, none());
         expect_that!(summary.total_output_tokens, none());
         expect_that!(summary.total_cost, none());
-        expect_that!(summary.total_inference_time_ms, eq(0.0));
+        expect_that!(summary.total_processing_time_ms, eq(0.0));
     }
 
     #[gtest]
@@ -220,7 +220,7 @@ mod tests {
             summary.total_cost,
             some(eq(Decimal::from_str("0.005").expect("valid decimal")))
         );
-        expect_that!(summary.total_inference_time_ms, eq(150.0));
+        expect_that!(summary.total_processing_time_ms, eq(150.0));
     }
 
     #[gtest]
@@ -250,7 +250,7 @@ mod tests {
             summary.total_cost,
             some(eq(Decimal::from_str("0.015").expect("valid decimal")))
         );
-        expect_that!(summary.total_inference_time_ms, eq(300.0));
+        expect_that!(summary.total_processing_time_ms, eq(300.0));
     }
 
     #[gtest]
@@ -277,7 +277,7 @@ mod tests {
             "neither inference had output tokens"
         );
         expect_that!(summary.total_cost, none(), "neither inference had cost");
-        expect_that!(summary.total_inference_time_ms, eq(125.0));
+        expect_that!(summary.total_processing_time_ms, eq(125.0));
     }
 
     #[gtest]
@@ -290,7 +290,7 @@ mod tests {
                 total_input_tokens: Some(1000),
                 total_output_tokens: Some(500),
                 total_cost: Some(Decimal::from_str("0.05").expect("valid decimal")),
-                total_inference_time_ms: 750.0,
+                total_processing_time_ms: 750.0,
             },
         });
 
@@ -303,7 +303,7 @@ mod tests {
         expect_that!(parsed["usage"]["total_input_tokens"], eq(1000));
         expect_that!(parsed["usage"]["total_output_tokens"], eq(500));
         expect_that!(parsed["usage"]["total_cost"], eq(0.05));
-        expect_that!(parsed["usage"]["total_inference_time_ms"], eq(750.0));
+        expect_that!(parsed["usage"]["total_processing_time_ms"], eq(750.0));
     }
 
     #[gtest]
@@ -333,14 +333,14 @@ mod tests {
             response: serde_json::json!({}),
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
-            inference_time_ms: 123.456,
+            processing_time_ms: 123.456,
         });
 
         let json = serde_json::to_string(&event).expect("serialization should succeed");
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
 
         expect_that!(parsed["type"], eq("success"));
-        expect_that!(parsed["inference_time_ms"], eq(123.456));
+        expect_that!(parsed["processing_time_ms"], eq(123.456));
     }
 
     #[gtest]
@@ -353,7 +353,7 @@ mod tests {
                 "total_input_tokens": 5000,
                 "total_output_tokens": 2500,
                 "total_cost": 0.123,
-                "total_inference_time_ms": 1500.5
+                "total_processing_time_ms": 1500.5
             }
         });
 
@@ -365,7 +365,7 @@ mod tests {
                 expect_that!(complete.usage.total_input_tokens, some(eq(5000)));
                 expect_that!(complete.usage.total_output_tokens, some(eq(2500)));
                 expect_that!(complete.usage.total_cost, some(anything()));
-                expect_that!(complete.usage.total_inference_time_ms, eq(1500.5));
+                expect_that!(complete.usage.total_processing_time_ms, eq(1500.5));
             }
             other => panic!("Expected Complete event, got {other:?}"),
         }

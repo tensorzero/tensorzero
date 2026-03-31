@@ -10,5 +10,5 @@ export type EvaluationRunSuccessEvent = {
   /**
    * Wall-clock time for the inference call, in milliseconds
    */
-  inference_time_ms: number;
+  processing_time_ms: number;
 };
