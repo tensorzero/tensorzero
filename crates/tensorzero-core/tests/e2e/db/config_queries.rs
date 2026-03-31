@@ -189,7 +189,7 @@ make_db_test!(test_config_snapshot_includes_built_in_functions);
 
 #[expect(clippy::disallowed_methods)]
 async fn test_config_snapshot_tag_merging(conn: impl ConfigQueries + TestDatabaseHelpers) {
-    use tensorzero_core::config::stored::StoredConfig;
+    use tensorzero_core::config::snapshot::StoredConfig;
 
     let random_id = Uuid::now_v7();
 

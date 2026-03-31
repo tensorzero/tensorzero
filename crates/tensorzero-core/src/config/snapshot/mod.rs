@@ -9,6 +9,8 @@
 //! when fields are added or removed from either the stored or uninitialized types.
 
 mod cache_config;
+pub(crate) mod config_snapshot;
+pub use config_snapshot::ConfigSnapshot;
 mod embedding_model_config;
 mod gateway_config;
 mod observability_config;
@@ -17,6 +19,7 @@ pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 pub use gateway_config::StoredGatewayConfig;
 pub use observability_config::StoredObservabilityConfig;
+pub use tensorzero_types::SnapshotHash;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
