@@ -1,0 +1,137 @@
+---
+title: "API Reference: Models"
+sidebarTitle: Models
+description: API reference for the `/openai/v1/models` endpoints.
+---
+
+## `GET /openai/v1/models`
+
+Lists all available models, embedding models, and user-defined functions in the TensorZero Gateway.
+
+This endpoint follows the [OpenAI Models API](https://platform.openai.com/docs/api-reference/models) specification.
+
+### Response
+
+Returns a list of all available entities with the following fields:
+
+- **id** (string): The unique identifier for the model/function
+- **object** (string): Always `"model"`
+- **created** (integer): Unix timestamp (seconds)
+- **owned_by** (string): The owner of the model (configurable via `gateway.openai_models_owned_by`)
+
+### Model ID Formats
+
+TensorZero uses different prefixes to distinguish between entity types:
+
+| Entity Type | ID Format | Example |
+|-------------|-----------|---------|
+| Inference Models | `tensorzero::model_name::<name>` | `tensorzero::model_name::gpt-4o` |
+| Embedding Models | `tensorzero::embedding_model_name::<name>` | `tensorzero::embedding_model_name::text-embedding-3-small` |
+| User Functions | `tensorzero::function_name::<name>` | `tensorzero::function_name::my-chat-function` |
+
+<Note>
+
+Built-in functions (e.g., `tensorzero::optimization::gepa::analyze`) are not included in the models list.
+
+</Note>
+
+<Accordion title="Example Request">
+
+```bash
+curl http://localhost:3000/openai/v1/models \
+  -H "Authorization: Bearer not-used"
+```
+
+</Accordion>
+
+<Accordion title="Example Response">
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "tensorzero::model_name::gpt-4o",
+      "object": "model",
+      "created": 1774944000,
+      "owned_by": "tensorzero"
+    },
+    {
+      "id": "tensorzero::embedding_model_name::text-embedding-3-small",
+      "object": "model",
+      "created": 1774944000,
+      "owned_by": "tensorzero"
+    },
+    {
+      "id": "tensorzero::function_name::my-chat-function",
+      "object": "model",
+      "created": 1774944000,
+      "owned_by": "tensorzero"
+    }
+  ]
+}
+```
+
+</Accordion>
+
+---
+
+## `GET /openai/v1/models/{model}`
+
+Retrieves a specific model, embedding model, or function by its ID.
+
+### Path Parameters
+
+- **model** (string, required): The model ID (e.g., `tensorzero::model_name::gpt-4o`)
+
+You can also provide just the name without the prefix:
+
+- `gpt-4o` (looks up in models)
+- `text-embedding-3-small` (looks up in embedding models)
+- `my-chat-function` (looks up in functions)
+
+### Response
+
+Returns the specified model with the following fields:
+
+- **id** (string): The unique identifier for the model/function
+- **object** (string): Always `"model"`
+- **created** (integer): Unix timestamp (seconds)
+- **owned_by** (string): The owner of the model
+
+<Accordion title="Example Request">
+
+```bash
+curl http://localhost:3000/openai/v1/models/tensorzero::model_name::gpt-4o \
+  -H "Authorization: Bearer not-used"
+```
+
+</Accordion>
+
+<Accordion title="Example Response">
+
+```json
+{
+  "id": "tensorzero::model_name::gpt-4o",
+  "object": "model",
+  "created": 1774944000,
+  "owned_by": "tensorzero"
+}
+```
+
+</Accordion>
+
+### Error Responses
+
+- **404 Not Found**: If the specified model/function does not exist
+
+```json
+{
+  "error": {
+    "message": "Model 'nonexistent-model' not found",
+    "type": "invalid_request_error",
+    "param": "model",
+    "code": "model_not_found"
+  }
+}
+```

@@ -70,6 +70,7 @@
                 "pages": [
                   "gateway/api-reference/inference",
                   "gateway/api-reference/inference-openai-compatible",
+                  "gateway/api-reference/models",
                   "gateway/api-reference/feedback",
                   "gateway/api-reference/batch-inference",
                   "gateway/api-reference/datasets-datapoints"
