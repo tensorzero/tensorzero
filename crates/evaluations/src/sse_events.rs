@@ -91,7 +91,9 @@ pub struct EvaluationRunCompleteEvent {
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct EvaluationRunUsageSummary {
     /// Number of successful inferences
-    pub count: u32,
+    pub success_count: u32,
+    /// Number of failed inferences
+    pub error_count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_input_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,8 +110,8 @@ pub struct EvaluationRunUsageSummary {
 }
 
 impl EvaluationRunUsageSummary {
-    pub fn accumulate(&mut self, info: &super::stats::EvaluationInfo) {
-        self.count += 1;
+    pub fn record_success(&mut self, info: &super::stats::EvaluationInfo) {
+        self.success_count += 1;
         let usage = info.response.usage();
         if let Some(input_tokens) = usage.input_tokens {
             *self.total_input_tokens.get_or_insert(0) += input_tokens as u64;
@@ -121,6 +123,10 @@ impl EvaluationRunUsageSummary {
             *self.total_cost.get_or_insert(Decimal::ZERO) += cost;
         }
         self.total_processing_time_ms += info.processing_time_ms;
+    }
+
+    pub fn record_error(&mut self) {
+        self.error_count += 1;
     }
 }
 
@@ -193,13 +199,23 @@ mod tests {
     }
 
     #[gtest]
-    fn test_accumulate_empty() {
+    fn test_default_summary() {
         let summary = EvaluationRunUsageSummary::default();
-        expect_that!(summary.count, eq(0));
+        expect_that!(summary.success_count, eq(0));
+        expect_that!(summary.error_count, eq(0));
         expect_that!(summary.total_input_tokens, none());
         expect_that!(summary.total_output_tokens, none());
         expect_that!(summary.total_cost, none());
         expect_that!(summary.total_processing_time_ms, eq(0.0));
+    }
+
+    #[gtest]
+    fn test_record_error() {
+        let mut summary = EvaluationRunUsageSummary::default();
+        summary.record_error();
+        summary.record_error();
+        expect_that!(summary.error_count, eq(2));
+        expect_that!(summary.success_count, eq(0));
     }
 
     #[gtest]
@@ -211,9 +227,9 @@ mod tests {
             Some(Decimal::from_str("0.005").expect("valid decimal")),
             150.0,
         );
-        summary.accumulate(&info);
+        summary.record_success(&info);
 
-        expect_that!(summary.count, eq(1));
+        expect_that!(summary.success_count, eq(1));
         expect_that!(summary.total_input_tokens, some(eq(100)));
         expect_that!(summary.total_output_tokens, some(eq(50)));
         expect_that!(
@@ -240,10 +256,10 @@ mod tests {
             200.0,
         );
 
-        summary.accumulate(&info1);
-        summary.accumulate(&info2);
+        summary.record_success(&info1);
+        summary.record_success(&info2);
 
-        expect_that!(summary.count, eq(2));
+        expect_that!(summary.success_count, eq(2));
         expect_that!(summary.total_input_tokens, some(eq(300)));
         expect_that!(summary.total_output_tokens, some(eq(130)));
         expect_that!(
@@ -262,10 +278,10 @@ mod tests {
         // Second has partial usage
         let info2 = make_evaluation_info(Some(100), None, None, 75.0);
 
-        summary.accumulate(&info1);
-        summary.accumulate(&info2);
+        summary.record_success(&info1);
+        summary.record_success(&info2);
 
-        expect_that!(summary.count, eq(2));
+        expect_that!(summary.success_count, eq(2));
         expect_that!(
             summary.total_input_tokens,
             some(eq(100)),
@@ -286,7 +302,8 @@ mod tests {
         let event = EvaluationRunEvent::Complete(EvaluationRunCompleteEvent {
             evaluation_run_id: run_id,
             usage: EvaluationRunUsageSummary {
-                count: 5,
+                success_count: 5,
+                error_count: 2,
                 total_input_tokens: Some(1000),
                 total_output_tokens: Some(500),
                 total_cost: Some(Decimal::from_str("0.05").expect("valid decimal")),
@@ -299,7 +316,8 @@ mod tests {
 
         expect_that!(parsed["type"], eq("complete"));
         expect_that!(parsed["evaluation_run_id"], eq(run_id.to_string().as_str()));
-        expect_that!(parsed["usage"]["count"], eq(5));
+        expect_that!(parsed["usage"]["success_count"], eq(5));
+        expect_that!(parsed["usage"]["error_count"], eq(2));
         expect_that!(parsed["usage"]["total_input_tokens"], eq(1000));
         expect_that!(parsed["usage"]["total_output_tokens"], eq(500));
         expect_that!(parsed["usage"]["total_cost"], eq(0.05));
@@ -317,7 +335,8 @@ mod tests {
         let json = serde_json::to_string(&event).expect("serialization should succeed");
         let parsed: serde_json::Value = serde_json::from_str(&json).expect("should be valid JSON");
 
-        expect_that!(parsed["usage"]["count"], eq(0));
+        expect_that!(parsed["usage"]["success_count"], eq(0));
+        expect_that!(parsed["usage"]["error_count"], eq(0));
         // None fields should be omitted (skip_serializing_if)
         expect_that!(parsed["usage"].get("total_input_tokens"), none());
         expect_that!(parsed["usage"].get("total_output_tokens"), none());
@@ -349,7 +368,8 @@ mod tests {
             "type": "complete",
             "evaluation_run_id": "01963691-9d3c-7793-a8be-3937ebb849c1",
             "usage": {
-                "count": 10,
+                "success_count": 10,
+                "error_count": 3,
                 "total_input_tokens": 5000,
                 "total_output_tokens": 2500,
                 "total_cost": 0.123,
@@ -361,7 +381,8 @@ mod tests {
             serde_json::from_value(json).expect("deserialization should succeed");
         match event {
             EvaluationRunEvent::Complete(complete) => {
-                expect_that!(complete.usage.count, eq(10));
+                expect_that!(complete.usage.success_count, eq(10));
+                expect_that!(complete.usage.error_count, eq(3));
                 expect_that!(complete.usage.total_input_tokens, some(eq(5000)));
                 expect_that!(complete.usage.total_output_tokens, some(eq(2500)));
                 expect_that!(complete.usage.total_cost, some(anything()));

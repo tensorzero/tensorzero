@@ -7,7 +7,11 @@ export type EvaluationRunUsageSummary = {
   /**
    * Number of successful inferences
    */
-  count: number;
+  success_count: number;
+  /**
+   * Number of failed inferences
+   */
+  error_count: number;
   total_input_tokens?: bigint;
   total_output_tokens?: bigint;
   total_cost?: number | null;

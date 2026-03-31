@@ -183,7 +183,7 @@ fn create_evaluation_stream(
             let event = match update {
                 EvaluationUpdate::RunInfo(_) => continue, // Already sent start event
                 EvaluationUpdate::Success(info) => {
-                    usage_summary.accumulate(&info);
+                    usage_summary.record_success(&info);
                     match success_event_from_info(evaluation_run_id, info) {
                         Ok(success_event) => EvaluationRunEvent::Success(success_event),
                         Err(e) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
@@ -194,6 +194,7 @@ fn create_evaluation_stream(
                     }
                 }
                 EvaluationUpdate::Error(EvaluationError { datapoint_id, message }) => {
+                    usage_summary.record_error();
                     EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                         evaluation_run_id,
                         datapoint_id,
