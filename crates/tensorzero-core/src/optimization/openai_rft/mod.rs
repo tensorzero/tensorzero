@@ -5,6 +5,11 @@ use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredOpenAIGrader, StoredOpenAIModelGraderInput, StoredOpenAIRFTConfig,
+    StoredOpenAIRFTResponseFormat, StoredOpenAIRFTRole, StoredOpenAISimilarityMetric,
+    StoredOpenAIStringCheckOp, StoredRFTJsonSchemaInfo,
+};
 use url::Url;
 
 use crate::{
@@ -104,6 +109,170 @@ impl std::fmt::Display for UninitializedOpenAIRFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredOpenAIStringCheckOp> for crate::providers::openai::grader::OpenAIStringCheckOp {
+    fn from(stored: StoredOpenAIStringCheckOp) -> Self {
+        match stored {
+            StoredOpenAIStringCheckOp::Eq => Self::Eq,
+            StoredOpenAIStringCheckOp::Ne => Self::Ne,
+            StoredOpenAIStringCheckOp::Like => Self::Like,
+            StoredOpenAIStringCheckOp::Ilike => Self::Ilike,
+        }
+    }
+}
+
+impl From<StoredOpenAISimilarityMetric>
+    for crate::providers::openai::grader::OpenAISimilarityMetric
+{
+    fn from(stored: StoredOpenAISimilarityMetric) -> Self {
+        match stored {
+            StoredOpenAISimilarityMetric::FuzzyMatch => Self::FuzzyMatch,
+            StoredOpenAISimilarityMetric::Bleu => Self::Bleu,
+            StoredOpenAISimilarityMetric::Gleu => Self::Gleu,
+            StoredOpenAISimilarityMetric::Meteor => Self::Meteor,
+            StoredOpenAISimilarityMetric::Rouge1 => Self::Rouge1,
+            StoredOpenAISimilarityMetric::Rouge2 => Self::Rouge2,
+            StoredOpenAISimilarityMetric::Rouge3 => Self::Rouge3,
+            StoredOpenAISimilarityMetric::Rouge4 => Self::Rouge4,
+            StoredOpenAISimilarityMetric::Rouge5 => Self::Rouge5,
+            StoredOpenAISimilarityMetric::RougeL => Self::RougeL,
+        }
+    }
+}
+
+impl From<StoredOpenAIRFTRole> for crate::providers::openai::grader::OpenAIRFTRole {
+    fn from(stored: StoredOpenAIRFTRole) -> Self {
+        match stored {
+            StoredOpenAIRFTRole::Developer => Self::Developer,
+            StoredOpenAIRFTRole::User => Self::User,
+        }
+    }
+}
+
+impl From<StoredOpenAIModelGraderInput>
+    for crate::providers::openai::grader::OpenAIModelGraderInput
+{
+    fn from(stored: StoredOpenAIModelGraderInput) -> Self {
+        Self {
+            role: stored.role.into(),
+            content: stored.content,
+        }
+    }
+}
+
+impl From<StoredOpenAIGrader> for OpenAIGrader {
+    fn from(stored: StoredOpenAIGrader) -> Self {
+        match stored {
+            StoredOpenAIGrader::StringCheck {
+                name,
+                operation,
+                input,
+                reference,
+            } => Self::StringCheck {
+                name,
+                operation: operation.into(),
+                input,
+                reference,
+            },
+            StoredOpenAIGrader::TextSimilarity {
+                name,
+                evaluation_metric,
+                input,
+                reference,
+            } => Self::TextSimilarity {
+                name,
+                evaluation_metric: evaluation_metric.into(),
+                input,
+                reference,
+            },
+            StoredOpenAIGrader::ScoreModel {
+                name,
+                model,
+                input,
+                range,
+            } => Self::ScoreModel {
+                name,
+                model,
+                input: input.into_iter().map(Into::into).collect(),
+                range,
+            },
+            StoredOpenAIGrader::LabelModel {
+                name,
+                model,
+                labels,
+                passing_labels,
+                input,
+            } => Self::LabelModel {
+                name,
+                model,
+                labels,
+                passing_labels,
+                input: input.into_iter().map(Into::into).collect(),
+            },
+            StoredOpenAIGrader::Python {
+                name,
+                source,
+                image_tag,
+            } => Self::Python {
+                name,
+                source,
+                image_tag,
+            },
+            StoredOpenAIGrader::Multi {
+                calculate_output,
+                graders,
+                name,
+            } => Self::Multi {
+                calculate_output,
+                graders: graders
+                    .into_iter()
+                    .map(|(k, v)| (k, Box::new((*v).into())))
+                    .collect(),
+                name,
+            },
+        }
+    }
+}
+
+impl From<StoredRFTJsonSchemaInfo> for JsonSchemaInfo {
+    fn from(stored: StoredRFTJsonSchemaInfo) -> Self {
+        Self {
+            name: stored.name,
+            description: stored.description,
+            schema: stored.schema,
+            strict: stored.strict.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<StoredOpenAIRFTResponseFormat> for OpenAIRFTResponseFormat {
+    fn from(stored: StoredOpenAIRFTResponseFormat) -> Self {
+        match stored {
+            StoredOpenAIRFTResponseFormat::JsonSchema { json_schema } => Self::JsonSchema {
+                json_schema: RFTJsonSchemaInfoOption::JsonSchema(json_schema.into()),
+            },
+        }
+    }
+}
+
+impl From<StoredOpenAIRFTConfig> for UninitializedOpenAIRFTConfig {
+    fn from(stored: StoredOpenAIRFTConfig) -> Self {
+        UninitializedOpenAIRFTConfig {
+            model: stored.model,
+            grader: stored.grader.into(),
+            response_format: stored.response_format.map(Into::into),
+            batch_size: stored.batch_size,
+            compute_multiplier: stored.compute_multiplier,
+            eval_interval: stored.eval_interval,
+            eval_samples: stored.eval_samples,
+            learning_rate_multiplier: stored.learning_rate_multiplier,
+            n_epochs: stored.n_epochs,
+            reasoning_effort: stored.reasoning_effort,
+            seed: stored.seed,
+            suffix: stored.suffix,
+        }
     }
 }
 
