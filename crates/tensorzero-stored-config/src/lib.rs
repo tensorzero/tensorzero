@@ -69,7 +69,9 @@ pub use stored_optimizer_info::{
     StoredTogetherTrainingMethod, StoredTogetherTrainingType,
 };
 pub use stored_postgres_config::StoredPostgresConfig;
-pub use stored_prompt_template::StoredPromptRef;
+pub use stored_prompt_template::{
+    StoredPromptRef, StoredPromptTemplate, StoredPromptTemplateDependency,
+};
 pub use stored_provider_types_config::{
     StoredApiKeyDefaults, StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,
     StoredGCPBatchConfigCloudStorage, StoredGCPBatchConfigType, StoredGCPCredentialDefaults,
