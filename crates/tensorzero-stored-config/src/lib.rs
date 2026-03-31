@@ -6,6 +6,7 @@ mod stored_embedding_model_config;
 mod stored_evaluation_config;
 mod stored_extra_body;
 mod stored_extra_headers;
+mod stored_function_config;
 mod stored_gateway_config;
 mod stored_metric_config;
 pub mod stored_model_config;
@@ -16,6 +17,7 @@ mod stored_provider_types_config;
 mod stored_rate_limiting_config;
 mod stored_storage_kind;
 mod stored_tool_config;
+pub mod stored_variant_config;
 
 pub use stored_autopilot_config::StoredAutopilotConfig;
 pub use stored_clickhouse_config::StoredClickHouseConfig;
@@ -44,6 +46,12 @@ pub use stored_extra_body::{
 };
 pub use stored_extra_headers::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
+};
+pub use stored_function_config::{
+    StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
+    StoredChatFunctionConfig, StoredExperimentationConfig,
+    StoredExperimentationConfigWithNamespaces, StoredFunctionConfig, StoredJsonFunctionConfig,
+    StoredStaticExperimentationConfig, StoredToolChoice,
 };
 pub use stored_gateway_config::{
     StoredAuthConfig, StoredBatchWritesConfig, StoredExportConfig, StoredGatewayAuthCacheConfig,
@@ -86,3 +94,8 @@ pub use stored_rate_limiting_config::{
 };
 pub use stored_storage_kind::StoredStorageKind;
 pub use stored_tool_config::StoredToolConfig;
+pub use stored_variant_config::{
+    StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredDiclVariantConfig,
+    StoredInputWrappers, StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
+    StoredVariantVersionConfig,
+};
