@@ -24,7 +24,7 @@ use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 ///
 /// `fallback_variants` is optional and defaults to an empty list.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct StaticExperimentationConfig {
     pub candidate_variants: WeightedVariants,
@@ -37,7 +37,7 @@ pub struct StaticExperimentationConfig {
 /// - A JSON/TOML map `{"a": 0.7, "b": 0.3}` → explicit weights
 ///
 /// Always serializes as a map.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct WeightedVariants(BTreeMap<String, f64>);
 
 impl WeightedVariants {

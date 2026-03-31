@@ -121,7 +121,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -722,7 +722,7 @@ impl EmbeddingProviderInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,

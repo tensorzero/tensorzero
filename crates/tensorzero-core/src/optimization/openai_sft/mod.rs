@@ -23,7 +23,7 @@ pub struct OpenAISFTConfig {
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {

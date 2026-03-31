@@ -84,7 +84,7 @@ pub struct RateLimitingConfig {
     pub(crate) default_nano_cost: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     pub(crate) rules: Vec<RateLimitingConfigRule>,
@@ -400,7 +400,7 @@ impl ActiveRateLimit {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
@@ -433,7 +433,7 @@ impl RateLimitingConfigRule {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
