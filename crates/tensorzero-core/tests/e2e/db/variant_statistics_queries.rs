@@ -21,6 +21,7 @@ use tensorzero_core::inference::types::{
     ChatInferenceDatabaseInsert, FinishReason, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     StoredModelInference,
 };
+use tensorzero_core::serde_util::deserialize_u64;
 use tensorzero_core::tool::ToolCallConfigDatabaseInsert;
 use tonic::async_trait;
 
@@ -59,11 +60,13 @@ trait VariantStatisticsTestQueries: Send + Sync {
 struct ClickHouseVariantStatsRow {
     function_name: String,
     variant_name: String,
+    #[serde(deserialize_with = "deserialize_u64")]
     count: u64,
     total_input_tokens: Option<i64>,
     total_output_tokens: Option<i64>,
     #[serde(default, with = "rust_decimal::serde::float_option")]
     total_cost: Option<Decimal>,
+    #[serde(deserialize_with = "deserialize_u64")]
     count_with_cost: u64,
 }
 

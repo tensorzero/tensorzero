@@ -614,8 +614,10 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let row1 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        function_name: "test_function".to_string(),
-        variant_name: "test_variant".to_string(),
+        // Empty strings so these are skipped during serialization — the columns
+        // don't exist in ClickHouse until migration 0053.
+        function_name: String::new(),
+        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -638,8 +640,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let row2 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        function_name: "test_function".to_string(),
-        variant_name: "test_variant".to_string(),
+        function_name: String::new(),
+        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
