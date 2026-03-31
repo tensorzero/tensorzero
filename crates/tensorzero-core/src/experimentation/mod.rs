@@ -6,6 +6,9 @@ use std::{
     sync::Arc,
 };
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredAdaptiveExperimentationAlgorithm, StoredExperimentationConfig,
+};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -579,6 +582,51 @@ impl VariantSampler for AlwaysFailsConfig {
             .into_iter()
             .map(|variant_name| (variant_name, uniform_prob))
             .collect())
+    }
+}
+
+impl From<StoredExperimentationConfig> for UninitializedExperimentationConfig {
+    fn from(stored: StoredExperimentationConfig) -> Self {
+        match stored {
+            StoredExperimentationConfig::Static(s) => {
+                let weighted = match s.candidate_variants {
+                    Some(map) => WeightedVariants::from_map(map.into_iter().collect()),
+                    None => WeightedVariants::from_map(Default::default()),
+                };
+                UninitializedExperimentationConfig::Static(StaticExperimentationConfig {
+                    candidate_variants: weighted,
+                    fallback_variants: s.fallback_variants.unwrap_or_default(),
+                })
+            }
+            StoredExperimentationConfig::Adaptive(a) => {
+                let algo = match a.algorithm {
+                    Some(StoredAdaptiveExperimentationAlgorithm::TrackAndStop) | None => {
+                        AdaptiveExperimentationAlgorithm::TrackAndStop
+                    }
+                };
+                UninitializedExperimentationConfig::Adaptive(
+                    UninitializedAdaptiveExperimentationConfig {
+                        algorithm: Some(algo),
+                        inner: a.into(),
+                    },
+                )
+            }
+        }
+    }
+}
+
+impl From<tensorzero_stored_config::StoredExperimentationConfigWithNamespaces>
+    for UninitializedExperimentationConfigWithNamespaces
+{
+    fn from(stored: tensorzero_stored_config::StoredExperimentationConfigWithNamespaces) -> Self {
+        let base = stored.base.into();
+        let namespaces = stored
+            .namespaces
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k, v.into()))
+            .collect();
+        UninitializedExperimentationConfigWithNamespaces { base, namespaces }
     }
 }
 

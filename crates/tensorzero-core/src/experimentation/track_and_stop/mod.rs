@@ -313,6 +313,30 @@ fn default_max_samples_per_variant() -> Option<u64> {
     Some(10_000)
 }
 
+impl From<tensorzero_stored_config::StoredAdaptiveExperimentationConfig>
+    for UninitializedTrackAndStopExperimentationConfig
+{
+    fn from(stored: tensorzero_stored_config::StoredAdaptiveExperimentationConfig) -> Self {
+        UninitializedTrackAndStopExperimentationConfig {
+            metric: stored.metric,
+            candidate_variants: stored.candidate_variants.unwrap_or_default(),
+            fallback_variants: stored.fallback_variants.unwrap_or_default(),
+            min_samples_per_variant: stored
+                .min_samples_per_variant
+                .unwrap_or_else(default_min_samples_per_variant),
+            delta: stored.delta.unwrap_or_else(default_delta),
+            epsilon: stored.epsilon.unwrap_or_default(),
+            update_period_s: stored
+                .update_period_s
+                .unwrap_or_else(default_update_period_s),
+            min_prob: stored.min_prob.or_else(default_min_prob),
+            max_samples_per_variant: stored
+                .max_samples_per_variant
+                .or_else(default_max_samples_per_variant),
+        }
+    }
+}
+
 impl UninitializedTrackAndStopExperimentationConfig {
     pub fn load(
         self,

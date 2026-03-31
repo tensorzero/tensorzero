@@ -30,6 +30,7 @@ pub mod postgres_setup;
 mod prompt_template_writes;
 pub mod rate_limiting;
 mod resolve_uuid;
+pub mod stored_config_queries;
 pub mod stored_config_writes;
 pub mod workflow_evaluation_queries;
 

@@ -1,3 +1,4 @@
+pub mod schema_dispatch;
 mod stored_autopilot_config;
 mod stored_clickhouse_config;
 mod stored_cost;
