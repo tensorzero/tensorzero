@@ -693,6 +693,7 @@ mod tests {
             response: create_test_chat_inference_response("Test response"),
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
+            inference_time_ms: 0.0,
         }
     }
 

@@ -1778,5 +1778,6 @@ fn convert_success_event(
         response,
         evaluations: success.evaluations,
         evaluator_errors: success.evaluator_errors,
+        inference_time_ms: success.inference_time_ms,
     }))
 }

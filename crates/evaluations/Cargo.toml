@@ -21,6 +21,7 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tokio-util = "0.7"
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error.workspace = true
