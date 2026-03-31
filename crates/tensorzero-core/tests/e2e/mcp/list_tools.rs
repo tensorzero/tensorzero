@@ -9,11 +9,16 @@ async fn test_mcp_list_tools() {
     let tools = mcp.list_tools().await;
 
     let tool_names: Vec<String> = tools.iter().map(|t| t.name.to_string()).collect();
-    // The MCP server registers all SimpleTool implementations from autopilot-tools.
-    // Verify that the core tools are present and that there are more than just two.
+    // The MCP server registers all SimpleTool implementations from autopilot-tools,
+    // plus manually-registered TaskTool-based tools (launch_optimization, launch_gepa).
     expect_that!(
         tool_names,
-        contains_each![eq("list_inferences"), eq("get_inferences")]
+        contains_each![
+            eq("list_inferences"),
+            eq("get_inferences"),
+            eq("launch_optimization"),
+            eq("launch_gepa"),
+        ]
     );
     expect_that!(tool_names.len(), gt(2));
 
