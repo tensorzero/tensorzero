@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::StoredTimeoutsConfig;
 use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -219,6 +220,20 @@ impl TimeoutsConfig {
         }
 
         Ok(())
+    }
+}
+
+impl From<StoredTimeoutsConfig> for TimeoutsConfig {
+    fn from(stored: StoredTimeoutsConfig) -> Self {
+        TimeoutsConfig {
+            non_streaming: stored.non_streaming.map(|ns| NonStreamingTimeouts {
+                total_ms: ns.total_ms,
+            }),
+            streaming: stored.streaming.map(|s| StreamingTimeouts {
+                ttft_ms: s.ttft_ms,
+                total_ms: s.total_ms,
+            }),
+        }
     }
 }
 

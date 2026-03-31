@@ -8,6 +8,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::export_schema;
+use tensorzero_stored_config::{
+    StoredExtraBodyConfig, StoredExtraBodyReplacement, StoredExtraBodyReplacementKind,
+};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
@@ -394,6 +397,34 @@ pub mod dynamic {
 }
 
 pub use dynamic::ExtraBody as DynamicExtraBody;
+
+// ─── Stored → Uninitialized conversions ──────────────────────────────────────
+
+impl From<StoredExtraBodyReplacementKind> for ExtraBodyReplacementKind {
+    fn from(stored: StoredExtraBodyReplacementKind) -> Self {
+        match stored {
+            StoredExtraBodyReplacementKind::Value(v) => ExtraBodyReplacementKind::Value(v),
+            StoredExtraBodyReplacementKind::Delete => ExtraBodyReplacementKind::Delete,
+        }
+    }
+}
+
+impl From<StoredExtraBodyReplacement> for ExtraBodyReplacement {
+    fn from(stored: StoredExtraBodyReplacement) -> Self {
+        ExtraBodyReplacement {
+            pointer: stored.pointer,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraBodyConfig> for ExtraBodyConfig {
+    fn from(stored: StoredExtraBodyConfig) -> Self {
+        ExtraBodyConfig {
+            data: stored.data.into_iter().map(Into::into).collect(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

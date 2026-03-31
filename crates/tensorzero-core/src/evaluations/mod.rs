@@ -5,6 +5,10 @@ use schemars::JsonSchema;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredExactMatchConfig, StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat,
+    StoredLLMJudgeOptimize, StoredLLMJudgeOutputType, StoredRegexConfig, StoredToolUseConfig,
+};
 
 use crate::variant::chain_of_thought::ChainOfThoughtConfig;
 
@@ -298,6 +302,73 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
         match optimize {
             LLMJudgeOptimize::Min => MetricConfigOptimize::Min,
             LLMJudgeOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
+// ─── Stored → Uninitialized conversions (simple types) ───────────────────────
+
+impl From<StoredLLMJudgeInputFormat> for LLMJudgeInputFormat {
+    fn from(stored: StoredLLMJudgeInputFormat) -> Self {
+        match stored {
+            StoredLLMJudgeInputFormat::Serialized => LLMJudgeInputFormat::Serialized,
+            StoredLLMJudgeInputFormat::Messages => LLMJudgeInputFormat::Messages,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeOutputType> for LLMJudgeOutputType {
+    fn from(stored: StoredLLMJudgeOutputType) -> Self {
+        match stored {
+            StoredLLMJudgeOutputType::Float => LLMJudgeOutputType::Float,
+            StoredLLMJudgeOutputType::Boolean => LLMJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeOptimize> for LLMJudgeOptimize {
+    fn from(stored: StoredLLMJudgeOptimize) -> Self {
+        match stored {
+            StoredLLMJudgeOptimize::Min => LLMJudgeOptimize::Min,
+            StoredLLMJudgeOptimize::Max => LLMJudgeOptimize::Max,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeIncludeConfig> for LLMJudgeIncludeConfig {
+    fn from(stored: StoredLLMJudgeIncludeConfig) -> Self {
+        LLMJudgeIncludeConfig {
+            reference_output: stored.reference_output,
+        }
+    }
+}
+
+#[expect(deprecated)]
+impl From<StoredExactMatchConfig> for ExactMatchConfig {
+    fn from(stored: StoredExactMatchConfig) -> Self {
+        ExactMatchConfig {
+            cutoff: stored.cutoff,
+        }
+    }
+}
+
+impl From<StoredRegexConfig> for RegexConfig {
+    fn from(stored: StoredRegexConfig) -> Self {
+        RegexConfig {
+            must_match: stored.must_match,
+            must_not_match: stored.must_not_match,
+        }
+    }
+}
+
+impl From<StoredToolUseConfig> for ToolUseConfig {
+    fn from(stored: StoredToolUseConfig) -> Self {
+        match stored {
+            StoredToolUseConfig::None => ToolUseConfig::None,
+            StoredToolUseConfig::NoneOf { tools } => ToolUseConfig::NoneOf { tools },
+            StoredToolUseConfig::Any => ToolUseConfig::Any,
+            StoredToolUseConfig::AnyOf { tools } => ToolUseConfig::AnyOf { tools },
+            StoredToolUseConfig::AllOf { tools } => ToolUseConfig::AllOf { tools },
         }
     }
 }
