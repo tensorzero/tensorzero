@@ -115,6 +115,22 @@ pub struct EvaluationStatisticsRow {
     pub ci_upper: Option<f64>,
 }
 
+/// Aggregated usage statistics for an evaluation run.
+/// Sums token counts and cost across all inferences in the run.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct EvaluationUsageStatisticsRow {
+    pub evaluation_run_id: Uuid,
+    pub inference_count: u32,
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub total_input_tokens: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub total_output_tokens: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
+    pub total_cost: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
+    pub avg_processing_time_ms: Option<f64>,
+}
+
 /// Result of checking for existing human feedback for an inference evaluation.
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
@@ -451,6 +467,20 @@ pub trait EvaluationQueries {
         function_name: &str,
         function_type: FunctionConfigType,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets aggregated usage statistics (tokens, cost, processing time) for specified evaluation runs.
+    ///
+    /// For each evaluation run, returns totals across all inferences:
+    /// - inference count
+    /// - total input/output tokens
+    /// - total cost (null if any model inference lacks cost)
+    /// - average processing time in milliseconds
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error>;
 
     /// Gets evaluation statistics (aggregated metrics) for specified evaluation runs.
     ///

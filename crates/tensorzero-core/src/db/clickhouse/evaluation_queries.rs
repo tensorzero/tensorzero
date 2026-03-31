@@ -14,6 +14,7 @@ use crate::db::evaluation_queries::EvaluationRunInfoByIdRow;
 use crate::db::evaluation_queries::EvaluationRunInfoRow;
 use crate::db::evaluation_queries::EvaluationRunSearchResult;
 use crate::db::evaluation_queries::EvaluationStatisticsRow;
+use crate::db::evaluation_queries::EvaluationUsageStatisticsRow;
 use crate::db::evaluation_queries::InferenceEvaluationHumanFeedbackRow;
 use crate::db::evaluation_queries::InferenceEvaluationRunInsert;
 use crate::db::evaluation_queries::InferenceEvaluationRunMetadata;
@@ -67,7 +68,34 @@ impl RawEvaluationStatisticsRow {
     }
 }
 
-// Private helper for constructing the subquery for datapoint IDs
+/// Builds just the `all_inference_ids` CTE that finds inferences matching the given
+/// evaluation run IDs. Used by queries that don't need datapoint-level filtering.
+fn get_evaluation_inference_ids_subquery(
+    function_name: &str,
+    evaluation_run_ids: &[uuid::Uuid],
+) -> (String, HashMap<String, String>) {
+    let mut params = HashMap::new();
+    params.insert("function_name".to_string(), function_name.to_string());
+
+    let eval_run_ids_str: Vec<String> = evaluation_run_ids
+        .iter()
+        .map(|id| format!("'{id}'"))
+        .collect();
+    let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
+    params.insert("evaluation_run_ids".to_string(), eval_run_ids_joined);
+
+    let query = "all_inference_ids AS (
+            SELECT DISTINCT inference_id
+            FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
+            AND function_name = {function_name:String}
+            AND value IN ({evaluation_run_ids:Array(String)})
+        )"
+    .to_string();
+    (query, params)
+}
+
+/// Builds both `all_inference_ids` and `all_datapoint_ids` CTEs.
+/// Extends the inference IDs subquery with datapoint-level filtering and pagination.
 fn get_evaluation_result_datapoint_id_subquery(
     function_name: &str,
     evaluation_run_ids: &[uuid::Uuid],
@@ -75,6 +103,9 @@ fn get_evaluation_result_datapoint_id_subquery(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> (String, HashMap<String, String>) {
+    let (inference_ids_subquery, mut params) =
+        get_evaluation_inference_ids_subquery(function_name, evaluation_run_ids);
+
     let limit_clause = if let Some(limit) = limit {
         format!("LIMIT {limit}")
     } else {
@@ -86,16 +117,6 @@ fn get_evaluation_result_datapoint_id_subquery(
         String::new()
     };
 
-    let mut params = HashMap::new();
-    params.insert("function_name".to_string(), function_name.to_string());
-
-    let eval_run_ids_str: Vec<String> = evaluation_run_ids
-        .iter()
-        .map(|id| format!("'{id}'"))
-        .collect();
-    let eval_run_ids_joined = format!("[{}]", eval_run_ids_str.join(","));
-    params.insert("evaluation_run_ids".to_string(), eval_run_ids_joined);
-
     // Add optional datapoint_id filter
     let datapoint_filter = if let Some(dp_id) = datapoint_id {
         params.insert("datapoint_id".to_string(), dp_id.to_string());
@@ -105,12 +126,7 @@ fn get_evaluation_result_datapoint_id_subquery(
     };
 
     let query = format!(
-        "all_inference_ids AS (
-            SELECT DISTINCT inference_id
-            FROM TagInference WHERE key = 'tensorzero::evaluation_run_id'
-            AND function_name = {{function_name:String}}
-            AND value IN ({{evaluation_run_ids:Array(String)}})
-        ),
+        "{inference_ids_subquery},
         all_datapoint_ids AS (
             SELECT DISTINCT value as datapoint_id
             FROM TagInference
@@ -535,6 +551,64 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         parse_json_rows(response.response.as_str())
     }
 
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[uuid::Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        let inference_table_name = function_type.table_name();
+
+        let (inference_ids_subquery, params_owned) =
+            get_evaluation_inference_ids_subquery(function_name, evaluation_run_ids);
+
+        let sql_query = format!(
+            r"WITH {inference_ids_subquery},
+            filtered_inference AS (
+                SELECT
+                    id,
+                    tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+                    processing_time_ms
+                FROM {inference_table_name}
+                WHERE id IN (SELECT inference_id FROM all_inference_ids)
+                AND function_name = {{function_name:String}}
+            ),
+            inference_usage AS (
+                SELECT
+                    mi.inference_id as inference_id,
+                    toInt64(sum(mi.input_tokens)) as input_tokens,
+                    toInt64(sum(mi.output_tokens)) as output_tokens,
+                    if(count(*) = countIf(isNotNull(mi.cost)), toFloat64(sum(mi.cost)), null) as cost
+                FROM ModelInference mi
+                WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
+                GROUP BY mi.inference_id
+            )
+            SELECT
+                toUUID(fi.evaluation_run_id) as evaluation_run_id,
+                toUInt32(count()) as inference_count,
+                toInt64(sum(iu.input_tokens)) as total_input_tokens,
+                toInt64(sum(iu.output_tokens)) as total_output_tokens,
+                if(count(*) = countIf(isNotNull(iu.cost)), toFloat64(sum(iu.cost)), null) as total_cost,
+                avg(fi.processing_time_ms) as avg_processing_time_ms
+            FROM filtered_inference fi
+            LEFT JOIN inference_usage iu ON iu.inference_id = fi.id
+            GROUP BY fi.evaluation_run_id
+            ORDER BY toUInt128(toUUID(fi.evaluation_run_id)) DESC
+            FORMAT JSONEachRow
+            "
+        );
+
+        let function_name_str = function_name.to_string();
+        let mut params: HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        params.insert("function_name", function_name_str.as_str());
+
+        let response = self.run_query_synchronous(sql_query, &params).await?;
+        parse_json_rows(response.response.as_str())
+    }
+
     async fn get_evaluation_statistics(
         &self,
         function_name: &str,
@@ -544,14 +618,9 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
     ) -> Result<Vec<EvaluationStatisticsRow>, Error> {
         let inference_table_name = function_type.table_name();
 
-        // Build the datapoint ID subquery
-        let (datapoint_id_subquery, params_owned) = get_evaluation_result_datapoint_id_subquery(
-            function_name,
-            evaluation_run_ids,
-            None, // datapoint_id filter
-            /* limit= */ None,
-            /* offset= */ None,
-        );
+        // Build the inference IDs subquery (we only need inference IDs, not datapoint IDs)
+        let (inference_ids_subquery, params_owned) =
+            get_evaluation_inference_ids_subquery(function_name, evaluation_run_ids);
 
         // Build metric names array for ClickHouse
         let metric_names_str: Vec<String> = metric_names.iter().map(|s| format!("'{s}'")).collect();
@@ -560,7 +629,7 @@ impl EvaluationQueries for ClickHouseConnectionInfo {
         // Query returns raw statistics (mean, count, stdev) without CI computation.
         // CI is computed in Rust using wald_confint (float) or wilson_confint (boolean).
         let sql_query = format!(
-            r"WITH {datapoint_id_subquery},
+            r"WITH {inference_ids_subquery},
             filtered_inference AS (
                 SELECT
                     id,
@@ -2622,5 +2691,149 @@ mod tests {
             feedback.value,
             serde_json::json!({"score": 0.8, "reason": "good"})
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_statistics_does_not_include_datapoint_ids_cte() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                // The query should include the inference IDs CTE
+                assert_query_contains(query, "all_inference_ids");
+                // But should NOT include the datapoint IDs CTE (unnecessary for statistics)
+                assert!(
+                    !query.contains("all_datapoint_ids"),
+                    "get_evaluation_statistics should not include the all_datapoint_ids CTE"
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let _ = conn
+            .get_evaluation_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_usage_statistics_does_not_include_datapoint_ids_cte() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                // The query should include the inference IDs CTE
+                assert_query_contains(query, "all_inference_ids");
+                // But should NOT include the datapoint IDs CTE (unnecessary for usage statistics)
+                assert!(
+                    !query.contains("all_datapoint_ids"),
+                    "get_evaluation_usage_statistics should not include the all_datapoint_ids CTE"
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let _ = conn
+            .get_evaluation_usage_statistics(
+                "test_func",
+                FunctionConfigType::Chat,
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_evaluation_results_includes_datapoint_ids_cte() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                // get_evaluation_results needs both CTEs
+                assert_query_contains(query, "all_inference_ids");
+                assert_query_contains(query, "all_datapoint_ids");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let _ = conn
+            .get_evaluation_results(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+                FunctionConfigType::Chat,
+                &["metric1".to_string()],
+                None,
+                10,
+                0,
+            )
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_count_datapoints_includes_datapoint_ids_cte() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _params| {
+                // count_datapoints_for_evaluation needs both CTEs
+                assert_query_contains(query, "all_inference_ids");
+                assert_query_contains(query, "all_datapoint_ids");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: r#"{"count":5}"#.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let _ = conn
+            .count_datapoints_for_evaluation(
+                "test_func",
+                &[Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap()],
+            )
+            .await
+            .unwrap();
     }
 }

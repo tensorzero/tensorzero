@@ -45,6 +45,7 @@ import type {
   GetEvaluationResultsResponse,
   GetEvaluationRunInfosResponse,
   GetEvaluationStatisticsResponse,
+  GetEvaluationUsageStatisticsResponse,
   GetEvaluationRunMetadataResponse,
   GetFeedbackBoundsResponse,
   GetFeedbackByTargetIdResponse,
@@ -1608,6 +1609,34 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetEvaluationStatisticsResponse;
+  }
+
+  /**
+   * Gets aggregated usage statistics (tokens, cost, processing time) for evaluation runs.
+   * @param functionName - The name of the function being evaluated
+   * @param functionType - The type of function: "chat" or "json"
+   * @param evaluationRunIds - Array of evaluation run UUIDs to query
+   * @returns A promise that resolves with aggregated usage statistics per run
+   * @throws Error if the request fails
+   */
+  async getEvaluationUsageStatistics(
+    functionName: string,
+    functionType: "chat" | "json",
+    evaluationRunIds: string[],
+  ): Promise<GetEvaluationUsageStatisticsResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("function_name", functionName);
+    searchParams.append("function_type", functionType);
+    searchParams.append("evaluation_run_ids", evaluationRunIds.join(","));
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/evaluations/usage_statistics?${queryString}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetEvaluationUsageStatisticsResponse;
   }
 
   /**

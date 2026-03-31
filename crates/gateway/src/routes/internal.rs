@@ -144,6 +144,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             get(endpoints::internal::evaluations::get_evaluation_statistics_handler),
         )
         .route(
+            "/internal/evaluations/usage_statistics",
+            get(endpoints::internal::evaluations::get_evaluation_usage_statistics_handler),
+        )
+        .route(
             "/internal/evaluations/results",
             get(endpoints::internal::evaluations::get_evaluation_results_handler),
         )
