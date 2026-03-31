@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use std::sync::Arc;
 
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
