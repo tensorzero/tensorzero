@@ -15,6 +15,9 @@
   "banner": {
     "content": "**[TensorZero Autopilot](https://www.tensorzero.com)** is an automated AI engineer that analyzes LLM observability data, optimizes prompts and models, sets up evals, and runs A/B tests. **[Schedule a demo →](https://www.tensorzero.com/schedule-demo)**"
   },
+  "icons": {
+    "library": "lucide"
+  },
   "navigation": {
     "tabs": [
       {
@@ -120,6 +123,10 @@
               "experimentation/run-static-ab-tests",
               "experimentation/scope-experiments-with-namespaces"
             ]
+          },
+          {
+            "group": "Development",
+            "pages": ["development/integrate-with-your-coding-agents"]
           },
           {
             "group": "Deployment",
