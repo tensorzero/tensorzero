@@ -137,7 +137,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: reasoning_providers,
         reasoning_usage_inference: reasoning_usage_providers,
-        cache_input_tokens_inference: standard_providers.clone(), // xAI supports auto-caching via prompt_tokens_details.cached_tokens
+        cache_input_tokens_inference: vec![], // xAI auto-caching doesn't reliably return prompt_tokens_details.cached_tokens in non-streaming
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: vec![],
