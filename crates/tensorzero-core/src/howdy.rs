@@ -30,6 +30,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, debug, info};
+use uuid::Uuid;
 
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -77,6 +78,7 @@ pub async fn howdy_loop(
     let db =
         DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore);
     let client = Client::new();
+    let gateway_id = Uuid::now_v7();
     let deployment_id = match get_deployment_id(&clickhouse, &postgres, primary_datastore).await {
         Ok(deployment_id) => deployment_id,
         Err(()) => {
@@ -100,6 +102,7 @@ pub async fn howdy_loop(
                 &copied_client,
                 &copied_deployment_id,
                 primary_datastore,
+                gateway_id,
             )
             .await
             {
@@ -115,9 +118,10 @@ async fn send_howdy(
     client: &Client,
     deployment_id: &str,
     primary_datastore: PrimaryDatastore,
+    gateway_id: Uuid,
 ) -> Result<(), String> {
     let howdy_url = HOWDY_URL.clone();
-    let howdy_report = get_howdy_report(db, deployment_id, primary_datastore).await?;
+    let howdy_report = get_howdy_report(db, deployment_id, primary_datastore, gateway_id).await?;
     if let Err(e) = client.post(&howdy_url).json(&howdy_report).send().await {
         return Err(format!("Failed to send howdy: {e}"));
     }
@@ -179,6 +183,7 @@ pub async fn get_howdy_report<'a>(
     db: &(dyn HowdyQueries + Sync),
     deployment_id: &'a str,
     primary_datastore: PrimaryDatastore,
+    gateway_id: Uuid,
 ) -> Result<HowdyReportBody<'a>, String> {
     let dryrun = cfg!(any(test, feature = "e2e_tests"));
     let (inference_counts, feedback_counts, token_totals) = try_join!(
@@ -212,6 +217,7 @@ pub async fn get_howdy_report<'a>(
         demonstration_feedback_count: Some(
             feedback_counts.demonstration_feedback_count.to_string(),
         ),
+        gateway_id,
         observability_backend: primary_datastore,
         dryrun,
     })
@@ -220,6 +226,7 @@ pub async fn get_howdy_report<'a>(
 #[derive(Debug, Serialize)]
 pub struct HowdyReportBody<'a> {
     pub deployment_id: &'a str,
+    pub gateway_id: Uuid,
     pub inference_count: String,
     pub feedback_count: String,
     pub gateway_version: &'static str,
