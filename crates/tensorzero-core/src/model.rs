@@ -1433,6 +1433,9 @@ pub enum UninitializedProviderConfig {
         include_encrypted_reasoning: bool,
         #[serde(default)]
         provider_tools: Vec<Value>,
+        #[serde(default)]
+        content_type_overrides:
+            std::collections::HashMap<String, crate::providers::openai::ContentBlockType>,
     },
     OpenRouter {
         model_name: String,
@@ -1578,6 +1581,7 @@ impl UninitializedProviderConfig {
                             OpenAIAPIType::ChatCompletions,
                             false,
                             Vec::new(),
+                            std::collections::HashMap::new(),
                             )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1733,6 +1737,7 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
+                content_type_overrides,
             } => {
                 // Use mock API base for testing if set, otherwise defer to the API base set
                 let api_base = get_mock_provider_api_base("openai").or(api_base);
@@ -1749,6 +1754,7 @@ impl UninitializedProviderConfig {
                     api_type,
                     include_encrypted_reasoning,
                     provider_tools,
+                    content_type_overrides,
                 )?)
             }
             UninitializedProviderConfig::OpenRouter {
@@ -2859,6 +2865,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::Responses,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 } else {
                     ProviderConfig::OpenAI(OpenAIProvider::new(
@@ -2870,6 +2877,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::ChatCompletions,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 }
             }
