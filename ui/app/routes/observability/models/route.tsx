@@ -6,7 +6,7 @@ export const handle: RouteHandle = {
   crumb: () => ["Models"],
 };
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import type { TimeWindow } from "~/types/tensorzero";
+import type { TimeWindow, ModelUsageTimePoint } from "~/types/tensorzero";
 import { ModelUsage } from "~/components/model/ModelUsage";
 import { ModelLatency } from "~/components/model/ModelLatency";
 import {
@@ -17,7 +17,11 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { useConfig } from "~/context/config";
-import { StatsBar } from "~/components/ui/StatsBar";
+import { StatsBar, StatsBarSkeleton } from "~/components/ui/StatsBar";
+import { Suspense } from "react";
+import { Await } from "react-router";
+import { formatCost } from "~/utils/cost";
+import { formatCompactNumber } from "~/utils/chart";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -65,11 +69,67 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function ModelsSummary() {
+function ModelsSummary({
+  usageDataPromise,
+}: {
+  usageDataPromise: Promise<ModelUsageTimePoint[]>;
+}) {
   const config = useConfig();
   const modelCount = config.model_names.length;
 
-  return <StatsBar items={[{ label: "Models", value: String(modelCount) }]} />;
+  return (
+    <Suspense fallback={<StatsBarSkeleton count={5} />}>
+      <Await resolve={usageDataPromise}>
+        {(usageData) => {
+          const filtered = usageData.filter(
+            (row) => row.count && Number(row.count) > 0,
+          );
+
+          let totalInferences = 0;
+          let totalInputTokens = 0;
+          let totalOutputTokens = 0;
+          let totalCost = 0;
+          let hasCost = false;
+          const activeModels = new Set<string>();
+
+          for (const row of filtered) {
+            totalInferences += Number(row.count ?? 0);
+            totalInputTokens += Number(row.input_tokens ?? 0);
+            totalOutputTokens += Number(row.output_tokens ?? 0);
+            if (row.cost != null) {
+              totalCost += row.cost;
+              hasCost = true;
+            }
+            activeModels.add(row.model_name);
+          }
+
+          const totalTokens = totalInputTokens + totalOutputTokens;
+
+          const items = [
+            {
+              label: "Models",
+              value: String(modelCount),
+              detail: `${activeModels.size} active`,
+            },
+            {
+              label: "Total Inferences",
+              value: formatCompactNumber(totalInferences),
+            },
+            {
+              label: "Total Tokens",
+              value: formatCompactNumber(totalTokens),
+              detail: `${formatCompactNumber(totalInputTokens)} in / ${formatCompactNumber(totalOutputTokens)} out`,
+            },
+            ...(hasCost
+              ? [{ label: "Total Cost", value: formatCost(totalCost) }]
+              : []),
+          ];
+
+          return <StatsBar items={items} />;
+        }}
+      </Await>
+    </Suspense>
+  );
 }
 
 export default function ModelsPage({ loaderData }: Route.ComponentProps) {
@@ -79,7 +139,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader heading="Models" />
-      <ModelsSummary />
+      <ModelsSummary usageDataPromise={modelUsageTimeseriesPromise} />
 
       <SectionsGroup>
         <SectionLayout>

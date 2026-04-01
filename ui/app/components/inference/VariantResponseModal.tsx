@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Loader2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, RefreshCw, Copy, Check } from "lucide-react";
+import { InputIcon, Output, Cost } from "~/components/icons/Icons";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
@@ -88,6 +89,43 @@ function TextDiff({ oldText, newText }: { oldText: string; newText: string }) {
   );
 }
 
+function LoadingState({ selectedVariant }: { selectedVariant: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    setElapsed(0);
+    const interval = setInterval(() => {
+      setElapsed(((Date.now() - startRef.current) / 1000) | 0);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatElapsed = (s: number) => {
+    if (s < 1) return "0.0s";
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m ${s % 60}s`;
+  };
+
+  return (
+    <div className="flex h-48 flex-col items-center justify-center gap-4">
+      <Loader2 className="text-fg-tertiary h-8 w-8 animate-spin" />
+      <div className="text-center">
+        <p className="text-fg-primary text-sm font-medium">
+          Running inference with{" "}
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+            {selectedVariant}
+          </code>
+        </p>
+        <p className="text-fg-muted mt-1 font-mono text-xs tabular-nums">
+          {formatElapsed(elapsed)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 interface ResponseColumnProps {
   title: string;
   response: VariantResponseInfo | null;
@@ -96,6 +134,26 @@ interface ResponseColumnProps {
   onClose?: () => void;
   actions?: React.ReactNode;
   refreshButton?: React.ReactNode;
+}
+
+function CopyTextButton({ text }: { text: string | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="iconSm"
+      className="h-6 w-6 cursor-pointer opacity-50 transition-opacity hover:opacity-100"
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title="Copy text"
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+    </Button>
+  );
 }
 
 function ResponseColumn({
@@ -107,11 +165,13 @@ function ResponseColumn({
   actions,
   refreshButton,
 }: ResponseColumnProps) {
+  const text = extractTextFromOutput(response);
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {refreshButton}
-      <div className="mb-2">
+      <div className="mb-2 flex items-center gap-2">
         <h3 className="text-sm font-semibold">{title}</h3>
+        <CopyTextButton text={text} />
       </div>
       {errorMessage ? (
         <div className="flex-1">
@@ -260,15 +320,13 @@ export function VariantResponseModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] sm:max-w-[90vw]">
+      <DialogContent className="max-h-[90vh] sm:max-w-[90vw]" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="mt-4 max-h-[70vh] overflow-y-auto">
+        <div>
           {isLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
+            <LoadingState selectedVariant={selectedVariant} />
           ) : error ? (
             <div className="flex h-32 items-center justify-center">
               <div className="text-center text-red-600">
@@ -450,7 +508,10 @@ function UsageComparison({
           <div className="text-fg-muted text-center font-medium">New</div>
           <div className="text-fg-muted text-center font-medium">Delta</div>
 
-          <div className="text-fg-secondary">Input tokens</div>
+          <div className="text-fg-secondary flex items-center gap-1.5">
+            <InputIcon className="text-fg-tertiary h-3.5 w-3.5" />
+            Input tokens
+          </div>
           <div className="text-fg-primary text-center font-mono tabular-nums">
             {baselineUsage?.input_tokens?.toLocaleString() ?? "—"}
           </div>
@@ -464,7 +525,10 @@ function UsageComparison({
             ) ?? "—"}
           </div>
 
-          <div className="text-fg-secondary">Output tokens</div>
+          <div className="text-fg-secondary flex items-center gap-1.5">
+            <Output className="text-fg-tertiary h-3.5 w-3.5" />
+            Output tokens
+          </div>
           <div className="text-fg-primary text-center font-mono tabular-nums">
             {baselineUsage?.output_tokens?.toLocaleString() ?? "—"}
           </div>
@@ -480,7 +544,10 @@ function UsageComparison({
 
           {(baselineUsage?.cost != null || newUsage?.cost != null) && (
             <>
-              <div className="text-fg-secondary">Cost</div>
+              <div className="text-fg-secondary flex items-center gap-1.5">
+                <Cost className="text-fg-tertiary h-3.5 w-3.5" />
+                Cost
+              </div>
               <div className="text-fg-primary text-center font-mono tabular-nums">
                 {baselineUsage?.cost != null
                   ? formatCost(baselineUsage.cost)
