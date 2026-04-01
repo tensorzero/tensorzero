@@ -238,3 +238,8 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 # xAI reasoning multi-turn tests are slow due to reasoning model response times
 filter = 'binary(e2e) and test(test_reasoning_multi_turn_)'
 slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# OpenRouter proxies to other providers and can be slow, especially for tool use and parallel requests
+filter = 'binary(e2e) and test(providers::openrouter::)'
+slow-timeout = { period = "60s", terminate-after = 2 }

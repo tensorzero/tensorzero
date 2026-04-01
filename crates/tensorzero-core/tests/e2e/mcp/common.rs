@@ -64,6 +64,86 @@ impl McpTestClient {
     }
 }
 
+/// Create a datapoint in the given dataset and return the datapoint ID.
+pub async fn create_test_datapoint(dataset_name: &str) -> String {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints"
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "type": "chat",
+                "function_name": "basic_test",
+                "input": {
+                    "system": {"assistant_name": "TestBot"},
+                    "messages": [{"role": "user", "content": "Hello"}]
+                },
+                "output": [{"type": "text", "text": "Hi there!"}]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "Failed to create datapoint: {:?}",
+        response.text().await
+    );
+    let body: Value = response.json().await.unwrap();
+    body["ids"][0].as_str().unwrap().to_string()
+}
+
+/// Submit boolean feedback for an inference and return the feedback ID.
+pub async fn submit_boolean_feedback(inference_id: &str, metric_name: &str, value: bool) -> String {
+    let client = reqwest::Client::new();
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&json!({
+            "inference_id": inference_id,
+            "metric_name": metric_name,
+            "value": value,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "Failed to submit feedback: {:?}",
+        response.text().await
+    );
+    let body: Value = response.json().await.unwrap();
+    body["feedback_id"].as_str().unwrap().to_string()
+}
+
+/// Poll an MCP tool until the given condition is met on the response.
+/// Returns the first response that satisfies the condition.
+/// Panics if the condition is not met within the timeout.
+pub async fn poll_mcp_tool<F>(
+    mcp: &McpTestClient,
+    tool_name: &str,
+    params: Value,
+    condition: F,
+) -> Value
+where
+    F: Fn(&Value) -> bool,
+{
+    let max_attempts = 10;
+    let delay = std::time::Duration::from_millis(500);
+    let mut last_response = Value::Null;
+    for _ in 0..max_attempts {
+        let response: Value = mcp.call_tool(tool_name, params.clone()).await;
+        if condition(&response) {
+            return response;
+        }
+        last_response = response;
+        tokio::time::sleep(delay).await;
+    }
+    panic!(
+        "Condition not met after {max_attempts} attempts for tool `{tool_name}` with params {params}\nLast response: {last_response}"
+    );
+}
+
 /// Insert an inference and return (inference_id, episode_id).
 pub async fn insert_inference(function_name: &str) -> (String, String) {
     let client = reqwest::Client::new();

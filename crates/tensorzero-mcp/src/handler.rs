@@ -22,11 +22,11 @@ use uuid::Uuid;
 
 /// TODO - refactor the way we wrap client-side tool so that we can avoid
 /// constructing a dummy side info
-fn dummy_side_info() -> AutopilotSideInfo {
+fn dummy_side_info(config_snapshot_hash: String) -> AutopilotSideInfo {
     AutopilotSideInfo {
         tool_call_event_id: Uuid::nil(),
         session_id: Uuid::nil(),
-        config_snapshot_hash: String::new(),
+        config_snapshot_hash,
         optimization: Default::default(),
     }
 }
@@ -69,6 +69,7 @@ struct McpToolVisitor {
     client: Arc<dyn TensorZeroClient>,
     heartbeater: Arc<dyn Heartbeater>,
     registry: Arc<ToolRegistry>,
+    config_snapshot_hash: String,
 }
 
 impl McpToolVisitor {
@@ -78,6 +79,7 @@ impl McpToolVisitor {
             client: Arc::new(EmbeddedClient::new(app_state.clone())),
             heartbeater: Arc::new(NoopHeartbeater),
             registry: Arc::new(ToolRegistry::new()),
+            config_snapshot_hash: app_state.config.hash.to_string(),
         }
     }
 
@@ -126,12 +128,14 @@ impl ToolVisitor for McpToolVisitor {
         let client = self.client.clone();
         let heartbeater = self.heartbeater.clone();
         let registry = self.registry.clone();
+        let config_snapshot_hash = self.config_snapshot_hash.clone();
         let route = ToolRoute::new_dyn(
             tool_attr,
             move |ctx: ToolCallContext<'_, TensorZeroMcpServer>| {
                 let client = client.clone();
                 let heartbeater = heartbeater.clone();
                 let registry = registry.clone();
+                let config_snapshot_hash = config_snapshot_hash.clone();
                 Box::pin(async move {
                     let arguments = ctx.arguments.unwrap_or_default();
 
@@ -144,8 +148,13 @@ impl ToolVisitor for McpToolVisitor {
                         SimpleToolContext::new_without_pool(&client, &heartbeater, &registry);
 
                     let idempotency_key = Uuid::now_v7().to_string();
-                    let result =
-                        T::execute(params, dummy_side_info(), simple_ctx, &idempotency_key).await;
+                    let result = T::execute(
+                        params,
+                        dummy_side_info(config_snapshot_hash),
+                        simple_ctx,
+                        &idempotency_key,
+                    )
+                    .await;
 
                     match result {
                         Ok(output) => {
