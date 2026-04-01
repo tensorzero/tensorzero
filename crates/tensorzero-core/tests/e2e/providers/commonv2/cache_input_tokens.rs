@@ -73,6 +73,14 @@ fn cache_control_extra_body() -> Vec<Value> {
     ]
 }
 
+/// Returns true if the model has explicit cache control markers in `cache_control_extra_body()`.
+/// These providers are expected to always return cache token fields.
+fn is_expected_cache_provider(model_name: &str) -> bool {
+    cache_control_extra_body()
+        .iter()
+        .any(|entry| entry.get("model_name").and_then(|v| v.as_str()) == Some(model_name))
+}
+
 /// Test that providers correctly include cache tokens in input_tokens (non-streaming).
 ///
 /// Makes two inference calls with identical large input:
@@ -237,12 +245,17 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         || cache_write2.is_some()
         || cache_read2.is_some();
     if !any_cache_fields {
-        println!(
-            "Provider {} did not report cache token fields on either request (this is expected for non-caching providers). \
+        let msg = format!(
+            "Provider {} did not report cache token fields on either request. \
             Request 1: cache_write={:?}, cache_read={:?}. \
             Request 2: cache_write={:?}, cache_read={:?}.",
             provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
         );
+        if is_expected_cache_provider(&provider.model_name) {
+            panic!("{msg}");
+        } else {
+            println!("{msg} (this is expected for non-caching providers)");
+        }
     }
 }
 
@@ -375,12 +388,17 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         || cache_write2.is_some()
         || cache_read2.is_some();
     if !any_cache_fields {
-        println!(
-            "Provider {} did not report cache token fields on either streaming request (this is expected for non-caching providers). \
+        let msg = format!(
+            "Provider {} did not report cache token fields on either streaming request. \
             Request 1: cache_write={:?}, cache_read={:?}. \
             Request 2: cache_write={:?}, cache_read={:?}.",
             provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
         );
+        if is_expected_cache_provider(&provider.model_name) {
+            panic!("{msg}");
+        } else {
+            println!("{msg} (this is expected for non-caching providers)");
+        }
     }
 }
 
