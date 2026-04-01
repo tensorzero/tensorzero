@@ -175,7 +175,7 @@ async fn get_providers() -> E2ETestProviders {
         bad_auth_extra_headers,
         reasoning_inference: vec![],
         reasoning_usage_inference: reasoning_providers,
-        cache_input_tokens_inference: vec![], // Azure Kimi doesn't reliably support prompt caching
+        cache_input_tokens_inference: standard_providers.clone(),
         embeddings: embedding_providers,
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

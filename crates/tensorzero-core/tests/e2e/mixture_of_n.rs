@@ -94,9 +94,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
-                cost: None,
             },
         )
     } else {
@@ -116,9 +116,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
+                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
-                cost: None,
             },
         )
     };
@@ -176,9 +176,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     let mut usage_sum = Usage {
         input_tokens: Some(0),
         output_tokens: Some(0),
+        cost: None,
         provider_cache_read_input_tokens: None,
         provider_cache_write_input_tokens: None,
-        cost: None,
     };
 
     for mi in &model_inferences {
@@ -227,9 +227,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(8),
+                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
-                cost: None,
             }
         );
     } else {
@@ -239,9 +239,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(40),
                 output_tokens: Some(4),
+                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
-                cost: None,
             }
         );
     }
@@ -254,9 +254,9 @@ async fn test_mixture_of_n_dummy_candidates_dummy_judge_inner(
             Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
-                cost: None,
             }
         );
     } else {

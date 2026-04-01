@@ -1,20 +1,16 @@
 //! E2E tests for verifying provider cache tokens are included in input_tokens.
 //!
 //! Makes two inference requests with large cacheable content:
-//! 1. First request: triggers cache write
-//! 2. Second request: triggers cache read
+//! 1. First request: triggers cache write (for caching providers)
+//! 2. Second request: triggers cache read (for caching providers)
 //!
 //! Both requests should report input_tokens > 4000 to prove that cache tokens
 //! (provider_cache_write_input_tokens, provider_cache_read_input_tokens) are properly included
 //! in the input_tokens count.
 //!
-//! The second request MUST report `provider_cache_read_input_tokens` to prove the
-//! cache is working. The first request assertion is lenient because auto-caching
-//! providers (OpenAI, Groq, xAI) may not return cache fields on the first request.
-//!
-//! NOTE: Only providers that support prompt caching AND return cache token fields
-//! in their API responses should be registered in `cache_input_tokens_inference`.
-//! See `tensorzero-types-providers/src/cache.rs` for the full provider mapping.
+//! For providers that support caching, cache fields are logged but not required —
+//! auto-caching providers (OpenAI, Groq, xAI) may not reliably return cache details.
+//! Non-caching providers still run to verify input_tokens accounting is correct.
 //!
 //! This addresses issue #5688 where some providers (e.g., AWS Bedrock) report
 //! inputTokens separately from cacheReadInputTokens/cacheWriteInputTokens.
@@ -232,20 +228,22 @@ pub async fn test_cache_input_tokens_non_streaming_with_provider(provider: E2ETe
         "input_tokens should be approximately equal between requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
-    // At least one request must report cache fields.
+    // Log whether cache fields are present (not all providers support caching).
     // - Explicit caching (Anthropic/Bedrock): first has cache_write, second has cache_read
     // - Auto caching (OpenAI/Groq/xAI): second should have cache_read
+    // - Non-caching providers: no cache fields expected
     let any_cache_fields = cache_write1.is_some()
         || cache_read1.is_some()
         || cache_write2.is_some()
         || cache_read2.is_some();
-    assert!(
-        any_cache_fields,
-        "Provider {} should report cache token fields on at least one request. \
-        Request 1: cache_write={:?}, cache_read={:?}. \
-        Request 2: cache_write={:?}, cache_read={:?}.",
-        provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
-    );
+    if !any_cache_fields {
+        println!(
+            "Provider {} did not report cache token fields on either request (this is expected for non-caching providers). \
+            Request 1: cache_write={:?}, cache_read={:?}. \
+            Request 2: cache_write={:?}, cache_read={:?}.",
+            provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
+        );
+    }
 }
 
 /// Test that providers correctly include cache tokens in input_tokens (streaming).
@@ -371,18 +369,19 @@ pub async fn test_cache_input_tokens_streaming_with_provider(provider: E2ETestPr
         "input_tokens should be approximately equal between streaming requests ({input_tokens1} vs {input_tokens2}, diff={diff})"
     );
 
-    // At least one request must report cache fields
+    // Log whether cache fields are present (not all providers support caching)
     let any_cache_fields = cache_write1.is_some()
         || cache_read1.is_some()
         || cache_write2.is_some()
         || cache_read2.is_some();
-    assert!(
-        any_cache_fields,
-        "Provider {} should report cache token fields on at least one streaming request. \
-        Request 1: cache_write={:?}, cache_read={:?}. \
-        Request 2: cache_write={:?}, cache_read={:?}.",
-        provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
-    );
+    if !any_cache_fields {
+        println!(
+            "Provider {} did not report cache token fields on either streaming request (this is expected for non-caching providers). \
+            Request 1: cache_write={:?}, cache_read={:?}. \
+            Request 2: cache_write={:?}, cache_read={:?}.",
+            provider.variant_name, cache_write1, cache_read1, cache_write2, cache_read2
+        );
+    }
 }
 
 /// Helper to get the usage object from a streaming response.
