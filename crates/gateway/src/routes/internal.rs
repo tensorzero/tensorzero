@@ -8,10 +8,11 @@ use axum::{
     routing::{get, post},
 };
 use tensorzero_core::endpoints;
+use tensorzero_core::feature_flags;
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData> {
-    Router::new()
+    let router = Router::new()
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
@@ -281,5 +282,23 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
         .route(
             "/internal/autopilot/status",
             get(endpoints::internal::autopilot::autopilot_status_handler),
-        )
+        );
+
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        router
+            .route(
+                "/internal/config_toml",
+                get(endpoints::internal::config::get_live_config_toml_handler),
+            )
+            .route(
+                "/internal/config_toml/validate",
+                post(endpoints::internal::config::validate_config_toml_handler),
+            )
+            .route(
+                "/internal/config_toml/{hash}",
+                get(endpoints::internal::config::get_config_toml_by_hash_handler),
+            )
+    } else {
+        router
+    }
 }

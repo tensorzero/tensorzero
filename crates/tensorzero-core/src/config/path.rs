@@ -15,6 +15,9 @@ use toml::{
 use crate::error::{Error, ErrorDetails};
 use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
+const REMAPPED_PATH_KEY: &str = "__tensorzero_remapped_path";
+const DATA_KEY: &str = "__data";
+
 /// Wrapper type to enforce proper handling of toml-relative paths for files.
 /// When we add support for config globbing, we'll require deserializing
 /// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
@@ -36,6 +39,24 @@ pub struct ResolvedTomlPathData {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ResolvedTomlPathDirectory {
     __tensorzero_remapped_path: PathBuf,
+}
+
+pub(crate) fn remapped_path_key() -> &'static str {
+    REMAPPED_PATH_KEY
+}
+
+pub(crate) fn data_key() -> &'static str {
+    DATA_KEY
+}
+
+pub(crate) fn is_directory_path(error_path: &[String]) -> bool {
+    matches!(
+        error_path,
+        [gateway, access, base_path]
+            if gateway == "gateway"
+                && access == "template_filesystem_access"
+                && base_path == "base_path"
+    )
 }
 
 impl ResolvedTomlPathData {
@@ -242,6 +263,157 @@ struct TargetData<'a, 'b> {
     error_path: Vec<String>,
 }
 
+struct ValueTargetData<'b> {
+    component: PathComponent,
+    tail: &'b [PathComponent],
+    entry: &'b mut toml::Value,
+    error_path: Vec<String>,
+}
+
+pub(crate) fn visit_target_path_values<F>(
+    root: &mut toml::Value,
+    mut visit_leaf: F,
+) -> Result<(), Error>
+where
+    F: FnMut(&mut toml::Value, &[String]) -> Result<(), Error>,
+{
+    for path in TARGET_PATH_COMPONENTS {
+        let mut targets = vec![ValueTargetData {
+            component: path[0],
+            tail: &path[1..],
+            entry: root,
+            error_path: vec![],
+        }];
+        while let Some(target_data) = targets.pop() {
+            let mut error_path = target_data.error_path.clone();
+            if target_data.tail.is_empty() {
+                match target_data.component {
+                    PathComponent::Literal(literal) => {
+                        error_path.push(literal.to_string());
+                        let toml::Value::Table(entry) = target_data.entry else {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "`{}`: Expected a table, found {}",
+                                    error_path.join("."),
+                                    target_data.entry.type_str()
+                                ),
+                            }
+                            .into());
+                        };
+                        if let Some(entry) = entry.get_mut(literal) {
+                            visit_leaf(entry, &error_path)?;
+                        }
+                    }
+                    PathComponent::Wildcard => {
+                        return Err(ErrorDetails::InternalError {
+                            message: format!(
+                                "`{}`: Path cannot end with a wildcard. {IMPOSSIBLE_ERROR_MESSAGE}",
+                                error_path.join(".")
+                            ),
+                        }
+                        .into());
+                    }
+                }
+            } else {
+                match target_data.component {
+                    PathComponent::Literal(literal) => {
+                        error_path.push(literal.to_string());
+                        let toml::Value::Table(entry) = target_data.entry else {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "`{}`: Expected a table, found {}",
+                                    error_path.join("."),
+                                    target_data.entry.type_str()
+                                ),
+                            }
+                            .into());
+                        };
+                        if let Some(entry) = entry.get_mut(literal) {
+                            targets.push(ValueTargetData {
+                                component: target_data.tail[0],
+                                tail: &target_data.tail[1..],
+                                entry,
+                                error_path,
+                            });
+                        }
+                    }
+                    PathComponent::Wildcard => {
+                        if let toml::Value::Table(table) = target_data.entry {
+                            for (key, value) in table.iter_mut() {
+                                let mut error_path = error_path.clone();
+                                error_path.push(key.to_string());
+                                targets.push(ValueTargetData {
+                                    component: target_data.tail[0],
+                                    tail: &target_data.tail[1..],
+                                    entry: value,
+                                    error_path,
+                                });
+                            }
+                        } else {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "`{}`: Expected a table, found {}",
+                                    target_data.error_path.join("."),
+                                    target_data.entry.type_str()
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn resolve_toml_paths_from_map(
+    table: toml::Table,
+    path_contents: &std::collections::HashMap<String, String>,
+) -> Result<toml::Table, Error> {
+    let mut root = toml::Value::Table(table);
+    visit_target_path_values(&mut root, |value, error_path| {
+        let toml::Value::String(path) = value else {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`{}`: Expected a string, found {}",
+                    error_path.join("."),
+                    value.type_str()
+                ),
+            }));
+        };
+
+        let mut inner_table = toml::Table::new();
+        inner_table.insert(
+            REMAPPED_PATH_KEY.to_string(),
+            toml::Value::String(path.clone()),
+        );
+
+        if !is_directory_path(error_path) {
+            let contents = path_contents.get(path).ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Missing editable file contents for path `{path}`",
+                        error_path.join(".")
+                    ),
+                })
+            })?;
+            inner_table.insert(DATA_KEY.to_string(), toml::Value::String(contents.clone()));
+        }
+
+        *value = toml::Value::Table(inner_table);
+        Ok(())
+    })?;
+
+    match root {
+        toml::Value::Table(table) => Ok(table),
+        _ => Err(ErrorDetails::InternalError {
+            message: format!("Root is not a table. {IMPOSSIBLE_ERROR_MESSAGE}"),
+        }
+        .into()),
+    }
+}
+
 /// Visits all of the entries declared in `TARGET_PATH_COMPONENTS`, and resolves relative paths into
 /// absolute paths. The original entries held string paths written by the user
 /// (e.g. `functions.my_function.system_schema = "some/relative/schema_path.json"`),
@@ -325,8 +497,7 @@ pub(super) fn resolve_toml_relative_paths(
                                     .to_string();
 
                                 // Check if this is a directory or file
-                                let is_directory_path = error_path.as_slice()
-                                    == ["gateway", "template_filesystem_access", "base_path"];
+                                let is_directory_path = is_directory_path(&error_path);
 
                                 if resolved_path.is_dir() {
                                     if !is_directory_path {
@@ -344,7 +515,7 @@ pub(super) fn resolve_toml_relative_paths(
                                     inner_table.insert(
                                         Spanned::new(
                                             0..0,
-                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
+                                            Cow::Owned(REMAPPED_PATH_KEY.to_string()),
                                         ),
                                         Spanned::new(
                                             0..0,
@@ -369,7 +540,7 @@ pub(super) fn resolve_toml_relative_paths(
                                     inner_table.insert(
                                         Spanned::new(
                                             0..0,
-                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
+                                            Cow::Owned(REMAPPED_PATH_KEY.to_string()),
                                         ),
                                         Spanned::new(
                                             0..0,
@@ -377,7 +548,7 @@ pub(super) fn resolve_toml_relative_paths(
                                         ),
                                     );
                                     inner_table.insert(
-                                        Spanned::new(0..0, Cow::Owned("__data".to_string())),
+                                        Spanned::new(0..0, Cow::Owned(DATA_KEY.to_string())),
                                         Spanned::new(
                                             0..0,
                                             DeValue::String(Cow::Owned(file_contents)),

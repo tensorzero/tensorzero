@@ -77,6 +77,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
+pub mod editable;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -1483,6 +1484,27 @@ impl Config {
 
         if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
             object_store.verify().await.map_err(|error| vec![error])?;
+        }
+
+        Ok(unwritten_config)
+    }
+
+    pub async fn load_from_uninitialized(
+        config: UninitializedConfig,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Error> {
+        let config = Box::new(config);
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
+            .await?
+        } else {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config))).await?
+        };
+
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
         Ok(unwritten_config)

@@ -15,7 +15,7 @@ use crate::{
     relay::TensorzeroRelay,
 };
 use chrono::Duration;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tensorzero_stored_config::{
     StoredAuthConfig, StoredBatchWritesConfig, StoredCredentialLocation,
     StoredCredentialLocationOrHardcoded, StoredCredentialLocationWithFallback,
@@ -165,7 +165,11 @@ impl Default for ValkeyModelInferenceCacheConfig {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
-    #[serde(serialize_with = "serialize_optional_socket_addr")]
+    #[serde(
+        default,
+        serialize_with = "serialize_optional_socket_addr",
+        deserialize_with = "deserialize_optional_socket_addr"
+    )]
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: Option<ObservabilityConfig>,
     pub debug: Option<bool>,
@@ -712,6 +716,17 @@ where
         Some(addr) => serializer.serialize_str(&addr.to_string()),
         None => serializer.serialize_none(),
     }
+}
+
+fn deserialize_optional_socket_addr<'de, D>(
+    deserializer: D,
+) -> Result<Option<std::net::SocketAddr>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let addr = Option::<String>::deserialize(deserializer)?;
+    addr.map(|addr| addr.parse().map_err(serde::de::Error::custom))
+        .transpose()
 }
 
 #[cfg(test)]
