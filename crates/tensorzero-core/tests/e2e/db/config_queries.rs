@@ -11,11 +11,14 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientBuilder, ClientInferenceParams, InferenceOutput, Input, InputMessage,
+    ClientBuilder, ClientExt, ClientInferenceParams, InferenceOutput, Input, InputMessage,
     InputMessageContent, Role,
 };
+use tensorzero_core::config::gateway::UninitializedGatewayConfig;
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{
+    Config, ConfigFileGlob, ObjectStoreInfo, PostgresConfig, RuntimeOverlay, UninitializedConfig,
+};
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::clickhouse::test_helpers::{
     CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
@@ -26,6 +29,13 @@ use tensorzero_core::inference::types::Text;
 use uuid::Uuid;
 
 // ===== DUAL-BACKEND TESTS (ClickHouse + Postgres) =====
+
+fn runtime_overlay_from_toml(config_toml: &str) -> RuntimeOverlay {
+    let table: toml::Table = toml::from_str(config_toml).unwrap();
+    let config = UninitializedConfig::try_from(table).unwrap();
+    let object_store_info = ObjectStoreInfo::new(config.object_storage.clone()).unwrap();
+    RuntimeOverlay::from_uninitialized_config(&config, object_store_info)
+}
 
 #[expect(clippy::disallowed_methods)]
 async fn test_config_snapshot_write_and_read(conn: impl ConfigQueries + TestDatabaseHelpers) {
@@ -452,7 +462,7 @@ optimize = "max"
 // select_chat_inference_clickhouse) that don't have Postgres equivalents.
 // TODO(#5691): Change these to work with Postgres once we have e2e writes working.
 
-/// Test the config snapshot lifecycle when runtime-overlaid fields are NOT explicitly set.
+/// Test the config snapshot lifecycle when runtime-overlaid fields are omitted.
 ///
 /// # Test Flow
 /// 1. Build a client from a config (without explicit runtime gateway fields)
@@ -461,30 +471,15 @@ optimize = "max"
 /// 4. Load the snapshot from ClickHouse
 /// 5. Build a new client from the snapshot
 /// 6. Do another inference
-/// 7. Assert the hashes are DIFFERENT (expected behavior - see below)
+/// 7. Assert the hashes are the SAME
 ///
-/// # Why the hashes are different
+/// # Why the hashes are stable
 ///
-/// When a config is rehydrated from a snapshot, `RuntimeOverlay::from_config()` takes the
-/// live `Config` (where defaults have been applied) and copies those concrete values back
-/// to `UninitializedGatewayConfig` with explicit `Some(value)`. This causes a difference
-/// in TOML serialization:
+/// The runtime overlay is captured from the original `UninitializedConfig` before defaults
+/// are resolved, so omitted runtime fields stay omitted when a snapshot is rehydrated.
+/// This preserves the serialized config and keeps the snapshot hash stable.
 ///
-/// - **Original config**: Fields like `fetch_and_encode_input_files_before_inference` and
-///   `global_outbound_http_timeout_ms` are `None`, so they're omitted from the serialized TOML.
-///
-/// - **Rehydrated config**: These fields become `Some(default_value)` via the RuntimeOverlay,
-///   so they're explicitly present in the serialized TOML.
-///
-/// This different serialization produces different hashes, which is **expected behavior**.
-/// The hash represents the exact TOML content, and the content IS different even though
-/// the semantic meaning is the same.
-///
-/// # How to get stable hashes
-///
-/// If you need hash stability across rehydration, explicitly set all runtime-overlaid
-/// gateway fields in your original config. See `test_config_snapshot_hash_stable_with_explicit_runtime_fields`
-/// for an example of this.
+/// This test exercises the regression directly with omitted runtime sections.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_config_snapshot_inference_roundtrip() {
     let random_id = Uuid::now_v7();
@@ -507,6 +502,7 @@ model = "test_model_{random_id}"
     );
 
     let client = make_embedded_gateway_with_config(&config).await;
+    let runtime_overlay = runtime_overlay_from_toml(&config);
 
     let params = ClientInferenceParams {
         function_name: Some(format!("basic_test_{random_id}")),
@@ -545,10 +541,9 @@ model = "test_model_{random_id}"
         .await
         .unwrap();
 
-    let live_config = Config::default();
     let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
-        &live_config,
+        runtime_overlay,
         Some(CLICKHOUSE_URL.clone()),
         None,
         None,
@@ -588,12 +583,9 @@ model = "test_model_{random_id}"
         .as_str()
         .unwrap();
 
-    // The hashes are DIFFERENT because the original config didn't explicitly set
-    // runtime-overlaid gateway fields. When rehydrated, RuntimeOverlay adds these
-    // fields with explicit default values, changing the serialized TOML and thus the hash.
-    assert_ne!(
+    assert_eq!(
         snapshot_hash_str, stored_hash2,
-        "Hashes should be DIFFERENT because runtime-overlaid fields were not explicitly set. \
+        "Hashes should be stable even when runtime-overlaid fields were omitted. \
          Original: {snapshot_hash_str}, Rehydrated: {stored_hash2}",
     );
 
@@ -615,33 +607,13 @@ model = "test_model_{random_id}"
 #[tokio::test(flavor = "multi_thread")]
 async fn test_config_snapshot_hash_stable_with_explicit_runtime_fields() {
     let random_id = Uuid::now_v7();
-    // NOTE(shuyangli): the ConfigSnapshot types share a lot of UninitializedConfig types.
-    //
-    // We are trying to stop defaulting values in UninitializedConfig (#7156) because they
-    // cause us to write values to the database that the users didn't supply themselves. This
-    // change causes some values to change over a round-trip (RuntimeOverlay produces
-    // Some(default_value) for fields the original config had as None).
-    //
-    // In the original test config, we need to explicitly set ALL fields that
-    // RuntimeOverlay::from_config produces as Some(value). This will allow us to check whether
-    // RuntimeOverlay::from_config changes any other values.
     let config = format!(
         r#"
 [gateway]
-debug = false
 fetch_and_encode_input_files_before_inference = false
 global_outbound_http_timeout_ms = 900000
-unstable_error_json = false
-unstable_disable_feedback_target_validation = false
-disable_pseudonymous_usage_analytics = false
 
 [gateway.template_filesystem_access]
-enabled = false
-
-[gateway.observability]
-async_writes = false
-
-[gateway.auth]
 enabled = false
 
 [models.test_model_{random_id}]
@@ -661,6 +633,7 @@ model = "test_model_{random_id}"
     );
 
     let client = make_embedded_gateway_with_config(&config).await;
+    let runtime_overlay = runtime_overlay_from_toml(&config);
 
     let params = ClientInferenceParams {
         function_name: Some(format!("basic_test_{random_id}")),
@@ -699,10 +672,9 @@ model = "test_model_{random_id}"
         .await
         .unwrap();
 
-    let live_config = Config::default();
     let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
-        &live_config,
+        runtime_overlay,
         Some(CLICKHOUSE_URL.clone()),
         None,
         None,
@@ -753,8 +725,6 @@ model = "test_model_{random_id}"
 /// Test that from_config_snapshot correctly overlays runtime config from live_config
 #[tokio::test(flavor = "multi_thread")]
 async fn test_from_config_snapshot_overlays_runtime_config() {
-    use tensorzero::ClientExt;
-
     let random_id = Uuid::now_v7();
     let config = format!(
         r#"
@@ -823,13 +793,21 @@ model = "test_model_{random_id}"
         .unwrap();
 
     // These runtime overlay items should not affect snapshot hash.
-    let mut live_config = Config::default();
-    live_config.gateway.debug = true;
-    live_config.postgres.connection_pool_size = Some(99);
+    let live_runtime_overlay = RuntimeOverlay {
+        gateway: Some(UninitializedGatewayConfig {
+            debug: Some(true),
+            ..Default::default()
+        }),
+        postgres: Some(PostgresConfig {
+            connection_pool_size: Some(99),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
 
     let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
-        &live_config,
+        live_runtime_overlay,
         Some(CLICKHOUSE_URL.clone()),
         None,
         None,

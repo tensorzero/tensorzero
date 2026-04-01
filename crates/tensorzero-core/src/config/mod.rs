@@ -887,65 +887,32 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
 /// When loading a config from a historical snapshot, infrastructure settings should
 /// come from the current runtime environment, not the snapshot. This struct captures
 /// those runtime values that need to be overlaid.
+#[derive(Clone, Debug, Default)]
 pub struct RuntimeOverlay {
-    pub gateway: UninitializedGatewayConfig,
-    pub clickhouse: ClickHouseConfig,
-    pub postgres: PostgresConfig,
-    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub gateway: Option<UninitializedGatewayConfig>,
+    pub clickhouse: Option<ClickHouseConfig>,
+    pub postgres: Option<PostgresConfig>,
+    pub rate_limiting: Option<UninitializedRateLimitingConfig>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
 
 impl RuntimeOverlay {
-    /// Create a RuntimeOverlay from a live Config.
-    /// Uses destructuring to ensure compile-time errors if fields are added/removed.
-    pub fn from_config(config: &Config) -> Self {
-        // Destructure GatewayConfig to ensure all fields are handled
-        let GatewayConfig {
-            bind_address,
-            observability,
-            debug,
-            template_filesystem_access,
-            export,
-            base_path,
-            unstable_error_json,
-            unstable_disable_feedback_target_validation,
-            disable_pseudonymous_usage_analytics,
-            fetch_and_encode_input_files_before_inference,
-            auth,
-            global_outbound_http_timeout,
-            relay,
-            metrics,
-            cache,
-        } = &config.gateway;
-
+    /// Create a RuntimeOverlay by extracting runtime fields from an `UninitializedConfig`.
+    ///
+    /// This preserves `Option<T>` values exactly as parsed from the original config
+    /// (None for omitted fields, Some for explicit values), avoiding the lossy
+    /// `Config → UninitializedConfig` round-trip that would turn default values
+    /// into explicit `Some(default)` and break snapshot hash stability.
+    pub fn from_uninitialized_config(
+        config: &UninitializedConfig,
+        object_store_info: Option<ObjectStoreInfo>,
+    ) -> Self {
         Self {
-            gateway: UninitializedGatewayConfig {
-                bind_address: *bind_address,
-                observability: Some(observability.clone()),
-                debug: Some(*debug),
-                template_filesystem_access: Some(template_filesystem_access.clone()),
-                export: Some(export.clone()),
-                base_path: base_path.clone(),
-                unstable_disable_feedback_target_validation: Some(
-                    *unstable_disable_feedback_target_validation,
-                ),
-                unstable_error_json: Some(*unstable_error_json),
-                disable_pseudonymous_usage_analytics: Some(*disable_pseudonymous_usage_analytics),
-                fetch_and_encode_input_files_before_inference: Some(
-                    *fetch_and_encode_input_files_before_inference,
-                ),
-                auth: Some(auth.clone()),
-                global_outbound_http_timeout_ms: Some(
-                    global_outbound_http_timeout.num_milliseconds() as u64,
-                ),
-                relay: relay.as_ref().map(|relay| relay.original_config.clone()),
-                metrics: Some(metrics.clone()),
-                cache: Some(cache.clone()),
-            },
+            gateway: config.gateway.clone(),
             clickhouse: config.clickhouse.clone(),
             postgres: config.postgres.clone(),
-            rate_limiting: UninitializedRateLimitingConfig::from(&config.rate_limiting),
-            object_store_info: config.object_store_info.clone(),
+            rate_limiting: config.rate_limiting.clone(),
+            object_store_info,
         }
     }
 }
@@ -972,6 +939,8 @@ struct ProcessedConfigInput {
     loaded_functions: HashMap<String, LoadedFunctionConfig>,
     gateway_config: GatewayConfig,
     object_store_info: Option<ObjectStoreInfo>,
+    /// Runtime overlay captured from the UninitializedConfig before defaults are resolved.
+    runtime_overlay: RuntimeOverlay,
 }
 
 /// Processes the config input (fresh TOML or snapshot) and returns all the fields
@@ -1049,6 +1018,8 @@ async fn process_config_input(
             }
 
             let object_store_info = ObjectStoreInfo::new(object_storage)?;
+            let runtime_overlay =
+                RuntimeOverlay::from_uninitialized_config(&config, object_store_info.clone());
             let gateway_config = gateway.load(object_store_info.as_ref())?;
 
             // Initialize templates from ALL functions (including built-in)
@@ -1091,6 +1062,7 @@ async fn process_config_input(
                 loaded_functions,
                 gateway_config,
                 object_store_info,
+                runtime_overlay,
             })
         }
         ConfigInput::Snapshot {
@@ -1098,6 +1070,7 @@ async fn process_config_input(
             runtime_overlay,
         } => {
             let original_snapshot = *snapshot;
+            let captured_runtime_overlay = (*runtime_overlay).clone();
 
             // Destructure overlay to ensure all fields are handled (compile error if field added/removed)
             let RuntimeOverlay {
@@ -1147,10 +1120,10 @@ async fn process_config_input(
 
             // Reconstruct with overlaid values for snapshot hash computation
             let overlaid_config = UninitializedConfig {
-                gateway: Some(overlay_gateway.clone()),
-                clickhouse: Some(overlay_clickhouse.clone()),
-                postgres: Some(overlay_postgres.clone()),
-                rate_limiting: Some(overlay_rate_limiting.clone()),
+                gateway: overlay_gateway.clone(),
+                clickhouse: overlay_clickhouse.clone(),
+                postgres: overlay_postgres.clone(),
+                rate_limiting: overlay_rate_limiting.clone(),
                 object_storage: overlay_object_store_info
                     .as_ref()
                     .map(|info| info.kind.clone()),
@@ -1176,7 +1149,10 @@ async fn process_config_input(
             }
 
             // Use the overlay object store info directly instead of creating a new one
-            let gateway_config = overlay_gateway.load(overlay_object_store_info.as_ref())?;
+            let gateway_config = overlay_gateway
+                .clone()
+                .unwrap_or_default()
+                .load(overlay_object_store_info.as_ref())?;
             // Initialize templates from ALL functions (including built-in)
             let all_template_paths = Config::get_templates_from_loaded(&loaded_functions)?;
             // We don't use these since the extra templates come directly from the snapshot
@@ -1193,15 +1169,16 @@ async fn process_config_input(
                 evaluations,
                 provider_types,
                 optimizers,
-                clickhouse: overlay_clickhouse,
-                postgres: overlay_postgres,
-                rate_limiting: overlay_rate_limiting,
+                clickhouse: overlay_clickhouse.unwrap_or_default(),
+                postgres: overlay_postgres.unwrap_or_default(),
+                rate_limiting: overlay_rate_limiting.unwrap_or_default(),
                 autopilot,
                 // unused
                 snapshot,
                 loaded_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
+                runtime_overlay: captured_runtime_overlay,
             })
         }
     }
@@ -1389,6 +1366,7 @@ impl Config {
             loaded_functions,
             gateway_config,
             object_store_info,
+            runtime_overlay,
         } = process_config_input(input, &mut templates).await?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
@@ -1606,7 +1584,7 @@ impl Config {
         }
         config.evaluations = evaluations;
 
-        Ok(UnwrittenConfig::new(config, snapshot))
+        Ok(UnwrittenConfig::new(config, snapshot, runtime_overlay))
     }
 
     /// Validate the config

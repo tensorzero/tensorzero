@@ -528,6 +528,7 @@ mod tests {
 
         AppStateData::new_for_snapshot(
             config,
+            std::sync::Arc::new(crate::config::RuntimeOverlay::default()),
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,

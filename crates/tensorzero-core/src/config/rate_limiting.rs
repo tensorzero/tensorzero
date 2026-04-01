@@ -833,13 +833,13 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(
-            toml_config.enabled.unwrap_or(true),
-            "Default enabled should be true"
-        );
+        assert_eq!(toml_config.enabled, None, "Default enabled should be None");
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
-        assert!(config.enabled());
+        assert!(
+            config.enabled(),
+            "After converting to RateLimitingConfig, default enabled should be true"
+        );
 
         assert_eq!(
             config.rules()[0].priority,
@@ -859,7 +859,10 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
-        assert!(!config.enabled());
+        assert!(
+            !config.enabled(),
+            "After converting to RateLimitingConfig, enabled should be false when explicitly set"
+        );
 
         assert_eq!(
             config.rules()[0].priority,
@@ -884,19 +887,19 @@ mod tests {
     fn test_default_enabled_when_section_missing() {
         // When the entire [rate_limiting] section is missing from the TOML config,
         // serde uses Default::default() for the struct. This test ensures that
-        // the default enabled value is true.
+        // the default enabled value is None.
         let default_config = TomlUninitializedRateLimitingConfig::default();
-        assert!(
-            default_config.enabled.unwrap_or(true),
-            "Rate limiting enabled should default to true when section is missing"
+        assert_eq!(
+            default_config.enabled, None,
+            "Rate limiting enabled should default to None when section is missing"
         );
 
-        // Also test that an empty string deserializes with enabled = true
+        // Also test that an empty string deserializes with enabled = None
         let toml_str = "";
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(
-            toml_config.enabled.unwrap_or(true),
-            "Rate limiting enabled should default to true when section is empty"
+        assert_eq!(
+            toml_config.enabled, None,
+            "Rate limiting enabled should default to None when section is empty"
         );
     }
 
@@ -1437,10 +1440,7 @@ mod tests {
         assert_eq!(rules[0].limits.len(), 1);
         assert_eq!(rules[0].limits[0].capacity, 100);
         assert_eq!(rules[0].limits[0].refill_rate, 50);
-        assert!(
-            config.enabled.unwrap_or(true),
-            "Expected enabled to be true"
-        );
+        assert_eq!(config.enabled, Some(true), "Expected enabled to be true");
     }
 
     #[test]

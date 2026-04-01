@@ -170,6 +170,9 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
+    /// Runtime overlay captured from the original UninitializedConfig at startup.
+    /// Used for snapshot rehydration without the lossy Config → UninitializedConfig round-trip.
+    pub runtime_overlay: Arc<RuntimeOverlay>,
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
@@ -282,6 +285,7 @@ impl GatewayHandle {
             postgres_connection_info.clone(),
             primary_datastore,
         );
+        let runtime_overlay = Arc::new(config.runtime_overlay().clone());
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let valkey_cache_connection_info =
@@ -289,6 +293,7 @@ impl GatewayHandle {
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
+            runtime_overlay,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
@@ -328,9 +333,11 @@ impl GatewayHandle {
             PrimaryDatastore::ClickHouse,
         )
         .expect("Should be able to construct CacheManager");
+        let runtime_overlay = Arc::new(RuntimeOverlay::default());
         Self {
             app_state: AppStateData {
                 config,
+                runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -357,6 +364,7 @@ impl GatewayHandle {
     #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
+        runtime_overlay: Arc<RuntimeOverlay>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
@@ -503,6 +511,7 @@ impl GatewayHandle {
         Ok(Self {
             app_state: AppStateData {
                 config,
+                runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -533,6 +542,7 @@ impl AppStateData {
     fn disabled_for_shutdown_placeholder(&self) -> Self {
         Self {
             config: self.config.clone(),
+            runtime_overlay: self.runtime_overlay.clone(),
             http_client: self.http_client.clone(),
             clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
             postgres_connection_info: PostgresConnectionInfo::new_disabled(),
@@ -565,8 +575,8 @@ impl AppStateData {
         &self,
         snapshot: &ConfigSnapshot,
     ) -> Result<(), crate::error::Error> {
-        let runtime_overlay = RuntimeOverlay::from_config(&self.config);
-        Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
+        Config::load_from_snapshot(snapshot.clone(), (*self.runtime_overlay).clone(), false)
+            .await?;
 
         let db = self.get_delegating_database();
         #[expect(clippy::disallowed_methods)]
@@ -587,6 +597,7 @@ impl AppStateData {
     #[expect(clippy::too_many_arguments)]
     pub fn new_for_snapshot(
         config: Arc<Config>,
+        runtime_overlay: Arc<RuntimeOverlay>,
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
@@ -609,6 +620,7 @@ impl AppStateData {
         )?;
         Ok(Self {
             config,
+            runtime_overlay,
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
@@ -1123,7 +1135,11 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let config = UnwrittenConfig::new(
+            config,
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
 
         let clickhouse_connection_info = setup_clickhouse(&config, None).await.unwrap();
         assert_eq!(
@@ -1151,7 +1167,11 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
@@ -1195,7 +1215,11 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
 
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
@@ -1232,7 +1256,11 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         setup_clickhouse(&unwritten_config, Some("bad_url".to_string()))
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
@@ -1270,7 +1298,11 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         setup_clickhouse(
             &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
@@ -1397,6 +1429,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1433,6 +1466,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1467,6 +1501,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1495,6 +1530,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1526,6 +1562,7 @@ mod tests {
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1554,6 +1591,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1588,6 +1626,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1616,6 +1655,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1711,6 +1751,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1743,6 +1784,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
