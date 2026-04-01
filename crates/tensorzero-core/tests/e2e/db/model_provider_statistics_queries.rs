@@ -755,8 +755,6 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
         StoredModelInference {
             id: uuid::Uuid::now_v7(),
             inference_id: uuid::Uuid::now_v7(),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -779,8 +777,6 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
         StoredModelInference {
             id: uuid::Uuid::now_v7(),
             inference_id: uuid::Uuid::now_v7(),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -803,8 +799,6 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
         StoredModelInference {
             id: uuid::Uuid::now_v7(),
             inference_id: uuid::Uuid::now_v7(),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -853,8 +847,6 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
         StoredModelInference {
             id: uuid::Uuid::new_v7(ts_a1),
             inference_id: uuid::Uuid::new_v7(ts_a1),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -878,8 +870,6 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
         StoredModelInference {
             id: uuid::Uuid::new_v7(ts_a2),
             inference_id: uuid::Uuid::new_v7(ts_a2),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -903,8 +893,6 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
         StoredModelInference {
             id: uuid::Uuid::new_v7(ts_b1),
             inference_id: uuid::Uuid::new_v7(ts_b1),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,

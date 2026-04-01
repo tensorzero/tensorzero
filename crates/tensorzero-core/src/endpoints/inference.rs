@@ -1654,11 +1654,7 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_inferences = result
-        .get_model_inferences(
-            &metadata.function_name,
-            &metadata.variant_name,
-            metadata.snapshot_hash.clone(),
-        )
+        .get_model_inferences(metadata.snapshot_hash.clone())
         .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);

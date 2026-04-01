@@ -189,8 +189,6 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
         SELECT
             i.id,
             i.inference_id,
-            i.function_name,
-            i.variant_name,
             io.raw_request,
             io.raw_response,
             io.system,
@@ -231,7 +229,7 @@ pub(super) fn build_insert_model_inferences_query(
     let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
         r"
         INSERT INTO tensorzero.model_inferences (
-            id, inference_id, function_name, variant_name, input_tokens, output_tokens,
+            id, inference_id, input_tokens, output_tokens,
             provider_cache_read_input_tokens, provider_cache_write_input_tokens,
             response_time_ms, model_name, model_provider_name,
             ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
@@ -241,8 +239,6 @@ pub(super) fn build_insert_model_inferences_query(
     qb.push_values(rows.iter().zip(&timestamps), |mut b, (row, created_at)| {
         b.push_bind(row.id)
             .push_bind(row.inference_id)
-            .push_bind(&row.function_name)
-            .push_bind(&row.variant_name)
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
             .push_bind(row.provider_cache_read_input_tokens.map(|v| v as i32))
@@ -693,8 +689,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
     fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         let id: Uuid = row.try_get("id")?;
         let inference_id: Uuid = row.try_get("inference_id")?;
-        let function_name: String = row.try_get("function_name")?;
-        let variant_name: String = row.try_get("variant_name")?;
         let raw_request: Option<String> = row.try_get("raw_request")?;
         let raw_response: Option<String> = row.try_get("raw_response")?;
         let system: Option<String> = row.try_get("system")?;
@@ -720,8 +714,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         Ok(StoredModelInference {
             id,
             inference_id,
-            function_name,
-            variant_name,
             raw_request,
             raw_response,
             system,
@@ -1197,8 +1189,6 @@ mod tests {
             SELECT
                 i.id,
                 i.inference_id,
-                i.function_name,
-                i.variant_name,
                 io.raw_request,
                 io.raw_response,
                 io.system,
@@ -1229,8 +1219,6 @@ mod tests {
         let rows = vec![StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
             raw_request: Some("request".to_string()),
             raw_response: Some("response".to_string()),
             system: Some("system".to_string()),
@@ -1256,11 +1244,11 @@ mod tests {
             qb.sql().as_str(),
             r"
             INSERT INTO tensorzero.model_inferences (
-                id, inference_id, function_name, variant_name, input_tokens, output_tokens,
+                id, inference_id, input_tokens, output_tokens,
                 provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ",
         );
 
@@ -1282,8 +1270,6 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                function_name: "test_function".to_string(),
-                variant_name: "test_variant".to_string(),
                 raw_request: Some("request1".to_string()),
                 raw_response: Some("response1".to_string()),
                 system: None,
@@ -1306,8 +1292,6 @@ mod tests {
             StoredModelInference {
                 id: Uuid::now_v7(),
                 inference_id: Uuid::now_v7(),
-                function_name: "test_function".to_string(),
-                variant_name: "test_variant".to_string(),
                 raw_request: Some("request2".to_string()),
                 raw_response: Some("response2".to_string()),
                 system: Some("system2".to_string()),
@@ -1334,12 +1318,12 @@ mod tests {
             qb.sql().as_str(),
             r"
             INSERT INTO tensorzero.model_inferences (
-                id, inference_id, function_name, variant_name, input_tokens, output_tokens,
+                id, inference_id, input_tokens, output_tokens,
                 provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17),
-            ($18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15),
+            ($16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
             ",
         );
 

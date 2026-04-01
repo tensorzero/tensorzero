@@ -1,4 +1,4 @@
-use super::{check_column_exists, check_table_exists};
+use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
@@ -7,11 +7,10 @@ use std::time::Duration;
 
 use super::migration_0037::quantiles_sql_args;
 
-/// Denormalizes `function_name` and `variant_name` onto `ModelInference` (via ALTER TABLE),
-/// then creates the `VariantStatistics` AggregatingMergeTree table and three materialized views
+/// Creates the `VariantStatistics` AggregatingMergeTree table and three materialized views
 /// that feed it:
-/// - `VariantStatisticsModelView`: triggers on `ModelInference`, reads function_name/variant_name
-///   directly (no JOIN needed thanks to denormalization), aggregates token/cost metrics.
+/// - `VariantStatisticsModelView`: triggers on `ModelInference`, JOINs with `InferenceById`
+///   to obtain `function_name` and `variant_name`, aggregates token/cost metrics.
 /// - `VariantStatisticsChatView`: triggers on `ChatInference`, aggregates latency and count.
 /// - `VariantStatisticsJsonView`: triggers on `JsonInference`, aggregates latency and count.
 ///
@@ -45,18 +44,6 @@ impl Migration for Migration0053<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
-        // Check if the denormalized columns exist on ModelInference
-        if !check_column_exists(
-            self.clickhouse,
-            "ModelInference",
-            "function_name",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            return Ok(true);
-        }
-        // Check if the VariantStatistics tables exist
         for table in [
             "VariantStatistics",
             "VariantStatisticsModelView",
@@ -73,37 +60,6 @@ impl Migration for Migration0053<'_> {
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
         let qs = quantiles_sql_args();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-
-        // 0. Denormalize function_name and variant_name onto ModelInference.
-        //    New rows will be written with the correct values; historical rows default to ''.
-        if !check_column_exists(
-            self.clickhouse,
-            "ModelInference",
-            "function_name",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            self.clickhouse
-                .run_query_synchronous_no_params(format!(
-                    "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS function_name LowCardinality(String) DEFAULT ''"
-                ))
-                .await?;
-        }
-        if !check_column_exists(
-            self.clickhouse,
-            "ModelInference",
-            "variant_name",
-            MIGRATION_ID,
-        )
-        .await?
-        {
-            self.clickhouse
-                .run_query_synchronous_no_params(format!(
-                    "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String) DEFAULT ''"
-                ))
-                .await?;
-        }
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -150,9 +106,9 @@ impl Migration for Migration0053<'_> {
 
         // 3. Create the three materialized views
         let model_view_where = if clean_start {
-            String::new()
+            "1=1".to_string()
         } else {
-            format!("WHERE UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+            format!("UUIDv7ToDateTime(mi.id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
 
         let inference_view_where = if clean_start {
@@ -162,7 +118,7 @@ impl Migration for Migration0053<'_> {
         };
 
         // MV 1: VariantStatisticsModelView (triggers on ModelInference inserts)
-        // Reads function_name/variant_name directly from ModelInference (denormalized).
+        // JOINs with InferenceById to obtain function_name and variant_name.
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"
@@ -170,18 +126,19 @@ impl Migration for Migration0053<'_> {
                 TO VariantStatistics
                 AS
                 SELECT
-                    function_name,
-                    variant_name,
-                    toStartOfMinute(timestamp) AS minute,
-                    sumState(input_tokens) AS total_input_tokens,
-                    sumState(output_tokens) AS total_output_tokens,
-                    sumState(cost) AS total_cost,
-                    sumState(provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
-                    sumState(provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
-                    countState(cost) AS count_with_cost
-                FROM ModelInference
-                {model_view_where}
-                GROUP BY function_name, variant_name, minute
+                    ibi.function_name AS function_name,
+                    ibi.variant_name AS variant_name,
+                    toStartOfMinute(mi.timestamp) AS minute,
+                    sumState(mi.input_tokens) AS total_input_tokens,
+                    sumState(mi.output_tokens) AS total_output_tokens,
+                    sumState(mi.cost) AS total_cost,
+                    sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
+                    sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
+                    countState(mi.cost) AS count_with_cost
+                FROM ModelInference mi
+                INNER JOIN InferenceById ibi ON toUInt128(mi.inference_id) = ibi.id_uint
+                WHERE {model_view_where}
+                GROUP BY ibi.function_name, ibi.variant_name, minute
                 "
             ))
             .await?;
@@ -230,24 +187,6 @@ impl Migration for Migration0053<'_> {
 
         // 4. Backfill historical data if not a clean start
         if !clean_start {
-            // Skip backfill if source tables are empty (e.g. rollback tests on fresh DBs).
-            let has_data = self
-                .clickhouse
-                .run_query_synchronous_no_params(
-                    "SELECT count() FROM ModelInference LIMIT 1".to_string(),
-                )
-                .await?
-                .response
-                .trim()
-                != "0";
-
-            if !has_data {
-                tracing::info!(
-                    "Skipping `VariantStatistics` backfill: no data in `ModelInference`"
-                );
-                return Ok(());
-            }
-
             tokio::time::sleep(view_offset).await;
 
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
@@ -269,8 +208,7 @@ impl Migration for Migration0053<'_> {
             }
 
             // Backfill from ModelInference (token/cost metrics)
-            // Historical rows don't have function_name/variant_name populated,
-            // so we JOIN InferenceById for the backfill only.
+            // JOIN InferenceById to get function_name and variant_name.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
             self.clickhouse
                 .run_query_synchronous_no_params(format!(
@@ -353,9 +291,7 @@ impl Migration for Migration0053<'_> {
             DROP TABLE IF EXISTS VariantStatisticsModelView{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS VariantStatisticsChatView{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS VariantStatisticsJsonView{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS VariantStatistics{on_cluster_name} SYNC;
-            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN IF EXISTS function_name;
-            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN IF EXISTS variant_name;"
+            DROP TABLE IF EXISTS VariantStatistics{on_cluster_name} SYNC;"
         )
     }
 

@@ -614,10 +614,6 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let row1 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        // Empty strings so these are skipped during serialization — the columns
-        // don't exist in ClickHouse until migration 0053.
-        function_name: String::new(),
-        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -640,8 +636,6 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let row2 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        function_name: String::new(),
-        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -714,10 +708,6 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            // Empty strings so these are skipped during serialization — the columns
-            // don't exist in ClickHouse until migration 0053.
-            function_name: String::new(),
-            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -740,8 +730,6 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            function_name: String::new(),
-            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -764,8 +752,6 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            function_name: String::new(),
-            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -1196,8 +1182,6 @@ async fn test_clickhouse_migration_manager() {
     let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        function_name: "test_function".to_string(),
-        variant_name: "test_variant".to_string(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -1442,21 +1426,12 @@ async fn test_concurrent_clickhouse_migrations() {
                 disable_automatic_migrations: false,
             })
             .await
+            .unwrap();
         }));
     }
-    let mut success_count = 0u32;
     for handle in handles {
-        let result = handle.await.unwrap();
-        if result.is_ok() {
-            success_count += 1;
-        }
+        handle.await.unwrap();
     }
-    // At least one concurrent run must succeed (the others may hit transient
-    // races like `SHOW CREATE TABLE` on a view that another task is recreating).
-    assert!(
-        success_count > 0,
-        "Expected at least one concurrent migration run to succeed"
-    );
 
     // We should have written at least one duplicate migration record to `TensorZeroMigration`
     // due to multiple copies of the same migration running concurrently.
