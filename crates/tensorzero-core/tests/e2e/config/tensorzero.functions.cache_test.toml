@@ -1,0 +1,65 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │              CACHE TEST FUNCTION — prompt caching audit scenarios          │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# Variants cover different caching scenarios for testing /t0-cache-audit:
+#
+#   anthropic-with-tools          — Anthropic + tools, NO cache breakpoints (should FAIL breakpoints)
+#   anthropic-with-tools-cached   — Anthropic + tools, WITH cache breakpoints (should PASS)
+#   openai-with-tools             — OpenAI + tools, automatic caching (should INFO breakpoints)
+#   anthropic-no-tools            — Anthropic, no tools, long system, no breakpoints (should FAIL breakpoints)
+#   anthropic-no-tools-cached     — Anthropic, no tools, long system, WITH breakpoints (should PASS)
+
+[functions.cache_test]
+type = "chat"
+tools = ["get_temperature", "get_humidity", "search_wikipedia"]
+
+# ── Anthropic + tools, no breakpoints ────────────────────────────────────────
+# Expected: tool_ordering PASS (stable), cache_breakpoints FAIL (missing)
+[functions.cache_test.variants.anthropic-with-tools]
+type = "chat_completion"
+model = "claude-haiku-4-5-anthropic"
+system_template = "../../../fixtures/config/functions/cache_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# ── Anthropic + tools, WITH cache breakpoints ────────────────────────────────
+# Expected: tool_ordering PASS (stable), cache_breakpoints PASS
+[functions.cache_test.variants.anthropic-with-tools-cached]
+type = "chat_completion"
+model = "claude-haiku-4-5-anthropic"
+system_template = "../../../fixtures/config/functions/cache_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [
+    { pointer = "/system/0/cache_control", value = { type = "ephemeral" } },
+    { pointer = "/tools/2/cache_control", value = { type = "ephemeral" } },
+]
+
+# ── OpenAI + tools ───────────────────────────────────────────────────────────
+# Expected: tool_ordering PASS (stable), cache_breakpoints INFO (automatic)
+[functions.cache_test.variants.openai-with-tools]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/cache_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# ── Anthropic, no tools, no breakpoints ──────────────────────────────────────
+# Expected: tool_ordering INFO (no tools), cache_breakpoints FAIL (missing)
+[functions.cache_test_no_tools]
+type = "chat"
+
+[functions.cache_test_no_tools.variants.anthropic-no-tools]
+type = "chat_completion"
+model = "claude-haiku-4-5-anthropic"
+system_template = "../../../fixtures/config/functions/cache_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# ── Anthropic, no tools, WITH breakpoints ────────────────────────────────────
+# Expected: tool_ordering INFO (no tools), cache_breakpoints PASS
+[functions.cache_test_no_tools.variants.anthropic-no-tools-cached]
+type = "chat_completion"
+model = "claude-haiku-4-5-anthropic"
+system_template = "../../../fixtures/config/functions/cache_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [
+    { pointer = "/system/0/cache_control", value = { type = "ephemeral" } },
+]
