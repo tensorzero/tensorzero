@@ -210,6 +210,22 @@ export async function loader() {
   });
 
   // Keep the description promises for directory cards
+  const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
+    const total = countsInfo.reduce(
+      (acc, curr) => acc + curr.inference_count,
+      0,
+    );
+    return `${total.toLocaleString()} inferences`;
+  });
+
+  const numEpisodesDesc = episodesPromise.then((result) =>
+    result.count != null ? `${result.count.toLocaleString()} episodes` : "—",
+  );
+
+  const numModelsUsedDesc = numModelsUsedPromise.then(
+    (numModelsUsed) => `${numModelsUsed} models used`,
+  );
+
   const numFunctionsDesc = functionConfigsPromise.then((functionConfigs) => {
     const numFunctions = Object.keys(functionConfigs).length;
     return `${numFunctions} functions`;
@@ -246,11 +262,14 @@ export async function loader() {
 
   return {
     statsPromise,
+    totalInferencesDesc,
+    numEpisodesDesc,
     numFunctionsDesc,
     numVariantsDesc,
     numDatasetsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
+    numModelsUsedDesc,
   };
 }
 
@@ -333,11 +352,14 @@ function OverviewStatsBarSkeleton() {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     statsPromise,
+    totalInferencesDesc,
+    numEpisodesDesc,
     numFunctionsDesc,
     numVariantsDesc,
     numDatasetsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
+    numModelsUsedDesc,
   } = loaderData;
 
   return (
@@ -361,25 +383,25 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/observability/inferences"
                 icon={Inferences}
                 title="Inferences"
-                description=""
+                description={totalInferencesDesc}
               />
               <DirectoryCard
                 source="/observability/episodes"
                 icon={Episodes}
                 title="Episodes"
-                description=""
+                description={numEpisodesDesc}
               />
               <DirectoryCard
                 source="/observability/functions"
                 icon={Functions}
                 title="Functions"
-                description=""
+                description={numFunctionsDesc}
               />
               <DirectoryCard
                 source="/observability/models"
                 icon={Model}
                 title="Models"
-                description=""
+                description={numModelsUsedDesc}
               />
             </div>
           </div>

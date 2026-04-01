@@ -18,8 +18,8 @@ test("@base-path should check the health endpoint with the correct base path", a
 test("should show 22 functions in the functions badge", async ({ page }) => {
   await page.goto("/");
 
-  // Find the functions card specifically by looking for the card that contains both "Functions" title and description
-  const functionsCard = page.locator(".block").filter({
+  // Find the functions card by looking for a link that contains "Functions" heading and "22 functions" text
+  const functionsCard = page.locator('a[href*="functions"]').filter({
     has: page.locator('h3:has-text("Functions")'),
     hasText: "22 functions",
   });
@@ -30,8 +30,8 @@ test("should show 22 functions in the functions badge", async ({ page }) => {
 test("should show the models badge", async ({ page }) => {
   await page.goto("/");
 
-  // Find the models card
-  const modelsCard = page.locator(".block").filter({
+  // Find the models card by looking for a link that contains "Models" heading and "models used" text
+  const modelsCard = page.locator('a[href*="models"]').filter({
     has: page.locator('h3:has-text("Models")'),
     hasText: "models used",
   });

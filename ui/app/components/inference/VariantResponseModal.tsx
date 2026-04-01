@@ -5,7 +5,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Loader2, ChevronDown, ChevronUp, RefreshCw, Copy, Check } from "lucide-react";
+import {
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Copy,
+  Check,
+} from "lucide-react";
 import { InputIcon, Output, Cost } from "~/components/icons/Icons";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
@@ -151,7 +158,11 @@ function CopyTextButton({ text }: { text: string | null }) {
       }}
       title="Copy text"
     >
-      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? (
+        <Check className="h-3.5 w-3.5" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
     </Button>
   );
 }
@@ -320,7 +331,10 @@ export function VariantResponseModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] sm:max-w-[90vw]" aria-describedby={undefined}>
+      <DialogContent
+        className="max-h-[90vh] sm:max-w-[90vw]"
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
