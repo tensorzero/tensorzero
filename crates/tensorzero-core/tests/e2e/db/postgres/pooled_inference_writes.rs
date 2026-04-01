@@ -138,8 +138,8 @@ async fn test_chat_inferences_flush_on_max_rows() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 60_000, // Very long — should not trigger
-                max_rows,
+                flush_interval_ms: Some(60_000), // Very long — should not trigger
+                max_rows: Some(max_rows),
                 ..Default::default()
             },
         )
@@ -197,8 +197,8 @@ async fn test_json_inferences_flush_on_max_rows() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 60_000,
-                max_rows,
+                flush_interval_ms: Some(60_000),
+                max_rows: Some(max_rows),
                 ..Default::default()
             },
         )
@@ -255,8 +255,8 @@ async fn test_model_inferences_flush_on_max_rows() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 60_000,
-                max_rows,
+                flush_interval_ms: Some(60_000),
+                max_rows: Some(max_rows),
                 ..Default::default()
             },
         )
@@ -310,8 +310,8 @@ async fn test_flush_on_timeout() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 1000,
-                max_rows: 1000, // Very large — should not trigger via row count
+                flush_interval_ms: Some(1000),
+                max_rows: Some(1000), // Very large — should not trigger via row count
                 ..Default::default()
             },
         )
@@ -357,8 +357,8 @@ async fn test_drain_on_close() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 60_000, // Very long
-                max_rows: 1000,            // Very large
+                flush_interval_ms: Some(60_000), // Very long
+                max_rows: Some(1000),            // Very large
                 ..Default::default()
             },
         )
@@ -444,8 +444,8 @@ async fn test_overflow_beyond_max_rows() {
             pool.clone(),
             BatchWritesConfig {
                 enabled: true,
-                flush_interval_ms: 60_000,
-                max_rows,
+                flush_interval_ms: Some(60_000),
+                max_rows: Some(max_rows),
                 ..Default::default()
             },
         )

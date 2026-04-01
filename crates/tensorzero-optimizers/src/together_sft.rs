@@ -43,7 +43,10 @@ use tensorzero_core::{
 use crate::{JobHandle, Optimizer};
 
 fn get_sft_config(provider_types: &ProviderTypesConfig) -> Option<&TogetherProviderSFTConfig> {
-    provider_types.together.sft.as_ref()
+    provider_types
+        .together
+        .as_ref()
+        .and_then(|t| t.sft.as_ref())
 }
 
 #[derive(Debug, Deserialize)]

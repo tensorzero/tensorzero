@@ -92,7 +92,7 @@ async fn test_write_config_tool_sets_autopilot_tags(pool: PgPool) {
     mock_client
         .expect_write_config()
         .withf(move |request| {
-            request.config.functions.is_empty()
+            request.config.functions.is_none()
                 && request.extra_templates.get("template_a") == Some(&"content".to_string())
                 && request.tags.get("tensorzero::autopilot::session_id")
                     == Some(&session_id.to_string())

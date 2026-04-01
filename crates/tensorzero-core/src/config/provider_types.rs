@@ -1,51 +1,35 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderTypesConfig {
-    #[serde(default)]
-    pub anthropic: AnthropicProviderTypeConfig,
-    #[serde(default)]
-    pub azure: AzureProviderTypeConfig,
-    #[serde(default)]
-    pub deepseek: DeepSeekProviderTypeConfig,
-    #[serde(default)]
-    pub fireworks: FireworksProviderTypeConfig,
-    #[serde(default)]
-    pub gcp_vertex_gemini: GCPVertexGeminiProviderTypeConfig,
-    #[serde(default)]
-    pub gcp_vertex_anthropic: GCPVertexAnthropicProviderTypeConfig,
-    #[serde(default)]
-    pub google_ai_studio_gemini: GoogleAIStudioGeminiProviderTypeConfig,
-    #[serde(default)]
-    pub groq: GroqProviderTypeConfig,
-    #[serde(default)]
-    pub hyperbolic: HyperbolicProviderTypeConfig,
-    #[serde(default)]
-    pub mistral: MistralProviderTypeConfig,
-    #[serde(default)]
-    pub openai: OpenAIProviderTypeConfig,
-    #[serde(default)]
-    pub openrouter: OpenRouterProviderTypeConfig,
-    #[serde(default)]
-    pub sglang: SGLangProviderTypeConfig,
-    #[serde(default)]
-    pub tgi: TGIProviderTypeConfig,
-    #[serde(default)]
-    pub together: TogetherProviderTypeConfig,
-    #[serde(default)]
-    pub vllm: VLLMProviderTypeConfig,
-    #[serde(default)]
-    pub xai: XAIProviderTypeConfig,
+    pub anthropic: Option<AnthropicProviderTypeConfig>,
+    pub azure: Option<AzureProviderTypeConfig>,
+    pub deepseek: Option<DeepSeekProviderTypeConfig>,
+    pub fireworks: Option<FireworksProviderTypeConfig>,
+    pub gcp_vertex_gemini: Option<GCPVertexGeminiProviderTypeConfig>,
+    pub gcp_vertex_anthropic: Option<GCPVertexAnthropicProviderTypeConfig>,
+    pub google_ai_studio_gemini: Option<GoogleAIStudioGeminiProviderTypeConfig>,
+    pub groq: Option<GroqProviderTypeConfig>,
+    pub hyperbolic: Option<HyperbolicProviderTypeConfig>,
+    pub mistral: Option<MistralProviderTypeConfig>,
+    pub openai: Option<OpenAIProviderTypeConfig>,
+    pub openrouter: Option<OpenRouterProviderTypeConfig>,
+    pub sglang: Option<SGLangProviderTypeConfig>,
+    pub tgi: Option<TGIProviderTypeConfig>,
+    pub together: Option<TogetherProviderTypeConfig>,
+    pub vllm: Option<VLLMProviderTypeConfig>,
+    pub xai: Option<XAIProviderTypeConfig>,
 }
 
 // Anthropic
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: AnthropicDefaults,
+    pub defaults: Option<AnthropicDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -65,10 +49,10 @@ impl Default for AnthropicDefaults {
 
 // Azure
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct AzureProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: AzureDefaults,
+    pub defaults: Option<AzureDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -88,10 +72,10 @@ impl Default for AzureDefaults {
 
 // DeepSeek
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct DeepSeekProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: DeepSeekDefaults,
+    pub defaults: Option<DeepSeekDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -111,12 +95,11 @@ impl Default for DeepSeekDefaults {
 
 // Fireworks
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct FireworksProviderTypeConfig {
-    #[serde(default)]
     pub sft: Option<FireworksSFTConfig>,
-    #[serde(default)]
-    pub defaults: FireworksDefaults,
+    pub defaults: Option<FireworksDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -143,25 +126,23 @@ impl Default for FireworksDefaults {
 
 // GCP Vertex Gemini
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub struct GCPVertexGeminiProviderTypeConfig {
-    #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
-    #[serde(default)]
     pub sft: Option<GCPSFTConfig>,
-    #[serde(default)]
-    pub defaults: GCPDefaults,
+    pub defaults: Option<GCPDefaults>,
 }
 
 // GCP Vertex Anthropic
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GCPVertexAnthropicProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: GCPDefaults,
+    pub defaults: Option<GCPDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -214,10 +195,10 @@ impl Default for GCPDefaults {
 
 // Google AI Studio
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: GoogleAIStudioGeminiDefaults,
+    pub defaults: Option<GoogleAIStudioGeminiDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -237,10 +218,10 @@ impl Default for GoogleAIStudioGeminiDefaults {
 
 // Groq
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct GroqProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: GroqDefaults,
+    pub defaults: Option<GroqDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -260,10 +241,10 @@ impl Default for GroqDefaults {
 
 // Hyperbolic
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct HyperbolicProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: HyperbolicDefaults,
+    pub defaults: Option<HyperbolicDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -283,10 +264,10 @@ impl Default for HyperbolicDefaults {
 
 // Mistral
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct MistralProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: MistralDefaults,
+    pub defaults: Option<MistralDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -306,10 +287,10 @@ impl Default for MistralDefaults {
 
 // OpenAI
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct OpenAIProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: OpenAIDefaults,
+    pub defaults: Option<OpenAIDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -329,10 +310,10 @@ impl Default for OpenAIDefaults {
 
 // Openrouter
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct OpenRouterProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: OpenRouterDefaults,
+    pub defaults: Option<OpenRouterDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -352,10 +333,10 @@ impl Default for OpenRouterDefaults {
 
 // SGLang
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct SGLangProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: SGLangDefaults,
+    pub defaults: Option<SGLangDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -375,10 +356,10 @@ impl Default for SGLangDefaults {
 
 // TGI
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct TGIProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: TGIDefaults,
+    pub defaults: Option<TGIDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -398,12 +379,11 @@ impl Default for TGIDefaults {
 
 // Together
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct TogetherProviderTypeConfig {
-    #[serde(default)]
     pub sft: Option<TogetherSFTConfig>,
-    #[serde(default)]
-    pub defaults: TogetherDefaults,
+    pub defaults: Option<TogetherDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -437,10 +417,10 @@ impl Default for TogetherDefaults {
 
 // vLLM
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VLLMProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: VLLMDefaults,
+    pub defaults: Option<VLLMDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -460,10 +440,10 @@ impl Default for VLLMDefaults {
 
 // xAI
 
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct XAIProviderTypeConfig {
-    #[serde(default)]
-    pub defaults: XAIDefaults,
+    pub defaults: Option<XAIDefaults>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

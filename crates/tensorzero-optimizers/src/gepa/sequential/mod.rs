@@ -87,7 +87,12 @@ impl Optimizer for GEPAConfig {
             Ok(url) => {
                 ClickHouseConnectionInfo::new(
                     &url,
-                    config.gateway.observability.batch_writes.clone(),
+                    config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .clone()
+                        .unwrap_or_default(),
                 )
                 .await?
             }

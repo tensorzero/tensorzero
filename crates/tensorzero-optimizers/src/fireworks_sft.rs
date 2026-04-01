@@ -58,13 +58,17 @@ use crate::{JobHandle, Optimizer};
 fn get_sft_config(
     provider_types: &ProviderTypesConfig,
 ) -> Result<&FireworksProviderSFTConfig, Error> {
-    provider_types.fireworks.sft.as_ref().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message:
-                "Fireworks SFT requires `[provider_types.fireworks.sft]` configuration section"
-                    .to_string(),
+    provider_types
+        .fireworks
+        .as_ref()
+        .and_then(|f| f.sft.as_ref())
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message:
+                    "Fireworks SFT requires `[provider_types.fireworks.sft]` configuration section"
+                        .to_string(),
+            })
         })
-    })
 }
 
 impl Optimizer for FireworksSFTConfig {

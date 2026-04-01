@@ -615,13 +615,33 @@ model = "test_model_{random_id}"
 #[tokio::test(flavor = "multi_thread")]
 async fn test_config_snapshot_hash_stable_with_explicit_runtime_fields() {
     let random_id = Uuid::now_v7();
+    // NOTE(shuyangli): the ConfigSnapshot types share a lot of UninitializedConfig types.
+    //
+    // We are trying to stop defaulting values in UninitializedConfig (#7156) because they
+    // cause us to write values to the database that the users didn't supply themselves. This
+    // change causes some values to change over a round-trip (RuntimeOverlay produces
+    // Some(default_value) for fields the original config had as None).
+    //
+    // In the original test config, we need to explicitly set ALL fields that
+    // RuntimeOverlay::from_config produces as Some(value). This will allow us to check whether
+    // RuntimeOverlay::from_config changes any other values.
     let config = format!(
         r#"
 [gateway]
+debug = false
 fetch_and_encode_input_files_before_inference = false
 global_outbound_http_timeout_ms = 900000
+unstable_error_json = false
+unstable_disable_feedback_target_validation = false
+disable_pseudonymous_usage_analytics = false
 
 [gateway.template_filesystem_access]
+enabled = false
+
+[gateway.observability]
+async_writes = false
+
+[gateway.auth]
 enabled = false
 
 [models.test_model_{random_id}]
@@ -802,9 +822,10 @@ model = "test_model_{random_id}"
         .await
         .unwrap();
 
+    // These runtime overlay items should not affect snapshot hash.
     let mut live_config = Config::default();
     live_config.gateway.debug = true;
-    live_config.postgres.connection_pool_size = 99;
+    live_config.postgres.connection_pool_size = Some(99);
 
     let new_client = Box::pin(ClientBuilder::from_config_snapshot(
         retrieved_snapshot,
@@ -825,7 +846,8 @@ model = "test_model_{random_id}"
         "Gateway should be overlaid from live_config (debug = true)"
     );
     assert_eq!(
-        new_config.postgres.connection_pool_size, 99,
+        new_config.postgres.connection_pool_size,
+        Some(99),
         "Postgres should be overlaid from live_config"
     );
     assert!(

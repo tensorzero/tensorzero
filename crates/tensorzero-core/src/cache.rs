@@ -4,7 +4,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::config::OtlpConfig;
-use crate::config::gateway::{InferenceCacheBackend, ModelInferenceCacheConfig};
+use crate::config::gateway::{
+    InferenceCacheBackend, ModelInferenceCacheConfig, ValkeyModelInferenceCacheConfig,
+};
 use crate::db::cache::CacheQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
@@ -67,7 +69,7 @@ impl CacheManager {
             matches!(valkey_connection_info, ValkeyConnectionInfo::Enabled { .. });
 
         match cache_config.backend {
-            InferenceCacheBackend::Auto => {
+            None | Some(InferenceCacheBackend::Auto) => {
                 let explicitly_enabled = cache_config.enabled == Some(true);
                 if primary_datastore == PrimaryDatastore::ClickHouse {
                     if !clickhouse_available && explicitly_enabled {
@@ -95,12 +97,12 @@ impl CacheManager {
                 }
                 match valkey_connection_info {
                     ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
-                        ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                        ValkeyCacheClient::new(connection.clone(), cache_config.valkey.as_ref().map(|v| v.ttl_s).unwrap_or_else(|| ValkeyModelInferenceCacheConfig::default().ttl_s)),
                     ))),
                     ValkeyConnectionInfo::Disabled => Ok(Self::disabled()),
                 }
             }
-            InferenceCacheBackend::ClickHouse => {
+            Some(InferenceCacheBackend::ClickHouse) => {
                 if !clickhouse_available {
                     return Err(ErrorDetails::AppState {
                         message: "`cache.backend` is set to `clickhouse` but ClickHouse is not available. \
@@ -111,9 +113,9 @@ impl CacheManager {
                 }
                 Ok(Self::new(Arc::new(clickhouse_connection_info.clone())))
             }
-            InferenceCacheBackend::Valkey => match valkey_connection_info {
+            Some(InferenceCacheBackend::Valkey) => match valkey_connection_info {
                 ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
-                    ValkeyCacheClient::new(connection.clone(), cache_config.valkey.ttl_s),
+                    ValkeyCacheClient::new(connection.clone(), cache_config.valkey.as_ref().map(|v| v.ttl_s).unwrap_or_else(|| ValkeyModelInferenceCacheConfig::default().ttl_s)),
                 ))),
                 ValkeyConnectionInfo::Disabled => Err(ErrorDetails::AppState {
                     message: "`cache.backend` is set to `valkey` but Valkey is not available. \

@@ -834,13 +834,11 @@ impl ClientBuilder {
         allow_batch_writes: bool,
     ) -> Result<(), ClientBuilderError> {
         // Validate batch writes configuration
+        let batch_writes = config.gateway.observability.batch_writes.as_ref();
         if !allow_batch_writes
-            && config.gateway.observability.batch_writes.enabled
-            && !config
-                .gateway
-                .observability
-                .batch_writes
-                .__force_allow_embedded_batch_writes
+            && batch_writes.is_some_and(|bw| bw.enabled)
+            && !batch_writes
+                .is_some_and(|bw| bw.__force_allow_embedded_batch_writes.unwrap_or(false))
         {
             return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::Config {

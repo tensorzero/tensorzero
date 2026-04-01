@@ -18,6 +18,9 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::cache::CacheManager;
+use crate::config::gateway::{
+    default_gateway_auth_cache_enabled, default_gateway_auth_cache_ttl_ms,
+};
 use crate::config::{
     BatchWritesConfig, Config, ConfigFileGlob, RuntimeOverlay, snapshot::ConfigSnapshot,
     snapshot::SnapshotHash, unwritten::UnwrittenConfig,
@@ -217,13 +220,20 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
         .as_ref()
         .unwrap_or(&default_cache_config);
 
-    if !cache_config.enabled {
+    if !cache_config
+        .enabled
+        .unwrap_or_else(default_gateway_auth_cache_enabled)
+    {
         return None;
     }
 
     Some(
         Cache::builder()
-            .time_to_live(Duration::from_millis(cache_config.ttl_ms))
+            .time_to_live(Duration::from_millis(
+                cache_config
+                    .ttl_ms
+                    .unwrap_or_else(default_gateway_auth_cache_ttl_ms),
+            ))
             .build(),
     )
 }
@@ -649,7 +659,12 @@ pub async fn setup_clickhouse(
         (Some(true), Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -662,7 +677,12 @@ pub async fn setup_clickhouse(
         (None, Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -673,7 +693,10 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
+            disable_automatic_migrations: config
+                .clickhouse
+                .disable_automatic_migrations
+                .unwrap_or(false),
         })
         .await?;
     }
@@ -754,8 +777,13 @@ pub async fn setup_postgres(
         (Some(true), Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size,
-                &config.gateway.observability.batch_writes,
+                config.postgres.connection_pool_size.unwrap_or(20),
+                &config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -768,8 +796,13 @@ pub async fn setup_postgres(
         (None, Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size,
-                &config.gateway.observability.batch_writes,
+                config.postgres.connection_pool_size.unwrap_or(20),
+                &config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -1065,8 +1098,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(false),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1105,8 +1138,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: None,
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1137,8 +1170,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1175,8 +1208,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1213,8 +1246,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1354,7 +1387,7 @@ mod tests {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
-                    backend: ObservabilityBackend::ClickHouse,
+                    backend: Some(ObservabilityBackend::ClickHouse),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1390,7 +1423,7 @@ mod tests {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
-                    backend: ObservabilityBackend::Postgres,
+                    backend: Some(ObservabilityBackend::Postgres),
                     ..Default::default()
                 },
                 ..Default::default()

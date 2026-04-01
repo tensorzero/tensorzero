@@ -933,7 +933,7 @@ async fn eval_analyze_mutate_step(
         .function_context
         .load(
             &params.gepa_config.function_name,
-            &uninitialized_config.metrics,
+            &uninitialized_config.metrics.unwrap_or_default(),
         )
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
 

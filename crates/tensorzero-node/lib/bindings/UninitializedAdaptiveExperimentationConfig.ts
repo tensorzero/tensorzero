@@ -7,7 +7,7 @@ import type { AdaptiveExperimentationAlgorithm } from "./AdaptiveExperimentation
  * an additional `algorithm` field.
  */
 export type UninitializedAdaptiveExperimentationConfig = {
-  algorithm: AdaptiveExperimentationAlgorithm;
+  algorithm?: AdaptiveExperimentationAlgorithm;
   metric: string;
   candidate_variants: Array<string>;
   fallback_variants: Array<string>;

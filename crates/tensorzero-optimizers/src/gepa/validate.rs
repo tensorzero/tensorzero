@@ -571,7 +571,8 @@ pub fn validate_gepa_config_uninitialized(
     // Load the target function
     let uninitialized_fn = uninitialized_config
         .functions
-        .get(&config.function_name)
+        .as_ref()
+        .and_then(|m| m.get(&config.function_name))
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
@@ -581,15 +582,18 @@ pub fn validate_gepa_config_uninitialized(
             })
         })?;
 
-    let loaded_fn = uninitialized_fn
-        .clone()
-        .load(&config.function_name, &uninitialized_config.metrics)?;
+    let loaded_fn = uninitialized_fn.clone().load(&config.function_name, {
+        static EMPTY: std::sync::LazyLock<HashMap<String, tensorzero_core::config::MetricConfig>> =
+            std::sync::LazyLock::new(HashMap::new);
+        uninitialized_config.metrics.as_ref().unwrap_or(&EMPTY)
+    })?;
     let function_config = Arc::new(loaded_fn.function_config);
 
     // Load the evaluation
     let uninitialized_eval = uninitialized_config
         .evaluations
-        .get(&config.evaluation_name)
+        .as_ref()
+        .and_then(|m| m.get(&config.evaluation_name))
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
@@ -706,8 +710,11 @@ pub fn validate_gepa_config_uninitialized(
     } else {
         let mut tools = HashMap::new();
         for tool_name in &function_tool_names {
-            let uninitialized_tool =
-                uninitialized_config.tools.get(tool_name).ok_or_else(|| {
+            let uninitialized_tool = uninitialized_config
+                .tools
+                .as_ref()
+                .and_then(|m| m.get(tool_name))
+                .ok_or_else(|| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
                             "Tool `{}` referenced by Function `{}` not found in configuration",
@@ -1714,7 +1721,7 @@ mod tests {
 
         let mut config = empty_uninitialized_config();
 
-        config.functions.insert(
+        config.functions.get_or_insert_with(HashMap::new).insert(
             function_name.to_string(),
             UninitializedFunctionConfig::Chat(UninitializedFunctionConfigChat {
                 variants,
@@ -1731,7 +1738,7 @@ mod tests {
             }),
         );
 
-        config.evaluations.insert(
+        config.evaluations.get_or_insert_with(HashMap::new).insert(
             evaluation_name.to_string(),
             tensorzero_core::evaluations::UninitializedEvaluationConfig::Inference(
                 UninitializedInferenceEvaluationConfig {
@@ -1786,24 +1793,27 @@ mod tests {
 
         // Create config with function but no matching evaluation
         let mut uninitialized = empty_uninitialized_config();
-        uninitialized.functions.insert(
-            "test_function".to_string(),
-            tensorzero_core::config::UninitializedFunctionConfig::Chat(
-                tensorzero_core::config::UninitializedFunctionConfigChat {
-                    variants,
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
-                    schemas: tensorzero_core::config::UninitializedSchemas::default(),
-                    tools: vec![],
-                    tool_choice: tensorzero_core::tool::ToolChoice::None,
-                    parallel_tool_calls: None,
-                    description: None,
-                    experimentation: None,
-                    evaluators: HashMap::new(),
-                },
-            ),
-        );
+        uninitialized
+            .functions
+            .get_or_insert_with(HashMap::new)
+            .insert(
+                "test_function".to_string(),
+                tensorzero_core::config::UninitializedFunctionConfig::Chat(
+                    tensorzero_core::config::UninitializedFunctionConfigChat {
+                        variants,
+                        system_schema: None,
+                        user_schema: None,
+                        assistant_schema: None,
+                        schemas: tensorzero_core::config::UninitializedSchemas::default(),
+                        tools: vec![],
+                        tool_choice: tensorzero_core::tool::ToolChoice::None,
+                        parallel_tool_calls: None,
+                        description: None,
+                        experimentation: None,
+                        evaluators: HashMap::new(),
+                    },
+                ),
+            );
 
         let gepa_config = create_gepa_config("test_function", None, None);
         let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
