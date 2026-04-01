@@ -423,7 +423,7 @@ routing = ["together"]
 
 [models."llama4-maverick-instruct-together".providers.together]
 type = "together"
-model_name = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+model_name = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
 
 [models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]
