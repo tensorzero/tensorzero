@@ -133,6 +133,25 @@ pub struct ModelUsageTimePoint {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct CacheStatisticsTimePoint {
+    pub period_start: DateTime<Utc>,
+    pub model_name: String,
+    pub model_provider_name: String,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub cache_read_input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub cache_write_input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub count: Option<u64>,
+    #[serde(skip_deserializing)]
+    pub cache_read_ratio: Option<f64>,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
     // should be an array of quantiles_len u64

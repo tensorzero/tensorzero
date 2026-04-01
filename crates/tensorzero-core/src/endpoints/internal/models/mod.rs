@@ -4,7 +4,9 @@
 
 pub mod types;
 
-pub use types::{CountModelsResponse, GetModelLatencyResponse, GetModelUsageResponse};
+pub use types::{
+    CountModelsResponse, GetCacheStatisticsResponse, GetModelLatencyResponse, GetModelUsageResponse,
+};
 
 use axum::Json;
 use axum::extract::{Query, State};
@@ -12,7 +14,7 @@ use tracing::instrument;
 
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::endpoints::internal::models::types::{
-    GetModelLatencyQueryParams, GetModelUsageQueryParams,
+    GetCacheStatisticsQueryParams, GetModelLatencyQueryParams, GetModelUsageQueryParams,
 };
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData};
@@ -69,4 +71,27 @@ pub async fn get_model_latency_handler(
         .await?;
 
     Ok(Json(GetModelLatencyResponse { quantiles, data }))
+}
+
+/// Handler for `GET /internal/models/cache_statistics`
+///
+/// Returns cache statistics timeseries data grouped by model and provider.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(name = "models.cache_statistics", skip_all)]
+pub async fn get_cache_statistics_handler(
+    State(app_state): AppState,
+    Query(params): Query<GetCacheStatisticsQueryParams>,
+) -> Result<Json<GetCacheStatisticsResponse>, Error> {
+    let database = app_state.get_delegating_database();
+
+    let data = database
+        .get_cache_statistics_timeseries(
+            params.time_window,
+            params.max_periods,
+            params.model_name.as_deref(),
+            params.model_provider_name.as_deref(),
+        )
+        .await?;
+
+    Ok(Json(GetCacheStatisticsResponse { data }))
 }

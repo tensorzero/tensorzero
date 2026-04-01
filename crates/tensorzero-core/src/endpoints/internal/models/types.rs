@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 
 /// Response containing the count of distinct models used.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -36,6 +36,28 @@ pub struct GetModelUsageResponse {
 pub struct GetModelLatencyQueryParams {
     /// The time window for aggregating latency data.
     pub time_window: TimeWindow,
+}
+
+/// Query parameters for the cache statistics endpoint.
+#[derive(Debug, Deserialize)]
+pub struct GetCacheStatisticsQueryParams {
+    /// The time window granularity for grouping data.
+    pub time_window: TimeWindow,
+    /// Maximum number of time periods to return.
+    pub max_periods: u32,
+    /// Filter by model name (optional).
+    pub model_name: Option<String>,
+    /// Filter by model provider name (optional).
+    pub model_provider_name: Option<String>,
+}
+
+/// Response containing cache statistics timeseries data.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GetCacheStatisticsResponse {
+    /// The cache statistics data points.
+    pub data: Vec<CacheStatisticsTimePoint>,
 }
 
 /// Response containing model latency quantile data.

@@ -218,6 +218,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
         )
+        .route(
+            "/internal/models/cache_statistics",
+            get(endpoints::internal::models::get_cache_statistics_handler),
+        )
         // Config snapshot endpoints
         .route(
             "/internal/config",
