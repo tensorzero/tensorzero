@@ -15,6 +15,10 @@ pub trait StorageKindExt {
     fn file_path(self, image: &Base64File) -> Result<StoragePath, Error>;
 }
 
+pub trait StorageKindDbExt {
+    fn serialize_for_db(&self) -> Result<serde_json::Value, Error>;
+}
+
 impl StorageKindExt for StorageKind {
     /// Get the extra prefix for the object key during e2e-tests
     #[cfg(feature = "e2e_tests")]

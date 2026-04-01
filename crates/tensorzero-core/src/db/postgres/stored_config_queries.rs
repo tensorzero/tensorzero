@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
-use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Transaction};
+use sqlx::{Executor, FromRow, PgPool, Postgres, QueryBuilder, Transaction};
 use tensorzero_stored_config::schema_dispatch::{
     deserialize_autopilot_config, deserialize_clickhouse_config,
     deserialize_embedding_model_config, deserialize_evaluation_config, deserialize_function_config,
@@ -37,8 +37,10 @@ struct NamedVersionedConfigRow {
 }
 
 #[derive(Clone, Debug, FromRow)]
-struct ActiveFunctionRow {
+struct FunctionConfigRow {
+    id: Uuid,
     name: String,
+    deleted_at: Option<chrono::DateTime<chrono::Utc>>,
     #[expect(dead_code)]
     function_type: String,
     schema_revision: i32,
@@ -46,13 +48,9 @@ struct ActiveFunctionRow {
 }
 
 #[derive(Clone, Debug, FromRow)]
-struct VariantVersionRow {
+struct VariantConfigRow {
     id: Uuid,
-    #[expect(dead_code)]
-    function_name: String,
     name: String,
-    #[expect(dead_code)]
-    variant_type: String,
     schema_revision: i32,
     config: serde_json::Value,
 }
@@ -124,74 +122,86 @@ fn schema_dispatch_error(error: impl std::fmt::Display) -> Error {
     })
 }
 
-async fn load_latest_singleton(
-    tx: &mut Transaction<'_, Postgres>,
+async fn load_latest_singleton<'e, E>(
+    executor: E,
     table_name: &'static str,
-) -> Result<Option<VersionedConfigRow>, Error> {
+) -> Result<Option<VersionedConfigRow>, Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     let mut query =
         QueryBuilder::<Postgres>::new("SELECT schema_revision, config FROM tensorzero.");
     query
         .push(table_name)
         .push(" ORDER BY created_at DESC, id DESC LIMIT 1");
-    Ok(query.build_query_as().fetch_optional(&mut **tx).await?)
+    Ok(query.build_query_as().fetch_optional(executor).await?)
 }
 
-async fn load_named_collection(
-    tx: &mut Transaction<'_, Postgres>,
+async fn load_named_collection<'e, E>(
+    executor: E,
     table_name: &'static str,
-) -> Result<Vec<NamedVersionedConfigRow>, Error> {
-    // Pick the most recent row per `name`, breaking ties by `id` so the result
-    // is deterministic if two writes share an `updated_at` timestamp.
-    let mut query = QueryBuilder::<Postgres>::new(
-        "SELECT DISTINCT ON (name) name, schema_revision, config FROM tensorzero.",
-    );
+) -> Result<Vec<NamedVersionedConfigRow>, Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    // Each row is uniquely keyed by `name` (UNIQUE constraint + upsert
+    // semantics on the write side), so a simple filtered SELECT suffices.
+    // Rows tombstoned via `deleted_at` are skipped — they represent names
+    // the user removed from the TOML on the last full-config apply.
+    let mut query =
+        QueryBuilder::<Postgres>::new("SELECT name, schema_revision, config FROM tensorzero.");
     query
         .push(table_name)
-        .push(" ORDER BY name ASC, updated_at DESC, id DESC");
-    Ok(query.build_query_as().fetch_all(&mut **tx).await?)
+        .push(" WHERE deleted_at IS NULL ORDER BY name ASC");
+    Ok(query.build_query_as().fetch_all(executor).await?)
 }
 
-async fn load_active_functions(
-    tx: &mut Transaction<'_, Postgres>,
-) -> Result<Vec<ActiveFunctionRow>, Error> {
-    // `function_configs` stores one row per function version. The active
-    // version of a function is the most recently inserted row for that name
-    // whose `deleted_at` is NULL.
-    Ok(sqlx::query_as::<_, ActiveFunctionRow>(
+async fn load_latest_functions<'e, E>(executor: E) -> Result<Vec<FunctionConfigRow>, Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    Ok(sqlx::query_as::<_, FunctionConfigRow>(
         r"
-        SELECT DISTINCT ON (name) name, function_type, schema_revision, config
+        SELECT DISTINCT ON (name) id, name, deleted_at, function_type, schema_revision, config
         FROM tensorzero.function_configs
-        WHERE deleted_at IS NULL
-        ORDER BY name ASC, created_at DESC, id DESC
+        ORDER BY name ASC
+               , created_at DESC
+               , id DESC
         ",
     )
-    .fetch_all(&mut **tx)
+    .fetch_all(executor)
     .await?)
 }
 
-async fn load_variant_versions(
-    tx: &mut Transaction<'_, Postgres>,
+async fn load_variant_versions<'e, E>(
+    executor: E,
     ids: &[Uuid],
-) -> Result<Vec<VariantVersionRow>, Error> {
+) -> Result<Vec<VariantConfigRow>, Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    Ok(sqlx::query_as::<_, VariantVersionRow>(
+    Ok(sqlx::query_as::<_, VariantConfigRow>(
         r"
-        SELECT id, function_name, name, variant_type, schema_revision, config
+        SELECT id, name, schema_revision, config
         FROM tensorzero.variant_configs
         WHERE id = ANY($1)
         ",
     )
     .bind(ids)
-    .fetch_all(&mut **tx)
+    .fetch_all(executor)
     .await?)
 }
 
-async fn load_prompt_templates(
-    tx: &mut Transaction<'_, Postgres>,
+async fn load_prompt_templates<'e, E>(
+    executor: E,
     ids: &[Uuid],
-) -> Result<Vec<PromptTemplateRow>, Error> {
+) -> Result<Vec<PromptTemplateRow>, Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -203,7 +213,7 @@ async fn load_prompt_templates(
         ",
     )
     .bind(ids)
-    .fetch_all(&mut **tx)
+    .fetch_all(executor)
     .await?)
 }
 
@@ -457,82 +467,52 @@ where
     result
 }
 
-pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, Vec<Error>> {
-    // We want every read in this function to observe the same database state.
-    // Without that, a concurrent writer (e.g. `write_stored_config` or
-    // `write_function_config`) could move between our individual reads and
-    // produce a torn snapshot — a new function row pointing at variant or
-    // prompt rows we already missed, or new model rows that don't match the
-    // provider-types row we already loaded.
-    //
-    // A Postgres transaction is bound to a single connection, so we cannot
-    // simply wrap a `tokio::try_join!` of parallel queries in one tx. Instead
-    // we use `pg_export_snapshot()`: open a leader REPEATABLE READ transaction
-    // on one connection, export its snapshot id, and have every parallel
-    // reader open its own REPEATABLE READ transaction that imports that
-    // snapshot via `SET TRANSACTION SNAPSHOT`. This gives us both a single
-    // consistent snapshot and full read parallelism. The leader transaction
-    // must stay open until every reader has imported the snapshot, so we
-    // commit it only after all reads complete.
-    let mut leader_tx = pool.begin().await.map_err(|error| {
-        vec![Error::new(ErrorDetails::Config {
-            message: format!("Failed to start config snapshot leader transaction: {error}"),
-        })]
-    })?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-        .execute(&mut *leader_tx)
-        .await
-        .map_err(|error| {
-            vec![Error::new(ErrorDetails::Config {
-                message: format!("Failed to set REPEATABLE READ on leader transaction: {error}"),
-            })]
-        })?;
-    let snapshot_id: String = sqlx::query_scalar("SELECT pg_export_snapshot()")
-        .fetch_one(&mut *leader_tx)
-        .await
-        .map_err(|error| {
-            vec![Error::new(ErrorDetails::Config {
-                message: format!("Failed to export config snapshot: {error}"),
-            })]
-        })?;
+struct LoadedStoredConfigRows {
+    gateway_row: Option<VersionedConfigRow>,
+    clickhouse_row: Option<VersionedConfigRow>,
+    postgres_row: Option<VersionedConfigRow>,
+    object_storage_row: Option<VersionedConfigRow>,
+    model_rows: Vec<NamedVersionedConfigRow>,
+    embedding_model_rows: Vec<NamedVersionedConfigRow>,
+    metric_rows: Vec<NamedVersionedConfigRow>,
+    tool_rows: Vec<NamedVersionedConfigRow>,
+    evaluation_rows: Vec<NamedVersionedConfigRow>,
+    optimizer_rows: Vec<NamedVersionedConfigRow>,
+    rate_limiting_row: Option<VersionedConfigRow>,
+    autopilot_row: Option<VersionedConfigRow>,
+    provider_types_row: Option<VersionedConfigRow>,
+    latest_function_rows: Vec<FunctionConfigRow>,
+}
 
-    // Each closure runs in its own snapshot transaction so the queries can
-    // execute on independent connections in parallel under `tokio::try_join!`.
-    // Futures are boxed so the outer `load_config_from_db` future stays small
-    // (clippy::large_futures) — without this, fanning out 14 sub-futures into
-    // a single state machine pushes it well past the warning threshold.
-    let load_singleton = |table: &'static str| {
-        let snapshot_id = snapshot_id.as_str();
-        Box::pin(async move {
-            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
-            load_latest_singleton(&mut tx, table).await
-        })
-            as std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<Option<VersionedConfigRow>, Error>>>,
-            >
-    };
-    let load_collection = |table: &'static str| {
-        let snapshot_id = snapshot_id.as_str();
-        Box::pin(async move {
-            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
-            load_named_collection(&mut tx, table).await
-        })
-            as std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<Vec<NamedVersionedConfigRow>, Error>>>,
-            >
-    };
-    let load_functions = || {
-        let snapshot_id = snapshot_id.as_str();
-        Box::pin(async move {
-            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
-            load_active_functions(&mut tx).await
-        })
-            as std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<Vec<ActiveFunctionRow>, Error>>>,
-            >
-    };
+async fn load_config_rows_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<LoadedStoredConfigRows, Error> {
+    Ok(LoadedStoredConfigRows {
+        gateway_row: load_latest_singleton(&mut **tx, "gateway_configs").await?,
+        clickhouse_row: load_latest_singleton(&mut **tx, "clickhouse_configs").await?,
+        postgres_row: load_latest_singleton(&mut **tx, "postgres_configs").await?,
+        object_storage_row: load_latest_singleton(&mut **tx, "object_storage_configs").await?,
+        model_rows: load_named_collection(&mut **tx, "models_configs").await?,
+        embedding_model_rows: load_named_collection(&mut **tx, "embedding_models_configs").await?,
+        metric_rows: load_named_collection(&mut **tx, "metrics_configs").await?,
+        tool_rows: load_named_collection(&mut **tx, "tools_configs").await?,
+        evaluation_rows: load_named_collection(&mut **tx, "evaluations_configs").await?,
+        optimizer_rows: load_named_collection(&mut **tx, "optimizers_configs").await?,
+        rate_limiting_row: load_latest_singleton(&mut **tx, "rate_limiting_configs").await?,
+        autopilot_row: load_latest_singleton(&mut **tx, "autopilot_configs").await?,
+        provider_types_row: load_latest_singleton(&mut **tx, "provider_types_configs").await?,
+        latest_function_rows: load_latest_functions(&mut **tx).await?,
+    })
+}
 
-    let (
+/// Rehydrate the given config rows into an `UninitializedConfig`. The provided
+/// connection is used for the secondary sequential loads of variant versions
+/// and prompt templates that depend on which functions are present.
+async fn rehydrate_loaded_config_rows(
+    rows: LoadedStoredConfigRows,
+    conn: &mut sqlx::PgConnection,
+) -> Result<UninitializedConfig, Vec<Error>> {
+    let LoadedStoredConfigRows {
         gateway_row,
         clickhouse_row,
         postgres_row,
@@ -546,24 +526,8 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
         rate_limiting_row,
         autopilot_row,
         provider_types_row,
-        active_function_rows,
-    ) = tokio::try_join!(
-        load_singleton("gateway_configs"),
-        load_singleton("clickhouse_configs"),
-        load_singleton("postgres_configs"),
-        load_singleton("object_storage_configs"),
-        load_collection("models_configs"),
-        load_collection("embedding_models_configs"),
-        load_collection("metrics_configs"),
-        load_collection("tools_configs"),
-        load_collection("evaluations_configs"),
-        load_collection("optimizers_configs"),
-        load_singleton("rate_limiting_configs"),
-        load_singleton("autopilot_configs"),
-        load_singleton("provider_types_configs"),
-        load_functions(),
-    )
-    .map_err(|error| vec![error])?;
+        latest_function_rows,
+    } = rows;
 
     let gateway = match gateway_row {
         Some(row) => {
@@ -658,33 +622,33 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
 
     let mut stored_functions = HashMap::new();
     let mut variant_ids = HashSet::new();
-    for active_function in &active_function_rows {
+    for function_row in &latest_function_rows {
+        if function_row.deleted_at.is_some() {
+            continue;
+        }
         let stored = match deserialize_function_config(
-            active_function.schema_revision,
-            active_function.config.clone(),
+            function_row.schema_revision,
+            function_row.config.clone(),
         ) {
             Ok(stored) => stored,
             Err(error) => {
                 tracing::error!(
-                    "Skipping function `{}` from DB config: failed to deserialize active function version: {}",
-                    active_function.name,
+                    "Skipping function `{}` from DB config: failed to deserialize function version `{}`: {}",
+                    function_row.name,
+                    function_row.id,
                     error
                 );
                 continue;
             }
         };
         collect_function_variant_ids(&stored, &mut variant_ids);
-        stored_functions.insert(active_function.name.clone(), stored);
+        stored_functions.insert(function_row.name.clone(), stored);
     }
 
     let variant_ids = variant_ids.into_iter().collect::<Vec<_>>();
-    let mut variant_tx = begin_snapshot_read_tx(pool, &snapshot_id)
+    let variant_version_rows = load_variant_versions(&mut *conn, &variant_ids)
         .await
         .map_err(|error| vec![error])?;
-    let variant_version_rows = load_variant_versions(&mut variant_tx, &variant_ids)
-        .await
-        .map_err(|error| vec![error])?;
-    drop(variant_tx);
     let mut stored_variants = HashMap::new();
     for row in variant_version_rows {
         let stored = match deserialize_variant_config(row.schema_revision, row.config.clone()) {
@@ -726,19 +690,9 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     }
 
     let prompt_ids = prompt_ids.into_iter().collect::<Vec<_>>();
-    let mut prompt_tx = begin_snapshot_read_tx(pool, &snapshot_id)
+    let prompt_rows = load_prompt_templates(&mut *conn, &prompt_ids)
         .await
         .map_err(|error| vec![error])?;
-    let prompt_rows = load_prompt_templates(&mut prompt_tx, &prompt_ids)
-        .await
-        .map_err(|error| vec![error])?;
-    drop(prompt_tx);
-
-    // All snapshot readers have finished, so the leader transaction is no
-    // longer needed. It is read-only and only existed to keep the exported
-    // snapshot alive, so we just drop it (rolling back implicitly) — there
-    // is nothing to commit.
-    drop(leader_tx);
     let prompts = prompt_rows
         .into_iter()
         .map(|row| {
@@ -781,18 +735,21 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     }
 
     let mut functions = HashMap::new();
-    for active_function in active_function_rows {
-        let Some(stored_function) = stored_functions.get(&active_function.name).cloned() else {
+    for function_row in latest_function_rows {
+        if function_row.deleted_at.is_some() {
+            continue;
+        }
+        let Some(stored_function) = stored_functions.get(&function_row.name).cloned() else {
             continue;
         };
         match rehydrate_function(stored_function, &stored_variants, &prompts) {
             Ok(function) => {
-                functions.insert(active_function.name, function);
+                functions.insert(function_row.name, function);
             }
             Err(error) => {
                 tracing::error!(
                     "Skipping function `{}` from DB config during rehydration: {}",
-                    active_function.name,
+                    function_row.name,
                     error
                 );
             }
@@ -817,6 +774,167 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     };
 
     validate_user_config_names(&config).map_err(|error| vec![error])?;
+
+    Ok(config)
+}
+
+pub async fn load_config_from_db_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<UninitializedConfig, Vec<Error>> {
+    let rows = load_config_rows_in_tx(tx)
+        .await
+        .map_err(|error| vec![error])?;
+    rehydrate_loaded_config_rows(rows, tx).await
+}
+
+pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, Vec<Error>> {
+    // We want every read in this function to observe the same database state.
+    // Without that, a concurrent writer (e.g. `write_stored_config` or
+    // `write_function_config`) could move between our individual reads and
+    // produce a torn snapshot — a new function row pointing at variant or
+    // prompt rows we already missed, or new model rows that don't match the
+    // provider-types row we already loaded.
+    //
+    // A Postgres transaction is bound to a single connection, so we cannot
+    // simply wrap a `tokio::try_join!` of parallel queries in one tx. Instead
+    // we use `pg_export_snapshot()`: open a leader REPEATABLE READ transaction
+    // on one connection, export its snapshot id, and have every parallel
+    // reader open its own REPEATABLE READ transaction that imports that
+    // snapshot via `SET TRANSACTION SNAPSHOT`. This gives us both a single
+    // consistent snapshot and full read parallelism. The leader transaction
+    // must stay open until every reader has imported the snapshot, so we
+    // commit it only after all reads complete.
+    let mut leader_tx = pool.begin().await.map_err(|error| {
+        vec![Error::new(ErrorDetails::Config {
+            message: format!("Failed to start config snapshot leader transaction: {error}"),
+        })]
+    })?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *leader_tx)
+        .await
+        .map_err(|error| {
+            vec![Error::new(ErrorDetails::Config {
+                message: format!("Failed to set REPEATABLE READ on leader transaction: {error}"),
+            })]
+        })?;
+    let snapshot_id: String = sqlx::query_scalar("SELECT pg_export_snapshot()")
+        .fetch_one(&mut *leader_tx)
+        .await
+        .map_err(|error| {
+            vec![Error::new(ErrorDetails::Config {
+                message: format!("Failed to export config snapshot: {error}"),
+            })]
+        })?;
+
+    // Each closure runs in its own snapshot transaction so the queries can
+    // execute on independent connections in parallel under `tokio::try_join!`.
+    // Futures are boxed so the outer `load_config_from_db` future stays small
+    // (clippy::large_futures) — without this, fanning out 14 sub-futures into
+    // a single state machine pushes it well past the warning threshold.
+    let load_singleton = |table: &'static str| {
+        let snapshot_id = snapshot_id.as_str();
+        Box::pin(async move {
+            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
+            load_latest_singleton(&mut *tx, table).await
+        })
+            as std::pin::Pin<
+                Box<
+                    dyn std::future::Future<Output = Result<Option<VersionedConfigRow>, Error>>
+                        + Send,
+                >,
+            >
+    };
+    let load_collection = |table: &'static str| {
+        let snapshot_id = snapshot_id.as_str();
+        Box::pin(async move {
+            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
+            load_named_collection(&mut *tx, table).await
+        })
+            as std::pin::Pin<
+                Box<
+                    dyn std::future::Future<Output = Result<Vec<NamedVersionedConfigRow>, Error>>
+                        + Send,
+                >,
+            >
+    };
+    let load_functions = || {
+        let snapshot_id = snapshot_id.as_str();
+        Box::pin(async move {
+            let mut tx = begin_snapshot_read_tx(pool, snapshot_id).await?;
+            load_latest_functions(&mut *tx).await
+        })
+            as std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<Vec<FunctionConfigRow>, Error>> + Send>,
+            >
+    };
+
+    let (
+        gateway_row,
+        clickhouse_row,
+        postgres_row,
+        object_storage_row,
+        model_rows,
+        embedding_model_rows,
+        metric_rows,
+        tool_rows,
+        evaluation_rows,
+        optimizer_rows,
+        rate_limiting_row,
+        autopilot_row,
+        provider_types_row,
+        latest_function_rows,
+    ) = tokio::try_join!(
+        load_singleton("gateway_configs"),
+        load_singleton("clickhouse_configs"),
+        load_singleton("postgres_configs"),
+        load_singleton("object_storage_configs"),
+        load_collection("models_configs"),
+        load_collection("embedding_models_configs"),
+        load_collection("metrics_configs"),
+        load_collection("tools_configs"),
+        load_collection("evaluations_configs"),
+        load_collection("optimizers_configs"),
+        load_singleton("rate_limiting_configs"),
+        load_singleton("autopilot_configs"),
+        load_singleton("provider_types_configs"),
+        load_functions(),
+    )
+    .map_err(|error| vec![error])?;
+
+    let rows = LoadedStoredConfigRows {
+        gateway_row,
+        clickhouse_row,
+        postgres_row,
+        object_storage_row,
+        model_rows,
+        embedding_model_rows,
+        metric_rows,
+        tool_rows,
+        evaluation_rows,
+        optimizer_rows,
+        rate_limiting_row,
+        autopilot_row,
+        provider_types_row,
+        latest_function_rows,
+    };
+
+    // Load variant versions and prompt templates inside the same snapshot
+    // transaction so they observe the same consistent snapshot as the
+    // parallel readers above.
+    let mut secondary_tx = begin_snapshot_read_tx(pool, &snapshot_id)
+        .await
+        .map_err(|error| vec![error])?;
+    let config = rehydrate_loaded_config_rows(rows, &mut secondary_tx).await?;
+    drop(secondary_tx);
+
+    // All snapshot readers have finished, so the leader transaction is no
+    // longer needed. Committing it (vs. dropping it) is just clearer about
+    // intent — there is nothing to roll back.
+    leader_tx.commit().await.map_err(|error| {
+        vec![Error::new(ErrorDetails::Config {
+            message: format!("Failed to commit config snapshot leader transaction: {error}"),
+        })]
+    })?;
 
     Ok(config)
 }

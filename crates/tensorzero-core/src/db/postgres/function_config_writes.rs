@@ -48,10 +48,22 @@ use super::prompt_template_writes::{
     CollectedPromptTemplate, add_prompt_template, write_collected_prompt_templates,
 };
 
+/// Parameters for the public, single-function write API
+/// (`PostgresConnectionInfo::write_function_config`).
+///
+/// This API always performs a per-function compare-and-swap check against the
+/// caller-supplied `expected_current_version_id`. The only way to bypass that
+/// check is via `write_function_config_in_tx_skipping_cas`, which is
+/// crate-private and only usable by the full-config bulk write path.
 #[derive(Debug)]
 pub struct WriteFunctionConfigParams<'a> {
     pub function_name: &'a str,
     pub config: &'a UninitializedFunctionConfig,
+    /// Expected current latest version ID for this function. The write fails
+    /// with a CAS error if the actual latest row doesn't match.
+    ///
+    /// `None` means the caller expects no existing row for this function
+    /// (first write).
     pub expected_current_version_id: Option<Uuid>,
     pub creation_source: &'a str,
     pub source_autopilot_session_id: Option<Uuid>,
@@ -60,6 +72,20 @@ pub struct WriteFunctionConfigParams<'a> {
     /// MiniJinja `{% include %}` — must be stored in the database for the config to be
     /// self-contained.
     pub extra_templates: &'a HashMap<String, String>,
+}
+
+/// Compare-and-swap mode for the internal `write_function_config_in_tx_impl`.
+#[derive(Debug, Clone, Copy)]
+enum FunctionVersionCas {
+    /// Check that the current latest version ID matches this expected value.
+    /// `None` means "expect no existing row" (first write for this function).
+    Expected(Option<Uuid>),
+    /// Skip the per-function CAS check entirely.
+    ///
+    /// **Invariant:** this variant must only be used by the full-config bulk
+    /// write path (`write_stored_config_in_tx`). See
+    /// `write_function_config_in_tx_skipping_cas` for the full rationale.
+    SkipForFullConfigWrite,
 }
 
 #[derive(Debug)]
@@ -103,50 +129,126 @@ pub(super) async fn write_function_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteFunctionConfigParams<'_>,
 ) -> Result<WriteFunctionConfigResult, Error> {
+    write_function_config_in_tx_impl(
+        tx,
+        params.function_name,
+        params.config,
+        FunctionVersionCas::Expected(params.expected_current_version_id),
+        params.creation_source,
+        params.source_autopilot_session_id,
+        params.extra_templates,
+    )
+    .await
+}
+
+/// Writes a function config version **without** the per-function CAS check.
+///
+/// # Invariant: full-config bulk write path only
+///
+/// This entry point must only ever be called from
+/// `write_stored_config_in_tx`, the bulk "apply a full editable TOML" path.
+/// That path provides equivalent protection at a higher level:
+///
+/// 1. It holds the global `config_editor` transaction-level advisory lock
+///    (`acquire_config_editor_lock` in `endpoints/internal/config.rs`), which
+///    serializes all config-editor writes — no other bulk or single-function
+///    UI-driven write can interleave.
+/// 2. It verifies the full editable-TOML signature against the `base_signature`
+///    the UI was editing from (see `apply_config_toml_handler`). If anything
+///    in the config has changed between the read and the write, the apply
+///    is rejected before we get here.
+///
+/// Together, those guarantees make the per-function CAS redundant: every
+/// function row we append is guaranteed to sit on top of the same state the
+/// caller snapshotted. Dropping the per-function CAS is also *necessary* in
+/// the bulk path because the bulk writer never reads the current function
+/// version IDs — it only has the `UninitializedConfig` — and there is no
+/// safe value to pass for `expected_current_version_id` on an existing row.
+///
+/// # Do not call from anywhere else
+///
+/// Any single-function edit path (UI function editor, API) must go through
+/// `write_function_config` / `write_function_config_in_tx`, which enforces
+/// the CAS against a caller-supplied `expected_current_version_id`. Calling
+/// this skipping-CAS variant from such a path would allow concurrent writers
+/// to silently clobber each other's edits.
+pub(crate) async fn write_function_config_in_tx_skipping_cas(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
+    write_function_config_in_tx_impl(
+        tx,
+        function_name,
+        config,
+        FunctionVersionCas::SkipForFullConfigWrite,
+        creation_source,
+        source_autopilot_session_id,
+        extra_templates,
+    )
+    .await
+}
+
+async fn write_function_config_in_tx_impl(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    cas: FunctionVersionCas,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
     // Acquire an advisory lock on the function name to serialize concurrent writes,
     // including first writes where there is no existing row to lock via FOR UPDATE.
-    acquire_function_advisory_lock(tx, params.function_name).await?;
+    acquire_function_advisory_lock(tx, function_name).await?;
 
-    // With the advisory lock held, read the latest version for the CAS check.
-    let actual_latest_id = fetch_latest_function_version(tx, params.function_name).await?;
-
-    // Compare-and-swap: verify the caller's expected version matches the current row.
-    if actual_latest_id != params.expected_current_version_id {
-        return Err(Error::new(ErrorDetails::Config {
-            message: format!(
-                "Function `{}` was updated during your edit; please refresh before retrying.",
-                params.function_name
-            ),
-        }));
+    match cas {
+        FunctionVersionCas::Expected(expected) => {
+            // With the advisory lock held, read the latest version for the CAS check.
+            let actual_latest_id = fetch_latest_function_version(tx, function_name).await?;
+            if actual_latest_id != expected {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Function `{function_name}` was updated during your edit; please refresh before retrying.",
+                    ),
+                }));
+            }
+        }
+        FunctionVersionCas::SkipForFullConfigWrite => {
+            // Intentionally no CAS — see `write_function_config_in_tx_skipping_cas`.
+        }
     }
 
     let prompt_template_version_ids = write_prompt_template_versions(
         tx,
-        params.config,
-        params.extra_templates,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        config,
+        extra_templates,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let variant_version_ids = write_variant_versions(
         tx,
-        params.function_name,
-        params.config,
+        function_name,
+        config,
         &prompt_template_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let function_version_id = write_function_version(
         tx,
-        params.function_name,
-        params.config,
+        function_name,
+        config,
         &prompt_template_version_ids,
         &variant_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 

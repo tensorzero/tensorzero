@@ -2159,8 +2159,8 @@ pub struct UninitializedRelayConfig {
 
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
-struct UninitializedGlobbedConfig {
-    table: toml::Table,
+pub struct UninitializedGlobbedConfig {
+    pub table: toml::Table,
 }
 
 impl UninitializedConfig {
@@ -2288,7 +2288,7 @@ impl UninitializedConfig {
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
-    fn read_toml_config(
+    pub fn read_toml_config(
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {

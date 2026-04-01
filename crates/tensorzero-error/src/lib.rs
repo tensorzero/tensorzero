@@ -493,6 +493,9 @@ pub enum ErrorDetails {
     Config {
         message: String,
     },
+    ConfigCompareAndSwapConflict {
+        message: String,
+    },
     CostComputation {
         message: String,
     },
@@ -899,6 +902,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::ConfigCompareAndSwapConflict { .. } => tracing::Level::WARN,
             ErrorDetails::CostComputation { .. } => tracing::Level::WARN,
             ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => tracing::Level::ERROR,
@@ -1066,6 +1070,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ConfigCompareAndSwapConflict { .. } => StatusCode::CONFLICT,
             ErrorDetails::CostComputation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ConfigSnapshotHashMismatch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1476,6 +1481,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Failed to run ClickHouse query: {message}")
             }
             ErrorDetails::Config { message } => {
+                write!(f, "{message}")
+            }
+            ErrorDetails::ConfigCompareAndSwapConflict { message } => {
                 write!(f, "{message}")
             }
             ErrorDetails::CostComputation { message } => {

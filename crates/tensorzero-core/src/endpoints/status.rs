@@ -1,5 +1,7 @@
 use crate::{
+    config::Config,
     db::HealthCheckable,
+    feature_flags,
     utils::gateway::{AppState, AppStateData},
 };
 use axum::extract::State;
@@ -11,6 +13,24 @@ use serde_json::{Value, json};
 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn merge_load_config_errors(errors: Vec<crate::error::Error>) -> crate::error::Error {
+    let mut iter = errors.into_iter();
+    let Some(first) = iter.next() else {
+        return crate::error::Error::new(crate::error::ErrorDetails::Config {
+            message: "Failed to load config from database".to_string(),
+        });
+    };
+    if iter.len() == 0 {
+        return first;
+    }
+    let message = std::iter::once(first)
+        .chain(iter)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    crate::error::Error::new(crate::error::ErrorDetails::Config { message })
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -21,13 +41,27 @@ pub struct StatusResponse {
 }
 
 /// A handler for a simple liveness check
-#[expect(clippy::unused_async)]
-pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> {
-    Json(StatusResponse {
+pub async fn status_handler(
+    State(app_state): AppState,
+) -> Result<Json<StatusResponse>, crate::error::Error> {
+    let config_hash = if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        let pool = app_state
+            .postgres_connection_info
+            .get_pool_result()
+            .map_err(|e| e.log())?;
+        let config = Config::load_from_db(pool, false)
+            .await
+            .map_err(merge_load_config_errors)?;
+        config.hash.to_string()
+    } else {
+        app_state.config.hash.to_string()
+    };
+
+    Ok(Json(StatusResponse {
         status: "ok".to_string(),
         version: TENSORZERO_VERSION.to_string(),
-        config_hash: app_state.config.hash.to_string(),
-    })
+        config_hash,
+    }))
 }
 
 /// A handler for a health check that includes availability of related services

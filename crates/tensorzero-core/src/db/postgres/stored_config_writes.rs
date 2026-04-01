@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use sqlx::{Postgres, QueryBuilder, Transaction};
 use tensorzero_stored_config::{
@@ -20,7 +20,7 @@ use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 
 use super::PostgresConnectionInfo;
-use super::function_config_writes::{WriteFunctionConfigParams, write_function_config_in_tx};
+use super::function_config_writes::write_function_config_in_tx_skipping_cas;
 use super::prompt_template_writes::{
     CollectedPromptTemplate, add_prompt_template, write_collected_prompt_templates,
 };
@@ -57,7 +57,7 @@ impl PostgresConnectionInfo {
     }
 }
 
-async fn write_stored_config_in_tx(
+pub(crate) async fn write_stored_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteStoredConfigParams<'_>,
 ) -> Result<(), Error> {
@@ -177,58 +177,63 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    // 2. Named collection tables (upsert-by-name)
-    for (name, model_config) in models.as_ref().into_iter().flat_map(|m| m.iter()) {
-        let stored = StoredModelConfig::try_from(model_config)?;
-        upsert_named_config_row(
-            tx,
-            "models_configs",
-            STORED_MODEL_CONFIG_SCHEMA_REVISION,
-            name,
-            &serialize_stored(&stored)?,
-        )
-        .await?;
-    }
+    // 2. Named collection tables (upsert-by-name, tombstone removals).
+    //
+    // For each named collection we (a) upsert every row present in the new
+    // config — which also revives any previously-tombstoned rows with the
+    // same name via the `deleted_at = NULL` clause in `upsert_named_config_row`
+    // — and then (b) tombstone anything that was in the DB but is not in the
+    // new config. This is what makes "remove a tool/model/etc. from the TOML
+    // and apply" actually delete it on reload. The whole sequence is safe to
+    // run inside the apply transaction because the caller holds the global
+    // `config_editor` advisory lock and has already verified the full-TOML
+    // signature against the user's base snapshot.
+    let models_new_names = write_named_section(
+        tx,
+        "models_configs",
+        STORED_MODEL_CONFIG_SCHEMA_REVISION,
+        models.as_ref().into_iter().flat_map(|m| m.iter()),
+        |model_config| serialize_stored(&StoredModelConfig::try_from(model_config)?),
+    )
+    .await?;
+    tombstone_removed_names(tx, "models_configs", &models_new_names).await?;
 
-    for (name, embedding_model_config) in
-        embedding_models.as_ref().into_iter().flat_map(|m| m.iter())
-    {
-        let stored = StoredEmbeddingModelConfig::try_from(embedding_model_config)?;
-        upsert_named_config_row(
-            tx,
-            "embedding_models_configs",
-            STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION,
-            name,
-            &serialize_stored(&stored)?,
-        )
-        .await?;
-    }
+    let embedding_models_new_names = write_named_section(
+        tx,
+        "embedding_models_configs",
+        STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION,
+        embedding_models.as_ref().into_iter().flat_map(|m| m.iter()),
+        |embedding_model_config| {
+            serialize_stored(&StoredEmbeddingModelConfig::try_from(
+                embedding_model_config,
+            )?)
+        },
+    )
+    .await?;
+    tombstone_removed_names(tx, "embedding_models_configs", &embedding_models_new_names).await?;
 
-    for (name, metric_config) in metrics.as_ref().into_iter().flat_map(|m| m.iter()) {
-        let stored = StoredMetricConfig::from(metric_config);
-        upsert_named_config_row(
-            tx,
-            "metrics_configs",
-            STORED_METRIC_CONFIG_SCHEMA_REVISION,
-            name,
-            &serialize_stored(&stored)?,
-        )
-        .await?;
-    }
+    let metrics_new_names = write_named_section(
+        tx,
+        "metrics_configs",
+        STORED_METRIC_CONFIG_SCHEMA_REVISION,
+        metrics.as_ref().into_iter().flat_map(|m| m.iter()),
+        |metric_config| serialize_stored(&StoredMetricConfig::from(metric_config)),
+    )
+    .await?;
+    tombstone_removed_names(tx, "metrics_configs", &metrics_new_names).await?;
 
-    for (name, optimizer_info) in optimizers.as_ref().into_iter().flat_map(|m| m.iter()) {
-        let stored = StoredOptimizerConfig::from(optimizer_info.clone());
-        upsert_named_config_row(
-            tx,
-            "optimizers_configs",
-            STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION,
-            name,
-            &serialize_stored(&stored)?,
-        )
-        .await?;
-    }
+    let optimizers_new_names = write_named_section(
+        tx,
+        "optimizers_configs",
+        STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION,
+        optimizers.as_ref().into_iter().flat_map(|m| m.iter()),
+        |optimizer_info| serialize_stored(&StoredOptimizerConfig::from(optimizer_info.clone())),
+    )
+    .await?;
+    tombstone_removed_names(tx, "optimizers_configs", &optimizers_new_names).await?;
 
     // 3. Tools (with prompt templates)
+    let mut tools_new_names: HashSet<String> = HashSet::new();
     for (name, tool_config) in tools.as_ref().into_iter().flat_map(|m| m.iter()) {
         let prompt_template_version_ids = write_prompt_templates_in_tx(
             tx,
@@ -251,9 +256,12 @@ async fn write_stored_config_in_tx(
             &config_json,
         )
         .await?;
+        tools_new_names.insert(name.clone());
     }
+    tombstone_removed_names(tx, "tools_configs", &tools_new_names).await?;
 
     // 4. Evaluations (with prompt templates)
+    let mut evaluations_new_names: HashSet<String> = HashSet::new();
     for (name, eval_config) in evaluations.as_ref().into_iter().flat_map(|m| m.iter()) {
         let prompt_template_version_ids = write_prompt_templates_in_tx(
             tx,
@@ -276,23 +284,38 @@ async fn write_stored_config_in_tx(
             &config_json,
         )
         .await?;
+        evaluations_new_names.insert(name.clone());
     }
+    tombstone_removed_names(tx, "evaluations_configs", &evaluations_new_names).await?;
 
-    // 5. Functions (via existing write_function_config_in_tx)
+    // 5. Functions.
+    //
+    // We use the skipping-CAS variant here because this bulk path always runs
+    // under the global `config_editor` advisory lock and only after the
+    // apply-TOML handler has verified the full-TOML signature matches the
+    // caller's base snapshot. See `write_function_config_in_tx_skipping_cas`
+    // for the full invariant. A per-function CAS would require knowing the
+    // current version ID of every existing function, which this bulk path
+    // has no way to provide since it only sees the `UninitializedConfig`.
+    let mut functions_new_names: HashSet<String> = HashSet::new();
     for (function_name, function_config) in functions.as_ref().into_iter().flat_map(|m| m.iter()) {
-        write_function_config_in_tx(
+        write_function_config_in_tx_skipping_cas(
             tx,
-            WriteFunctionConfigParams {
-                function_name,
-                config: function_config,
-                expected_current_version_id: None,
-                creation_source,
-                source_autopilot_session_id,
-                extra_templates,
-            },
+            function_name,
+            function_config,
+            creation_source,
+            source_autopilot_session_id,
+            extra_templates,
         )
         .await?;
+        functions_new_names.insert(function_name.clone());
     }
+    let active_function_names = load_active_function_names(tx).await?;
+    let removed_functions: Vec<String> = active_function_names
+        .difference(&functions_new_names)
+        .cloned()
+        .collect();
+    tombstone_function_rows(tx, &removed_functions).await?;
 
     Ok(())
 }
@@ -331,6 +354,45 @@ async fn acquire_stored_config_advisory_lock(
         }));
     }
     Ok(())
+}
+
+/// Upserts every `(name, config)` pair in `items` into `table_name` and
+/// returns the set of names that were written — the caller uses this set
+/// as the "new" side of the diff when tombstoning removed rows.
+async fn write_named_section<'a, K, T, I, F>(
+    tx: &mut Transaction<'_, Postgres>,
+    table_name: &'static str,
+    schema_revision: i32,
+    items: I,
+    mut serialize: F,
+) -> Result<HashSet<String>, Error>
+where
+    K: AsRef<str> + 'a,
+    T: 'a,
+    I: Iterator<Item = (&'a K, &'a T)>,
+    F: FnMut(&T) -> Result<serde_json::Value, Error>,
+{
+    let mut new_names: HashSet<String> = HashSet::new();
+    for (name, item) in items {
+        let config_json = serialize(item)?;
+        let name_str = name.as_ref();
+        upsert_named_config_row(tx, table_name, schema_revision, name_str, &config_json).await?;
+        new_names.insert(name_str.to_string());
+    }
+    Ok(new_names)
+}
+
+/// Tombstones rows in `table_name` whose `name` is in the DB's active set
+/// but not in `new_names` (i.e. names the user removed from the TOML on
+/// this apply).
+async fn tombstone_removed_names(
+    tx: &mut Transaction<'_, Postgres>,
+    table_name: &'static str,
+    new_names: &HashSet<String>,
+) -> Result<(), Error> {
+    let current_names = load_active_named_config_names(tx, table_name).await?;
+    let to_delete: Vec<String> = current_names.difference(new_names).cloned().collect();
+    tombstone_named_config_rows(tx, table_name, &to_delete).await
 }
 
 // ── SQL helpers ───────────────────────────────────────────────────────────────
@@ -386,13 +448,115 @@ async fn upsert_named_config_row(
     qb.push_bind(schema_revision);
     qb.push(", ");
     qb.push_bind(config_json.clone());
-    qb.push(") ON CONFLICT (name) DO UPDATE SET schema_revision = EXCLUDED.schema_revision, config = EXCLUDED.config, updated_at = NOW()");
+    // Clear `deleted_at` on the update path so re-adding a previously
+    // tombstoned name revives its row.
+    qb.push(") ON CONFLICT (name) DO UPDATE SET schema_revision = EXCLUDED.schema_revision, config = EXCLUDED.config, updated_at = NOW(), deleted_at = NULL");
     qb.build().execute(&mut **tx).await.map_err(|e| {
         postgres_query_error(
             &format!("Failed to upsert named config row into `{table_name}` for `{name}`"),
             e,
         )
     })?;
+    Ok(())
+}
+
+/// Returns the set of currently-active (`deleted_at IS NULL`) names in a
+/// named collection table.
+async fn load_active_named_config_names(
+    tx: &mut Transaction<'_, Postgres>,
+    table_name: &str,
+) -> Result<HashSet<String>, Error> {
+    let mut qb = QueryBuilder::<Postgres>::new("SELECT name FROM tensorzero.");
+    qb.push(table_name);
+    qb.push(" WHERE deleted_at IS NULL");
+    let names: Vec<String> = qb
+        .build_query_scalar()
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| {
+            postgres_query_error(
+                &format!("Failed to load active names from `{table_name}`"),
+                e,
+            )
+        })?;
+    Ok(names.into_iter().collect())
+}
+
+/// Tombstones the rows in a named collection table whose `name` is in
+/// `names_to_delete`. Named collection tables use `UNIQUE(name)`, so each
+/// name has exactly one row, and tombstoning is a simple `UPDATE`.
+async fn tombstone_named_config_rows(
+    tx: &mut Transaction<'_, Postgres>,
+    table_name: &str,
+    names_to_delete: &[String],
+) -> Result<(), Error> {
+    if names_to_delete.is_empty() {
+        return Ok(());
+    }
+    let mut qb = QueryBuilder::<Postgres>::new("UPDATE tensorzero.");
+    qb.push(table_name);
+    qb.push(" SET deleted_at = NOW() WHERE deleted_at IS NULL AND name = ANY(");
+    qb.push_bind(names_to_delete);
+    qb.push(")");
+    qb.build().execute(&mut **tx).await.map_err(|e| {
+        postgres_query_error(
+            &format!("Failed to tombstone removed rows in `{table_name}`"),
+            e,
+        )
+    })?;
+    Ok(())
+}
+
+/// Returns the set of function names whose most recent version is active
+/// (`deleted_at IS NULL`). Functions are append-only with multiple versions
+/// per name, so "active" means the latest version per name is not tombstoned.
+async fn load_active_function_names(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<HashSet<String>, Error> {
+    let names: Vec<String> = sqlx::query_scalar(
+        r"
+        SELECT name
+        FROM (
+            SELECT DISTINCT ON (name) name, deleted_at
+            FROM tensorzero.function_configs
+            ORDER BY name ASC, created_at DESC, id DESC
+        ) latest
+        WHERE deleted_at IS NULL
+        ",
+    )
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| postgres_query_error("Failed to load active function names", e))?;
+    Ok(names.into_iter().collect())
+}
+
+/// Tombstones the latest version row for each function name in
+/// `names_to_delete`. Uses `UPDATE` on the most-recent row per name rather
+/// than `INSERT`-of-tombstone so we don't have to synthesize a fake
+/// `function_type` / `config` for the tombstone row.
+async fn tombstone_function_rows(
+    tx: &mut Transaction<'_, Postgres>,
+    names_to_delete: &[String],
+) -> Result<(), Error> {
+    if names_to_delete.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        r"
+        UPDATE tensorzero.function_configs
+        SET deleted_at = NOW()
+        WHERE id IN (
+            SELECT DISTINCT ON (name) id
+            FROM tensorzero.function_configs
+            WHERE name = ANY($1)
+            ORDER BY name ASC, created_at DESC, id DESC
+        )
+        ",
+    )
+    .bind(names_to_delete)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| postgres_query_error("Failed to tombstone removed function rows", e))?;
     Ok(())
 }
 

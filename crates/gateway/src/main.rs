@@ -66,20 +66,7 @@ async fn load_startup_config(
     }
 
     if let Some(path) = args.config_file.as_ref() {
-        let glob = ConfigFileGlob::new_from_path(path)
-            .log_err_pretty("Failed to process config file glob")?;
-        let unwritten_config = Config::load_and_verify_from_path(&glob)
-            .await
-            .ok() // Don't print the error here, since it was already printed when it was constructed
-            .log_err_pretty(&format!(
-                "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                glob.glob,
-                glob.paths
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ))?;
+        let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
         return Ok((unwritten_config, Some(glob)));
     }
 
@@ -152,6 +139,72 @@ async fn load_startup_config_from_database()
     Config::load_from_db(&pool, true)
         .await
         .map_err(merge_db_config_load_errors)
+}
+
+async fn load_config_from_path_glob(
+    path: &std::path::Path,
+) -> Result<
+    (
+        tensorzero_core::config::unwritten::UnwrittenConfig,
+        ConfigFileGlob,
+    ),
+    ExitCode,
+> {
+    let glob =
+        ConfigFileGlob::new_from_path(path).log_err_pretty("Failed to process config file glob")?;
+    let glob_display = glob.glob.clone();
+    let resolved_paths = glob
+        .paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = Config::load_and_verify_from_path(&glob)
+        .await
+        .ok()
+        .log_err_pretty(&format!(
+            "Failed to load config. Config file glob `{glob_display}` resolved to the following files:\n{resolved_paths}"
+        ))?;
+    Ok((config, glob))
+}
+
+async fn store_config_in_database(
+    uninitialized_config: tensorzero_core::config::UninitializedConfig,
+    extra_templates: &std::collections::HashMap<String, String>,
+) -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::AppState {
+            message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
+                      `--store-config` requires a Postgres connection."
+                .to_string(),
+        })
+    })?;
+
+    // Run all migrations (including stored config tables)
+    tensorzero_core::db::postgres::manual_run_postgres_migrations_with_url(&postgres_url).await?;
+
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::AppState {
+                message: format!("Failed to connect to Postgres: {e}"),
+            })
+        })?;
+
+    let postgres = PostgresConnectionInfo::new_with_pool(pool);
+    postgres
+        .write_stored_config(
+            tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
+                config: &uninitialized_config,
+                creation_source: "store-config-cli",
+                source_autopilot_session_id: None,
+                extra_templates,
+            },
+        )
+        .await?;
+
+    Ok(())
 }
 
 #[expect(clippy::print_stdout)]
@@ -339,6 +392,36 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Failed to run optimization Postgres migrations.")?;
 
         tracing::info!("Postgres is ready.");
+        return Ok(());
+    }
+
+    if let Some(config_path) = args.early_exit_commands.store_config.as_ref() {
+        let glob = ConfigFileGlob::new_from_path(config_path)
+            .log_err_pretty("Failed to process config file glob")?;
+        print_configuration_info(Some(&glob));
+
+        // Parse the glob into UninitializedConfig (before load/initialization)
+        let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
+            .ok()
+            .log_err_pretty("Failed to parse config files")?;
+        let uninitialized_config =
+            tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
+                .ok()
+                .log_err_pretty("Failed to deserialize config")?;
+
+        // Validate by running the full load pipeline (ensures the config is valid before storing).
+        // Also extracts extra templates discovered from the filesystem — all prompts, whether
+        // explicitly specified or dynamically included, must be stored in the database.
+        let validated = Config::load_and_verify_from_path(&glob)
+            .await
+            .ok()
+            .log_err_pretty("Config validation failed")?;
+        let extra_templates = validated.extra_templates().clone();
+
+        store_config_in_database(uninitialized_config, &extra_templates)
+            .await
+            .log_err_pretty("Failed to store configuration in the database")?;
+        tracing::info!("Configuration stored in the database.");
         return Ok(());
     }
 

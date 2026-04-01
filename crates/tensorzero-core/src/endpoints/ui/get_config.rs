@@ -9,6 +9,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use serde::Serialize;
 
+use crate::feature_flags;
 use crate::{
     config::snapshot::{ConfigSnapshot, SnapshotHash},
     config::{Config, MetricConfig, UninitializedConfig},
@@ -141,9 +142,37 @@ impl UiConfig {
 /// Handler for GET /internal/ui_config
 ///
 /// Returns a UI-safe subset of the Config.
-#[expect(clippy::unused_async)]
-pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
-    Json(UiConfig::from_config(&app_state.config))
+pub async fn ui_config_handler(State(app_state): AppState) -> Result<Json<UiConfig>, Error> {
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        let pool = app_state
+            .postgres_connection_info
+            .get_pool_result()
+            .map_err(|e| e.log())?;
+        let config = Config::load_from_db(pool, false)
+            .await
+            .map_err(merge_load_config_errors)?;
+        return Ok(Json(UiConfig::from_config(&config)));
+    }
+
+    Ok(Json(UiConfig::from_config(&app_state.config)))
+}
+
+fn merge_load_config_errors(errors: Vec<Error>) -> Error {
+    let mut iter = errors.into_iter();
+    let Some(first) = iter.next() else {
+        return Error::new(ErrorDetails::Config {
+            message: "Failed to load config from database".to_string(),
+        });
+    };
+    if iter.len() == 0 {
+        return first;
+    }
+    let message = std::iter::once(first)
+        .chain(iter)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    Error::new(ErrorDetails::Config { message })
 }
 
 /// Handler for GET /internal/ui_config/{hash}

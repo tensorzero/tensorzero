@@ -291,6 +291,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
                 get(endpoints::internal::config::get_live_config_toml_handler),
             )
             .route(
+                "/internal/config_toml/apply",
+                post(endpoints::internal::config::apply_config_toml_handler),
+            )
+            .route(
                 "/internal/config_toml/validate",
                 post(endpoints::internal::config::validate_config_toml_handler),
             )
