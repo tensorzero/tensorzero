@@ -708,6 +708,7 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
+        crate::model::record_usage_metrics(&response.usage);
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
