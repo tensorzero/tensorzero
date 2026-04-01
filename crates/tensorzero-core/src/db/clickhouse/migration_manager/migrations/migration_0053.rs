@@ -3,6 +3,7 @@ use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
+use chrono::Datelike;
 use std::time::Duration;
 
 use super::migration_0037::quantiles_sql_args;
@@ -209,34 +210,94 @@ impl Migration for Migration0053<'_> {
 
             // Backfill from ModelInference (token/cost metrics)
             // JOIN InferenceById to get function_name and variant_name.
-            // Use partial_merge join to limit memory usage on large tables.
+            // Process one month at a time to limit peak memory during the JOIN.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
-            self.clickhouse
+
+            // Get the date range from ModelInference
+            let range_result = self
+                .clickhouse
                 .run_query_synchronous_no_params(format!(
-                    r"
-                    INSERT INTO VariantStatistics
-                        (function_name, variant_name, minute,
-                         total_input_tokens, total_output_tokens, total_cost,
-                         total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
-                         count_with_cost)
-                    SELECT
-                        ibi.function_name AS function_name,
-                        ibi.variant_name AS variant_name,
-                        toStartOfMinute(mi.timestamp) AS minute,
-                        sumState(mi.input_tokens) AS total_input_tokens,
-                        sumState(mi.output_tokens) AS total_output_tokens,
-                        sumState(mi.cost) AS total_cost,
-                        sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
-                        sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
-                        countState(mi.cost) AS count_with_cost
-                    FROM ModelInference mi
-                    INNER JOIN InferenceById ibi ON toUInt128(mi.inference_id) = ibi.id_uint
-                    WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                    GROUP BY ibi.function_name, ibi.variant_name, minute
-                    SETTINGS join_algorithm = 'partial_merge'
-                    "
+                    r"SELECT
+                        formatDateTime(min(timestamp), '%Y-%m-01') AS min_month,
+                        formatDateTime(max(timestamp), '%Y-%m-01') AS max_month
+                    FROM ModelInference
+                    WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})"
                 ))
                 .await?;
+
+            // Parse months - response is TSV: min_month\tmax_month
+            let range_line = range_result.response.trim();
+            if !range_line.is_empty() && !range_line.starts_with('\t') {
+                let parts: Vec<&str> = range_line.split('\t').collect();
+                if parts.len() == 2 {
+                    let min_month = parts[0].trim();
+                    let max_month = parts[1].trim();
+
+                    // Parse months into NaiveDate for iteration
+                    let start =
+                        chrono::NaiveDate::parse_from_str(min_month, "%Y-%m-%d").map_err(|e| {
+                            Error::new(ErrorDetails::ClickHouseMigration {
+                                id: MIGRATION_ID.to_string(),
+                                message: format!("Failed to parse min_month `{min_month}`: {e}"),
+                            })
+                        })?;
+                    let end =
+                        chrono::NaiveDate::parse_from_str(max_month, "%Y-%m-%d").map_err(|e| {
+                            Error::new(ErrorDetails::ClickHouseMigration {
+                                id: MIGRATION_ID.to_string(),
+                                message: format!("Failed to parse max_month `{max_month}`: {e}"),
+                            })
+                        })?;
+
+                    let mut current = start;
+                    while current <= end {
+                        let next = if current.month() == 12 {
+                            chrono::NaiveDate::from_ymd_opt(current.year() + 1, 1, 1)
+                        } else {
+                            chrono::NaiveDate::from_ymd_opt(current.year(), current.month() + 1, 1)
+                        }
+                        .ok_or_else(|| {
+                            Error::new(ErrorDetails::ClickHouseMigration {
+                                id: MIGRATION_ID.to_string(),
+                                message: "Failed to compute next month".to_string(),
+                            })
+                        })?;
+
+                        tracing::info!(
+                            "Backfilling `VariantStatistics` from `ModelInference` for month starting {current}"
+                        );
+
+                        self.clickhouse
+                            .run_query_synchronous_no_params(format!(
+                                r"
+                                INSERT INTO VariantStatistics
+                                    (function_name, variant_name, minute,
+                                     total_input_tokens, total_output_tokens, total_cost,
+                                     total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
+                                     count_with_cost)
+                                SELECT
+                                    ibi.function_name AS function_name,
+                                    ibi.variant_name AS variant_name,
+                                    toStartOfMinute(mi.timestamp) AS minute,
+                                    sumState(mi.input_tokens) AS total_input_tokens,
+                                    sumState(mi.output_tokens) AS total_output_tokens,
+                                    sumState(mi.cost) AS total_cost,
+                                    sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
+                                    sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
+                                    countState(mi.cost) AS count_with_cost
+                                FROM ModelInference mi
+                                INNER JOIN InferenceById ibi ON toUInt128(mi.inference_id) = ibi.id_uint
+                                WHERE mi.timestamp >= '{current}' AND mi.timestamp < '{next}'
+                                    AND UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                                GROUP BY ibi.function_name, ibi.variant_name, minute
+                                "
+                            ))
+                            .await?;
+
+                        current = next;
+                    }
+                }
+            }
 
             // Backfill from ChatInference (latency/count metrics)
             tracing::info!("Running backfill of `VariantStatistics` from `ChatInference`");
