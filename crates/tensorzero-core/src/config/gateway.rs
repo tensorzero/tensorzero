@@ -434,6 +434,72 @@ impl From<StoredEndpointLocation> for EndpointLocation {
     }
 }
 
+impl From<&CredentialLocation> for StoredCredentialLocation {
+    fn from(loc: &CredentialLocation) -> Self {
+        match loc {
+            CredentialLocation::Env(inner) => Self::Env {
+                value: inner.clone(),
+            },
+            CredentialLocation::PathFromEnv(inner) => Self::PathFromEnv {
+                value: inner.clone(),
+            },
+            CredentialLocation::Dynamic(inner) => Self::Dynamic {
+                value: inner.clone(),
+            },
+            CredentialLocation::Path(inner) => Self::Path {
+                value: inner.clone(),
+            },
+            CredentialLocation::Sdk => Self::Sdk,
+            CredentialLocation::None => Self::None,
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback> for StoredCredentialLocationWithFallback {
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        match loc {
+            CredentialLocationWithFallback::Single(inner) => Self::Single {
+                location: inner.into(),
+            },
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                Self::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<&CredentialLocationOrHardcoded> for StoredCredentialLocationOrHardcoded {
+    fn from(loc: &CredentialLocationOrHardcoded) -> Self {
+        match loc {
+            CredentialLocationOrHardcoded::Hardcoded(value) => Self::Hardcoded {
+                value: value.clone(),
+            },
+            CredentialLocationOrHardcoded::Location(inner) => Self::Location {
+                location: inner.into(),
+            },
+        }
+    }
+}
+
+impl From<&EndpointLocation> for StoredEndpointLocation {
+    fn from(loc: &EndpointLocation) -> Self {
+        match loc {
+            EndpointLocation::Env(value) => Self::Env {
+                value: value.clone(),
+            },
+            EndpointLocation::Dynamic(value) => Self::Dynamic {
+                value: value.clone(),
+            },
+            EndpointLocation::Static(value) => Self::Static {
+                value: value.clone(),
+            },
+        }
+    }
+}
+
 impl TryFrom<StoredRelayConfig> for UninitializedRelayConfig {
     type Error = Error;
 
@@ -495,6 +561,35 @@ impl TryFrom<StoredGatewayConfig> for UninitializedGatewayConfig {
     }
 }
 
+impl From<ObservabilityBackend> for StoredObservabilityBackend {
+    fn from(backend: ObservabilityBackend) -> Self {
+        match backend {
+            ObservabilityBackend::Auto => StoredObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse => StoredObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres => StoredObservabilityBackend::Postgres,
+        }
+    }
+}
+
+impl From<OtlpTracesFormat> for StoredOtlpTracesFormat {
+    fn from(format: OtlpTracesFormat) -> Self {
+        match format {
+            OtlpTracesFormat::OpenTelemetry => StoredOtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference => StoredOtlpTracesFormat::OpenInference,
+        }
+    }
+}
+
+impl From<InferenceCacheBackend> for StoredInferenceCacheBackend {
+    fn from(backend: InferenceCacheBackend) -> Self {
+        match backend {
+            InferenceCacheBackend::Auto => StoredInferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse => StoredInferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey => StoredInferenceCacheBackend::Valkey,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
@@ -553,5 +648,115 @@ where
     match addr {
         Some(addr) => serializer.serialize_str(&addr.to_string()),
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_observability_backend_round_trip() {
+        for variant in [
+            ObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres,
+        ] {
+            let stored: StoredObservabilityBackend = variant.into();
+            let restored: ObservabilityBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_otlp_traces_format_round_trip() {
+        for variant in &[
+            OtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference,
+        ] {
+            let stored: StoredOtlpTracesFormat = variant.clone().into();
+            let restored: OtlpTracesFormat = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_inference_cache_backend_round_trip() {
+        for variant in [
+            InferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey,
+        ] {
+            let stored: StoredInferenceCacheBackend = variant.into();
+            let restored: InferenceCacheBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    // ── CredentialLocationWithFallback ─────────────────────────────────
+
+    fn credential_location_variants() -> Vec<CredentialLocation> {
+        vec![
+            CredentialLocation::Env("MY_KEY".to_string()),
+            CredentialLocation::PathFromEnv("MY_KEY_PATH".to_string()),
+            CredentialLocation::Dynamic("dyn_key".to_string()),
+            CredentialLocation::Path("/etc/keys/key.pem".to_string()),
+            CredentialLocation::Sdk,
+            CredentialLocation::None,
+        ]
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_single_round_trip() {
+        for loc in credential_location_variants() {
+            let original = CredentialLocationWithFallback::Single(loc);
+            let stored: StoredCredentialLocationWithFallback = (&original).into();
+            let restored: CredentialLocationWithFallback = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_with_fallback_round_trip() {
+        let original = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Env("PRIMARY".to_string()),
+            fallback: CredentialLocation::PathFromEnv("BACKUP_PATH".to_string()),
+        };
+        let stored: StoredCredentialLocationWithFallback = (&original).into();
+        let restored: CredentialLocationWithFallback = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_all_fallback_combos_round_trip() {
+        // Cover the full cross-product of default × fallback to make sure each
+        // variant survives the encode/decode through stored form.
+        for default in credential_location_variants() {
+            for fallback in credential_location_variants() {
+                let original = CredentialLocationWithFallback::WithFallback {
+                    default: default.clone(),
+                    fallback: fallback.clone(),
+                };
+                let stored: StoredCredentialLocationWithFallback = (&original).into();
+                let restored: CredentialLocationWithFallback = stored.into();
+                expect_that!(restored, eq(&original));
+            }
+        }
+    }
+
+    // ── EndpointLocation ───────────────────────────────────────────────
+
+    #[gtest]
+    fn test_endpoint_location_round_trip() {
+        for variant in [
+            EndpointLocation::Env("MY_ENDPOINT".to_string()),
+            EndpointLocation::Dynamic("dyn_endpoint".to_string()),
+            EndpointLocation::Static("https://api.example.com".to_string()),
+        ] {
+            let stored: StoredEndpointLocation = (&variant).into();
+            let restored: EndpointLocation = stored.into();
+            expect_that!(restored, eq(&variant));
+        }
     }
 }

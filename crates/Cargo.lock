@@ -7397,6 +7397,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sqlx",
+ "tensorzero-error",
  "tensorzero-types",
  "uuid",
 ]

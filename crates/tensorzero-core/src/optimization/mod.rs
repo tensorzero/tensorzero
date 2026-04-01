@@ -264,6 +264,12 @@ impl UninitializedOptimizerInfo {
     }
 }
 
+impl From<UninitializedOptimizerInfo> for StoredOptimizerConfig {
+    fn from(info: UninitializedOptimizerInfo) -> Self {
+        info.inner.into()
+    }
+}
+
 impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerInfo {
     type Error = Error;
 
@@ -320,6 +326,30 @@ pub enum UninitializedOptimizerConfig {
     GEPA(UninitializedGEPAConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
+}
+
+impl From<UninitializedOptimizerConfig> for StoredOptimizerConfig {
+    fn from(config: UninitializedOptimizerConfig) -> Self {
+        match config {
+            UninitializedOptimizerConfig::Dicl(c) => StoredOptimizerConfig::Dicl(c.into()),
+            UninitializedOptimizerConfig::OpenAISFT(c) => {
+                StoredOptimizerConfig::OpenAISFT(c.into())
+            }
+            UninitializedOptimizerConfig::OpenAIRFT(c) => {
+                StoredOptimizerConfig::OpenAIRFT(Box::new((*c).into()))
+            }
+            UninitializedOptimizerConfig::FireworksSFT(c) => {
+                StoredOptimizerConfig::FireworksSFT(c.into())
+            }
+            UninitializedOptimizerConfig::GCPVertexGeminiSFT(c) => {
+                StoredOptimizerConfig::GCPVertexGeminiSFT(c.into())
+            }
+            UninitializedOptimizerConfig::GEPA(c) => StoredOptimizerConfig::GEPA(c.into()),
+            UninitializedOptimizerConfig::TogetherSFT(c) => {
+                StoredOptimizerConfig::TogetherSFT(Box::new((*c).into()))
+            }
+        }
+    }
 }
 
 impl UninitializedOptimizerConfig {

@@ -12,6 +12,24 @@ pub struct StoredCostConfig {
     pub entries: Vec<StoredCostConfigEntry>,
 }
 
+impl From<&UninitializedCostConfig> for StoredCostConfig {
+    fn from(config: &UninitializedCostConfig) -> Self {
+        StoredCostConfig {
+            entries: config
+                .iter()
+                .map(|entry| StoredCostConfigEntry {
+                    pointer: entry.pointer.pointer.clone(),
+                    pointer_nonstreaming: entry.pointer.pointer_nonstreaming.clone(),
+                    pointer_streaming: entry.pointer.pointer_streaming.clone(),
+                    cost_per_million: entry.rate.cost_per_million,
+                    cost_per_unit: entry.rate.cost_per_unit,
+                    required: Some(entry.required),
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<StoredCostConfig> for UninitializedCostConfig {
     fn from(stored: StoredCostConfig) -> Self {
         stored
@@ -51,6 +69,22 @@ pub struct StoredCostConfigEntry {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredUnifiedCostConfig {
     pub entries: Vec<StoredUnifiedCostConfigEntry>,
+}
+
+impl From<&UninitializedUnifiedCostConfig> for StoredUnifiedCostConfig {
+    fn from(config: &UninitializedUnifiedCostConfig) -> Self {
+        StoredUnifiedCostConfig {
+            entries: config
+                .iter()
+                .map(|entry| StoredUnifiedCostConfigEntry {
+                    pointer: entry.pointer.pointer.clone(),
+                    cost_per_million: entry.rate.cost_per_million,
+                    cost_per_unit: entry.rate.cost_per_unit,
+                    required: Some(entry.required),
+                })
+                .collect(),
+        }
+    }
 }
 
 impl From<StoredUnifiedCostConfig> for UninitializedUnifiedCostConfig {

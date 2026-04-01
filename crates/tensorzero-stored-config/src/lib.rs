@@ -89,8 +89,8 @@ pub use stored_provider_types_config::{
     StoredTogetherProviderTypeConfig,
 };
 pub use stored_rate_limiting_config::{
-    StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
-    StoredRateLimitingConfig,
+    StoredRateLimit, StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
+    StoredRateLimitingConfig, StoredRateLimitingRule,
 };
 pub use stored_storage_kind::StoredStorageKind;
 pub use stored_tool_config::StoredToolConfig;

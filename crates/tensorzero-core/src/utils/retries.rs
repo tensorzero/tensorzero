@@ -115,3 +115,20 @@ impl From<StoredRetryConfig> for RetryConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_retry_config_round_trip() {
+        let original = RetryConfig {
+            num_retries: 3,
+            max_delay_s: 10.0,
+        };
+        let stored: StoredRetryConfig = original.into();
+        let restored: RetryConfig = stored.into();
+        expect_that!(restored, eq(original));
+    }
+}

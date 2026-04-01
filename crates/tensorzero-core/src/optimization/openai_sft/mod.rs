@@ -55,6 +55,19 @@ impl From<tensorzero_stored_config::StoredOpenAISFTConfig> for UninitializedOpen
     }
 }
 
+impl From<UninitializedOpenAISFTConfig> for tensorzero_stored_config::StoredOpenAISFTConfig {
+    fn from(config: UninitializedOpenAISFTConfig) -> Self {
+        tensorzero_stored_config::StoredOpenAISFTConfig {
+            model: config.model,
+            batch_size: config.batch_size,
+            learning_rate_multiplier: config.learning_rate_multiplier,
+            n_epochs: config.n_epochs,
+            seed: config.seed,
+            suffix: config.suffix,
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedOpenAISFTConfig {
@@ -134,5 +147,42 @@ impl std::fmt::Display for OpenAISFTJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use tensorzero_stored_config::StoredOpenAISFTConfig;
+
+    #[gtest]
+    fn test_openai_sft_config_round_trip_full() {
+        let original = UninitializedOpenAISFTConfig {
+            model: "gpt-4o-mini".to_string(),
+            batch_size: Some(8),
+            learning_rate_multiplier: Some(0.5),
+            n_epochs: Some(3),
+            seed: Some(42),
+            suffix: Some("my-tune".to_string()),
+        };
+        let stored: StoredOpenAISFTConfig = original.clone().into();
+        let restored: UninitializedOpenAISFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_sft_config_round_trip_minimal() {
+        let original = UninitializedOpenAISFTConfig {
+            model: "gpt-4o-mini".to_string(),
+            batch_size: None,
+            learning_rate_multiplier: None,
+            n_epochs: None,
+            seed: None,
+            suffix: None,
+        };
+        let stored: StoredOpenAISFTConfig = original.clone().into();
+        let restored: UninitializedOpenAISFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

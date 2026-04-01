@@ -6,16 +6,17 @@ use std::sync::Arc;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize};
-use tensorzero_stored_config::{
-    StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
-    StoredRateLimitingConfig,
-};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+#[cfg(test)]
+use tensorzero_stored_config::StoredRateLimitResource;
+use tensorzero_stored_config::{
+    StoredRateLimitInterval, StoredRateLimitingBackend, StoredRateLimitingConfig,
+};
 
 pub use tensorzero_error::rate_limiting_types::*;
 
@@ -165,32 +166,49 @@ impl Default for RateLimitingConfig {
     }
 }
 
-// These would ideally be `From` impls, but the orphan rule prevents it since both
-// types are defined in other crates (`tensorzero-error` and `tensorzero-stored-config`).
-fn convert_resource(stored: StoredRateLimitResource) -> RateLimitResource {
-    match stored {
-        StoredRateLimitResource::ModelInference => RateLimitResource::ModelInference,
-        StoredRateLimitResource::Token => RateLimitResource::Token,
-        StoredRateLimitResource::Cost => RateLimitResource::Cost,
+impl From<StoredRateLimitingBackend> for RateLimitingBackend {
+    fn from(stored: StoredRateLimitingBackend) -> Self {
+        match stored {
+            StoredRateLimitingBackend::Auto => RateLimitingBackend::Auto,
+            StoredRateLimitingBackend::Postgres => RateLimitingBackend::Postgres,
+            StoredRateLimitingBackend::Valkey => RateLimitingBackend::Valkey,
+        }
     }
 }
 
-fn convert_interval(stored: StoredRateLimitInterval) -> RateLimitInterval {
-    match stored {
-        StoredRateLimitInterval::Second => RateLimitInterval::Second,
-        StoredRateLimitInterval::Minute => RateLimitInterval::Minute,
-        StoredRateLimitInterval::Hour => RateLimitInterval::Hour,
-        StoredRateLimitInterval::Day => RateLimitInterval::Day,
-        StoredRateLimitInterval::Week => RateLimitInterval::Week,
-        StoredRateLimitInterval::Month => RateLimitInterval::Month,
+impl From<RateLimitingBackend> for StoredRateLimitingBackend {
+    fn from(backend: RateLimitingBackend) -> Self {
+        match backend {
+            RateLimitingBackend::Auto => Self::Auto,
+            RateLimitingBackend::Postgres => Self::Postgres,
+            RateLimitingBackend::Valkey => Self::Valkey,
+        }
     }
 }
 
-fn convert_backend(stored: StoredRateLimitingBackend) -> RateLimitingBackend {
-    match stored {
-        StoredRateLimitingBackend::Auto => RateLimitingBackend::Auto,
-        StoredRateLimitingBackend::Postgres => RateLimitingBackend::Postgres,
-        StoredRateLimitingBackend::Valkey => RateLimitingBackend::Valkey,
+impl From<StoredRateLimitInterval> for RateLimitInterval {
+    fn from(stored: StoredRateLimitInterval) -> Self {
+        match stored {
+            StoredRateLimitInterval::Second => RateLimitInterval::Second,
+            StoredRateLimitInterval::Minute => RateLimitInterval::Minute,
+            StoredRateLimitInterval::Hour => RateLimitInterval::Hour,
+            StoredRateLimitInterval::Day => RateLimitInterval::Day,
+            StoredRateLimitInterval::Week => RateLimitInterval::Week,
+            StoredRateLimitInterval::Month => RateLimitInterval::Month,
+        }
+    }
+}
+
+impl From<RateLimitInterval> for StoredRateLimitInterval {
+    fn from(interval: RateLimitInterval) -> Self {
+        match interval {
+            RateLimitInterval::Second => Self::Second,
+            RateLimitInterval::Minute => Self::Minute,
+            RateLimitInterval::Hour => Self::Hour,
+            RateLimitInterval::Day => Self::Day,
+            RateLimitInterval::Week => Self::Week,
+            RateLimitInterval::Month => Self::Month,
+        }
     }
 }
 
@@ -208,8 +226,8 @@ impl TryFrom<StoredRateLimitingConfig> for UninitializedRateLimitingConfig {
                     .into_iter()
                     .map(|limit| {
                         Ok(Arc::new(RateLimit {
-                            resource: convert_resource(limit.resource),
-                            interval: convert_interval(limit.interval),
+                            resource: limit.resource.into(),
+                            interval: limit.interval.into(),
                             capacity: limit.capacity,
                             refill_rate: limit.refill_rate,
                         }))
@@ -232,7 +250,7 @@ impl TryFrom<StoredRateLimitingConfig> for UninitializedRateLimitingConfig {
                 })
             })
             .collect::<Result<Vec<_>, Error>>()?;
-        let backend = stored.backend.map(convert_backend);
+        let backend = stored.backend.map(Into::into);
         Ok(UninitializedRateLimitingConfig {
             rules: Some(rules),
             enabled: stored.enabled,
@@ -241,7 +259,6 @@ impl TryFrom<StoredRateLimitingConfig> for UninitializedRateLimitingConfig {
         })
     }
 }
-
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
@@ -817,8 +834,11 @@ pub fn get_estimated_tokens(text: &str) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashMap;
+
+    use googletest::{expect_that, gtest, matchers::eq};
+
+    use super::*;
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_concrete_match() {
@@ -2301,5 +2321,49 @@ mod tests {
             0,
             "$0.00 should be 0 nano-dollars"
         );
+    }
+
+    // ─── Stored conversion round-trip tests ──────────────────────────────
+
+    #[gtest]
+    fn test_rate_limit_backend_round_trip() {
+        for variant in [
+            RateLimitingBackend::Auto,
+            RateLimitingBackend::Postgres,
+            RateLimitingBackend::Valkey,
+        ] {
+            let stored: StoredRateLimitingBackend = variant.into();
+            let restored: RateLimitingBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_rate_limit_resource_round_trip() {
+        for variant in [
+            RateLimitResource::ModelInference,
+            RateLimitResource::Token,
+            RateLimitResource::Cost,
+        ] {
+            let stored: StoredRateLimitResource = variant.into();
+            let restored: RateLimitResource = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_rate_limit_interval_round_trip() {
+        for variant in [
+            RateLimitInterval::Second,
+            RateLimitInterval::Minute,
+            RateLimitInterval::Hour,
+            RateLimitInterval::Day,
+            RateLimitInterval::Week,
+            RateLimitInterval::Month,
+        ] {
+            let stored: StoredRateLimitInterval = variant.into();
+            let restored: RateLimitInterval = stored.into();
+            expect_that!(restored, eq(variant));
+        }
     }
 }
