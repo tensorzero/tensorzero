@@ -621,9 +621,9 @@ max_tokens = 100
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
-model = "llama4-maverick-instruct-together"
+model = "glm-4.7-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
