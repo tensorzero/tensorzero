@@ -74,6 +74,7 @@ use crate::{
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
+use metrics::counter;
 use serde::{Deserialize, Serialize};
 
 use crate::providers::{
@@ -84,6 +85,15 @@ use crate::providers::{
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
+
+pub(crate) fn record_usage_metrics(usage: &Usage) {
+    if let Some(input_tokens) = usage.input_tokens {
+        counter!("tensorzero_input_tokens_total").increment(input_tokens as u64);
+    }
+    if let Some(output_tokens) = usage.output_tokens {
+        counter!("tensorzero_output_tokens_total").increment(output_tokens as u64);
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
@@ -945,6 +955,8 @@ fn wrap_provider_stream(
                     }
                 }
             };
+
+            record_usage_metrics(&aggregated_usage);
 
             if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
@@ -2088,6 +2100,7 @@ impl ModelProvider {
         };
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
+        record_usage_metrics(&provider_inference_response.usage);
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
