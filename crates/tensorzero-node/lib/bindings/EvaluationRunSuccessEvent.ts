@@ -7,4 +7,8 @@ export type EvaluationRunSuccessEvent = {
   response: JsonValue;
   evaluations: { [key in string]: JsonValue | null };
   evaluator_errors: { [key in string]: string };
+  /**
+   * Wall-clock time for the inference call, in milliseconds
+   */
+  processing_time_ms: number;
 };

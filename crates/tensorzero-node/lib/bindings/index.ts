@@ -122,6 +122,7 @@ export * from "./EvaluationRunMetadata";
 export * from "./EvaluationRunStartEvent";
 export * from "./EvaluationRunStatsResponse";
 export * from "./EvaluationRunSuccessEvent";
+export * from "./EvaluationRunUsageSummary";
 export * from "./EvaluationStatistics";
 export * from "./EvaluationUsageStatistics";
 export * from "./EvaluatorConfig";
