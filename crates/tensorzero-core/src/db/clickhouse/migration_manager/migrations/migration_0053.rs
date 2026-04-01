@@ -209,6 +209,7 @@ impl Migration for Migration0053<'_> {
 
             // Backfill from ModelInference (token/cost metrics)
             // JOIN InferenceById to get function_name and variant_name.
+            // Use partial_merge join to limit memory usage on large tables.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
             self.clickhouse
                 .run_query_synchronous_no_params(format!(
@@ -232,6 +233,7 @@ impl Migration for Migration0053<'_> {
                     INNER JOIN InferenceById ibi ON toUInt128(mi.inference_id) = ibi.id_uint
                     WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
                     GROUP BY ibi.function_name, ibi.variant_name, minute
+                    SETTINGS join_algorithm = 'partial_merge'
                     "
                 ))
                 .await?;
