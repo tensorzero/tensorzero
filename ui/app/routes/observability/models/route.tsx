@@ -16,6 +16,8 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { useConfig } from "~/context/config";
+import { StatsBar } from "~/components/ui/StatsBar";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -63,6 +65,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+function ModelsSummary() {
+  const config = useConfig();
+  const modelCount = config.model_names.length;
+
+  return <StatsBar items={[{ label: "Models", value: String(modelCount) }]} />;
+}
+
 export default function ModelsPage({ loaderData }: Route.ComponentProps) {
   const { modelUsageTimeseriesPromise, modelLatencyQuantilesPromise } =
     loaderData;
@@ -70,6 +79,7 @@ export default function ModelsPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader heading="Models" />
+      <ModelsSummary />
 
       <SectionsGroup>
         <SectionLayout>

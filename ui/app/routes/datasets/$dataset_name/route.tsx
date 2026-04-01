@@ -9,15 +9,17 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect } from "react";
-import { useFetcher } from "react-router";
+import { Suspense, useEffect } from "react";
+import { Await, useFetcher } from "react-router";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
-import type { DatapointFilter } from "~/types/tensorzero";
+import type { Datapoint, DatapointFilter } from "~/types/tensorzero";
+import { TypeChat, TypeJson } from "~/components/icons/Icons";
+import { StatsBar, StatsBarSkeleton } from "~/components/ui/StatsBar";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -54,6 +56,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Promise for count (streams to PageHeader)
   const countPromise = Promise.resolve(datasetInfo.datapoint_count);
 
+  // Promise for stats (function/type breakdown from a sample)
+  const statsPromise: Promise<DatasetStats> = (async () => {
+    const response = await getTensorZeroClient().listDatapoints(dataset_name, {
+      limit: 200,
+      offset: 0,
+    });
+    return computeDatasetStats(
+      response.datapoints,
+      datasetInfo.datapoint_count,
+      datasetInfo.last_updated,
+    );
+  })();
+
   // Promise for table data (streams to DatasetRowTable)
   const dataPromise: Promise<DatasetRowsData> = (async () => {
     const response = await getTensorZeroClient().listDatapoints(dataset_name, {
@@ -73,6 +88,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     dataset_name,
     countPromise,
+    statsPromise,
     dataPromise,
     limit,
     offset,
@@ -137,12 +153,120 @@ export async function action({ request, params }: Route.ActionArgs) {
   return null;
 }
 
+interface DatasetStats {
+  totalCount: number;
+  lastUpdated: string;
+  functionBreakdown: { name: string; count: number }[];
+  chatCount: number;
+  jsonCount: number;
+  withOutput: number;
+  withoutOutput: number;
+}
+
+function computeDatasetStats(
+  datapoints: Datapoint[],
+  totalCount: number,
+  lastUpdated: string,
+): DatasetStats {
+  const functionCounts = new Map<string, number>();
+  let chatCount = 0;
+  let jsonCount = 0;
+  let withOutput = 0;
+  let withoutOutput = 0;
+
+  for (const dp of datapoints) {
+    const fn = dp.function_name;
+    functionCounts.set(fn, (functionCounts.get(fn) ?? 0) + 1);
+    if (dp.type === "chat") chatCount++;
+    else jsonCount++;
+    if (dp.output != null) withOutput++;
+    else withoutOutput++;
+  }
+
+  const functionBreakdown = Array.from(functionCounts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    totalCount,
+    lastUpdated,
+    functionBreakdown,
+    chatCount,
+    jsonCount,
+    withOutput,
+    withoutOutput,
+  };
+}
+
+function DatasetStatsBar({ stats }: { stats: DatasetStats }) {
+  const formattedDate = new Date(stats.lastUpdated).toLocaleDateString(
+    undefined,
+    { month: "short", day: "numeric", year: "numeric" },
+  );
+
+  return (
+    <StatsBar
+      items={[
+        {
+          label: "Datapoints",
+          value: stats.totalCount.toLocaleString(),
+        },
+        {
+          label: "Types",
+          custom: (
+            <div className="flex items-center gap-3">
+              {stats.chatCount > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-bg-type-chat rounded-sm p-0.5">
+                    <TypeChat className="text-fg-type-chat" />
+                  </span>
+                  <span className="text-fg-primary text-sm font-medium">
+                    {stats.chatCount}
+                  </span>
+                </div>
+              )}
+              {stats.jsonCount > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-bg-type-json rounded-sm p-0.5">
+                    <TypeJson className="text-fg-type-json" />
+                  </span>
+                  <span className="text-fg-primary text-sm font-medium">
+                    {stats.jsonCount}
+                  </span>
+                </div>
+              )}
+            </div>
+          ),
+        },
+        {
+          label: "Functions",
+          value: String(stats.functionBreakdown.length),
+        },
+        {
+          label: "Output Coverage",
+          value:
+            stats.withOutput + stats.withoutOutput > 0
+              ? `${Math.round((stats.withOutput / (stats.withOutput + stats.withoutOutput)) * 100)}%`
+              : "—",
+          detail: `${stats.withOutput} with output`,
+        },
+        { label: "Last Updated", value: formattedDate },
+      ]}
+    />
+  );
+}
+
+function DatasetStatsBarSkeleton() {
+  return <StatsBarSkeleton count={4} />;
+}
+
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
   const {
     dataset_name,
     countPromise,
+    statsPromise,
     dataPromise,
     limit,
     offset,
@@ -192,6 +316,12 @@ export default function DatasetDetailPage({
           <AskAutopilotButton message={`Dataset: ${dataset_name}\n\n`} />
         </ActionBar>
       </PageHeader>
+
+      <Suspense fallback={<DatasetStatsBarSkeleton />}>
+        <Await resolve={statsPromise}>
+          {(stats) => <DatasetStatsBar stats={stats} />}
+        </Await>
+      </Suspense>
 
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={dataset_name} />

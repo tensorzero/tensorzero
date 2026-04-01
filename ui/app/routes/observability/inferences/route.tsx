@@ -1,7 +1,7 @@
 import { listInferencesWithPagination } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import InferencesTable, { type InferencesData } from "./InferencesTable";
-import { data } from "react-router";
+import { Await, data } from "react-router";
 import InferenceSearchBar from "./InferenceSearchBar";
 import {
   PageHeader,
@@ -11,6 +11,9 @@ import {
 import type { InferenceFilter, InferenceMetadata } from "~/types/tensorzero";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { applyPaginationLogic } from "~/utils/pagination";
+import { Suspense } from "react";
+import { StatsBar, StatsBarSkeleton } from "~/components/ui/StatsBar";
+import { getRelativeTimeString } from "~/utils/date";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -43,13 +46,33 @@ export async function loader({ request }: Route.LoaderArgs) {
   // The fast listInferenceMetadata endpoint now supports function_name, variant_name, and episode_id
   const needsFullInferences = search_query || filters;
 
-  // Create promise for total count - will be streamed to the component
+  // Create promise for total count and summary stats - will be streamed to the component
   const client = getTensorZeroClient();
-  const totalInferencesPromise = client
-    .listFunctionsWithInferenceCount()
-    .then((countsInfo) =>
-      countsInfo.reduce((acc, curr) => acc + curr.inference_count, 0),
+  const countsInfoPromise = client.listFunctionsWithInferenceCount();
+  const totalInferencesPromise = countsInfoPromise.then((countsInfo) =>
+    countsInfo.reduce((acc, curr) => acc + curr.inference_count, 0),
+  );
+  const summaryPromise = countsInfoPromise.then((countsInfo) => {
+    const totalInferences = countsInfo.reduce(
+      (acc, curr) => acc + curr.inference_count,
+      0,
     );
+    const activeFunctions = countsInfo.filter(
+      (info) => info.inference_count > 0,
+    ).length;
+    const lastTimestamp = countsInfo.reduce<string | null>((latest, info) => {
+      if (!info.last_inference_timestamp || info.inference_count === 0)
+        return latest;
+      if (!latest) return info.last_inference_timestamp;
+      return info.last_inference_timestamp > latest
+        ? info.last_inference_timestamp
+        : latest;
+    }, null);
+    const lastInference = lastTimestamp
+      ? getRelativeTimeString(new Date(lastTimestamp))
+      : "Never";
+    return { totalInferences, activeFunctions, lastInference };
+  });
 
   // Create promise for inferences data - will be streamed to the component
   const inferencesDataPromise: Promise<InferencesData> = (async () => {
@@ -109,6 +132,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     inferencesData: inferencesDataPromise,
     totalInferences: totalInferencesPromise,
+    summaryData: summaryPromise,
     limit,
     function_name,
     variant_name,
@@ -118,10 +142,44 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+function InferencesSummarySkeleton() {
+  return <StatsBarSkeleton count={3} />;
+}
+
+function InferencesSummary({
+  data,
+}: {
+  data: {
+    totalInferences: number;
+    activeFunctions: number;
+    lastInference: string;
+  };
+}) {
+  return (
+    <StatsBar
+      items={[
+        {
+          label: "Total Inferences",
+          value: data.totalInferences.toLocaleString(),
+        },
+        {
+          label: "Active Functions",
+          value: String(data.activeFunctions),
+        },
+        {
+          label: "Last Inference",
+          value: data.lastInference,
+        },
+      ]}
+    />
+  );
+}
+
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const {
     inferencesData,
     totalInferences,
+    summaryData,
     limit,
     function_name,
     variant_name,
@@ -133,6 +191,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader heading="Inferences" count={totalInferences} />
+      <Suspense fallback={<InferencesSummarySkeleton />}>
+        <Await resolve={summaryData}>
+          {(data) => <InferencesSummary data={data} />}
+        </Await>
+      </Suspense>
       <SectionLayout>
         <InferenceSearchBar />
         <InferencesTable

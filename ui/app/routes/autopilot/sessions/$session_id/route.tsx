@@ -513,6 +513,9 @@ function AutopilotSessionEventsPageContent({
   const [isEventsLoading, setIsEventsLoading] = useState(!isNewSession);
   const [hasLoadError, setHasLoadError] = useState(false);
 
+  // Persistent connection error for new sessions (backend unreachable)
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
   // Track whether we've reached the start of the conversation (for top fade)
   const [hasReachedStart, setHasReachedStart] = useState(false);
 
@@ -846,12 +849,15 @@ function AutopilotSessionEventsPageContent({
 
   const handleMessageFailed = useCallback(
     (err: Error) => {
-      toast.error({
-        title: isNewSession
-          ? "Failed to create session"
-          : "Failed to send message",
-        description: err.message,
-      });
+      if (isNewSession) {
+        // Show persistent inline error for new sessions (backend likely unreachable)
+        setConnectionError(err.message);
+      } else {
+        toast.error({
+          title: "Failed to send message",
+          description: err.message,
+        });
+      }
     },
     [toast, isNewSession],
   );
@@ -947,6 +953,24 @@ function AutopilotSessionEventsPageContent({
               )}
             </Await>
           </Suspense>
+          {connectionError && (
+            <div className="flex flex-col items-center justify-center py-16">
+              <AlertCircle className="mb-4 h-10 w-10 text-amber-500" />
+              <h2 className="text-foreground text-xl font-medium">
+                Unable to connect to Autopilot
+              </h2>
+              <p className="text-muted-foreground mt-2 max-w-xs text-center text-sm">
+                {connectionError}
+              </p>
+              <button
+                type="button"
+                className="text-fg-secondary hover:text-fg-primary mt-4 cursor-pointer text-sm underline transition-colors"
+                onClick={() => setConnectionError(null)}
+              >
+                Dismiss and retry
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

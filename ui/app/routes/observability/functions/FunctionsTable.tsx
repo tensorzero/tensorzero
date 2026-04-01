@@ -26,6 +26,7 @@ import { useMemo, useState } from "react";
 import { ChevronUp, ChevronDown, Search } from "lucide-react";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
+import { TypeChat, TypeJson } from "~/components/icons/Icons";
 
 interface MergedFunctionData {
   function_name: string;
@@ -42,6 +43,8 @@ export default function FunctionsTable({
   countsInfo,
   showInternalFunctions,
   onToggleShowInternalFunctions,
+  typeFilter,
+  onTypeFilterChange,
 }: {
   functions: {
     [x: string]: FunctionConfig | undefined;
@@ -49,6 +52,8 @@ export default function FunctionsTable({
   countsInfo: FunctionInferenceCount[];
   showInternalFunctions: boolean;
   onToggleShowInternalFunctions: (value: boolean) => void;
+  typeFilter: "chat" | "json" | null;
+  onTypeFilterChange: (type: "chat" | "json" | null) => void;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -143,15 +148,48 @@ export default function FunctionsTable({
   return (
     <div>
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-          <Input
-            type="text"
-            placeholder="Search functions..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
-          />
+        <div className="flex w-full items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              type="text"
+              placeholder="Search functions..."
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
+            />
+          </div>
+          <div className="border-border flex rounded-md border">
+            <button
+              type="button"
+              className={`flex cursor-pointer items-center gap-1.5 rounded-l-md px-2.5 py-1.5 text-xs transition-colors ${
+                typeFilter === "chat"
+                  ? "bg-bg-type-chat/20 text-fg-type-chat font-medium"
+                  : "text-fg-muted hover:bg-bg-tertiary"
+              }`}
+              onClick={() =>
+                onTypeFilterChange(typeFilter === "chat" ? null : "chat")
+              }
+            >
+              <TypeChat className="h-3.5 w-3.5" />
+              Chat
+            </button>
+            <div className="border-border border-l" />
+            <button
+              type="button"
+              className={`flex cursor-pointer items-center gap-1.5 rounded-r-md px-2.5 py-1.5 text-xs transition-colors ${
+                typeFilter === "json"
+                  ? "bg-bg-type-json/20 text-fg-type-json font-medium"
+                  : "text-fg-muted hover:bg-bg-tertiary"
+              }`}
+              onClick={() =>
+                onTypeFilterChange(typeFilter === "json" ? null : "json")
+              }
+            >
+              <TypeJson className="h-3.5 w-3.5" />
+              JSON
+            </button>
+          </div>
         </div>
         <label className="text-fg-muted flex items-center gap-2 text-sm font-medium whitespace-nowrap">
           <Checkbox

@@ -13,7 +13,7 @@ import {
   SidebarCollapse,
   SidebarExpand,
 } from "~/components/icons/Icons";
-import { KeyRound, LayoutGrid, Plus } from "lucide-react";
+import { KeyRound, LayoutGrid, Moon, Plus, Sun } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -35,6 +35,7 @@ import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 import { ReadOnlyBadge } from "./ReadOnlyBadge";
+import { useTheme } from "~/context/theme";
 
 interface NavigationItem {
   title: string;
@@ -124,15 +125,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state, toggleSidebar } = useSidebar();
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
+  const { theme, setTheme } = useTheme();
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="pb-4">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center justify-between">
             <SidebarMenuButton
               asChild
-              className="text-black hover:bg-transparent focus-visible:bg-transparent active:bg-transparent"
+              className="text-sidebar-foreground hover:bg-transparent focus-visible:bg-transparent active:bg-transparent"
             >
               <Link to="/" className="flex items-center gap-2">
                 <TensorZeroLogo size={16} />
@@ -141,6 +143,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </span>
               </Link>
             </SidebarMenuButton>
+            <button
+              aria-label="Toggle theme"
+              className="text-sidebar-foreground hover:text-fg-primary shrink-0 cursor-pointer rounded-md p-1.5 transition-colors group-data-[collapsible=icon]:hidden"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

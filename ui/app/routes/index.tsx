@@ -19,8 +19,11 @@ import {
   SequenceChecks,
   Playground,
   Model,
+  TypeChat,
+  TypeJson,
 } from "~/components/icons/Icons";
 import { KeyRound } from "lucide-react";
+import { formatRelativeTime } from "~/utils/date";
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +33,7 @@ import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
 import type { Route } from "./+types/index";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getErrorDetails } from "~/utils/tensorzero/errors";
+import { Skeleton } from "~/components/ui/skeleton";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
@@ -126,6 +130,18 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   );
 }
 
+type OverviewStats = {
+  totalInferences: number;
+  totalEpisodes: string;
+  totalFunctions: number;
+  totalVariants: number;
+  chatFunctions: number;
+  jsonFunctions: number;
+  modelsUsed: number;
+  activeFunctions: number;
+  lastActivity: string | null;
+};
+
 export async function loader() {
   const httpClient = getTensorZeroClient();
 
@@ -143,14 +159,57 @@ export async function loader() {
     .countDistinctModelsUsed()
     .then((response) => response.model_count);
 
-  const totalInferencesDesc = countsInfoPromise.then((countsInfo) => {
-    const total = countsInfo.reduce(
+  // Build rich stats for the overview
+  const statsPromise: Promise<OverviewStats> = Promise.all([
+    countsInfoPromise,
+    episodesPromise,
+    functionConfigsPromise,
+    numModelsUsedPromise,
+  ]).then(([countsInfo, episodeBounds, functionConfigs, modelsUsed]) => {
+    const totalInferences = countsInfo.reduce(
       (acc, curr) => acc + curr.inference_count,
       0,
     );
-    return `${total.toLocaleString()} inferences`;
+    const totalFunctions = Object.keys(functionConfigs).length;
+    const totalVariants = Object.values(functionConfigs).reduce(
+      (acc, funcConfig) =>
+        acc + (funcConfig ? Object.keys(funcConfig.variants || {}).length : 0),
+      0,
+    );
+    const chatFunctions = Object.values(functionConfigs).filter(
+      (f) => f?.type === "chat",
+    ).length;
+    const jsonFunctions = Object.values(functionConfigs).filter(
+      (f) => f?.type === "json",
+    ).length;
+    const activeFunctions = countsInfo.filter(
+      (info) => info.inference_count > 0,
+    ).length;
+
+    // Find most recent activity across all functions
+    const timestamps = countsInfo
+      .filter((info) => info.last_inference_timestamp)
+      .map((info) => info.last_inference_timestamp);
+    const lastActivity =
+      timestamps.length > 0 ? timestamps.sort().reverse()[0] : null;
+
+    return {
+      totalInferences,
+      totalEpisodes:
+        episodeBounds.count != null
+          ? episodeBounds.count.toLocaleString()
+          : "—",
+      totalFunctions,
+      totalVariants,
+      chatFunctions,
+      jsonFunctions,
+      modelsUsed,
+      activeFunctions,
+      lastActivity,
+    };
   });
 
+  // Keep the description promises for directory cards
   const numFunctionsDesc = functionConfigsPromise.then((functionConfigs) => {
     const numFunctions = Object.keys(functionConfigs).length;
     return `${numFunctions} functions`;
@@ -167,10 +226,6 @@ export async function loader() {
     );
     return `${numVariants} variants`;
   });
-
-  const numEpisodesDesc = episodesPromise.then((result) =>
-    result.count != null ? `${result.count.toLocaleString()} episodes` : "—",
-  );
 
   const numDatasetsDesc = datasetMetadataPromise.then(
     (datasets) => `${datasets.datasets.length} datasets`,
@@ -189,40 +244,114 @@ export async function loader() {
     numWorkflowEvaluationRunsPromise,
   ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
-  const numModelsUsedDesc = numModelsUsedPromise.then(
-    (numModelsUsed) => `${numModelsUsed} models used`,
-  );
-
   return {
-    totalInferencesDesc,
+    statsPromise,
     numFunctionsDesc,
     numVariantsDesc,
-    numEpisodesDesc,
     numDatasetsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
-    numModelsUsedDesc,
   };
+}
+
+function OverviewStatsBar({ stats }: { stats: OverviewStats }) {
+  return (
+    <div className="bg-bg-secondary border-border grid grid-cols-2 divide-x rounded-lg border sm:grid-cols-3 lg:grid-cols-6">
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Inferences</span>
+        <span className="text-fg-primary text-lg font-semibold tabular-nums">
+          {stats.totalInferences.toLocaleString()}
+        </span>
+      </div>
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Episodes</span>
+        <span className="text-fg-primary text-lg font-semibold tabular-nums">
+          {stats.totalEpisodes}
+        </span>
+      </div>
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Functions</span>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-fg-primary text-lg font-semibold tabular-nums">
+            {stats.totalFunctions}
+          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="bg-bg-type-chat rounded-sm p-px">
+                <TypeChat className="text-fg-type-chat h-3 w-3" />
+              </span>
+              <span className="text-fg-muted text-xs tabular-nums">
+                {stats.chatFunctions}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="bg-bg-type-json rounded-sm p-px">
+                <TypeJson className="text-fg-type-json h-3 w-3" />
+              </span>
+              <span className="text-fg-muted text-xs tabular-nums">
+                {stats.jsonFunctions}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Variants</span>
+        <span className="text-fg-primary text-lg font-semibold tabular-nums">
+          {stats.totalVariants}
+        </span>
+      </div>
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Models</span>
+        <span className="text-fg-primary text-lg font-semibold tabular-nums">
+          {stats.modelsUsed}
+        </span>
+      </div>
+      <div className="flex flex-col gap-0.5 px-5 py-3">
+        <span className="text-fg-tertiary text-xs">Last Activity</span>
+        <span className="text-fg-primary text-lg font-semibold">
+          {stats.lastActivity ? formatRelativeTime(stats.lastActivity) : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function OverviewStatsBarSkeleton() {
+  return (
+    <div className="bg-bg-secondary border-border grid grid-cols-2 divide-x rounded-lg border sm:grid-cols-3 lg:grid-cols-6">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex flex-col gap-1.5 px-5 py-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-6 w-12" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
-    totalInferencesDesc,
+    statsPromise,
     numFunctionsDesc,
     numVariantsDesc,
-    numEpisodesDesc,
     numDatasetsDesc,
     inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
-    numModelsUsedDesc,
   } = loaderData;
 
   return (
-    <PageLayout>
-      <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
+    <PageLayout className="min-h-full">
+      <div className="mx-auto flex w-full max-w-240 flex-1 flex-col gap-8">
         <h1 className="text-2xl font-medium">Overview</h1>
 
-        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+        <React.Suspense fallback={<OverviewStatsBarSkeleton />}>
+          <Await resolve={statsPromise}>
+            {(stats) => <OverviewStatsBar stats={stats} />}
+          </Await>
+        </React.Suspense>
+
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
           <div id="observability" className="flex w-full flex-col gap-2">
             <h2 className="text-md text-fg-secondary font-medium">
               Observability
@@ -232,30 +361,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 source="/observability/inferences"
                 icon={Inferences}
                 title="Inferences"
-                description={totalInferencesDesc}
+                description=""
               />
               <DirectoryCard
                 source="/observability/episodes"
                 icon={Episodes}
                 title="Episodes"
-                description={numEpisodesDesc}
+                description=""
               />
               <DirectoryCard
                 source="/observability/functions"
                 icon={Functions}
                 title="Functions"
-                description={numFunctionsDesc}
+                description=""
               />
               <DirectoryCard
                 source="/observability/models"
                 icon={Model}
                 title="Models"
-                description={numModelsUsedDesc}
+                description=""
               />
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-12 lg:gap-6">
+          <div className="flex w-full flex-col gap-8 lg:gap-6">
             <div id="evaluations" className="flex w-full flex-col gap-2">
               <h2 className="text-md text-fg-secondary font-medium">
                 Evaluations
@@ -319,9 +448,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
+        <div className="flex-1" />
         <div className="border-border my-4 w-full border-t"></div>
 
-        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid w-full grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2 lg:grid-cols-3">
           <div className="w-full">
             <h3 className="text-fg-tertiary mb-4 text-sm font-medium">
               Learn more

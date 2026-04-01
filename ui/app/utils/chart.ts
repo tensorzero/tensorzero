@@ -1,6 +1,7 @@
 /**
- * Standard chart colors for consistent theming across all charts
- * Uses CSS custom properties defined in the theme
+ * Base chart colors from CSS custom properties.
+ * For more than 5 series, use `getChartColor(index)` which generates
+ * unlimited distinct colors via golden-angle hue rotation.
  */
 export const CHART_COLORS = [
   "hsl(var(--chart-1))",
@@ -9,6 +10,19 @@ export const CHART_COLORS = [
   "hsl(var(--chart-4))",
   "hsl(var(--chart-5))",
 ] as const;
+
+/**
+ * Get a chart color by index. Returns themed CSS colors for the first 5,
+ * then generates additional distinct colors using the golden angle.
+ */
+export function getChartColor(index: number): string {
+  if (index < CHART_COLORS.length) {
+    return CHART_COLORS[index];
+  }
+  // Golden angle (~137.5°) produces maximally spaced hues
+  const hue = ((index - CHART_COLORS.length) * 137.508 + 60) % 360;
+  return `hsl(${hue.toFixed(0)} 55% 55%)`;
+}
 
 /**
  * Format numbers for chart axes to avoid overflow with large numbers
@@ -97,23 +111,40 @@ export function formatXAxisTimestamp(
   date: Date,
   granularity: "minute" | "hour" | "day" | "week" | "month" | "cumulative",
 ): string {
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
 
+  const MONTH_SHORT = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
   switch (granularity) {
     case "minute":
-      // Format: MM-DD HH:mm
-      return `${month}-${day} ${hours}:${minutes}`;
+      // Format: Mar 30 14:05
+      return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()} ${hours}:${minutes}`;
     case "hour":
-      // Format: MM-DD HH:00
-      return `${month}-${day} ${hours}:00`;
+      // Format: Mar 30 14:00
+      return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()} ${hours}:00`;
     case "day":
+      // Format: Mar 30
+      return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()}`;
     case "week":
+      // Format: Mar 29 (week start date, like Grafana/Datadog)
+      return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()}`;
     case "month":
-      // Format: YYYY-MM-DD
-      return `${date.getFullYear()}-${month}-${day}`;
+      // Format: Mar 2026
+      return `${MONTH_SHORT[date.getMonth()]} ${date.getFullYear()}`;
     case "cumulative":
       return "All time";
   }
@@ -128,23 +159,40 @@ export function formatTooltipTimestamp(
   granularity: "minute" | "hour" | "day" | "week" | "month" | "cumulative",
 ): string {
   const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
 
+  const MONTH_LONG = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
   switch (granularity) {
     case "minute":
-      // Format: YYYY-MM-DD HH:mm
-      return `${year}-${month}-${day} ${hours}:${minutes}`;
+      // Format: March 30, 2026 14:05
+      return `${MONTH_LONG[date.getMonth()]} ${date.getDate()}, ${year} ${hours}:${minutes}`;
     case "hour":
-      // Format: YYYY-MM-DD HH:00
-      return `${year}-${month}-${day} ${hours}:00`;
+      // Format: March 30, 2026 14:00
+      return `${MONTH_LONG[date.getMonth()]} ${date.getDate()}, ${year} ${hours}:00`;
     case "day":
+      // Format: March 30, 2026
+      return `${MONTH_LONG[date.getMonth()]} ${date.getDate()}, ${year}`;
     case "week":
+      // Format: Week of March 29, 2026
+      return `Week of ${MONTH_LONG[date.getMonth()]} ${date.getDate()}, ${year}`;
     case "month":
-      // Format: YYYY-MM-DD
-      return `${year}-${month}-${day}`;
+      // Format: March 2026
+      return `${MONTH_LONG[date.getMonth()]} ${year}`;
     case "cumulative":
       return "All time";
   }

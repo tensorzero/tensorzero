@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,70 @@ import { formatCost } from "~/utils/cost";
 import { Link } from "react-router";
 import { toInferenceUrl } from "~/utils/urls";
 import type { Datapoint, InferenceResponse } from "~/types/tensorzero";
+import { CodeEditor } from "~/components/ui/code-editor";
+import { diffWords } from "diff";
+
+/** Extract plain text from a chat output for diffing */
+function extractTextFromOutput(
+  response: VariantResponseInfo | null,
+): string | null {
+  if (!response?.output) return null;
+  if (response.type === "json") {
+    const jsonOutput = response.output as JsonInferenceOutput;
+    if (jsonOutput?.raw) return jsonOutput.raw;
+    if (jsonOutput?.parsed) {
+      try {
+        return JSON.stringify(jsonOutput.parsed, null, 2);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+  // Chat output: concatenate text blocks
+  const blocks = response.output as ContentBlockChatOutput[];
+  const textParts = blocks
+    .filter((b): b is { type: "text" } & { text: string } => b.type === "text")
+    .map((b) => b.text);
+  return textParts.length > 0 ? textParts.join("\n") : null;
+}
+
+/** Render inline diff between two strings */
+function TextDiff({ oldText, newText }: { oldText: string; newText: string }) {
+  const parts = useMemo(() => diffWords(oldText, newText), [oldText, newText]);
+
+  return (
+    <div className="bg-bg-secondary border-border overflow-auto rounded-lg border p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+      {parts.map((part, i) => {
+        if (part.added) {
+          return (
+            <span
+              key={i}
+              className="rounded-xs bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+            >
+              {part.value}
+            </span>
+          );
+        }
+        if (part.removed) {
+          return (
+            <span
+              key={i}
+              className="rounded-xs bg-red-100 text-red-800 line-through dark:bg-red-900/40 dark:text-red-300"
+            >
+              {part.value}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="text-fg-secondary">
+            {part.value}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 interface ResponseColumnProps {
   title: string;
@@ -87,25 +151,6 @@ function ResponseColumn({
             )}
 
             <div className="mt-4">{actions}</div>
-
-            <div className="mt-4 grid grid-cols-2 justify-end gap-4">
-              {response.usage && (
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                  <p className="text-xs">
-                    Input tokens: {response.usage.input_tokens}
-                  </p>
-                  <p className="text-xs">
-                    Output tokens: {response.usage.output_tokens}
-                  </p>
-                  {response.usage.cost != null && (
-                    <p className="text-xs">
-                      Cost: {formatCost(response.usage.cost)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
           </>
         )
       )}
@@ -246,6 +291,16 @@ export function VariantResponseModal({
                 />
               </div>
 
+              <UsageComparison
+                baselineUsage={baselineResponse.usage}
+                newUsage={variantResponse?.usage}
+              />
+
+              <DiffSection
+                baselineResponse={baselineResponse}
+                variantResponse={variantResponse}
+              />
+
               <Separator className="my-4" />
               <div>
                 <Button
@@ -261,10 +316,10 @@ export function VariantResponseModal({
                     <ChevronDown className="ml-2 h-4 w-4" />
                   )}
                 </Button>
-                {showRawResponse && (
-                  <pre className="mt-2 overflow-x-auto rounded-md bg-gray-100 p-4 text-xs break-words whitespace-pre-wrap">
-                    <code>{JSON.stringify(rawResponse, null, 2)}</code>
-                  </pre>
+                {showRawResponse && rawResponse && (
+                  <div className="mt-2">
+                    <RawResponseViewer rawResponse={rawResponse} />
+                  </div>
                 )}
               </div>
             </>
@@ -272,5 +327,175 @@ export function VariantResponseModal({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DiffSection({
+  baselineResponse,
+  variantResponse,
+}: {
+  baselineResponse: VariantResponseInfo;
+  variantResponse: VariantResponseInfo | null;
+}) {
+  const oldText = extractTextFromOutput(baselineResponse);
+  const newText = extractTextFromOutput(variantResponse);
+  const [showDiff, setShowDiff] = useState(false);
+
+  if (!oldText || !newText || oldText === newText) return null;
+
+  return (
+    <>
+      <Separator className="my-4" />
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowDiff(!showDiff)}
+          className="w-full justify-between"
+        >
+          Text Diff
+          {showDiff ? (
+            <ChevronUp className="ml-2 h-4 w-4" />
+          ) : (
+            <ChevronDown className="ml-2 h-4 w-4" />
+          )}
+        </Button>
+        {showDiff && (
+          <div className="mt-2">
+            <TextDiff oldText={oldText} newText={newText} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function RawResponseViewer({
+  rawResponse,
+}: {
+  rawResponse: InferenceResponse;
+}) {
+  const jsonString = useMemo(
+    () => JSON.stringify(rawResponse, null, 2),
+    [rawResponse],
+  );
+  return (
+    <CodeEditor
+      value={jsonString}
+      allowedLanguages={["json"]}
+      readOnly
+      maxHeight="400px"
+    />
+  );
+}
+
+function formatTokenDelta(
+  original: number | null | undefined,
+  updated: number | null | undefined,
+): React.ReactNode {
+  if (original == null || updated == null) return null;
+  const delta = updated - original;
+  if (delta === 0) return <span className="text-fg-muted text-xs">=</span>;
+  const sign = delta > 0 ? "+" : "";
+  const color =
+    delta > 0
+      ? "text-red-600 dark:text-red-400"
+      : "text-green-600 dark:text-green-400";
+  return (
+    <span className={`text-xs font-medium ${color}`}>
+      {sign}
+      {delta.toLocaleString()}
+    </span>
+  );
+}
+
+function formatCostDelta(
+  original: number | null | undefined,
+  updated: number | null | undefined,
+): React.ReactNode {
+  if (original == null || updated == null) return null;
+  const delta = updated - original;
+  if (Math.abs(delta) < 0.000001)
+    return <span className="text-fg-muted text-xs">=</span>;
+  const sign = delta > 0 ? "+" : "";
+  const color =
+    delta > 0
+      ? "text-red-600 dark:text-red-400"
+      : "text-green-600 dark:text-green-400";
+  return (
+    <span className={`text-xs font-medium ${color}`}>
+      {sign}
+      {formatCost(delta)}
+    </span>
+  );
+}
+
+function UsageComparison({
+  baselineUsage,
+  newUsage,
+}: {
+  baselineUsage?: InferenceUsage;
+  newUsage?: InferenceUsage;
+}) {
+  if (!baselineUsage && !newUsage) return null;
+
+  return (
+    <>
+      <Separator className="my-4" />
+      <div className="bg-bg-secondary border-border rounded-lg border p-3">
+        <h4 className="text-fg-primary mb-2 text-xs font-semibold">Usage</h4>
+        <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-4 gap-y-1 text-xs">
+          <div className="text-fg-muted font-medium" />
+          <div className="text-fg-muted text-center font-medium">Original</div>
+          <div className="text-fg-muted text-center font-medium">New</div>
+          <div className="text-fg-muted text-center font-medium">Delta</div>
+
+          <div className="text-fg-secondary">Input tokens</div>
+          <div className="text-fg-primary text-center font-mono tabular-nums">
+            {baselineUsage?.input_tokens?.toLocaleString() ?? "—"}
+          </div>
+          <div className="text-fg-primary text-center font-mono tabular-nums">
+            {newUsage?.input_tokens?.toLocaleString() ?? "—"}
+          </div>
+          <div className="text-center font-mono tabular-nums">
+            {formatTokenDelta(
+              baselineUsage?.input_tokens,
+              newUsage?.input_tokens,
+            ) ?? "—"}
+          </div>
+
+          <div className="text-fg-secondary">Output tokens</div>
+          <div className="text-fg-primary text-center font-mono tabular-nums">
+            {baselineUsage?.output_tokens?.toLocaleString() ?? "—"}
+          </div>
+          <div className="text-fg-primary text-center font-mono tabular-nums">
+            {newUsage?.output_tokens?.toLocaleString() ?? "—"}
+          </div>
+          <div className="text-center font-mono tabular-nums">
+            {formatTokenDelta(
+              baselineUsage?.output_tokens,
+              newUsage?.output_tokens,
+            ) ?? "—"}
+          </div>
+
+          {(baselineUsage?.cost != null || newUsage?.cost != null) && (
+            <>
+              <div className="text-fg-secondary">Cost</div>
+              <div className="text-fg-primary text-center font-mono tabular-nums">
+                {baselineUsage?.cost != null
+                  ? formatCost(baselineUsage.cost)
+                  : "—"}
+              </div>
+              <div className="text-fg-primary text-center font-mono tabular-nums">
+                {newUsage?.cost != null ? formatCost(newUsage.cost) : "—"}
+              </div>
+              <div className="text-center font-mono tabular-nums">
+                {formatCostDelta(baselineUsage?.cost, newUsage?.cost) ?? "—"}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

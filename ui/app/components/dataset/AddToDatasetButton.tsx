@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFetcher, Link } from "react-router";
 import { DatasetSelect } from "~/components/dataset/DatasetSelect";
 import {
@@ -46,6 +47,7 @@ export function AddToDatasetButton({
   const fetcher = useFetcher();
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
@@ -56,6 +58,7 @@ export function AddToDatasetButton({
         });
         return () => dismiss({ immediate: true });
       } else if (fetcher.data.redirectTo) {
+        queryClient.invalidateQueries({ queryKey: ["DATASETS_COUNT"] });
         const { dismiss } = toast.success({
           title: "New Datapoint",
           description: "A datapoint was created successfully.",
@@ -69,7 +72,7 @@ export function AddToDatasetButton({
       }
     }
     return;
-  }, [fetcher.state, fetcher.data, toast]);
+  }, [fetcher.state, fetcher.data, toast, queryClient]);
 
   // Helper function to handle dataset selection
   const handleDatasetAction = (
@@ -118,34 +121,54 @@ export function AddToDatasetButton({
 
   const alertDialog = (
     <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
-      <AlertDialogContent className="min-w-[600px]">
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            What should be the datapoint's output?
-          </AlertDialogTitle>
+          <AlertDialogTitle>Datapoint output</AlertDialogTitle>
           <AlertDialogDescription>
-            Each datapoint includes an optional output field. The choice should
-            depend on your use case. For example, you might prefer
-            demonstrations for fine-tuning.
+            Choose what to use as the output for this datapoint.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter className="flex justify-center gap-4">
-          <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
-            Inference Output
+        <div className="flex flex-col gap-2 py-2">
+          <AlertDialogAction
+            onClick={() => handleOutputSelect("inherit")}
+            className="bg-bg-secondary text-fg-primary hover:bg-bg-tertiary border-border h-auto justify-start rounded-lg border px-4 py-3 text-left font-normal shadow-none"
+          >
+            <div>
+              <div className="text-sm font-medium">Inference Output</div>
+              <div className="text-fg-muted mt-0.5 text-xs">
+                Use the model&apos;s original response as-is
+              </div>
+            </div>
           </AlertDialogAction>
           {hasDemonstration && (
             <AlertDialogAction
               onClick={() => handleOutputSelect("demonstration")}
+              className="bg-bg-secondary text-fg-primary hover:bg-bg-tertiary border-border h-auto justify-start rounded-lg border px-4 py-3 text-left font-normal shadow-none"
             >
-              Demonstration
+              <div>
+                <div className="text-sm font-medium">Demonstration</div>
+                <div className="text-fg-muted mt-0.5 text-xs">
+                  Use the human-curated demonstration
+                </div>
+              </div>
             </AlertDialogAction>
           )}
-          <AlertDialogAction onClick={() => handleOutputSelect("none")}>
-            None
+          <AlertDialogAction
+            onClick={() => handleOutputSelect("none")}
+            className="bg-bg-secondary text-fg-primary hover:bg-bg-tertiary border-border h-auto justify-start rounded-lg border px-4 py-3 text-left font-normal shadow-none"
+          >
+            <div>
+              <div className="text-sm font-medium">None</div>
+              <div className="text-fg-muted mt-0.5 text-xs">
+                Input only — no output attached
+              </div>
+            </div>
           </AlertDialogAction>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
+            Cancel
+          </AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
