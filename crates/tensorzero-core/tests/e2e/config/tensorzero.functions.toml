@@ -381,7 +381,7 @@ system_template = "../../../fixtures/config/functions/weather_helper_parallel/pr
 
 [functions.weather_helper_parallel.variants.together-tool]
 type = "chat_completion"
-model = "llama4-maverick-instruct-together"
+model = "glm-4.7-together"
 system_template = "../../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.weather_helper_parallel.variants.vllm]
