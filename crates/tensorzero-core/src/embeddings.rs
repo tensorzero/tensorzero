@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,10 +39,9 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use tensorzero_stored_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
-#[cfg(test)]
 use tensorzero_stored_config::{
-    StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredProviderConfig, StoredUnifiedCostConfig,
+    StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig, StoredExtraBodyConfig,
+    StoredExtraHeadersConfig, StoredProviderConfig, StoredUnifiedCostConfig,
 };
 use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
@@ -202,7 +201,6 @@ impl TryFrom<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderCo
     }
 }
 
-#[cfg(test)]
 impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
     type Error = Error;
 
@@ -216,7 +214,7 @@ impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig 
                     StoredEmbeddingProviderConfig::from(provider),
                 ))
             })
-            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         Ok(StoredEmbeddingModelConfig {
             routing: config.routing.iter().map(ToString::to_string).collect(),
@@ -226,7 +224,6 @@ impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig 
     }
 }
 
-#[cfg(test)]
 impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfig {
     fn from(provider: &UninitializedEmbeddingProviderConfig) -> Self {
         StoredEmbeddingProviderConfig {

@@ -5,6 +5,8 @@ use serde_json::Value;
 
 use crate::StoredRetryConfig;
 
+pub const STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 // --- Top-level ---
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

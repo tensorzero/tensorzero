@@ -965,7 +965,7 @@ fn convert_dicl_variant(
 }
 
 #[expect(deprecated)]
-fn convert_evaluators(
+pub(crate) fn convert_evaluators(
     evaluators: &HashMap<String, UninitializedEvaluatorConfig>,
     prompt_template_version_ids: &HashMap<String, Uuid>,
 ) -> Result<BTreeMap<String, StoredEvaluatorConfig>, Error> {

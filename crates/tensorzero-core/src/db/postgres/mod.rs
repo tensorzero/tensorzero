@@ -29,6 +29,7 @@ pub mod model_inferences;
 pub mod postgres_setup;
 pub mod rate_limiting;
 mod resolve_uuid;
+pub mod stored_config_writes;
 pub mod workflow_evaluation_queries;
 
 mod episode_queries;
