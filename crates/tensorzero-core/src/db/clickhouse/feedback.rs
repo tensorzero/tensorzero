@@ -521,7 +521,7 @@ fn build_variant_performance_query(
                     SELECT
                         target_id,
                         value,
-                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC, toUInt128(id) DESC) as rn
                     FROM {metric_table}
                     WHERE metric_name = {{metric_name:String}}
                 ) f ON i.episode_id = f.target_id AND f.rn = 1
@@ -564,7 +564,7 @@ fn build_variant_performance_query(
                         SELECT
                             target_id,
                             value,
-                            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC, toUInt128(id) DESC) as rn
                         FROM {metric_table}
                         WHERE metric_name = {{metric_name:String}}
                     ) f ON i.episode_id = f.target_id AND f.rn = 1
@@ -609,7 +609,7 @@ fn build_variant_performance_query(
                 SELECT
                     target_id,
                     value,
-                    ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC, toUInt128(id) DESC) as rn
                 FROM {metric_table}
                 WHERE metric_name = {{metric_name:String}}
             ) f ON i.id = f.target_id AND f.rn = 1
@@ -640,7 +640,7 @@ fn build_variant_performance_query(
                     SELECT
                         target_id,
                         value,
-                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+                        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC, toUInt128(id) DESC) as rn
                     FROM {metric_table}
                     WHERE metric_name = {{metric_name:String}}
                 ) f ON i.id = f.target_id AND f.rn = 1
