@@ -130,15 +130,17 @@ where
 {
     let max_attempts = 10;
     let delay = std::time::Duration::from_millis(500);
+    let mut last_response = Value::Null;
     for _ in 0..max_attempts {
         let response: Value = mcp.call_tool(tool_name, params.clone()).await;
         if condition(&response) {
             return response;
         }
+        last_response = response;
         tokio::time::sleep(delay).await;
     }
     panic!(
-        "Condition not met after {max_attempts} attempts for tool `{tool_name}` with params {params}"
+        "Condition not met after {max_attempts} attempts for tool `{tool_name}` with params {params}\nLast response: {last_response}"
     );
 }
 
