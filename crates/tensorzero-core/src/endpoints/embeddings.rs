@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, atomic::Ordering},
+};
 
 use axum::Extension;
 use serde::{Deserialize, Serialize};
@@ -19,6 +22,7 @@ use crate::{
         Usage,
         usage::{ApiType, RawResponseEntry},
     },
+    observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL,
     rate_limiting::{RateLimitingManager, ScopeInfo},
 };
 use tensorzero_auth::middleware::RequestApiKeyExtension;
@@ -110,6 +114,7 @@ pub async fn embeddings(
             "model_name" => params.model_name.clone(),
         )
         .increment(num_inputs as u64);
+        TENSORZERO_INFERENCES_TOTAL.fetch_add(num_inputs as u64, Ordering::Relaxed);
     }
     let clients = InferenceClients {
         http_client: http_client.clone(),

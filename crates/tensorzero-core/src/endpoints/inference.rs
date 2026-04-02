@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -59,6 +60,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
@@ -464,6 +466,7 @@ pub async fn inference(
         }
         counter!("tensorzero_requests_total", &labels).increment(1);
         counter!("tensorzero_inferences_total", &labels).increment(1);
+        TENSORZERO_INFERENCES_TOTAL.fetch_add(1, Ordering::Relaxed);
     }
 
     // Should we stream the inference?

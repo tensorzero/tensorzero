@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::iter::repeat;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::try_join;
 use tracing::instrument;
 use uuid::Uuid;
@@ -50,6 +51,7 @@ use crate::inference::types::{
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
+use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::rate_limiting::ScopeInfo;
 use crate::relay::TensorzeroRelay;
 use crate::tool::{
@@ -237,6 +239,7 @@ pub async fn start_batch_inference(
         "function_name" => params.function_name.to_string(),
     )
     .increment(num_inferences as u64);
+    TENSORZERO_INFERENCES_TOTAL.fetch_add(num_inferences as u64, Ordering::Relaxed);
 
     // Keep track of which variants failed
     let mut variant_errors = IndexMap::new();
