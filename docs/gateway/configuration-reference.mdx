@@ -223,12 +223,21 @@ See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more 
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
+Enabling this setting will offload the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 Each database insert is handled immediately in separate background tasks.
+This is an alternative to `batch_writes` (which is enabled by default) for low-throughput scenarios.
 
 See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
 
-You can't enable `async_writes` and `batch_writes` at the same time.
+You can't enable `async_writes` and `batch_writes` at the same time. Since `batch_writes` is enabled by default, you must explicitly disable it to use `async_writes`:
+
+```toml title="tensorzero.toml"
+[gateway]
+# ...
+observability.async_writes = true
+observability.batch_writes = { enabled = false }
+# ...
+```
 
 <Warning>
 
@@ -240,23 +249,34 @@ This can be problematic in serverless environments that terminate the gateway in
 ### `observability.batch_writes`
 
 - **Type:** object
-- **Required:** no (default: disabled)
+- **Required:** no (default: enabled)
 
-Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
+By default, the gateway uses batch writes to improve latency and throughput by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
 
 The `batch_writes` object supports the following fields:
 
-- `enabled` (boolean): Must be set to `true` to enable batch writes
+- `enabled` (boolean): Set to `false` to disable batch writes and use synchronous writes instead (default: `true`)
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
 - `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
 - `write_queue_capacity` (integer, optional): Maximum number of inferences each gateway instance can hold in memory per table type before dropping new rows to protect against out-of-memory crashes. When set, the write queue is bounded: if full, new rows are dropped and an error is logged. When unset (default), the queue is unbounded — all rows are buffered in memory. We recommend setting this for high-throughput production deployments, and monitoring your gateway instances' memory usage to determine an appropriate value
 
+To disable batch writes and use synchronous writes instead:
+
 ```toml tensorzero.toml
 [gateway]
 # ...
-observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows = 500 }
+observability.batch_writes = { enabled = false }
+# ...
+```
+
+To customize batch write parameters:
+
+```toml tensorzero.toml
+[gateway]
+# ...
+observability.batch_writes = { flush_interval_ms = 200, max_rows = 500 }
 # ...
 ```
 
@@ -266,7 +286,7 @@ You can't enable `async_writes` and `batch_writes` at the same time.
 
 <Warning>
 
-If you enable this setting, make sure that the gateway lives long enough to complete the writes.
+Since batch writes are enabled by default, make sure that the gateway lives long enough to complete the writes.
 This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
 
 </Warning>
