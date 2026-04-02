@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use tensorzero_core::client::client_inference_params::ClientInferenceParams;
+use tensorzero_core::config::Config;
 use tensorzero_core::config::snapshot::SnapshotHash;
-use tensorzero_core::config::{Config, RuntimeOverlay};
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::endpoints::feedback::feedback;
 use tensorzero_core::endpoints::feedback::{FeedbackResponse, Params as FeedbackParams};
@@ -88,7 +88,7 @@ pub async fn get_or_load_config(
         .get_config_snapshot(snapshot_hash.clone())
         .await?;
 
-    let runtime_overlay = RuntimeOverlay::from_config(&app_state.config);
+    let runtime_overlay = (*app_state.runtime_overlay).clone();
 
     let unwritten_config = Config::load_from_snapshot(
         snapshot,
@@ -153,6 +153,7 @@ pub async fn action(
             // Build AppStateData with snapshot config
             let snapshot_app_state = AppStateData::new_for_snapshot(
                 config,
+                app_state.runtime_overlay.clone(),
                 app_state.http_client.clone(),
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),
@@ -170,6 +171,7 @@ pub async fn action(
             // Build AppStateData with snapshot config
             let snapshot_app_state = AppStateData::new_for_snapshot(
                 config,
+                app_state.runtime_overlay.clone(),
                 app_state.http_client.clone(),
                 app_state.clickhouse_connection_info.clone(),
                 app_state.postgres_connection_info.clone(),

@@ -260,7 +260,7 @@ pub async fn start_batch_inference(
         cache_manager,
         rate_limiting_manager,
         tags: tags.clone(),
-        otlp_config: config.gateway.export.otlp.clone(),
+        otlp_config: config.gateway.export.otlp.clone().unwrap_or_default(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),

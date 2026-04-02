@@ -439,7 +439,13 @@ pub async fn run_evaluation_with_app_state(
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
-    let batch_writes_config = &app_state.config.gateway.observability.batch_writes;
+    let batch_writes_config = app_state
+        .config
+        .gateway
+        .observability
+        .batch_writes
+        .clone()
+        .unwrap_or_default();
     let postgres_client = match app_state.postgres_connection_info.get_pool() {
         Some(pool) if batch_writes_config.enabled => {
             let batch_sender = Arc::new(

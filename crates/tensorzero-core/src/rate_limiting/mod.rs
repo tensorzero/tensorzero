@@ -60,11 +60,10 @@ pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
  */
 
 /// Specifies which backend to use for rate limiting.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RateLimitingBackend {
     /// Automatically select: Valkey if available, otherwise Postgres
-    #[default]
     Auto,
     /// Force Postgres backend
     Postgres,
@@ -84,24 +83,24 @@ pub struct RateLimitingConfig {
     pub(crate) default_nano_cost: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedRateLimitingConfig {
-    #[serde(default)]
-    pub(crate) rules: Vec<RateLimitingConfigRule>,
-    #[serde(default = "default_enabled")]
-    pub(crate) enabled: bool,
-    #[serde(default)]
-    pub(crate) backend: RateLimitingBackend,
-    #[serde(default = "default_nano_cost")]
-    pub(crate) default_nano_cost: u64,
+    pub(crate) rules: Option<Vec<RateLimitingConfigRule>>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) backend: Option<RateLimitingBackend>,
+    pub(crate) default_nano_cost: Option<u64>,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
     type Error = Error;
     fn try_from(config: UninitializedRateLimitingConfig) -> Result<Self, Self::Error> {
+        let rules = config.rules.unwrap_or_default();
+        let enabled = config.enabled.unwrap_or(true);
+
         // Make sure no rules have duplicated RateLimitingConfigScopes
         let mut scopes = HashSet::new();
-        for rule in &config.rules {
+        for rule in &rules {
             if !scopes.insert(rule.scope.clone()) {
                 return Err(Error::new(ErrorDetails::DuplicateRateLimitingConfigScope {
                     scope: rule.scope.clone(),
@@ -109,7 +108,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             }
         }
 
-        if !config.enabled && !config.rules.is_empty() {
+        if !enabled && !rules.is_empty() {
             tracing::warn!(
                 "`rate_limiting.enabled` is `false` but rate limiting rules are defined. \
                  Rules will not be enforced."
@@ -117,10 +116,10 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         }
 
         Ok(Self {
-            rules: config.rules,
-            enabled: config.enabled,
-            backend: config.backend,
-            default_nano_cost: config.default_nano_cost,
+            rules,
+            enabled,
+            backend: config.backend.unwrap_or(RateLimitingBackend::Auto),
+            default_nano_cost: config.default_nano_cost.unwrap_or(NANO_DOLLARS_PER_DOLLAR),
         })
     }
 }
@@ -135,10 +134,10 @@ impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
             default_nano_cost,
         } = config;
         Self {
-            rules: rules.clone(),
-            enabled: *enabled,
-            backend: *backend,
-            default_nano_cost: *default_nano_cost,
+            rules: Some(rules.clone()),
+            enabled: Some(*enabled),
+            backend: Some(*backend),
+            default_nano_cost: Some(*default_nano_cost),
         }
     }
 }
@@ -151,23 +150,12 @@ fn default_nano_cost() -> u64 {
     NANO_DOLLARS_PER_DOLLAR // $1.00
 }
 
-impl Default for UninitializedRateLimitingConfig {
-    fn default() -> Self {
-        Self {
-            rules: Vec::new(),
-            enabled: default_enabled(),
-            backend: RateLimitingBackend::default(),
-            default_nano_cost: default_nano_cost(),
-        }
-    }
-}
-
 impl Default for RateLimitingConfig {
     fn default() -> Self {
         Self {
             rules: Vec::new(),
             enabled: default_enabled(),
-            backend: RateLimitingBackend::default(),
+            backend: RateLimitingBackend::Auto,
             default_nano_cost: default_nano_cost(),
         }
     }
@@ -1349,8 +1337,8 @@ mod tests {
         };
 
         let uninitialized = UninitializedRateLimitingConfig {
-            rules: vec![rule_priority_5, rule_always],
-            enabled: true,
+            rules: Some(vec![rule_priority_5, rule_always]),
+            enabled: Some(true),
             ..Default::default()
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)

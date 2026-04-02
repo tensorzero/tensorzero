@@ -4,9 +4,9 @@ export type StreamingTimeouts = {
   /**
    * The time allowed for the first token to be produced.
    */
-  ttft_ms: bigint | null;
+  ttft_ms?: bigint;
   /**
    * The total time allowed for the entire streaming request to complete.
    */
-  total_ms: bigint | null;
+  total_ms?: bigint;
 };

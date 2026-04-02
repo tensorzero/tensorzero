@@ -258,7 +258,7 @@ impl UninitializedExperimentationConfig {
                     );
                 }
                 let adaptive = UninitializedAdaptiveExperimentationConfig {
-                    algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
+                    algorithm: Some(AdaptiveExperimentationAlgorithm::TrackAndStop),
                     inner: config,
                 };
                 Ok(ExperimentationConfig::Adaptive(

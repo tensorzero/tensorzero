@@ -490,8 +490,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
           retries: { num_retries: 0, max_delay_s: 0 },
         },
         timeouts: {
-          non_streaming: { total_ms: null },
-          streaming: { ttft_ms: null, total_ms: null },
+          non_streaming: { total_ms: undefined },
+          streaming: { ttft_ms: undefined, total_ms: undefined },
         },
       };
     } else {

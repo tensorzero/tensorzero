@@ -125,7 +125,7 @@ pub async fn embeddings(
         postgres_connection_info: postgres_connection_info.clone(),
         tags: tags.clone(),
         rate_limiting_manager,
-        otlp_config: config.gateway.export.otlp.clone(),
+        otlp_config: config.gateway.export.otlp.clone().unwrap_or_default(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: None,

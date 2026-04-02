@@ -98,7 +98,7 @@ impl PostgresBatchSender {
         // batch writes to finish. This does not work on the CurrentThread runtime,
         // so we fail here rather than panicking at shutdown.
         if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread
-            && !config.__force_allow_embedded_batch_writes
+            && !config.__force_allow_embedded_batch_writes.unwrap_or(false)
         {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot use Postgres batching with the CurrentThread Tokio runtime"
@@ -215,8 +215,16 @@ fn spawn_flush_task<T: Send + 'static>(
 impl PostgresBatchWriter {
     async fn process(self, pool: PgPool, config: BatchWritesConfig) {
         let mut join_set = JoinSet::new();
-        let batch_timeout = Duration::from_millis(config.flush_interval_ms);
-        let max_rows = config.max_rows_postgres.unwrap_or(config.max_rows);
+        let batch_timeout = Duration::from_millis(
+            config
+                .flush_interval_ms
+                .unwrap_or_else(crate::config::default_flush_interval_ms),
+        );
+        let max_rows = config.max_rows_postgres.unwrap_or_else(|| {
+            config
+                .max_rows
+                .unwrap_or_else(crate::config::default_max_rows)
+        });
 
         // Chat inferences flush task
         spawn_flush_task(

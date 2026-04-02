@@ -142,6 +142,7 @@ regex = { workspace = true }
 dashmap = "6.1.0"
 redis = { workspace = true }
 rustls = { workspace = true }
+serde_with = { workspace = true }
 
 [dev-dependencies]
 googletest = { workspace = true }

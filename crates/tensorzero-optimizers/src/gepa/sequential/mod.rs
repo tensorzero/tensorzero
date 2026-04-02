@@ -87,7 +87,12 @@ impl Optimizer for GEPAConfig {
             Ok(url) => {
                 ClickHouseConnectionInfo::new(
                     &url,
-                    config.gateway.observability.batch_writes.clone(),
+                    config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .clone()
+                        .unwrap_or_default(),
                 )
                 .await?
             }
@@ -95,6 +100,7 @@ impl Optimizer for GEPAConfig {
         };
         let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config: config.clone(),
+            runtime_overlay: Arc::new(tensorzero_core::config::RuntimeOverlay::default()),
             clickhouse_connection_info: gateway_clickhouse,
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
