@@ -1,5 +1,7 @@
 #![cfg(any(test, feature = "e2e_tests"))]
 
+use std::collections::HashMap;
+
 use tonic::async_trait;
 
 use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
@@ -28,12 +30,21 @@ pub trait TestDatabaseHelpers: Send + Sync {
 #[async_trait]
 impl TestDatabaseHelpers for ClickHouseConnectionInfo {
     /// For ClickHouse, this flushes the async insert queue.
+    /// Uses `run_query_synchronous_delayed_err` to avoid the automatic ERROR log
+    /// from `run_query_synchronous`, since this command requires SYSTEM privileges
+    /// that may not be granted (e.g. ClickHouse LTS 25.12 in the merge queue).
     async fn flush_pending_writes(&self) {
         if let Err(e) = self
-            .run_query_synchronous_no_params("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
+            .run_query_synchronous_delayed_err(
+                "SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(),
+                &HashMap::default(),
+            )
             .await
         {
-            tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
+            tracing::warn!(
+                "Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}",
+                e.get_details()
+            );
         }
     }
 
