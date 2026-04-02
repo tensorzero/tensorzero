@@ -56,7 +56,6 @@ pub async fn get_episode_inference_count(
 mod tests {
     use super::*;
     use crate::db::inferences::MockInferenceQueries;
-    use crate::utils::gateway::SwappableAppStateData;
     use std::sync::Arc;
 
     #[tokio::test]
