@@ -59,6 +59,7 @@ describe("dump_optimizer_output", () => {
             timeouts: {} as TimeoutsConfig,
             api_type: "chat_completions",
             provider_tools: [],
+            content_type_overrides: {},
           },
         },
         timeouts: {
