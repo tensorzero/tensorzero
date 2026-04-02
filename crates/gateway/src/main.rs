@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
+use tensorzero_core::config::{default_flush_interval_ms, default_max_rows};
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
@@ -476,8 +477,10 @@ async fn run() -> Result<(), ExitCode> {
     if batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
-            batch_writes.flush_interval_ms.unwrap_or(0),
-            batch_writes.max_rows.unwrap_or(0)
+            batch_writes
+                .flush_interval_ms
+                .unwrap_or_else(default_flush_interval_ms),
+            batch_writes.max_rows.unwrap_or_else(default_max_rows)
         );
     } else {
         tracing::info!("├ Batch Writes: disabled");

@@ -22,8 +22,8 @@ use crate::config::gateway::{
     default_gateway_auth_cache_enabled, default_gateway_auth_cache_ttl_ms,
 };
 use crate::config::{
-    BatchWritesConfig, Config, ConfigFileGlob, RuntimeOverlay, snapshot::ConfigSnapshot,
-    snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+    BatchWritesConfig, Config, ConfigFileGlob, DEFAULT_POSTGRES_CONNECTION_POOL_SIZE,
+    RuntimeOverlay, snapshot::ConfigSnapshot, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
 };
 use crate::db::ConfigQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -789,7 +789,10 @@ pub async fn setup_postgres(
         (Some(true), Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size.unwrap_or(20),
+                config
+                    .postgres
+                    .connection_pool_size
+                    .unwrap_or(DEFAULT_POSTGRES_CONNECTION_POOL_SIZE),
                 &config
                     .gateway
                     .observability
@@ -808,7 +811,10 @@ pub async fn setup_postgres(
         (None, Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size.unwrap_or(20),
+                config
+                    .postgres
+                    .connection_pool_size
+                    .unwrap_or(DEFAULT_POSTGRES_CONNECTION_POOL_SIZE),
                 &config
                     .gateway
                     .observability

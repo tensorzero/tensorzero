@@ -470,11 +470,11 @@ impl ObservabilityConfig {
     }
 }
 
-pub(crate) fn default_flush_interval_ms() -> u64 {
+pub fn default_flush_interval_ms() -> u64 {
     100
 }
 
-pub(crate) fn default_max_rows() -> usize {
+pub fn default_max_rows() -> usize {
     1000
 }
 
@@ -2712,6 +2712,8 @@ impl PathWithContents {
         Ok(Self { path, contents })
     }
 }
+
+pub(crate) const DEFAULT_POSTGRES_CONNECTION_POOL_SIZE: u32 = 20;
 
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
