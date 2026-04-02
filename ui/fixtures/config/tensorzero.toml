@@ -1,5 +1,6 @@
 [gateway]
 debug = true
+disable_pseudonymous_usage_analytics = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
@@ -133,6 +134,9 @@ min_samples_per_variant = 10
 delta = 0.05
 epsilon = 0.1
 update_period_s = 60
+
+[functions.extract_entities.evaluators.exact_match]
+type = "exact_match"
 
 [functions.write_haiku]
 type = "chat"

@@ -40,7 +40,7 @@ not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !t
 junit.path = "junit.xml"
 
 [profile.live-batch]
-default-filter = 'test(batch) and not test(mock)'
+default-filter = 'test(batch) and not test(mock) and not test(postgres)'
 
 [profile.mock-batch]
 default-filter = 'test(batch) and test(mock)'
@@ -237,4 +237,9 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 [[profile.default.overrides]]
 # xAI reasoning multi-turn tests are slow due to reasoning model response times
 filter = 'binary(e2e) and test(test_reasoning_multi_turn_)'
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# OpenRouter proxies to other providers and can be slow, especially for tool use and parallel requests
+filter = 'binary(e2e) and test(providers::openrouter::)'
 slow-timeout = { period = "60s", terminate-after = 2 }

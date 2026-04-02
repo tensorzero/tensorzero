@@ -87,15 +87,14 @@ impl MixtureOfNConfig {
     }
 }
 
+#[serde_with::skip_serializing_none]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
-    #[serde(default)]
     pub weight: Option<f64>,
     #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub fuser: UninitializedFuserConfig,
@@ -110,7 +109,7 @@ pub struct FuserConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {
@@ -1250,6 +1249,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1288,6 +1289,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1345,6 +1348,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1386,6 +1391,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1469,6 +1476,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1507,6 +1516,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1633,6 +1644,8 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(35),
             output_tokens: Some(46),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let expected_content = InternalJsonInferenceOutput {
@@ -1913,6 +1926,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             None, // raw_usage_entries
@@ -1964,6 +1979,8 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }),
                 raw_usage: None,

@@ -94,6 +94,7 @@ use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod disjoint_intervals;
 mod exporter_wrapper;
+pub mod internal_metrics;
 pub mod overhead_timing;
 pub mod request_logging;
 mod span_leak_detector;
@@ -1255,6 +1256,18 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         "tensorzero_inferences_total",
         Unit::Count,
         "Inferences performed by TensorZero",
+    );
+
+    describe_counter!(
+        "tensorzero_input_tokens_total",
+        Unit::Count,
+        "Input tokens consumed by TensorZero inferences",
+    );
+
+    describe_counter!(
+        "tensorzero_output_tokens_total",
+        Unit::Count,
+        "Output tokens consumed by TensorZero inferences",
     );
 
     if !buckets.is_empty() {

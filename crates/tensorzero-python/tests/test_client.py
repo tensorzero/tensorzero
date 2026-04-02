@@ -3662,8 +3662,12 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     captured = capfd.readouterr()
     assert captured.err == ""
     for line in captured.out.splitlines():
+        # TODO(#7006): remove the evaluation assertion when we migrate all configs
         is_expected = (
-            "Using proxy URL from TENSORZERO_E2E_PROXY" in line or "no longer matches directory separators" in line
+            "Using proxy URL from TENSORZERO_E2E_PROXY" in line
+            or "no longer matches directory separators" in line
+            or "Top-level evaluations are deprecated" in line
+            or "Pseudonymous usage analytics is disabled" in line
         )
         assert is_expected, f"Unexpected log line: {line}"
 
@@ -3682,8 +3686,12 @@ async def test_async_embedded_client_no_spurious_log(
     captured = capfd.readouterr()
     assert captured.err == ""
     for line in captured.out.splitlines():
+        # TODO(#7006): remove the evaluation assertion when we migrate all configs
         is_expected = (
-            "Using proxy URL from TENSORZERO_E2E_PROXY" in line or "no longer matches directory separators" in line
+            "Using proxy URL from TENSORZERO_E2E_PROXY" in line
+            or "no longer matches directory separators" in line
+            or "Top-level evaluations are deprecated" in line
+            or "Pseudonymous usage analytics is disabled" in line
         )
         assert is_expected, f"Unexpected log line: {line}"
 

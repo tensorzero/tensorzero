@@ -14,7 +14,10 @@ use crate::endpoints::inference::InferenceResponse;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::{
+    deserialize_json_string, deserialize_option_f64, deserialize_option_i32,
+    deserialize_option_i64, deserialize_optional_json_string,
+};
 
 /// Database struct for deserializing evaluation run info.
 #[derive(Debug, Deserialize, sqlx::FromRow)]
@@ -112,6 +115,22 @@ pub struct EvaluationStatisticsRow {
     pub ci_upper: Option<f64>,
 }
 
+/// Aggregated usage statistics for an evaluation run.
+/// Sums token counts and cost across all inferences in the run.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct EvaluationUsageStatisticsRow {
+    pub evaluation_run_id: Uuid,
+    pub inference_count: u32,
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub total_input_tokens: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub total_output_tokens: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
+    pub total_cost: Option<f64>,
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
+    pub avg_processing_time_ms: Option<f64>,
+}
+
 /// Result of checking for existing human feedback for an inference evaluation.
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
@@ -149,6 +168,18 @@ pub(crate) struct RawEvaluationResultRow {
     pub variant_name: String,
     pub name: Option<String>,
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences for this inference
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences for this inference
+    #[serde(default, deserialize_with = "deserialize_option_i64")]
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(default, deserialize_with = "deserialize_option_f64")]
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds from the inference table
+    #[serde(default, deserialize_with = "deserialize_option_i32")]
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result for a chat function.
@@ -192,6 +223,18 @@ pub struct ChatEvaluationResultRow {
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result for a JSON function.
@@ -235,6 +278,18 @@ pub struct JsonEvaluationResultRow {
     /// When the datapoint was marked as stale (if ever)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staled_at: Option<String>,
+    /// Total input tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    /// Total output tokens across all model inferences
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    /// Total cost across all model inferences (null if any model inference lacks cost)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+    /// Processing time in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms: Option<i32>,
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
@@ -302,6 +357,10 @@ impl RawEvaluationResultRow {
             variant_name: self.variant_name,
             name: self.name,
             staled_at: self.staled_at,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            cost: self.cost,
+            processing_time_ms: self.processing_time_ms,
         })
     }
 
@@ -342,6 +401,10 @@ impl RawEvaluationResultRow {
             variant_name: self.variant_name,
             name: self.name,
             staled_at: self.staled_at,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            cost: self.cost,
+            processing_time_ms: self.processing_time_ms,
         })
     }
 }
@@ -404,6 +467,20 @@ pub trait EvaluationQueries {
         function_name: &str,
         function_type: FunctionConfigType,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error>;
+
+    /// Gets aggregated usage statistics (tokens, cost, processing time) for specified evaluation runs.
+    ///
+    /// For each evaluation run, returns totals across all inferences:
+    /// - inference count
+    /// - total input/output tokens
+    /// - total cost (null if any model inference lacks cost)
+    /// - average processing time in milliseconds
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error>;
 
     /// Gets evaluation statistics (aggregated metrics) for specified evaluation runs.
     ///

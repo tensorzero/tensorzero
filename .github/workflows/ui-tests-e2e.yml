@@ -44,7 +44,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -98,7 +98,7 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -225,7 +225,7 @@ jobs:
     if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
     steps:
       - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -352,7 +352,7 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -457,7 +457,7 @@ jobs:
         if: matrix.auth_mode != 'no_gateway_auth'
         working-directory: ui
         run: |
-          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
+          sed -i '3a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
       - name: Generate gateway API key and configure for auth mode
         if: matrix.auth_mode != 'no_gateway_auth'

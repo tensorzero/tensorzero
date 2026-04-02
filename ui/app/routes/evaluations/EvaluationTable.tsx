@@ -21,6 +21,7 @@ import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type { EvaluationRunInfoById as EvaluationRunInfo } from "~/types/tensorzero";
 import type {
   EvaluationStatistics,
+  EvaluationUsageStatistics,
   EvaluationResultRow,
   Input,
   RunMetricMetadata,
@@ -43,6 +44,8 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { InputElement } from "~/components/input_output/InputElement";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
+import { formatCost } from "~/utils/cost";
+import { InputIcon, Output, Cost, Timer } from "~/components/icons/Icons";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
@@ -210,6 +213,7 @@ interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
+  evaluation_usage_statistics: EvaluationUsageStatistics[];
   metric_names: string[];
   evaluation_name: string;
   function_name: string;
@@ -229,6 +233,13 @@ interface MetricValueInfo {
   is_human_feedback: boolean;
 }
 
+interface UsageInfo {
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+  processing_time_ms?: number;
+}
+
 // Interface for tracking selected rows
 export interface SelectedRowData {
   datapoint_id: string;
@@ -242,6 +253,7 @@ export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
+  evaluation_usage_statistics,
   metric_names,
   evaluation_name,
   function_name,
@@ -296,6 +308,7 @@ export function EvaluationTable({
         {
           generated_output?: JsonInferenceOutput | ContentBlockChatOutput[];
           metrics: Map<string, MetricValueInfo>;
+          usage?: UsageInfo;
         }
       >
     >();
@@ -316,6 +329,18 @@ export function EvaluationTable({
         datapointMap.set(result.evaluation_run_id, {
           generated_output: result.generated_output,
           metrics: new Map(),
+          usage: {
+            input_tokens:
+              result.input_tokens != null
+                ? Number(result.input_tokens)
+                : undefined,
+            output_tokens:
+              result.output_tokens != null
+                ? Number(result.output_tokens)
+                : undefined,
+            cost: result.cost ?? undefined,
+            processing_time_ms: result.processing_time_ms ?? undefined,
+          },
         });
       }
 
@@ -431,6 +456,9 @@ export function EvaluationTable({
                         </TableHead>
                       );
                     })}
+                    <TableHead className="py-2 text-center align-top">
+                      <UsageHeader usageStats={evaluation_usage_statistics} />
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -449,6 +477,7 @@ export function EvaluationTable({
                           | JsonInferenceOutput
                           | ContentBlockChatOutput[];
                         metrics: Map<string, MetricValueInfo>;
+                        usage?: UsageInfo;
                       },
                     ][];
 
@@ -641,6 +670,11 @@ export function EvaluationTable({
                                   </TableCell>
                                 );
                               })}
+
+                              {/* Usage */}
+                              <TableCell className="align-middle">
+                                <UsageCell usage={data.usage} />
+                              </TableCell>
                             </TableRow>
                           );
                         })}
@@ -656,6 +690,150 @@ export function EvaluationTable({
     </ColorAssignerProvider>
   );
 }
+
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}k`;
+  }
+  return tokens.toLocaleString();
+}
+
+function formatDuration(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${ms}ms`;
+}
+
+const UsageHeader = ({
+  usageStats,
+}: {
+  usageStats: EvaluationUsageStatistics[];
+}) => {
+  const [searchParams] = useSearchParams();
+  const selectedRunIdsParam = searchParams.get("evaluation_run_ids") || "";
+  const selectedRunIds = selectedRunIdsParam
+    ? selectedRunIdsParam.split(",")
+    : [];
+
+  const statsByRunId = new Map(
+    usageStats.map((stat) => [stat.evaluation_run_id, stat]),
+  );
+
+  const orderedStats = selectedRunIds
+    .filter((runId) => statsByRunId.has(runId))
+    .map((runId) => statsByRunId.get(runId)!);
+
+  const assigner = useColorAssigner();
+
+  return (
+    <div>
+      <div>Usage</div>
+      {orderedStats.length > 0 && (
+        <div className="text-muted-foreground mt-2 text-center text-xs">
+          {orderedStats.map((stat) => {
+            const variantColorClass = assigner.getColor(
+              stat.evaluation_run_id,
+              false,
+            );
+            return (
+              <div
+                key={stat.evaluation_run_id}
+                className="mt-1 flex items-center justify-center gap-1.5"
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
+                ></div>
+                <UsageSummary stat={stat} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const UsageSummary = ({ stat }: { stat: EvaluationUsageStatistics }) => {
+  const parts: string[] = [];
+
+  const inputTokens =
+    stat.total_input_tokens != null ? Number(stat.total_input_tokens) : null;
+  const outputTokens =
+    stat.total_output_tokens != null ? Number(stat.total_output_tokens) : null;
+
+  if (inputTokens != null && outputTokens != null) {
+    parts.push(`${formatTokenCount(inputTokens + outputTokens)} tok`);
+  } else if (inputTokens != null) {
+    parts.push(`${formatTokenCount(inputTokens)} in`);
+  } else if (outputTokens != null) {
+    parts.push(`${formatTokenCount(outputTokens)} out`);
+  }
+
+  if (stat.total_cost != null) {
+    parts.push(formatCost(stat.total_cost));
+  }
+
+  if (stat.avg_processing_time_ms != null) {
+    parts.push(
+      `avg ${formatDuration(Math.round(stat.avg_processing_time_ms))}`,
+    );
+  }
+
+  if (parts.length === 0) {
+    return <span>n={stat.inference_count}</span>;
+  }
+
+  return (
+    <span>
+      {parts.join(" · ")} (n={stat.inference_count})
+    </span>
+  );
+};
+
+const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
+  if (!usage) return <span className="text-muted-foreground">-</span>;
+
+  const hasAnyData =
+    usage.input_tokens != null ||
+    usage.output_tokens != null ||
+    usage.cost != null ||
+    usage.processing_time_ms != null;
+
+  if (!hasAnyData) return <span className="text-muted-foreground">-</span>;
+
+  return (
+    <div className="text-muted-foreground flex items-center gap-3 text-xs whitespace-nowrap">
+      {usage.input_tokens != null && (
+        <span className="flex items-center gap-1">
+          <InputIcon size={12} />
+          {formatTokenCount(usage.input_tokens)} tok
+        </span>
+      )}
+      {usage.output_tokens != null && (
+        <span className="flex items-center gap-1">
+          <Output size={12} />
+          {formatTokenCount(usage.output_tokens)} tok
+        </span>
+      )}
+      {usage.cost != null && (
+        <span className="flex items-center gap-1">
+          <Cost size={12} />
+          {formatCost(usage.cost)}
+        </span>
+      )}
+      {usage.processing_time_ms != null && (
+        <span className="flex items-center gap-1">
+          <Timer size={12} />
+          {formatDuration(usage.processing_time_ms)}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const EvaluatorHeader = ({
   evaluation_name,

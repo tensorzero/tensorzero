@@ -4,12 +4,13 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ContentBlockOutput, ProviderInferenceResponseArgs};
+use crate::inference::types::{ApiType, ContentBlockOutput};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
@@ -414,6 +415,7 @@ impl<'a> HyperbolicRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -511,6 +513,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -521,7 +524,6 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                 relay_raw_response: None,
                 provider_latency: latency,
                 finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
             },
         ))
     }
@@ -633,6 +635,7 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             }),
         };
         let generic_request = ModelInferenceRequest {

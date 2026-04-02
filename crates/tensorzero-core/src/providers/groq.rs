@@ -19,21 +19,20 @@ use crate::error::{
     DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
-};
+use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Thought, ThoughtChunk, Unknown, Usage,
     batch::StartBatchProviderInferenceResponse,
-    resolved_input::{FileUrl, LazyFile},
+    resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
@@ -1248,6 +1247,8 @@ fn groq_usage_to_tensorzero_usage(usage: GroqUsage) -> Usage {
     Usage {
         input_tokens: Some(usage.prompt_tokens),
         output_tokens: Some(usage.completion_tokens),
+        provider_cache_read_input_tokens: usage.prompt_tokens_details.and_then(|d| d.cached_tokens),
+        provider_cache_write_input_tokens: None,
         cost: None,
     }
 }
@@ -1351,6 +1352,7 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages: messages,
@@ -1363,7 +1365,6 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 finish_reason: Some(groq_finish_reason_to_tensorzero_finish_reason(
                     finish_reason,
                 )),
-                id: model_inference_id,
             },
         ))
     }
@@ -1833,6 +1834,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1936,6 +1938,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2030,6 +2033,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
+                prompt_tokens_details: None,
             },
         };
         let request_body = GroqRequest {
@@ -2093,6 +2097,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
+                prompt_tokens_details: None,
             },
         };
 
@@ -2505,6 +2510,7 @@ mod tests {
         let usage = GroqUsage {
             prompt_tokens: 10,
             completion_tokens: 20,
+            prompt_tokens_details: None,
         };
         let chunk = GroqChatChunk {
             choices: vec![],
@@ -2555,6 +2561,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -2937,6 +2945,7 @@ mod tests {
             usage: GroqUsage {
                 prompt_tokens: 10,
                 completion_tokens: 30,
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {

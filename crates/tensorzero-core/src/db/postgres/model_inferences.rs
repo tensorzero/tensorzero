@@ -15,7 +15,7 @@ use rust_decimal::Decimal;
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ContentBlockOutput, FinishReason, StoredModelInference, StoredRequestMessage,
@@ -90,7 +90,8 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         }
 
         if let Some(batch_sender) = self.batch_sender() {
-            return batch_sender.send_model_inferences(rows);
+            batch_sender.send_model_inferences(rows);
+            return Ok(());
         }
 
         let pool = self.get_pool_result()?;
@@ -175,6 +176,24 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         POSTGRES_QUANTILES
     }
+
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+        let pool = self.get_pool_result()?;
+        get_cache_statistics_timeseries_impl(
+            pool,
+            time_window,
+            max_periods,
+            model_name,
+            model_provider_name,
+        )
+        .await
+    }
 }
 
 // =====================================================================
@@ -195,6 +214,8 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             io.output,
             i.input_tokens,
             i.output_tokens,
+            i.provider_cache_read_input_tokens,
+            i.provider_cache_write_input_tokens,
             i.response_time_ms,
             i.model_name,
             i.model_provider_name,
@@ -227,6 +248,7 @@ pub(super) fn build_insert_model_inferences_query(
         r"
         INSERT INTO tensorzero.model_inferences (
             id, inference_id, input_tokens, output_tokens,
+            provider_cache_read_input_tokens, provider_cache_write_input_tokens,
             response_time_ms, model_name, model_provider_name,
             ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
         ) ",
@@ -237,6 +259,8 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.inference_id)
             .push_bind(row.input_tokens.map(|v| v as i32))
             .push_bind(row.output_tokens.map(|v| v as i32))
+            .push_bind(row.provider_cache_read_input_tokens.map(|v| v as i32))
+            .push_bind(row.provider_cache_write_input_tokens.map(|v| v as i32))
             .push_bind(row.response_time_ms.map(|v| v as i32))
             .push_bind(&row.model_name)
             .push_bind(&row.model_provider_name)
@@ -320,9 +344,6 @@ async fn get_model_usage_timeseries_impl(
 }
 
 /// Builds the query for model usage timeseries (non-cumulative).
-///
-/// Note: `count_with_cost` operates at (model, provider, minute) bucket
-/// granularity, not per-inference. See #6574 for a proposed fix.
 fn build_model_usage_timeseries_query(
     time_window: &TimeWindow,
     max_periods: u32,
@@ -340,7 +361,7 @@ fn build_model_usage_timeseries_query(
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('",
@@ -363,8 +384,6 @@ fn build_model_usage_timeseries_query(
     query_builder
 }
 
-/// Note: `count_with_cost` operates at (model, provider, minute) bucket
-/// granularity, not per-inference. See #6574 for a proposed fix.
 async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimePoint>, Error> {
     let rows: Vec<ModelUsageTimePoint> = sqlx::query_as(
         r"
@@ -375,7 +394,7 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         GROUP BY model_name
         ORDER BY model_name
@@ -383,6 +402,133 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
     )
     .fetch_all(pool)
     .await?;
+
+    Ok(rows)
+}
+
+async fn get_cache_statistics_timeseries_impl(
+    pool: &PgPool,
+    time_window: TimeWindow,
+    max_periods: u32,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+    if time_window == TimeWindow::Cumulative {
+        return get_cache_statistics_cumulative(pool, model_name, model_provider_name).await;
+    }
+
+    let mut query_builder = build_cache_statistics_timeseries_query(
+        &time_window,
+        max_periods,
+        model_name,
+        model_provider_name,
+    );
+    let mut rows: Vec<CacheStatisticsTimePoint> =
+        query_builder.build_query_as().fetch_all(pool).await?;
+
+    for point in &mut rows {
+        point.cache_read_ratio = match (point.cache_read_input_tokens, point.input_tokens) {
+            (Some(read), Some(total)) if total > 0 => Some(read as f64 / total as f64),
+            _ => None,
+        };
+    }
+
+    Ok(rows)
+}
+
+fn build_cache_statistics_timeseries_query(
+    time_window: &TimeWindow,
+    max_periods: u32,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let time_unit = time_window.to_postgres_time_unit();
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT date_trunc('");
+    query_builder.push(time_unit);
+    query_builder.push(
+        "', minute) as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE minute >= (
+            SELECT COALESCE(MAX(date_trunc('",
+    );
+    query_builder.push(time_unit);
+    query_builder.push(
+        "', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.model_provider_statistics
+        ) - INTERVAL '",
+    );
+    query_builder.push(max_periods.to_string());
+    query_builder.push(" ");
+    query_builder.push(time_unit);
+    query_builder.push("s'");
+
+    if let Some(name) = model_name {
+        query_builder.push(" AND model_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+    if let Some(name) = model_provider_name {
+        query_builder.push(" AND model_provider_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+
+    query_builder.push(
+        "
+        GROUP BY period_start, model_name, model_provider_name
+        ORDER BY period_start DESC, model_name, model_provider_name",
+    );
+
+    query_builder
+}
+
+async fn get_cache_statistics_cumulative(
+    pool: &PgPool,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        "SELECT
+            '1970-01-01'::TIMESTAMPTZ as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE TRUE",
+    );
+
+    if let Some(name) = model_name {
+        query_builder.push(" AND model_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+    if let Some(name) = model_provider_name {
+        query_builder.push(" AND model_provider_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+
+    query_builder.push(
+        "
+        GROUP BY model_name, model_provider_name
+        ORDER BY model_name, model_provider_name",
+    );
+
+    let mut rows: Vec<CacheStatisticsTimePoint> =
+        query_builder.build_query_as().fetch_all(pool).await?;
+
+    for point in &mut rows {
+        point.cache_read_ratio = match (point.cache_read_input_tokens, point.input_tokens) {
+            (Some(read), Some(total)) if total > 0 => Some(read as f64 / total as f64),
+            _ => None,
+        };
+    }
 
     Ok(rows)
 }
@@ -661,6 +807,27 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelLatencyDatapoint {
     }
 }
 
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for CacheStatisticsTimePoint {
+    fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        let period_start: DateTime<Utc> = row.try_get("period_start")?;
+        let input_tokens: Option<i64> = row.try_get("input_tokens")?;
+        let cache_read_input_tokens: Option<i64> = row.try_get("cache_read_input_tokens")?;
+        let cache_write_input_tokens: Option<i64> = row.try_get("cache_write_input_tokens")?;
+        let count: Option<i64> = row.try_get("count")?;
+
+        Ok(CacheStatisticsTimePoint {
+            period_start,
+            model_name: row.try_get("model_name")?,
+            model_provider_name: row.try_get("model_provider_name")?,
+            input_tokens: input_tokens.map(|v| v as u64),
+            cache_read_input_tokens: cache_read_input_tokens.map(|v| v as u64),
+            cache_write_input_tokens: cache_write_input_tokens.map(|v| v as u64),
+            count: count.map(|v| v as u64),
+            cache_read_ratio: None, // Computed after fetch
+        })
+    }
+}
+
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
     fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
         let period_start: DateTime<Utc> = row.try_get("period_start")?;
@@ -696,6 +863,10 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let output: Option<Json<Vec<ContentBlockOutput>>> = row.try_get("output")?;
         let input_tokens: Option<i32> = row.try_get("input_tokens")?;
         let output_tokens: Option<i32> = row.try_get("output_tokens")?;
+        let provider_cache_read_input_tokens: Option<i32> =
+            row.try_get("provider_cache_read_input_tokens")?;
+        let provider_cache_write_input_tokens: Option<i32> =
+            row.try_get("provider_cache_write_input_tokens")?;
         let response_time_ms: Option<i32> = row.try_get("response_time_ms")?;
         let model_name: String = row.try_get("model_name")?;
         let model_provider_name: String = row.try_get("model_provider_name")?;
@@ -716,6 +887,8 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             output: output.map(|v| v.0),
             input_tokens: input_tokens.map(|v| v as u32),
             output_tokens: output_tokens.map(|v| v as u32),
+            provider_cache_read_input_tokens: provider_cache_read_input_tokens.map(|v| v as u32),
+            provider_cache_write_input_tokens: provider_cache_write_input_tokens.map(|v| v as u32),
             response_time_ms: response_time_ms.map(|v| v as u32),
             model_name,
             model_provider_name,
@@ -755,7 +928,7 @@ mod tests {
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -777,7 +950,7 @@ mod tests {
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('day', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -799,7 +972,7 @@ mod tests {
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('minute', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -821,7 +994,7 @@ mod tests {
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('week', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -843,7 +1016,7 @@ mod tests {
             SUM(total_output_tokens)::BIGINT as output_tokens,
             SUM(inference_count)::BIGINT as count,
             SUM(total_cost)::NUMERIC as cost,
-            SUM(CASE WHEN total_cost IS NOT NULL THEN inference_count ELSE 0 END)::BIGINT as count_with_cost
+            SUM(count_with_cost)::BIGINT as count_with_cost
         FROM tensorzero.model_provider_statistics
         WHERE minute >= (
             SELECT COALESCE(MAX(date_trunc('month', minute)), '1970-01-01'::TIMESTAMPTZ)
@@ -1169,6 +1342,82 @@ mod tests {
     // Model inference query tests (existing)
     // =========================================================================
 
+    // =========================================================================
+    // Cache statistics query tests
+    // =========================================================================
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_hour_no_filters() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Hour, 24, None, None);
+        assert_query_equals(
+            qb.sql().as_str(),
+            r"SELECT date_trunc('hour', minute) as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE minute >= (
+            SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.model_provider_statistics
+        ) - INTERVAL '24 hours'
+        GROUP BY period_start, model_name, model_provider_name
+        ORDER BY period_start DESC, model_name, model_provider_name",
+        );
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_day_with_model_filter() {
+        let qb =
+            build_cache_statistics_timeseries_query(&TimeWindow::Day, 7, Some("my_model"), None);
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('day', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '7 days'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_does_not_contain(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_week_with_both_filters() {
+        let qb = build_cache_statistics_timeseries_query(
+            &TimeWindow::Week,
+            4,
+            Some("my_model"),
+            Some("my_provider"),
+        );
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('week', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '4 weeks'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_contains(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_month() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Month, 12, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('month', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '12 months'");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_minute() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Minute, 60, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('minute', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '60 minutes'");
+    }
+
+    // =========================================================================
+    // Model inference query tests (existing)
+    // =========================================================================
+
     #[test]
     fn test_build_get_model_inferences_query() {
         let inference_id = Uuid::nil();
@@ -1189,6 +1438,8 @@ mod tests {
                 io.output,
                 i.input_tokens,
                 i.output_tokens,
+                i.provider_cache_read_input_tokens,
+                i.provider_cache_write_input_tokens,
                 i.response_time_ms,
                 i.model_name,
                 i.model_provider_name,
@@ -1217,6 +1468,8 @@ mod tests {
             output: Some(vec![]),
             input_tokens: Some(10),
             output_tokens: Some(20),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             response_time_ms: Some(100),
             model_name: "test_model".to_string(),
             model_provider_name: "test_provider".to_string(),
@@ -1234,9 +1487,10 @@ mod tests {
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
+                provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ",
         );
 
@@ -1265,6 +1519,8 @@ mod tests {
                 output: Some(vec![]),
                 input_tokens: None,
                 output_tokens: None,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 response_time_ms: None,
                 model_name: "model1".to_string(),
                 model_provider_name: "provider1".to_string(),
@@ -1285,6 +1541,8 @@ mod tests {
                 output: Some(vec![]),
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 response_time_ms: Some(500),
                 model_name: "model2".to_string(),
                 model_provider_name: "provider2".to_string(),
@@ -1303,10 +1561,11 @@ mod tests {
             r"
             INSERT INTO tensorzero.model_inferences (
                 id, inference_id, input_tokens, output_tokens,
+                provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
                 ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13),
-            ($14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15),
+            ($16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
             ",
         );
 

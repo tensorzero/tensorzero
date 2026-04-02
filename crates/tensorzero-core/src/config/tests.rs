@@ -90,8 +90,8 @@ async fn test_config_from_toml_table_valid() {
         }
         FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
-    // Check that the async flag is set to false by default
-    assert!(!config.gateway.observability.async_writes);
+    // Check that the async flag is not set by default
+    assert_eq!(config.gateway.observability.async_writes, None);
 
     // To test that variant default weights work correctly,
     // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
@@ -269,7 +269,7 @@ async fn test_config_from_toml_table_valid() {
         "get_temperature"
     );
 
-    assert_eq!(config.postgres.connection_pool_size, 10);
+    assert_eq!(config.postgres.connection_pool_size, Some(10));
 }
 
 /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -3017,6 +3017,7 @@ async fn test_glob_relative_path() {
     let VariantConfig::ChatCompletion(variant) = &function.variants["my_variant"].inner else {
         panic!("Variant should be a chat completion variant");
     };
+    let canonical_temp_dir = temp_dir.path().canonicalize().unwrap();
     assert_eq!(
         variant
             .templates()
@@ -3027,7 +3028,7 @@ async fn test_glob_relative_path() {
             .get_template_key(),
         format!(
             "{}/second/second_template.minijinja",
-            temp_dir.path().display()
+            canonical_temp_dir.display()
         )
     );
     assert_eq!(
@@ -3049,8 +3050,8 @@ async fn test_glob_relative_path() {
             .path
             .get_template_key(),
         format!(
-            "{}/./first/first_template.minijinja",
-            temp_dir.path().display()
+            "{}/first/first_template.minijinja",
+            canonical_temp_dir.display()
         )
     );
 

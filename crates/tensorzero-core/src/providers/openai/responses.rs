@@ -120,13 +120,24 @@ pub struct OpenAIResponsesIncompleteDetails {
 pub struct OpenAIResponsesUsage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
+    #[serde(default)]
+    pub input_tokens_details: Option<OpenAIResponsesInputTokensDetails>,
 }
 
-impl From<OpenAIResponsesUsage> for Usage {
-    fn from(usage: OpenAIResponsesUsage) -> Self {
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct OpenAIResponsesInputTokensDetails {
+    pub cached_tokens: Option<u32>,
+}
+
+impl OpenAIResponsesUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
+            input_tokens: self.input_tokens,
+            output_tokens: self.output_tokens,
+            provider_cache_read_input_tokens: self
+                .input_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -258,12 +269,14 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
             )
         });
-        let usage = self.usage.map(|u| u.into()).unwrap_or_default();
+        let usage = self.usage.map(|u| u.into_usage()).unwrap_or_default();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output,
                 system: generic_request.system.clone(),
-                input_messages: generic_request.messages.clone(),
+                input_messages,
                 raw_request,
                 raw_response: raw_response.clone(),
                 raw_usage,
@@ -271,7 +284,6 @@ impl OpenAIResponsesResponse<'_> {
                 usage,
                 provider_latency: latency,
                 finish_reason,
-                id: model_inference_id,
             },
         ))
     }
@@ -566,6 +578,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
                     fetch_and_encode_input_files_before_inference: request
                         .fetch_and_encode_input_files_before_inference,
                     reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                    content_type_overrides: None,
                 },
             )
             .await?,
@@ -1452,9 +1465,17 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                     Some(v) => v.as_u64().map(|v| v as u32),
                 };
 
+                let provider_cache_read_input_tokens = u
+                    .get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+
                 Usage {
                     input_tokens,
                     output_tokens,
+                    provider_cache_read_input_tokens,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }
             });
@@ -1550,9 +1571,17 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                     Some(v) => v.as_u64().map(|v| v as u32),
                 };
 
+                let provider_cache_read_input_tokens = u
+                    .get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+
                 Usage {
                     input_tokens,
                     output_tokens,
+                    provider_cache_read_input_tokens,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 }
             });
@@ -2513,6 +2542,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -2609,6 +2640,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(200),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             })
         );
@@ -2711,6 +2744,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"

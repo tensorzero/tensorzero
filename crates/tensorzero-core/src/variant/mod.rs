@@ -439,7 +439,12 @@ impl Variant for VariantInfo {
                 }
             }
         };
-        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+        if let Some(timeout) = self
+            .timeouts
+            .non_streaming
+            .as_ref()
+            .and_then(|ns| ns.total_ms)
+        {
             let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
@@ -547,9 +552,10 @@ impl Variant for VariantInfo {
         let ttft_timeout = self
             .timeouts
             .streaming
-            .ttft_ms
+            .as_ref()
+            .and_then(|s| s.ttft_ms)
             .map(tokio::time::Duration::from_millis);
-        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let streaming_total_ms = self.timeouts.streaming.as_ref().and_then(|s| s.total_ms);
         let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
         let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
             (Some(ttft), Some(total)) => {
@@ -1488,6 +1494,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1605,6 +1613,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1838,6 +1848,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1861,7 +1873,7 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -2219,7 +2231,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

@@ -12,7 +12,8 @@ use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, RuntimeOverlay};
+use tensorzero_core::db::HowdyQueries;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
@@ -24,6 +25,7 @@ use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{Arguments, System, Template, Text};
 use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
+use uuid::Uuid;
 
 #[gtest]
 #[tokio::test(flavor = "multi_thread")]
@@ -55,6 +57,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     .unwrap();
     let handle = GatewayHandle::new_with_database_and_http_client(
         config,
+        Arc::new(RuntimeOverlay::default()),
         clickhouse,
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
@@ -88,9 +91,14 @@ async fn test_get_howdy_report() {
     )
     .await
     .unwrap();
-    let howdy_report = get_howdy_report(&clickhouse, &deployment_id, PrimaryDatastore::ClickHouse)
-        .await
-        .unwrap();
+    let howdy_report = get_howdy_report(
+        Some(&clickhouse as &(dyn HowdyQueries + Sync)),
+        Some(deployment_id.as_str()),
+        PrimaryDatastore::ClickHouse,
+        Uuid::now_v7(),
+    )
+    .await
+    .unwrap();
     assert_eq!(howdy_report.inference_count, "0");
     assert_eq!(howdy_report.feedback_count, "0");
     assert!(howdy_report.input_token_total.is_none());
@@ -180,10 +188,14 @@ async fn test_get_howdy_report() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Get the howdy report again
-    let new_howdy_report =
-        get_howdy_report(&clickhouse, &deployment_id, PrimaryDatastore::ClickHouse)
-            .await
-            .unwrap();
+    let new_howdy_report = get_howdy_report(
+        Some(&clickhouse as &(dyn HowdyQueries + Sync)),
+        Some(deployment_id.as_str()),
+        PrimaryDatastore::ClickHouse,
+        Uuid::now_v7(),
+    )
+    .await
+    .unwrap();
     assert!(!new_howdy_report.inference_count.is_empty());
     assert!(!new_howdy_report.feedback_count.is_empty());
     // Since we're in an e2e test, this should be true

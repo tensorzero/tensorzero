@@ -621,9 +621,9 @@ max_tokens = 100
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
-model = "llama4-maverick-instruct-together"
+model = "glm-4.7-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 500
 
 [functions.basic_test.variants.sglang]
 type = "chat_completion"
@@ -997,3 +997,16 @@ model = "error_with_raw_response"
 embedding_model = "dummy-embedding-model"
 k = 0
 max_tokens = 100
+
+# Function-level LLM judge evaluator (tests path resolution for functions.*.evaluators.*.variants.*)
+[functions.basic_test.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[functions.basic_test.evaluators.llm_judge_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::true"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"

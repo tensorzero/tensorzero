@@ -6,7 +6,7 @@ pub type UninitializedCostConfig = Vec<UninitializedCostConfigEntry>;
 pub type UninitializedUnifiedCostConfig =
     Vec<UninitializedCostConfigEntry<UnifiedCostPointerConfig>>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedCostConfigEntry<P = CostPointerConfig> {
     #[serde(flatten)]
     pub pointer: P,
@@ -16,7 +16,7 @@ pub struct UninitializedCostConfigEntry<P = CostPointerConfig> {
     pub required: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedCostRate {
     #[serde(default, with = "crate::serde_utils::decimal_float_option")]
     pub cost_per_million: Option<Decimal>,
@@ -24,7 +24,7 @@ pub struct UninitializedCostRate {
     pub cost_per_unit: Option<Decimal>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CostPointerConfig {
     #[serde(default)]
     pub pointer: Option<String>,
@@ -34,7 +34,7 @@ pub struct CostPointerConfig {
     pub pointer_streaming: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UnifiedCostPointerConfig {
     pub pointer: String,
 }

@@ -439,7 +439,13 @@ pub async fn run_evaluation_with_app_state(
         .recreate()
         .await
         .map_err(|e| anyhow!("Failed to create ClickHouse client for evaluation: {e}"))?;
-    let batch_writes_config = &app_state.config.gateway.observability.batch_writes;
+    let batch_writes_config = app_state
+        .config
+        .gateway
+        .observability
+        .batch_writes
+        .clone()
+        .unwrap_or_default();
     let postgres_client = match app_state.postgres_connection_info.get_pool() {
         Some(pool) if batch_writes_config.enabled => {
             let batch_sender = Arc::new(
@@ -750,6 +756,7 @@ pub async fn run_evaluation_core_streaming(
                         (*success.datapoint).clone(),
                         (*success.inference_response).clone(),
                         success.evaluation_result,
+                        success.processing_time_ms,
                     )))
                 }
                 BatchItemResult::Error(error) => {
@@ -1072,6 +1079,8 @@ pub struct DatapointVariantResult {
     pub inference_response: Arc<InferenceResponse>,
     /// Results from all evaluators (evaluator_name -> result)
     pub evaluation_result: evaluators::EvaluationResult,
+    /// Wall-clock time for the inference call, in milliseconds
+    pub processing_time_ms: f64,
 }
 
 /// Error from processing a single (datapoint, variant) pair.
@@ -1170,7 +1179,8 @@ pub async fn process_batch(
                 // Acquire semaphore permit for the entire task
                 let _permit = semaphore.acquire().await?;
 
-                // Run inference
+                // Run inference (timed)
+                let inference_start = std::time::Instant::now();
                 let inference_response = Arc::new(
                     infer_datapoint(InferDatapointParams {
                         clients: &clients,
@@ -1190,6 +1200,7 @@ pub async fn process_batch(
                         anyhow!("Error inferring for datapoint {}: {e}", datapoint.id())
                     })?,
                 );
+                let processing_time_ms = inference_start.elapsed().as_secs_f64() * 1000.0;
 
                 // Run evaluators
                 let evaluation_result = evaluate_inference(
@@ -1229,6 +1240,7 @@ pub async fn process_batch(
                     variant,
                     inference_response,
                     evaluation_result,
+                    processing_time_ms,
                 })
             });
 

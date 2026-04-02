@@ -7,9 +7,9 @@ use uuid::Uuid;
 
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
-    EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    InferenceEvaluationRunInsert, InferenceEvaluationRunMetadata,
-    InferenceEvaluationRunMetricMetadata, RawEvaluationResultRow,
+    EvaluationRunSearchResult, EvaluationStatisticsRow, EvaluationUsageStatisticsRow,
+    InferenceEvaluationHumanFeedbackRow, InferenceEvaluationRunInsert,
+    InferenceEvaluationRunMetadata, InferenceEvaluationRunMetricMetadata, RawEvaluationResultRow,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::error::{Error, ErrorDetails};
@@ -28,6 +28,17 @@ struct RawEvaluationStatisticsRow {
     datapoint_count: i32,
     mean_metric: f64,
     stdev: Option<f64>,
+}
+
+/// Raw usage statistics row from Postgres.
+#[derive(sqlx::FromRow)]
+struct RawEvaluationUsageStatisticsRow {
+    evaluation_run_id: Uuid,
+    inference_count: i32,
+    total_input_tokens: Option<i64>,
+    total_output_tokens: Option<i64>,
+    total_cost: Option<f64>,
+    avg_processing_time_ms: Option<f64>,
 }
 
 impl RawEvaluationStatisticsRow {
@@ -249,6 +260,36 @@ impl EvaluationQueries for PostgresConnectionInfo {
         );
         let rows: Vec<EvaluationRunInfoByIdRow> = qb.build_query_as().fetch_all(pool).await?;
         Ok(rows)
+    }
+
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        if evaluation_run_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let pool = self.get_pool_result()?;
+        let mut qb = build_get_evaluation_usage_statistics_query(
+            function_name,
+            function_type,
+            evaluation_run_ids,
+        );
+        let raw_rows: Vec<RawEvaluationUsageStatisticsRow> =
+            qb.build_query_as().fetch_all(pool).await?;
+        Ok(raw_rows
+            .into_iter()
+            .map(|row| EvaluationUsageStatisticsRow {
+                evaluation_run_id: row.evaluation_run_id,
+                inference_count: row.inference_count as u32,
+                total_input_tokens: row.total_input_tokens,
+                total_output_tokens: row.total_output_tokens,
+                total_cost: row.total_cost,
+                avg_processing_time_ms: row.avg_processing_time_ms,
+            })
+            .collect())
     }
 
     async fn get_evaluation_statistics(
@@ -605,6 +646,57 @@ fn build_get_evaluation_statistics_query(
     qb
 }
 
+fn build_get_evaluation_usage_statistics_query(
+    function_name: &str,
+    function_type: FunctionConfigType,
+    evaluation_run_ids: &[Uuid],
+) -> QueryBuilder<sqlx::Postgres> {
+    let inference_table = function_type.postgres_table_name();
+    let run_id_strings: Vec<String> = evaluation_run_ids.iter().map(|id| id.to_string()).collect();
+
+    let mut qb = QueryBuilder::new(
+        "WITH filtered_inference AS (SELECT id, tags->>'tensorzero::evaluation_run_id' as evaluation_run_id, processing_time_ms FROM ",
+    );
+    qb.push(inference_table);
+    qb.push(" WHERE tags->>'tensorzero::evaluation_run_id' = ANY(");
+    qb.push_bind(run_id_strings);
+    qb.push(") AND function_name = ");
+    qb.push_bind(function_name.to_string());
+    qb.push(
+        r"),
+        inference_usage AS (
+            SELECT
+                mi.inference_id,
+                SUM(mi.input_tokens)::BIGINT as input_tokens,
+                SUM(mi.output_tokens)::BIGINT as output_tokens,
+                CASE
+                    WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                    ELSE NULL
+                END as cost
+            FROM tensorzero.model_inferences mi
+            WHERE mi.inference_id IN (SELECT id FROM filtered_inference)
+            GROUP BY mi.inference_id
+        )
+        SELECT
+            fi.evaluation_run_id::UUID as evaluation_run_id,
+            COUNT(*)::INT as inference_count,
+            SUM(iu.input_tokens)::BIGINT as total_input_tokens,
+            SUM(iu.output_tokens)::BIGINT as total_output_tokens,
+            CASE
+                WHEN COUNT(*) = COUNT(iu.cost) THEN SUM(iu.cost)::DOUBLE PRECISION
+                ELSE NULL
+            END as total_cost,
+            AVG(fi.processing_time_ms)::DOUBLE PRECISION as avg_processing_time_ms
+        FROM filtered_inference fi
+        LEFT JOIN inference_usage iu ON iu.inference_id = fi.id
+        GROUP BY fi.evaluation_run_id
+        ORDER BY fi.evaluation_run_id DESC
+        ",
+    );
+
+    qb
+}
+
 fn build_get_evaluation_results_query(
     function_name: &str,
     evaluation_run_ids: &[Uuid],
@@ -675,9 +767,27 @@ fn build_get_evaluation_results_query(
     qb.push(inference_data_table);
     qb.push(" WHERE id IN (SELECT inference_id FROM all_inference_ids)");
 
-    // CTE 6: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
+    // CTE 6: inference_usage - aggregated token/cost usage per inference from model_inferences
     qb.push(
         r"),
+        inference_usage AS (
+            SELECT
+                mi.inference_id,
+                SUM(mi.input_tokens)::BIGINT as input_tokens,
+                SUM(mi.output_tokens)::BIGINT as output_tokens,
+                CASE
+                    WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                    ELSE NULL
+                END as cost
+            FROM tensorzero.model_inferences mi
+            WHERE mi.inference_id IN (SELECT inference_id FROM all_inference_ids)
+            GROUP BY mi.inference_id
+        )",
+    );
+
+    // CTE 7: filtered_feedback - latest feedback per (target_id, metric_name) from both boolean and float
+    qb.push(
+        r",
         filtered_feedback AS (
             SELECT * FROM (
                 SELECT DISTINCT ON (target_id, metric_name)
@@ -729,13 +839,19 @@ fn build_get_evaluation_results_query(
             filtered_feedback.feedback_id as feedback_id,
             COALESCE(filtered_feedback.is_human_feedback, false) as is_human_feedback,
             filtered_dp.staled_at::TEXT as staled_at,
-            filtered_inference.variant_name as variant_name
+            filtered_inference.variant_name as variant_name,
+            inference_usage.input_tokens as input_tokens,
+            inference_usage.output_tokens as output_tokens,
+            inference_usage.cost as cost,
+            filtered_inference.processing_time_ms as processing_time_ms
         FROM filtered_dp
         INNER JOIN filtered_inference
             ON (filtered_inference.tags->>'tensorzero::datapoint_id')::UUID = filtered_dp.id
         LEFT JOIN filtered_inference_data
             ON filtered_inference_data.id = filtered_inference.id
             AND filtered_inference_data.created_at = filtered_inference.created_at
+        LEFT JOIN inference_usage
+            ON inference_usage.inference_id = filtered_inference.id
         LEFT JOIN filtered_feedback
             ON filtered_feedback.target_id = filtered_inference.id
         ORDER BY datapoint_id DESC, metric_name DESC
@@ -958,6 +1074,245 @@ mod tests {
             FROM tensorzero.inference_evaluation_human_feedback
             WHERE metric_name = $1 AND datapoint_id = $2 AND output = $3 LIMIT 1
             ",
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_results_query_includes_usage_columns() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_results_query(
+            "test_func",
+            &[run_id],
+            FunctionConfigType::Chat,
+            &["metric1".to_string()],
+            None,
+            100,
+            0,
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // Verify the inference_usage CTE is present
+        assert!(
+            sql.contains("inference_usage AS"),
+            "Expected query to contain inference_usage CTE"
+        );
+        assert!(
+            sql.contains("SUM(mi.input_tokens)"),
+            "Expected inference_usage CTE to sum input_tokens"
+        );
+        assert!(
+            sql.contains("SUM(mi.output_tokens)"),
+            "Expected inference_usage CTE to sum output_tokens"
+        );
+
+        // Verify the usage columns are in the final SELECT
+        assert!(
+            sql.contains("inference_usage.input_tokens as input_tokens"),
+            "Expected final SELECT to include input_tokens from inference_usage"
+        );
+        assert!(
+            sql.contains("inference_usage.output_tokens as output_tokens"),
+            "Expected final SELECT to include output_tokens from inference_usage"
+        );
+        assert!(
+            sql.contains("inference_usage.cost as cost"),
+            "Expected final SELECT to include cost from inference_usage"
+        );
+        assert!(
+            sql.contains("filtered_inference.processing_time_ms as processing_time_ms"),
+            "Expected final SELECT to include processing_time_ms from filtered_inference"
+        );
+
+        // Verify the LEFT JOIN is present
+        assert!(
+            sql.contains("LEFT JOIN inference_usage"),
+            "Expected LEFT JOIN on inference_usage"
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_usage_statistics_query_chat() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_usage_statistics_query(
+            "test_func",
+            FunctionConfigType::Chat,
+            &[run_id],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        assert_query_equals(
+            sql,
+            r"WITH filtered_inference AS (SELECT id, tags->>'tensorzero::evaluation_run_id' as evaluation_run_id, processing_time_ms FROM tensorzero.chat_inferences WHERE tags->>'tensorzero::evaluation_run_id' = ANY($1)
+                AND function_name = $2),
+            inference_usage AS (
+                SELECT
+                    mi.inference_id,
+                    SUM(mi.input_tokens)::BIGINT as input_tokens,
+                    SUM(mi.output_tokens)::BIGINT as output_tokens,
+                    CASE
+                        WHEN COUNT(*) = COUNT(mi.cost) THEN SUM(mi.cost)::DOUBLE PRECISION
+                        ELSE NULL
+                    END as cost
+                FROM tensorzero.model_inferences mi
+                WHERE mi.inference_id IN (SELECT id FROM filtered_inference)
+                GROUP BY mi.inference_id
+            )
+            SELECT
+                fi.evaluation_run_id::UUID as evaluation_run_id,
+                COUNT(*)::INT as inference_count,
+                SUM(iu.input_tokens)::BIGINT as total_input_tokens,
+                SUM(iu.output_tokens)::BIGINT as total_output_tokens,
+                CASE
+                    WHEN COUNT(*) = COUNT(iu.cost) THEN SUM(iu.cost)::DOUBLE PRECISION
+                    ELSE NULL
+                END as total_cost,
+                AVG(fi.processing_time_ms)::DOUBLE PRECISION as avg_processing_time_ms
+            FROM filtered_inference fi
+            LEFT JOIN inference_usage iu ON iu.inference_id = fi.id
+            GROUP BY fi.evaluation_run_id
+            ORDER BY fi.evaluation_run_id DESC
+            ",
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_usage_statistics_query_json() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_usage_statistics_query(
+            "test_func",
+            FunctionConfigType::Json,
+            &[run_id],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // JSON function type should query json_inferences table
+        assert!(
+            sql.contains("tensorzero.json_inferences"),
+            "Expected json_inferences table for JSON function type"
+        );
+        assert!(
+            !sql.contains("tensorzero.chat_inferences"),
+            "Should not reference chat_inferences for JSON function type"
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_statistics_query() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_get_evaluation_statistics_query(
+            "test_func",
+            FunctionConfigType::Chat,
+            &["metric_bool".to_string(), "metric_float".to_string()],
+            &[run_id],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // Verify the CTE structure
+        assert!(
+            sql.contains("filtered_inference AS"),
+            "Expected filtered_inference CTE"
+        );
+        assert!(
+            sql.contains("float_feedback AS"),
+            "Expected float_feedback CTE"
+        );
+        assert!(
+            sql.contains("boolean_feedback AS"),
+            "Expected boolean_feedback CTE"
+        );
+        assert!(sql.contains("float_stats AS"), "Expected float_stats CTE");
+        assert!(
+            sql.contains("boolean_stats AS"),
+            "Expected boolean_stats CTE"
+        );
+
+        // Verify the UNION ALL combining float and boolean stats
+        assert!(
+            sql.contains("UNION ALL"),
+            "Expected UNION ALL to combine float and boolean stats"
+        );
+
+        // Verify key aggregation functions
+        assert!(
+            sql.contains("STDDEV_SAMP"),
+            "Expected STDDEV_SAMP for float metric standard deviation"
+        );
+        assert!(
+            sql.contains("AVG(bf.value::INT)"),
+            "Expected AVG(bf.value::INT) for boolean metric mean"
+        );
+
+        // Verify it uses the chat_inferences table
+        assert!(
+            sql.contains("tensorzero.chat_inferences"),
+            "Expected chat_inferences table for chat function type"
+        );
+
+        // Verify DISTINCT ON deduplication for feedback
+        assert!(
+            sql.contains("DISTINCT ON (target_id, metric_name)"),
+            "Expected DISTINCT ON for feedback deduplication"
+        );
+    }
+
+    #[test]
+    fn test_build_get_evaluation_usage_statistics_query_multiple_run_ids() {
+        let run_id1 = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let run_id2 = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95e").unwrap();
+        let qb = build_get_evaluation_usage_statistics_query(
+            "test_func",
+            FunctionConfigType::Chat,
+            &[run_id1, run_id2],
+        );
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // The query should have the same structure regardless of number of run IDs
+        // (run IDs are passed as a single array parameter)
+        assert!(
+            sql.contains("tags->>'tensorzero::evaluation_run_id' = ANY($1)"),
+            "Expected array-based run ID filter"
+        );
+
+        // Verify the two-level cost NULL semantics pattern
+        // Inner: WHEN COUNT(*) = COUNT(mi.cost) for per-inference cost
+        // Outer: WHEN COUNT(*) = COUNT(iu.cost) for per-run cost
+        let cost_checks: Vec<_> = sql.match_indices("COUNT(*) = COUNT(").collect();
+        assert_eq!(
+            cost_checks.len(),
+            2,
+            "Expected exactly 2 cost NULL check patterns (inner per-inference, outer per-run)"
+        );
+    }
+
+    #[test]
+    fn test_build_count_datapoints_for_evaluation_query() {
+        let run_id = Uuid::parse_str("0196ee9c-d808-74f3-8000-02ec7409b95d").unwrap();
+        let qb = build_count_datapoints_for_evaluation_query("test_func", &[run_id]);
+        let sql = qb.sql();
+        let sql = sql.as_str();
+
+        // Verify structure: uses all_inference_ids CTE, counts distinct datapoint_ids
+        assert!(
+            sql.contains("all_inference_ids AS"),
+            "Expected all_inference_ids CTE"
+        );
+        assert!(
+            sql.contains("COUNT(DISTINCT tags->>'tensorzero::datapoint_id')"),
+            "Expected COUNT DISTINCT on datapoint_id"
+        );
+        // Should query both chat and json tables for inference IDs
+        assert!(
+            sql.contains("tensorzero.chat_inferences"),
+            "Expected chat_inferences in UNION"
+        );
+        assert!(
+            sql.contains("tensorzero.json_inferences"),
+            "Expected json_inferences in UNION"
         );
     }
 }

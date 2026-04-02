@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use tensorzero_derive::TensorZeroDeserialize;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type")]
@@ -100,7 +100,7 @@ impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
 #[serde(rename_all = "snake_case")]
@@ -119,7 +119,7 @@ impl std::fmt::Display for OpenAIStringCheckOp {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
 #[serde(rename_all = "snake_case")]

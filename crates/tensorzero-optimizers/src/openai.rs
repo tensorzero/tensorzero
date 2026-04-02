@@ -145,6 +145,7 @@ impl<'a> OpenAISupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -168,6 +169,7 @@ impl<'a> OpenAISupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -232,6 +234,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
                 // For now, this isn't configurable in RFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -368,6 +371,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     api_type: Default::default(),
                     include_encrypted_reasoning: false,
                     provider_tools: Vec::new(),
+                    content_type_overrides: std::collections::HashMap::new(),
                 },
                 extra_headers: None,
                 extra_body: None,

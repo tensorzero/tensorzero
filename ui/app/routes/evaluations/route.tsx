@@ -143,7 +143,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const evaluationFormData = parseEvaluationFormData({
+    launch_mode: formData.get("launch_mode"),
     evaluation_name: formData.get("evaluation_name"),
+    function_name: formData.get("function_name"),
+    evaluator_names: formData.get("evaluator_names"),
     dataset_name: formData.get("dataset_name"),
     variant_name: formData.get("variant_name"),
     concurrency_limit: formData.get("concurrency_limit"),
@@ -156,27 +159,31 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("Invalid form data", { status: 400 });
   }
 
-  const {
-    evaluation_name,
-    dataset_name,
-    variant_name,
-    concurrency_limit,
-    inference_cache,
-    max_datapoints,
-    precision_targets,
-  } = evaluationFormData;
-
   let evaluation_start_info;
   try {
-    evaluation_start_info = await runEvaluation(
-      evaluation_name,
-      dataset_name,
-      variant_name,
-      concurrency_limit,
-      inference_cache,
-      max_datapoints,
-      precision_targets,
-    );
+    evaluation_start_info =
+      evaluationFormData.launch_mode === "evaluations-legacy"
+        ? await runEvaluation({
+            launchMode: "evaluations-legacy",
+            evaluationName: evaluationFormData.evaluation_name,
+            datasetName: evaluationFormData.dataset_name,
+            variantName: evaluationFormData.variant_name,
+            concurrency: evaluationFormData.concurrency_limit,
+            inferenceCache: evaluationFormData.inference_cache,
+            maxDatapoints: evaluationFormData.max_datapoints,
+            precisionTargets: evaluationFormData.precision_targets,
+          })
+        : await runEvaluation({
+            launchMode: "evaluators",
+            functionName: evaluationFormData.function_name,
+            evaluatorNames: evaluationFormData.evaluator_names,
+            datasetName: evaluationFormData.dataset_name,
+            variantName: evaluationFormData.variant_name,
+            concurrency: evaluationFormData.concurrency_limit,
+            inferenceCache: evaluationFormData.inference_cache,
+            maxDatapoints: evaluationFormData.max_datapoints,
+            precisionTargets: evaluationFormData.precision_targets,
+          });
   } catch (error) {
     logger.error("Error starting evaluation:", error);
     throw new Response(`Failed to start evaluation: ${error}`, {

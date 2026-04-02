@@ -32,7 +32,7 @@ You can easily run the TensorZero UI using Docker Compose:
 services:
   ui:
     image: tensorzero/ui
-    # Add your environment variables the .env file
+    # Add your environment variables the .env file (make sure it contains `TENSORZERO_GATEWAY_URL`)
     env_file:
       - ${ENV_FILE:-.env}
     # Publish the UI to port 4000

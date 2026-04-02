@@ -762,7 +762,9 @@ async fn init_eval_step(
         };
 
         let eval_params = RunEvaluationParams {
-            evaluation_name: params.evaluation_name.clone(),
+            evaluation_name: Some(params.evaluation_name.clone()),
+            function_name: None,
+            evaluator_names: None,
             dataset_name: None,
             datapoint_ids: Some(params.datapoint_ids.clone()),
             variant_name: variant_name.clone(),
@@ -810,7 +812,9 @@ async fn eval_variant_step(
     };
 
     let eval_params = RunEvaluationParams {
-        evaluation_name: params.evaluation_name,
+        evaluation_name: Some(params.evaluation_name),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: params.dataset_name,
         datapoint_ids: params.datapoint_ids,
         variant_name: params.variant_name.clone(),
@@ -870,7 +874,9 @@ async fn eval_analyze_mutate_step(
     };
 
     let eval_params = RunEvaluationParams {
-        evaluation_name: params.evaluation_name.clone(),
+        evaluation_name: Some(params.evaluation_name.clone()),
+        function_name: None,
+        evaluator_names: None,
         dataset_name: None,
         datapoint_ids: Some(params.datapoint_ids.clone()),
         variant_name: params.variant_name.clone(),
@@ -927,7 +933,7 @@ async fn eval_analyze_mutate_step(
         .function_context
         .load(
             &params.gepa_config.function_name,
-            &uninitialized_config.metrics,
+            &uninitialized_config.metrics.unwrap_or_default(),
         )
         .map_err(|e| anyhow::anyhow!("Failed to load function context: {e}"))?;
 

@@ -4,5 +4,5 @@ export type NonStreamingTimeouts = {
   /**
    * The total time allowed for the non-streaming request to complete.
    */
-  total_ms: bigint | null;
+  total_ms?: bigint;
 };

@@ -5,22 +5,20 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::Extension;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{ConsumeTicketsReceipt, ConsumeTicketsRequest, ReturnTicketsRequest};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
-use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+
+pub use tensorzero_error::rate_limiting_types::*;
 
 mod rate_limiting_manager;
 
 // Re-export RateLimitingManager at the module level
 pub use rate_limiting_manager::RateLimitingManager;
-
-/// 1 dollar = 1,000,000,000 nano-dollars
-pub const NANO_DOLLARS_PER_DOLLAR: u64 = 1_000_000_000;
 
 /// Convert a dollar amount (f64) to nano-dollars (u64).
 /// Negative values are clamped to 0. Values that would overflow `u64` are clamped to `u64::MAX`.
@@ -33,11 +31,6 @@ pub fn cost_to_nano_cost(cost: f64) -> u64 {
         return u64::MAX;
     }
     nano_cost as u64
-}
-
-/// Convert nano-dollars (u64) back to dollars (f64).
-pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
-    nano_cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
 }
 
 /// Convert a `Decimal` dollar amount to nano-dollars (u64).
@@ -67,11 +60,10 @@ pub fn decimal_cost_to_nano_cost(cost: Decimal) -> u64 {
  */
 
 /// Specifies which backend to use for rate limiting.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RateLimitingBackend {
     /// Automatically select: Valkey if available, otherwise Postgres
-    #[default]
     Auto,
     /// Force Postgres backend
     Postgres,
@@ -91,24 +83,24 @@ pub struct RateLimitingConfig {
     pub(crate) default_nano_cost: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedRateLimitingConfig {
-    #[serde(default)]
-    pub(crate) rules: Vec<RateLimitingConfigRule>,
-    #[serde(default = "default_enabled")]
-    pub(crate) enabled: bool,
-    #[serde(default)]
-    pub(crate) backend: RateLimitingBackend,
-    #[serde(default = "default_nano_cost")]
-    pub(crate) default_nano_cost: u64,
+    pub(crate) rules: Option<Vec<RateLimitingConfigRule>>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) backend: Option<RateLimitingBackend>,
+    pub(crate) default_nano_cost: Option<u64>,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
     type Error = Error;
     fn try_from(config: UninitializedRateLimitingConfig) -> Result<Self, Self::Error> {
+        let rules = config.rules.unwrap_or_default();
+        let enabled = config.enabled.unwrap_or(true);
+
         // Make sure no rules have duplicated RateLimitingConfigScopes
         let mut scopes = HashSet::new();
-        for rule in &config.rules {
+        for rule in &rules {
             if !scopes.insert(rule.scope.clone()) {
                 return Err(Error::new(ErrorDetails::DuplicateRateLimitingConfigScope {
                     scope: rule.scope.clone(),
@@ -116,7 +108,7 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
             }
         }
 
-        if !config.enabled && !config.rules.is_empty() {
+        if !enabled && !rules.is_empty() {
             tracing::warn!(
                 "`rate_limiting.enabled` is `false` but rate limiting rules are defined. \
                  Rules will not be enforced."
@@ -124,10 +116,10 @@ impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
         }
 
         Ok(Self {
-            rules: config.rules,
-            enabled: config.enabled,
-            backend: config.backend,
-            default_nano_cost: config.default_nano_cost,
+            rules,
+            enabled,
+            backend: config.backend.unwrap_or(RateLimitingBackend::Auto),
+            default_nano_cost: config.default_nano_cost.unwrap_or(NANO_DOLLARS_PER_DOLLAR),
         })
     }
 }
@@ -142,10 +134,10 @@ impl From<&RateLimitingConfig> for UninitializedRateLimitingConfig {
             default_nano_cost,
         } = config;
         Self {
-            rules: rules.clone(),
-            enabled: *enabled,
-            backend: *backend,
-            default_nano_cost: *default_nano_cost,
+            rules: Some(rules.clone()),
+            enabled: Some(*enabled),
+            backend: Some(*backend),
+            default_nano_cost: Some(*default_nano_cost),
         }
     }
 }
@@ -158,23 +150,12 @@ fn default_nano_cost() -> u64 {
     NANO_DOLLARS_PER_DOLLAR // $1.00
 }
 
-impl Default for UninitializedRateLimitingConfig {
-    fn default() -> Self {
-        Self {
-            rules: Vec::new(),
-            enabled: default_enabled(),
-            backend: RateLimitingBackend::default(),
-            default_nano_cost: default_nano_cost(),
-        }
-    }
-}
-
 impl Default for RateLimitingConfig {
     fn default() -> Self {
         Self {
             rules: Vec::new(),
             enabled: default_enabled(),
-            backend: RateLimitingBackend::default(),
+            backend: RateLimitingBackend::Auto,
             default_nano_cost: default_nano_cost(),
         }
     }
@@ -302,42 +283,6 @@ fn align_and_check_limits(
     Ok(aligned_receipts)
 }
 
-#[derive(Debug, PartialEq)]
-pub struct FailedRateLimit {
-    pub key: ActiveRateLimitKey,
-    /// Raw value in internal units (nano-dollars for Cost, count for others)
-    pub requested: u64,
-    /// Raw value in internal units (nano-dollars for Cost, count for others)
-    pub available: u64,
-    pub resource: RateLimitResource,
-    pub scope_key: Vec<RateLimitingScopeKey>,
-}
-
-impl Serialize for FailedRateLimit {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("FailedRateLimit", 5)?;
-        state.serialize_field("key", &self.key)?;
-        // For Cost resources, convert nano-dollars to dollars for display
-        match self.resource {
-            RateLimitResource::Cost => {
-                state.serialize_field("requested", &nano_cost_to_cost(self.requested))?;
-                state.serialize_field("available", &nano_cost_to_cost(self.available))?;
-            }
-            _ => {
-                state.serialize_field("requested", &self.requested)?;
-                state.serialize_field("available", &self.available)?;
-            }
-        }
-        state.serialize_field("resource", &self.resource)?;
-        state.serialize_field("scope_key", &self.scope_key)?;
-        state.end()
-    }
-}
-
 /// Since the database will tell us all borrows failed if any failed, we figure out which rate limits
 /// actually blocked the request and return an informative error.
 fn get_failed_rate_limits_err(
@@ -431,21 +376,6 @@ struct ActiveRateLimitKeyHelper<'a> {
     scope_key: &'a [RateLimitingScopeKey],
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Eq, Hash)]
-pub struct ActiveRateLimitKey(pub String);
-
-impl ActiveRateLimitKey {
-    pub fn new(key: String) -> Self {
-        ActiveRateLimitKey(key)
-    }
-}
-
-impl std::fmt::Display for ActiveRateLimitKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl ActiveRateLimit {
     pub fn get_key(&self) -> Result<ActiveRateLimitKey, Error> {
         let key = ActiveRateLimitKeyHelper {
@@ -458,7 +388,7 @@ impl ActiveRateLimit {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
@@ -472,7 +402,7 @@ impl RateLimitingConfigRule {
         scope_info: &'a ScopeInfo,
         max_priority: &mut usize,
     ) -> Option<Vec<ActiveRateLimit>> {
-        let key = self.scope.get_key_if_matches(scope_info)?;
+        let key = get_scope_keys_if_matches(&self.scope, scope_info)?;
         if let RateLimitingConfigPriority::Priority(priority) = self.priority
             && priority > *max_priority
         {
@@ -491,34 +421,13 @@ impl RateLimitingConfigRule {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
     pub capacity: u64,
     pub refill_rate: u64,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum RateLimitResource {
-    ModelInference,
-    Token,
-    Cost,
-}
-
-impl RateLimitResource {
-    /// Returns the snake_case string representation matching the serde serialization
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            RateLimitResource::ModelInference => "model_inference",
-            RateLimitResource::Token => "token",
-            RateLimitResource::Cost => "cost",
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -638,65 +547,20 @@ pub enum RateLimitingConfigPriority {
     Always,
 }
 
-/// Wrapper type for rate limiting scopes.
-/// Forces them to be sorted on construction
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(try_from = "Vec<RateLimitingConfigScope>")]
-pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
-
-impl TryFrom<Vec<RateLimitingConfigScope>> for RateLimitingConfigScopes {
-    type Error = &'static str;
-
-    fn try_from(scopes: Vec<RateLimitingConfigScope>) -> Result<Self, Self::Error> {
-        Self::new(scopes)
-    }
-}
-
-impl RateLimitingConfigScopes {
-    /// Creates a new instance of `RateLimitingConfigScopes`.
-    /// Ensures that there are no duplicate scopes and sorts them.
-    pub fn new(mut scopes: Vec<RateLimitingConfigScope>) -> Result<Self, &'static str> {
-        // First, we check to make sure there are no duplicate scopes
-        if scopes.len() != scopes.iter().collect::<HashSet<_>>().len() {
-            return Err("duplicate scopes are not allowed in the same rule");
-        }
-        // We sort the scopes so we are guaranteed a
-        // stable order when generating the key
-        scopes.sort();
-        Ok(RateLimitingConfigScopes(scopes))
-    }
-
-    /// Returns the key (as a Vec) if the scope matches the given info, or None if it does not.
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<Vec<RateLimitingScopeKey>> {
-        self.0
-            .iter()
-            .map(|scope| scope.get_key_if_matches(info))
-            .collect::<Option<Vec<_>>>()
-    }
-}
-
 trait Scope {
     fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey>;
 }
 
-// IMPORTANT: the types below are used to set up scopes and keys for rate limiting.
-// We need the keys that have already been used in production to remain stable.
-// So, we cannot change the sort order.
-// As scope types are added, please append new ones at the end to maintain a stable sort order,
-// and add a test each time that ensures the sort order is maintained as further changes are made.
-//
-// Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(untagged)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum RateLimitingConfigScope {
-    Tag(TagRateLimitingConfigScope),
-    ApiKeyPublicId(ApiKeyPublicIdConfigScope),
-    // model_name = "my_model"
-    // function_name = "my_function"
+/// Returns the key (as a Vec) if all scopes match the given info, or None if any do not.
+fn get_scope_keys_if_matches(
+    scopes: &RateLimitingConfigScopes,
+    info: &ScopeInfo,
+) -> Option<Vec<RateLimitingScopeKey>> {
+    scopes
+        .as_slice()
+        .iter()
+        .map(|scope| scope.get_key_if_matches(info))
+        .collect::<Option<Vec<_>>>()
 }
 
 impl Scope for RateLimitingConfigScope {
@@ -710,40 +574,15 @@ impl Scope for RateLimitingConfigScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct TagRateLimitingConfigScope {
-    tag_key: String,
-    tag_value: TagValueScope,
-}
+impl Scope for TagRateLimitingConfigScope {
+    fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey> {
+        let value = info.tags.get(self.tag_key())?;
 
-impl TagRateLimitingConfigScope {
-    /// Creates a new `TagRateLimitingConfigScope`.
-    ///
-    /// Note: This is primarily for internal use by stored config deserialization.
-    pub(crate) fn new(tag_key: String, tag_value: TagValueScope) -> Self {
-        Self { tag_key, tag_value }
-    }
-
-    #[cfg(test)]
-    pub fn tag_key(&self) -> &str {
-        &self.tag_key
-    }
-
-    #[cfg(test)]
-    pub fn tag_value(&self) -> &TagValueScope {
-        &self.tag_value
-    }
-
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
-        let value = info.tags.get(&self.tag_key)?;
-
-        match self.tag_value {
-            TagValueScope::Concrete(ref expected_value) => {
+        match self.tag_value() {
+            TagValueScope::Concrete(expected_value) => {
                 if value == expected_value {
                     Some(RateLimitingScopeKey::TagConcrete {
-                        key: self.tag_key.clone(),
+                        key: self.tag_key().to_string(),
                         value: value.clone(),
                     })
                 } else {
@@ -751,34 +590,20 @@ impl TagRateLimitingConfigScope {
                 }
             }
             TagValueScope::Each => Some(RateLimitingScopeKey::TagEach {
-                key: self.tag_key.clone(),
+                key: self.tag_key().to_string(),
                 value: value.clone(),
             }),
             TagValueScope::Total => Some(RateLimitingScopeKey::TagTotal {
-                key: self.tag_key.clone(),
+                key: self.tag_key().to_string(),
             }),
         }
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct ApiKeyPublicIdConfigScope {
-    api_key_public_id: ApiKeyPublicIdValueScope,
-}
-
-impl ApiKeyPublicIdConfigScope {
-    /// Creates a new `ApiKeyPublicIdConfigScope`.
-    ///
-    /// Note: This is primarily for internal use by stored config deserialization.
-    pub(crate) fn new(api_key_public_id: ApiKeyPublicIdValueScope) -> Self {
-        Self { api_key_public_id }
-    }
-
-    fn get_key_if_matches<'a>(&'a self, info: &'a ScopeInfo) -> Option<RateLimitingScopeKey> {
-        match self.api_key_public_id {
-            ApiKeyPublicIdValueScope::Concrete(ref key) => {
+impl Scope for ApiKeyPublicIdConfigScope {
+    fn get_key_if_matches(&self, info: &ScopeInfo) -> Option<RateLimitingScopeKey> {
+        match self.api_key_public_id() {
+            ApiKeyPublicIdValueScope::Concrete(key) => {
                 if info
                     .api_key_public_id
                     .as_ref()
@@ -797,124 +622,6 @@ impl ApiKeyPublicIdConfigScope {
                     api_key_public_id: key.clone(),
                 }
             }),
-        }
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum TagValueScope {
-    Concrete(String),
-    Each,
-    Total,
-}
-
-impl Serialize for TagValueScope {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            TagValueScope::Concrete(s) => serializer.serialize_str(s),
-            TagValueScope::Each => serializer.serialize_str("tensorzero::each"),
-            TagValueScope::Total => serializer.serialize_str("tensorzero::total"),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for TagValueScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "tensorzero::each" => Ok(TagValueScope::Each),
-            "tensorzero::total" => Ok(TagValueScope::Total),
-            _ if s.starts_with("tensorzero::") => Err(serde::de::Error::custom(
-                r#"Tag values in rate limiting scopes besides tensorzero::each and tensorzero::total may not start with "tensorzero::"."#,
-            )),
-            _ => Ok(TagValueScope::Concrete(s)),
-        }
-    }
-}
-
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub enum ApiKeyPublicIdValueScope {
-    Concrete(String),
-    Each,
-}
-
-impl Serialize for ApiKeyPublicIdValueScope {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            ApiKeyPublicIdValueScope::Concrete(s) => serializer.serialize_str(s),
-            ApiKeyPublicIdValueScope::Each => serializer.serialize_str("tensorzero::each"),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        if s == "tensorzero::each" {
-            Ok(ApiKeyPublicIdValueScope::Each)
-        } else if s.starts_with("tensorzero::") {
-            Err(serde::de::Error::custom(
-                r#"API key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
-            ))
-        } else if s.len() != PUBLIC_ID_LENGTH {
-            Err(serde::de::Error::custom(format!(
-                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
-            )))
-        } else {
-            Ok(ApiKeyPublicIdValueScope::Concrete(s))
-        }
-    }
-}
-
-/// Type that lists the different ways a Scope + matching ScopeInfo can be
-/// serialized into a key.
-/// We need this struct to have stable serialization behavior because we want rate limits to be stable
-/// across releases.
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum RateLimitingScopeKey {
-    TagTotal { key: String },
-    TagEach { key: String, value: String },
-    TagConcrete { key: String, value: String },
-    ApiKeyPublicIdEach { api_key_public_id: Arc<str> },
-    ApiKeyPublicIdConcrete { api_key_public_id: Arc<str> },
-}
-
-impl RateLimitingScopeKey {
-    /// Returns a representation that matches the config format for easy lookup
-    pub fn to_config_representation(&self) -> String {
-        match self {
-            RateLimitingScopeKey::TagTotal { key } => {
-                format!(r#"tag_key="{key}", tag_value="tensorzero::total""#)
-            }
-            RateLimitingScopeKey::TagEach { key, value } => {
-                format!(r#"tag_key="{key}", tag_value="tensorzero::each" (matched: "{value}")"#)
-            }
-            RateLimitingScopeKey::TagConcrete { key, value } => {
-                format!(r#"tag_key="{key}", tag_value="{value}""#)
-            }
-            RateLimitingScopeKey::ApiKeyPublicIdEach { api_key_public_id } => {
-                format!(r#"api_key_public_id="tensorzero::each" (matched: "{api_key_public_id}")"#)
-            }
-            RateLimitingScopeKey::ApiKeyPublicIdConcrete { api_key_public_id } => {
-                format!(r#"api_key_public_id="{api_key_public_id}""#)
-            }
         }
     }
 }
@@ -1030,14 +737,13 @@ pub fn get_estimated_tokens(text: &str) -> u64 {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::ops::Deref;
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_concrete_match() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
 
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
@@ -1059,10 +765,10 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_concrete_no_match() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
 
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "456".to_string());
@@ -1078,10 +784,10 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_each() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Each,
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Each,
+        ));
 
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "any_value".to_string());
@@ -1103,10 +809,10 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_tag_total() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Total,
+        ));
 
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "specific_value".to_string());
@@ -1127,10 +833,10 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scope_get_key_if_matches_missing_tag() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Each,
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Each,
+        ));
 
         let tags = HashMap::new(); // Empty tags
 
@@ -1153,16 +859,16 @@ mod tests {
             api_key_public_id: None,
         };
 
-        let keys = scopes.get_key_if_matches(&info).unwrap();
+        let keys = get_scope_keys_if_matches(&scopes, &info).unwrap();
         assert_eq!(keys.len(), 0);
     }
 
     #[test]
     fn test_rate_limiting_config_scopes_get_key_if_matches_single_match() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
         let scopes = RateLimitingConfigScopes::new(vec![scope]).unwrap();
 
         let mut tags = HashMap::new();
@@ -1173,7 +879,7 @@ mod tests {
             api_key_public_id: None,
         };
 
-        let keys = scopes.get_key_if_matches(&info).unwrap();
+        let keys = get_scope_keys_if_matches(&scopes, &info).unwrap();
         assert_eq!(keys.len(), 1);
 
         match &keys[0] {
@@ -1187,10 +893,10 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scopes_get_key_if_matches_single_no_match() {
-        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
+        let scope = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
         let scopes = RateLimitingConfigScopes::new(vec![scope]).unwrap();
 
         let mut tags = HashMap::new();
@@ -1201,20 +907,20 @@ mod tests {
             api_key_public_id: None,
         };
 
-        let keys = scopes.get_key_if_matches(&info);
+        let keys = get_scope_keys_if_matches(&scopes, &info);
         assert!(keys.is_none());
     }
 
     #[test]
     fn test_rate_limiting_config_scopes_get_key_if_matches_multiple_all_match() {
-        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Concrete("app123".to_string()),
-        });
-        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
+        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "application_id".to_string(),
+            TagValueScope::Concrete("app123".to_string()),
+        ));
+        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Total,
+        ));
         let scopes = RateLimitingConfigScopes::new(vec![scope1, scope2]).unwrap();
 
         let mut tags = HashMap::new();
@@ -1226,7 +932,7 @@ mod tests {
             api_key_public_id: None,
         };
 
-        let keys = scopes.get_key_if_matches(&info).unwrap();
+        let keys = get_scope_keys_if_matches(&scopes, &info).unwrap();
         assert_eq!(keys.len(), 2);
 
         // Check that keys are in the same stable order as the scopes
@@ -1248,14 +954,14 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scopes_get_key_if_matches_multiple_partial_match() {
-        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Concrete("app123".to_string()),
-        });
-        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("user456".to_string()),
-        });
+        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "application_id".to_string(),
+            TagValueScope::Concrete("app123".to_string()),
+        ));
+        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("user456".to_string()),
+        ));
         let scopes = RateLimitingConfigScopes::new(vec![scope1, scope2]).unwrap();
 
         let mut tags = HashMap::new();
@@ -1268,21 +974,21 @@ mod tests {
         };
 
         // Should return None because not all scopes match
-        let keys = scopes.get_key_if_matches(&info);
+        let keys = get_scope_keys_if_matches(&scopes, &info);
         assert!(keys.is_none());
     }
 
     #[test]
     fn test_rate_limiting_config_scopes_get_key_stability_across_different_scope_info() {
         // Test that the same scopes + different but equivalent ScopeInfo produce the same key structure
-        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
-        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Each,
-        });
+        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "application_id".to_string(),
+            TagValueScope::Total,
+        ));
+        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Each,
+        ));
         let scopes = RateLimitingConfigScopes::new(vec![scope1, scope2]).unwrap();
 
         // First ScopeInfo
@@ -1305,8 +1011,8 @@ mod tests {
             api_key_public_id: None,
         };
 
-        let keys1 = scopes.get_key_if_matches(&info1).unwrap();
-        let keys2 = scopes.get_key_if_matches(&info2).unwrap();
+        let keys1 = get_scope_keys_if_matches(&scopes, &info1).unwrap();
+        let keys2 = get_scope_keys_if_matches(&scopes, &info2).unwrap();
 
         // Keys should have the same structure but different values for TagEach
         assert_eq!(keys1.len(), keys2.len());
@@ -1353,14 +1059,14 @@ mod tests {
 
     #[test]
     fn test_rate_limiting_config_scopes_new_duplicate_scopes_error() {
-        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
-        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
+        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
+        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
 
         let result = RateLimitingConfigScopes::new(vec![scope1, scope2]);
         assert!(result.is_err());
@@ -1373,18 +1079,18 @@ mod tests {
     #[test]
     fn test_rate_limiting_config_scopes_new_sorting_stability() {
         // Test that scopes are sorted consistently regardless of input order
-        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "application_id".to_string(),
-            tag_value: TagValueScope::Each,
-        });
-        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
-        let scope3 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "organization_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
+        let scope1 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "application_id".to_string(),
+            TagValueScope::Each,
+        ));
+        let scope2 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
+        let scope3 = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "organization_id".to_string(),
+            TagValueScope::Total,
+        ));
 
         // Create scopes in different orders
         let scopes_order1 =
@@ -1396,8 +1102,8 @@ mod tests {
         let scopes_order3 = RateLimitingConfigScopes::new(vec![scope2, scope3, scope1]).unwrap();
 
         // All should result in the same order after sorting
-        assert_eq!(scopes_order1.0, scopes_order2.0);
-        assert_eq!(scopes_order2.0, scopes_order3.0);
+        assert_eq!(scopes_order1.as_slice(), scopes_order2.as_slice());
+        assert_eq!(scopes_order2.as_slice(), scopes_order3.as_slice());
 
         // Verify the actual sorted order
         match (&scopes_order1[0], &scopes_order1[1], &scopes_order1[2]) {
@@ -1406,12 +1112,15 @@ mod tests {
                 RateLimitingConfigScope::Tag(tag2),
                 RateLimitingConfigScope::Tag(tag3),
             ) => {
-                assert_eq!(tag1.tag_key, "application_id");
-                assert_eq!(tag1.tag_value, TagValueScope::Each);
-                assert_eq!(tag2.tag_key, "organization_id");
-                assert_eq!(tag2.tag_value, TagValueScope::Total);
-                assert_eq!(tag3.tag_key, "user_id");
-                assert_eq!(tag3.tag_value, TagValueScope::Concrete("123".to_string()));
+                assert_eq!(tag1.tag_key(), "application_id");
+                assert_eq!(*tag1.tag_value(), TagValueScope::Each);
+                assert_eq!(tag2.tag_key(), "organization_id");
+                assert_eq!(*tag2.tag_value(), TagValueScope::Total);
+                assert_eq!(tag3.tag_key(), "user_id");
+                assert_eq!(
+                    *tag3.tag_value(),
+                    TagValueScope::Concrete("123".to_string())
+                );
             }
             _ => panic!("Expected Tag variants"),
         }
@@ -1421,18 +1130,18 @@ mod tests {
     fn test_different_scopes_same_key_sorting_and_keys() {
         // Test that different TagValueScope variants with the same tag_key are sorted consistently
         // and produce different keys
-        let scope_concrete = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
-        let scope_each = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Each,
-        });
-        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
+        let scope_concrete = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
+        let scope_each = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Each,
+        ));
+        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Total,
+        ));
 
         // Test sorting order - TagValueScope variants should sort: Concrete < Each < Total
         let scopes_order1 = RateLimitingConfigScopes::new(vec![
@@ -1449,7 +1158,7 @@ mod tests {
         .unwrap();
 
         // Both orders should result in the same sorted order
-        assert_eq!(scopes_order1.0, scopes_order2.0);
+        assert_eq!(scopes_order1.as_slice(), scopes_order2.as_slice());
 
         // Verify the actual sorted order - let's check what the actual order is
         match (&scopes_order1[0], &scopes_order1[1], &scopes_order1[2]) {
@@ -1459,15 +1168,18 @@ mod tests {
                 RateLimitingConfigScope::Tag(tag3),
             ) => {
                 // All tags should have the same key
-                assert_eq!(tag1.tag_key, "user_id");
-                assert_eq!(tag2.tag_key, "user_id");
-                assert_eq!(tag3.tag_key, "user_id");
+                assert_eq!(tag1.tag_key(), "user_id");
+                assert_eq!(tag2.tag_key(), "user_id");
+                assert_eq!(tag3.tag_key(), "user_id");
 
                 // Test the actual derived sort order for TagValueScope
                 // Based on Rust's enum ordering: Concrete(String) < Each < Total
-                assert_eq!(tag1.tag_value, TagValueScope::Concrete("123".to_string()));
-                assert_eq!(tag2.tag_value, TagValueScope::Each);
-                assert_eq!(tag3.tag_value, TagValueScope::Total);
+                assert_eq!(
+                    *tag1.tag_value(),
+                    TagValueScope::Concrete("123".to_string())
+                );
+                assert_eq!(*tag2.tag_value(), TagValueScope::Each);
+                assert_eq!(*tag3.tag_value(), TagValueScope::Total);
             }
             _ => panic!("Expected Tag variants"),
         }
@@ -1530,14 +1242,14 @@ mod tests {
     fn test_different_scopes_same_key_duplicate_detection() {
         // Test that having the same tag_key with different TagValueScope variants
         // are NOT considered duplicates (they are different scopes)
-        let scope_concrete = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Concrete("123".to_string()),
-        });
-        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope {
-            tag_key: "user_id".to_string(),
-            tag_value: TagValueScope::Total,
-        });
+        let scope_concrete = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Concrete("123".to_string()),
+        ));
+        let scope_total = RateLimitingConfigScope::Tag(TagRateLimitingConfigScope::new(
+            "user_id".to_string(),
+            TagValueScope::Total,
+        ));
 
         // These should be allowed together since they have different TagValueScope
         let result = RateLimitingConfigScopes::new(vec![scope_concrete, scope_total]);
@@ -1545,14 +1257,6 @@ mod tests {
 
         let scopes = result.unwrap();
         assert_eq!(scopes.len(), 2);
-    }
-
-    impl Deref for RateLimitingConfigScopes {
-        type Target = Vec<RateLimitingConfigScope>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
     }
 
     // Consolidated comprehensive unit tests
@@ -1617,10 +1321,7 @@ mod tests {
         let rule_priority_5 = RateLimitingConfigRule {
             limits: vec![token_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-                TagRateLimitingConfigScope {
-                    tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Total,
-                },
+                TagRateLimitingConfigScope::new("user_id".to_string(), TagValueScope::Total),
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Priority(5),
@@ -1629,18 +1330,15 @@ mod tests {
         let rule_always = RateLimitingConfigRule {
             limits: vec![inference_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-                TagRateLimitingConfigScope {
-                    tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Total,
-                },
+                TagRateLimitingConfigScope::new("user_id".to_string(), TagValueScope::Total),
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Always,
         };
 
         let uninitialized = UninitializedRateLimitingConfig {
-            rules: vec![rule_priority_5, rule_always],
-            enabled: true,
+            rules: Some(vec![rule_priority_5, rule_always]),
+            enabled: Some(true),
             ..Default::default()
         };
         let err_message = RateLimitingConfig::try_from(uninitialized)
@@ -1676,10 +1374,7 @@ mod tests {
         let rule_priority_3 = RateLimitingConfigRule {
             limits: vec![token_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-                TagRateLimitingConfigScope {
-                    tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Total,
-                },
+                TagRateLimitingConfigScope::new("user_id".to_string(), TagValueScope::Total),
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Priority(3),
@@ -1688,10 +1383,7 @@ mod tests {
         let rule_priority_7 = RateLimitingConfigRule {
             limits: vec![inference_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-                TagRateLimitingConfigScope {
-                    tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Each,
-                },
+                TagRateLimitingConfigScope::new("user_id".to_string(), TagValueScope::Each),
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Priority(7),
@@ -1715,10 +1407,7 @@ mod tests {
         let rule_multiple_limits = RateLimitingConfigRule {
             limits: vec![token_limit.clone(), inference_limit.clone()],
             scope: RateLimitingConfigScopes::new(vec![RateLimitingConfigScope::Tag(
-                TagRateLimitingConfigScope {
-                    tag_key: "user_id".to_string(),
-                    tag_value: TagValueScope::Total,
-                },
+                TagRateLimitingConfigScope::new("user_id".to_string(), TagValueScope::Total),
             )])
             .unwrap(),
             priority: RateLimitingConfigPriority::Always,
@@ -1961,7 +1650,7 @@ mod tests {
         let config_with_token = RateLimitingConfig {
             rules: vec![RateLimitingConfigRule {
                 limits: vec![token_limit.clone()],
-                scope: RateLimitingConfigScopes(vec![]),
+                scope: RateLimitingConfigScopes::empty(),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
@@ -1981,7 +1670,7 @@ mod tests {
         let config_model_only = RateLimitingConfig {
             rules: vec![RateLimitingConfigRule {
                 limits: vec![model_limit.clone()],
-                scope: RateLimitingConfigScopes(vec![]),
+                scope: RateLimitingConfigScopes::empty(),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             enabled: true,
@@ -1997,7 +1686,7 @@ mod tests {
             enabled: false,
             rules: vec![RateLimitingConfigRule {
                 limits: vec![token_limit.clone()],
-                scope: RateLimitingConfigScopes(vec![]),
+                scope: RateLimitingConfigScopes::empty(),
                 priority: RateLimitingConfigPriority::Priority(1),
             }],
             ..Default::default()

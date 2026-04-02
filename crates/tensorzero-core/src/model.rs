@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -33,6 +34,9 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::observability::internal_metrics::{
+    TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
+};
 use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
 use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -41,6 +45,7 @@ use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 use tensorzero_types::{UninitializedCostConfig, UninitializedUnifiedCostConfig};
 
 use crate::inference::WrappedProvider;
+use crate::inference::types::ProviderInferenceResponseExt;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
@@ -73,6 +78,7 @@ use crate::{
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
+use metrics::counter;
 use serde::{Deserialize, Serialize};
 
 use crate::providers::{
@@ -83,6 +89,17 @@ use crate::providers::{
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
+
+pub(crate) fn record_usage_metrics(usage: &Usage) {
+    if let Some(input_tokens) = usage.input_tokens {
+        counter!("tensorzero_input_tokens_total").increment(input_tokens as u64);
+        TENSORZERO_INPUT_TOKENS_TOTAL.fetch_add(input_tokens as u64, Ordering::Relaxed);
+    }
+    if let Some(output_tokens) = usage.output_tokens {
+        counter!("tensorzero_output_tokens_total").increment(output_tokens as u64);
+        TENSORZERO_OUTPUT_TOKENS_TOTAL.fetch_add(output_tokens as u64, Ordering::Relaxed);
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
@@ -98,7 +115,7 @@ pub struct ModelConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
@@ -614,7 +631,12 @@ impl ModelConfig {
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
         // are treated as just another kind of provider error - a timeout of N ms is equivalent
         // to a provider taking N ms, and then producing a normal HTTP error.
-        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+        if let Some(timeout) = self
+            .timeouts
+            .non_streaming
+            .as_ref()
+            .and_then(|ns| ns.total_ms)
+        {
             let timeout = Duration::from_millis(timeout);
             tokio::time::timeout(timeout, run_all_models)
                 .await
@@ -761,8 +783,13 @@ impl ModelConfig {
         let start = tokio::time::Instant::now();
 
         // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
-        let ttft_timeout = self.timeouts.streaming.ttft_ms.map(Duration::from_millis);
-        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .as_ref()
+            .and_then(|s| s.ttft_ms)
+            .map(Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.as_ref().and_then(|s| s.total_ms);
         let total_timeout = streaming_total_ms.map(Duration::from_millis);
         let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
             (Some(ttft), Some(total)) => {
@@ -945,6 +972,8 @@ fn wrap_provider_stream(
                 }
             };
 
+            record_usage_metrics(&aggregated_usage);
+
             if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
@@ -982,7 +1011,7 @@ fn wrap_provider_stream(
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
@@ -1039,15 +1068,21 @@ impl ModelProvider {
         Ok(())
     }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.non_streaming.total_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.non_streaming.as_ref()?.total_ms?,
+        ))
     }
 
     fn streaming_ttft_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.streaming.ttft_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.streaming.as_ref()?.ttft_ms?,
+        ))
     }
 
     fn streaming_total_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.streaming.total_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.streaming.as_ref()?.total_ms?,
+        ))
     }
 
     /// The name to report in the OTEL `gen_ai.system` attribute
@@ -1277,7 +1312,7 @@ impl ProviderConfig {
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -1288,7 +1323,7 @@ pub enum HostedProviderKind {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
+#[derive(Clone, Debug, PartialEq, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -1420,6 +1455,9 @@ pub enum UninitializedProviderConfig {
         include_encrypted_reasoning: bool,
         #[serde(default)]
         provider_tools: Vec<Value>,
+        #[serde(default)]
+        content_type_overrides:
+            std::collections::HashMap<String, crate::providers::openai::ContentBlockType>,
     },
     OpenRouter {
         model_name: String,
@@ -1565,6 +1603,7 @@ impl UninitializedProviderConfig {
                             OpenAIAPIType::ChatCompletions,
                             false,
                             Vec::new(),
+                            std::collections::HashMap::new(),
                             )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1720,6 +1759,7 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
+                content_type_overrides,
             } => {
                 // Use mock API base for testing if set, otherwise defer to the API base set
                 let api_base = get_mock_provider_api_base("openai").or(api_base);
@@ -1736,6 +1776,7 @@ impl UninitializedProviderConfig {
                     api_type,
                     include_encrypted_reasoning,
                     provider_tools,
+                    content_type_overrides,
                 )?)
             }
             UninitializedProviderConfig::OpenRouter {
@@ -1857,9 +1898,13 @@ pub struct StreamResponseAndMessages {
 
 impl ModelProvider {
     fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
-        if otlp_config.traces.enabled {
-            match otlp_config.traces.format {
-                OtlpTracesFormat::OpenTelemetry => {
+        let traces = match &otlp_config.traces {
+            Some(t) => t,
+            None => return,
+        };
+        if traces.enabled.unwrap_or(false) {
+            match &traces.format {
+                None | Some(OtlpTracesFormat::OpenTelemetry) => {
                     span.set_attribute("gen_ai.operation.name", "chat");
                     span.set_attribute("gen_ai.system", self.genai_system_name());
 
@@ -1867,7 +1912,7 @@ impl ModelProvider {
                         span.set_attribute("gen_ai.request.model", model_name.to_string());
                     }
                 }
-                OtlpTracesFormat::OpenInference => {
+                Some(OtlpTracesFormat::OpenInference) => {
                     span.set_attribute("openinference.span.kind", "LLM");
                     span.set_attribute("llm.system", self.genai_system_name());
 
@@ -1886,12 +1931,13 @@ impl ModelProvider {
         span: &Span,
         resp: &Result<ProviderInferenceResponse, Error>,
     ) {
+        let traces_format = otlp_config.traces.as_ref().and_then(|t| t.format.clone());
         match resp {
             Ok(response) => {
                 otlp_config.apply_usage_to_model_provider_span(span, &response.usage);
-                match otlp_config.traces.format {
-                    OtlpTracesFormat::OpenTelemetry => {}
-                    OtlpTracesFormat::OpenInference => {
+                match traces_format {
+                    None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                    Some(OtlpTracesFormat::OpenInference) => {
                         // If we ever add providers that don't use JSON, we'll need to update this.
                         span.set_attribute("input.mime_type", "application/json");
                         span.set_attribute("input.value", response.raw_request.clone());
@@ -1913,9 +1959,9 @@ impl ModelProvider {
                         raw_response,
                         ..
                     } => {
-                        match otlp_config.traces.format {
-                            OtlpTracesFormat::OpenTelemetry => {}
-                            OtlpTracesFormat::OpenInference => {
+                        match traces_format {
+                            None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                            Some(OtlpTracesFormat::OpenInference) => {
                                 // If we ever add providers that don't use JSON, we'll need to update this.
                                 if let Some(raw_request) = raw_request {
                                     span.set_attribute("input.mime_type", "application/json");
@@ -2087,6 +2133,7 @@ impl ModelProvider {
         };
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
+        record_usage_metrics(&provider_inference_response.usage);
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
@@ -2845,6 +2892,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::Responses,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 } else {
                     ProviderConfig::OpenAI(OpenAIProvider::new(
@@ -2856,6 +2904,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::ChatCompletions,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 }
             }
@@ -3086,6 +3135,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -3368,6 +3419,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );

@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 
 use crate::rate_limiting::{
-    ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, NANO_DOLLARS_PER_DOLLAR, RateLimit,
-    RateLimitInterval, RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority,
-    RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes,
-    TagRateLimitingConfigScope, TagValueScope, UninitializedRateLimitingConfig, cost_to_nano_cost,
+    ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, RateLimit, RateLimitInterval,
+    RateLimitResource, RateLimitingBackend, RateLimitingConfigPriority, RateLimitingConfigRule,
+    RateLimitingConfigScope, RateLimitingConfigScopes, TagRateLimitingConfigScope, TagValueScope,
+    UninitializedRateLimitingConfig, cost_to_nano_cost,
 };
 
 /*
@@ -36,33 +36,15 @@ The TOML types in this file handle the shorthand format and convert to the runti
 // ============================================================================
 
 /// TOML-specific version of `UninitializedRateLimitingConfig` that uses shorthand format
-#[derive(Clone, Debug, Deserialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct TomlUninitializedRateLimitingConfig {
-    #[serde(default)]
-    pub(crate) rules: Vec<TomlRateLimitingConfigRule>,
-    #[serde(default = "default_enabled")]
-    pub(crate) enabled: bool,
-    #[serde(default)]
-    pub(crate) backend: RateLimitingBackend,
+    pub(crate) rules: Option<Vec<TomlRateLimitingConfigRule>>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) backend: Option<RateLimitingBackend>,
     /// Default cost in dollars for cost rate limiting estimation.
     /// Converted to nano-dollars internally. Defaults to 1 (= $1.00).
-    #[serde(default)]
     pub(crate) default_cost: Option<f64>,
-}
-
-fn default_enabled() -> bool {
-    true
-}
-
-impl Default for TomlUninitializedRateLimitingConfig {
-    fn default() -> Self {
-        Self {
-            rules: Vec::new(),
-            enabled: default_enabled(),
-            backend: RateLimitingBackend::default(),
-            default_cost: None,
-        }
-    }
 }
 
 impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingConfig {
@@ -77,13 +59,15 @@ impl TryFrom<TomlUninitializedRateLimitingConfig> for UninitializedRateLimitingC
                         "`default_cost` must be a finite non-negative number, got {cost}"
                     ));
                 }
-                cost_to_nano_cost(cost)
+                Some(cost_to_nano_cost(cost))
             }
-            None => NANO_DOLLARS_PER_DOLLAR, // $1.00 default
+            None => None,
         };
 
         Ok(Self {
-            rules: toml_config.rules.into_iter().map(Into::into).collect(),
+            rules: toml_config
+                .rules
+                .map(|r| r.into_iter().map(Into::into).collect()),
             enabled: toml_config.enabled,
             backend: toml_config.backend,
             default_nano_cost,
@@ -849,10 +833,13 @@ mod tests {
         ";
 
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(toml_config.enabled, "Default enabled should be true");
+        assert_eq!(toml_config.enabled, None, "Default enabled should be None");
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
-        assert!(config.enabled());
+        assert!(
+            config.enabled(),
+            "After converting to RateLimitingConfig, default enabled should be true"
+        );
 
         assert_eq!(
             config.rules()[0].priority,
@@ -872,7 +859,10 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
-        assert!(!config.enabled());
+        assert!(
+            !config.enabled(),
+            "After converting to RateLimitingConfig, enabled should be false when explicitly set"
+        );
 
         assert_eq!(
             config.rules()[0].priority,
@@ -897,19 +887,19 @@ mod tests {
     fn test_default_enabled_when_section_missing() {
         // When the entire [rate_limiting] section is missing from the TOML config,
         // serde uses Default::default() for the struct. This test ensures that
-        // the default enabled value is true.
+        // the default enabled value is None.
         let default_config = TomlUninitializedRateLimitingConfig::default();
-        assert!(
-            default_config.enabled,
-            "Rate limiting enabled should default to true when section is missing"
+        assert_eq!(
+            default_config.enabled, None,
+            "Rate limiting enabled should default to None when section is missing"
         );
 
-        // Also test that an empty string deserializes with enabled = true
+        // Also test that an empty string deserializes with enabled = None
         let toml_str = "";
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
-        assert!(
-            toml_config.enabled,
-            "Rate limiting enabled should default to true when section is empty"
+        assert_eq!(
+            toml_config.enabled, None,
+            "Rate limiting enabled should default to None when section is empty"
         );
     }
 
@@ -1445,11 +1435,12 @@ mod tests {
         }"#;
 
         let config: UninitializedRateLimitingConfig = serde_json::from_str(json_str).unwrap();
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules[0].limits.len(), 1);
-        assert_eq!(config.rules[0].limits[0].capacity, 100);
-        assert_eq!(config.rules[0].limits[0].refill_rate, 50);
-        assert!(config.enabled, "Expected enabled to be true");
+        let rules = config.rules.expect("rules should be Some");
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].limits.len(), 1);
+        assert_eq!(rules[0].limits[0].capacity, 100);
+        assert_eq!(rules[0].limits[0].refill_rate, 50);
+        assert_eq!(config.enabled, Some(true), "Expected enabled to be true");
     }
 
     #[test]
@@ -1475,14 +1466,12 @@ mod tests {
             serde_json::from_str(&json_str).unwrap();
 
         // Verify the roundtrip
-        assert_eq!(roundtrip_config.rules.len(), 1);
-        assert_eq!(roundtrip_config.rules[0].limits.len(), 1);
-        assert_eq!(roundtrip_config.rules[0].limits[0].capacity, 100);
-        assert_eq!(roundtrip_config.rules[0].limits[0].refill_rate, 50);
-        assert_eq!(
-            roundtrip_config.rules[0].priority,
-            RateLimitingConfigPriority::Priority(1)
-        );
+        let rules = roundtrip_config.rules.expect("rules should be Some");
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].limits.len(), 1);
+        assert_eq!(rules[0].limits[0].capacity, 100);
+        assert_eq!(rules[0].limits[0].refill_rate, 50);
+        assert_eq!(rules[0].priority, RateLimitingConfigPriority::Priority(1));
     }
 
     #[test]
@@ -1586,7 +1575,8 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         assert_eq!(
-            uninitialized_config.default_nano_cost, 500_000_000,
+            uninitialized_config.default_nano_cost,
+            Some(500_000_000),
             "$0.50 should be 500 million nano-dollars"
         );
 
@@ -1600,8 +1590,15 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         assert_eq!(
-            uninitialized_config.default_nano_cost, 1_000_000_000,
-            "Default should be $1.00 = 1 billion nano-dollars"
+            uninitialized_config.default_nano_cost, None,
+            "When default_cost is not specified, default_nano_cost should be None"
+        );
+        // After initialization, the default should be resolved to $1.00
+        let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
+        assert_eq!(
+            config.default_nano_cost,
+            tensorzero_error::rate_limiting_types::NANO_DOLLARS_PER_DOLLAR,
+            "After initialization, None should resolve to $1.00 = 1 billion nano-dollars"
         );
     }
 
@@ -1651,7 +1648,8 @@ mod tests {
         let toml_config: TomlUninitializedRateLimitingConfig = toml::from_str(toml_str).unwrap();
         let uninitialized_config: UninitializedRateLimitingConfig = toml_config.try_into().unwrap();
         assert_eq!(
-            uninitialized_config.default_nano_cost, 1_000_000_000,
+            uninitialized_config.default_nano_cost,
+            Some(1_000_000_000),
             "default_cost = 1 (integer) should parse as $1.00"
         );
 

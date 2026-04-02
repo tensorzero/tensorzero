@@ -1,7 +1,49 @@
+use std::time::Duration;
+
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     error::{Error, ErrorDetails},
 };
+
+/// Default offset for materialized view recreation during migrations.
+///
+/// When a migration drops and recreates a MV, there's a window where inserts
+/// are not captured. The MV is created with `WHERE id >= T` (where T = now + offset),
+/// and the backfill covers `WHERE id < T`. We must wait until T has passed before
+/// running the backfill so that no new rows can have `id < T`.
+///
+/// The offset only needs to exceed the time to drop + create the MV (typically < 1s,
+/// up to a few seconds on ClickHouse Cloud with replication).
+const VIEW_OFFSET: Duration = Duration::from_secs(5);
+
+/// Tracks a future deadline for MV backfill operations.
+///
+/// Created before the MV drop/recreate work starts. Call [`wait`](Self::wait)
+/// after the MV is recreated — it only sleeps the remaining time until the
+/// deadline, not the full offset duration.
+pub(crate) struct ViewOffsetDeadline {
+    deadline: tokio::time::Instant,
+}
+
+impl ViewOffsetDeadline {
+    /// Creates a new deadline `VIEW_OFFSET` seconds from now.
+    pub(crate) fn new() -> Self {
+        Self {
+            deadline: tokio::time::Instant::now() + VIEW_OFFSET,
+        }
+    }
+
+    /// Waits until the deadline has passed. If the deadline is already in the
+    /// past (because the MV work took longer than the offset), returns immediately.
+    pub(crate) async fn wait(self) {
+        tokio::time::sleep_until(self.deadline).await;
+    }
+
+    /// Returns the offset duration (for computing the future timestamp).
+    pub(crate) fn offset() -> Duration {
+        VIEW_OFFSET
+    }
+}
 
 pub mod migration_0000;
 pub mod migration_0002;
@@ -48,6 +90,8 @@ pub mod migration_0047;
 pub mod migration_0048;
 pub mod migration_0049;
 pub mod migration_0050;
+pub mod migration_0051;
+pub mod migration_0052;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -232,4 +276,58 @@ async fn check_index_exists(
     );
     let result = clickhouse.run_query_synchronous_no_params(query).await?;
     Ok(result.response.trim() == "1")
+}
+
+/// Submits a `MATERIALIZE INDEX` mutation asynchronously (with `mutations_sync=0` to override
+/// the connection-level `mutations_sync=2`), then polls `system.mutations` until the table
+/// has no pending mutations.
+///
+/// This avoids holding a blocking HTTP connection for the entire duration of the mutation,
+/// which can cause timeouts and lock contention when multiple gateway instances start concurrently.
+pub async fn materialize_index(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    index: &str,
+) -> Result<(), Error> {
+    // Submit the mutation asynchronously by overriding mutations_sync at the query level.
+    // The connection-level mutations_sync=2 is overridden by the SETTINGS clause.
+    let query =
+        format!("ALTER TABLE {table} MATERIALIZE INDEX {index} SETTINGS mutations_sync = 0");
+    clickhouse.run_query_synchronous_no_params(query).await?;
+
+    // Poll system.mutations until no pending mutations remain for this table.
+    let poll_interval = Duration::from_millis(100);
+    let timeout = Duration::from_secs(300);
+    let start = std::time::Instant::now();
+
+    loop {
+        let query = format!(
+            "SELECT count() FROM system.mutations WHERE database = currentDatabase() AND table = '{table}' AND is_done = 0 FORMAT CSV"
+        );
+        let result = clickhouse.run_query_synchronous_no_params(query).await?;
+
+        let pending: i64 = result.response.trim().parse().map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
+                id: "materialize_index".to_string(),
+                message: format!("Failed to parse pending mutation count for table `{table}`: {e}"),
+            })
+        })?;
+
+        if pending == 0 {
+            return Ok(());
+        }
+
+        if start.elapsed() > timeout {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "materialize_index".to_string(),
+                message: format!(
+                    "Timed out waiting for MATERIALIZE INDEX `{index}` on table `{table}` to complete ({pending} mutations still pending after {}s)",
+                    timeout.as_secs()
+                ),
+            }
+            .into());
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
 }

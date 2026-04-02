@@ -12,6 +12,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::iter::repeat;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::try_join;
 use tracing::instrument;
 use uuid::Uuid;
@@ -34,6 +35,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessage;
+use crate::inference::types::RequestMessageExt;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
@@ -49,6 +51,7 @@ use crate::inference::types::{
 use crate::inference::types::{Input, InputExt, batch::StartBatchModelInferenceWithMetadata};
 use crate::jsonschema_util::JSONSchema;
 use crate::model::ModelTable;
+use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::rate_limiting::ScopeInfo;
 use crate::relay::TensorzeroRelay;
 use crate::tool::{
@@ -236,6 +239,7 @@ pub async fn start_batch_inference(
         "function_name" => params.function_name.to_string(),
     )
     .increment(num_inferences as u64);
+    TENSORZERO_INFERENCES_TOTAL.fetch_add(num_inferences as u64, Ordering::Relaxed);
 
     // Keep track of which variants failed
     let mut variant_errors = IndexMap::new();
@@ -256,7 +260,7 @@ pub async fn start_batch_inference(
         cache_manager,
         rate_limiting_manager,
         tags: tags.clone(),
-        otlp_config: config.gateway.export.otlp.clone(),
+        otlp_config: config.gateway.export.otlp.clone().unwrap_or_default(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
@@ -1324,6 +1328,8 @@ fn convert_row_to_inference_response(
     let usage = Usage {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
+        provider_cache_read_input_tokens: None,
+        provider_cache_write_input_tokens: None,
         cost: row.cost,
     };
 

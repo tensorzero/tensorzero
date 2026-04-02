@@ -17,6 +17,8 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
+use crate::inference::types::Usage;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
@@ -25,7 +27,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
     batch::StartBatchProviderInferenceResponse,
 };
@@ -33,17 +35,17 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::openai::{
-    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
-    SystemOrDeveloper, get_chat_url, handle_openai_error,
-    openai_response_tool_call_to_tensorzero_tool_call, prepare_system_or_developer_message,
-    tensorzero_to_openai_messages,
+    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIRequestMessage,
+    OpenAISystemRequestMessage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
+    prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
 use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
 use tensorzero_types_providers::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
+    DeepSeekUsage,
 };
 use uuid::Uuid;
 
@@ -450,6 +452,7 @@ impl<'a> DeepSeekRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -555,7 +558,7 @@ fn deepseek_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(OpenAIUsage::into);
+    let usage = chunk.usage.map(deepseek_usage_into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -732,11 +735,12 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = deepseek_usage_into_usage(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages: messages,
@@ -746,8 +750,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(OpenAIFinishReason::into),
-                id: model_inference_id,
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -827,9 +830,22 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
     result
 }
 
+fn deepseek_usage_into_usage(usage: DeepSeekUsage) -> Usage {
+    Usage {
+        input_tokens: usage.prompt_tokens,
+        output_tokens: usage.completion_tokens,
+        provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
+        // DeepSeek's `prompt_cache_miss_tokens` = tokens not in cache, which are
+        // written to cache for future requests, so we map miss → write.
+        provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
+        cost: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use googletest::prelude::*;
     use std::borrow::Cow;
     use std::time::Duration;
     use uuid::Uuid;
@@ -843,10 +859,10 @@ mod tests {
     };
     use crate::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
+    use tensorzero_types_providers::openai::OpenAIFinishReason;
 
     #[tokio::test]
     async fn test_deepseek_request_new() {
@@ -1014,9 +1030,11 @@ mod tests {
                 },
                 finish_reason: Some(OpenAIFinishReason::Stop),
             }],
-            usage: OpenAIUsage {
+            usage: DeepSeekUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_cache_hit_tokens: Some(5),
+                prompt_cache_miss_tokens: Some(5),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1078,6 +1096,16 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, Some(10));
         assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
+            inference_response.usage.provider_cache_read_input_tokens,
+            Some(5),
+            "DeepSeek prompt_cache_hit_tokens should map to provider_cache_read_input_tokens"
+        );
+        assert_eq!(
+            inference_response.usage.provider_cache_write_input_tokens,
+            Some(5),
+            "DeepSeek prompt_cache_miss_tokens should map to provider_cache_write_input_tokens"
+        );
+        assert_eq!(
             inference_response.provider_latency,
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
@@ -1119,6 +1147,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await
@@ -1136,6 +1165,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await
@@ -1189,6 +1219,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await
@@ -1237,6 +1268,7 @@ mod tests {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await
@@ -1468,5 +1500,24 @@ mod tests {
             },
         )];
         assert_eq!(output, expected);
+    }
+
+    #[gtest]
+    fn test_deepseek_usage_with_cache_tokens() {
+        use tensorzero_types_providers::deepseek::DeepSeekUsage;
+
+        let deepseek_usage = DeepSeekUsage {
+            prompt_tokens: Some(100),
+            completion_tokens: Some(50),
+            prompt_cache_hit_tokens: Some(80),
+            prompt_cache_miss_tokens: Some(20),
+        };
+
+        let usage: Usage = deepseek_usage_into_usage(deepseek_usage);
+
+        expect_that!(usage.input_tokens, eq(Some(100)));
+        expect_that!(usage.output_tokens, eq(Some(50)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(80)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(Some(20)));
     }
 }

@@ -83,15 +83,14 @@ impl BestOfNSamplingConfig {
     }
 }
 
+#[serde_with::skip_serializing_none]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
-    #[serde(default)]
     pub weight: Option<f64>,
     #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub evaluator: UninitializedBestOfNEvaluatorConfig,
@@ -106,7 +105,7 @@ pub struct BestOfNEvaluatorConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
@@ -1126,6 +1125,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1167,6 +1168,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1227,6 +1230,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1271,6 +1276,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1347,6 +1354,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1388,6 +1397,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -1511,6 +1522,8 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(75),
             output_tokens: Some(126),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];

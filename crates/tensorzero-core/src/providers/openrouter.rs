@@ -27,6 +27,7 @@ use crate::error::{
 };
 use crate::inference::InferenceProvider;
 use crate::inference::types::ObjectStorageFile;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
@@ -34,15 +35,13 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
-};
+use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, ThoughtChunk, Unknown, Usage,
-    resolved_input::{FileUrl, LazyFile},
+    resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
@@ -72,6 +71,7 @@ use super::openai::{
 use crate::inference::TensorZeroEventError;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::providers::openai::OpenAIEmbeddingUsage;
+use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -1577,13 +1577,19 @@ impl<'a> OpenRouterRequest<'a> {
 pub(super) struct OpenRouterUsage {
     pub prompt_tokens: Option<u32>,
     pub completion_tokens: Option<u32>,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
 }
 
-impl From<OpenRouterUsage> for Usage {
-    fn from(usage: OpenRouterUsage) -> Self {
+impl OpenRouterUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
+            input_tokens: self.prompt_tokens,
+            output_tokens: self.completion_tokens,
+            provider_cache_read_input_tokens: self
+                .prompt_tokens_details
+                .and_then(|d| d.cached_tokens),
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -1635,9 +1641,9 @@ pub(super) enum OpenRouterFinishReason {
     Unknown,
 }
 
-impl From<OpenRouterFinishReason> for FinishReason {
-    fn from(finish_reason: OpenRouterFinishReason) -> Self {
-        match finish_reason {
+impl OpenRouterFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             OpenRouterFinishReason::Stop => FinishReason::Stop,
             OpenRouterFinishReason::Length => FinishReason::Length,
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
@@ -1734,11 +1740,12 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages: messages,
@@ -1748,8 +1755,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: Some(finish_reason.into()),
-                id: model_inference_id,
+                finish_reason: Some(finish_reason.into_finish_reason()),
             },
         ))
     }
@@ -1992,12 +1998,12 @@ fn openrouter_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(OpenRouterUsage::into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(choice_finish_reason) = choice.finish_reason {
-            finish_reason = Some(choice_finish_reason.into());
+            finish_reason = Some(choice_finish_reason.into_finish_reason());
         }
         // Process reasoning_details first (thoughts should come before content)
         if let Some(reasoning_details) = choice.delta.reasoning_details {
@@ -2507,6 +2513,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2608,6 +2615,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(15),
                 completion_tokens: Some(25),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2700,6 +2708,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(0),
+                prompt_tokens_details: None,
             },
         };
         let request_body = OpenRouterRequest {
@@ -2761,6 +2770,7 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(10),
+                prompt_tokens_details: None,
             },
         };
 
@@ -3101,6 +3111,7 @@ mod tests {
         let usage = OpenRouterUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = OpenRouterChatChunk {
             choices: vec![],
@@ -3152,6 +3163,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"

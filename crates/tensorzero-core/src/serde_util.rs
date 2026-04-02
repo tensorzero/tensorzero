@@ -456,6 +456,82 @@ where
     }
 }
 
+/// Deserializes an `Option<i64>` from either a number or a string (ClickHouse returns
+/// nullable integers as strings in JSONEachRow format).
+pub fn deserialize_option_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(i64),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<i64>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid i64 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
+/// Deserializes an `Option<i32>` from either a number or a string (ClickHouse compatibility).
+pub fn deserialize_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(i32),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<i32>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid i32 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
+/// Deserializes an `Option<f64>` from either a number or a string (ClickHouse compatibility).
+pub fn deserialize_option_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        String(String),
+        Number(f64),
+        Null,
+    }
+
+    match Helper::deserialize(deserializer)? {
+        Helper::String(s) => s
+            .parse::<f64>()
+            .map(Some)
+            .map_err(|_| D::Error::custom(format!("invalid f64 string: '{s}'"))),
+        Helper::Number(n) => Ok(Some(n)),
+        Helper::Null => Ok(None),
+    }
+}
+
 /// Serializes an optional value, returning an empty string if the value is None.
 /// This is useful for ClickHouse compatibility where empty strings represent null for certain fields.
 pub fn serialize_none_as_empty_string<S, T>(
@@ -1107,5 +1183,118 @@ mod tests {
             sort_json_keys(serde_json::json!(null)),
             serde_json::json!(null)
         );
+    }
+
+    // =========================================================================
+    // Tests for ClickHouse nullable numeric deserializers
+    // =========================================================================
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestOptionI64 {
+        #[serde(deserialize_with = "deserialize_option_i64")]
+        value: Option<i64>,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestOptionI32 {
+        #[serde(deserialize_with = "deserialize_option_i32")]
+        value: Option<i32>,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestOptionF64 {
+        #[serde(deserialize_with = "deserialize_option_f64")]
+        value: Option<f64>,
+    }
+
+    #[test]
+    fn test_deserialize_option_i64_from_number() {
+        let json = r#"{"value": 42}"#;
+        let result: TestOptionI64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(42));
+    }
+
+    #[test]
+    fn test_deserialize_option_i64_from_string() {
+        let json = r#"{"value": "42"}"#;
+        let result: TestOptionI64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(42));
+    }
+
+    #[test]
+    fn test_deserialize_option_i64_from_negative_string() {
+        let json = r#"{"value": "-100"}"#;
+        let result: TestOptionI64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(-100));
+    }
+
+    #[test]
+    fn test_deserialize_option_i64_from_null() {
+        let json = r#"{"value": null}"#;
+        let result: TestOptionI64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_i64_from_invalid_string() {
+        let json = r#"{"value": "not_a_number"}"#;
+        let result: Result<TestOptionI64, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_option_i32_from_number() {
+        let json = r#"{"value": 300}"#;
+        let result: TestOptionI32 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(300));
+    }
+
+    #[test]
+    fn test_deserialize_option_i32_from_string() {
+        let json = r#"{"value": "300"}"#;
+        let result: TestOptionI32 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(300));
+    }
+
+    #[test]
+    fn test_deserialize_option_i32_from_null() {
+        let json = r#"{"value": null}"#;
+        let result: TestOptionI32 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_i32_from_invalid_string() {
+        let json = r#"{"value": "abc"}"#;
+        let result: Result<TestOptionI32, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_option_f64_from_number() {
+        let json = r#"{"value": 1.23}"#;
+        let result: TestOptionF64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(1.23));
+    }
+
+    #[test]
+    fn test_deserialize_option_f64_from_string() {
+        let json = r#"{"value": "1.23"}"#;
+        let result: TestOptionF64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, Some(1.23));
+    }
+
+    #[test]
+    fn test_deserialize_option_f64_from_null() {
+        let json = r#"{"value": null}"#;
+        let result: TestOptionF64 = serde_json::from_str(json).unwrap();
+        assert_eq!(result.value, None);
+    }
+
+    #[test]
+    fn test_deserialize_option_f64_from_invalid_string() {
+        let json = r#"{"value": "not_float"}"#;
+        let result: Result<TestOptionF64, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

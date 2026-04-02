@@ -251,6 +251,7 @@ The `batch_writes` object supports the following fields:
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
 - `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
+- `write_queue_capacity` (integer, optional): Maximum number of inferences each gateway instance can hold in memory per table type before dropping new rows to protect against out-of-memory crashes. When set, the write queue is bounded: if full, new rows are dropped and an error is logged. When unset (default), the queue is unbounded — all rows are buffered in memory. We recommend setting this for high-throughput production deployments, and monitoring your gateway instances' memory usage to determine an appropriate value
 
 ```toml tensorzero.toml
 [gateway]
@@ -4266,6 +4267,34 @@ You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
 
 </Accordion>
+
+## `[functions.function_name.evaluators.evaluator_name]`
+
+Evaluators are defined as part of a function's configuration and specify how to evaluate the function's outputs.
+You can define multiple evaluators by including multiple `[functions.function_name.evaluators.evaluator_name]` sections.
+
+Evaluators are used by [TensorZero Evaluations](/evaluations/inference-evaluations/tutorial) to score and compare variants.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-exact]
+type = "exact_match"
+
+[functions.draft-email.evaluators.check-signature]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[functions.draft-email.evaluators.check-signature.variants.claude_sonnet_4_5]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+system_instructions = "./functions/draft-email/evaluators/check-signature/system_instructions.txt"
+```
+
+<Tip>
+
+See the [Evaluations Configuration Reference](/evaluations/inference-evaluations/configuration-reference) for the full list of evaluator types and their configuration options.
+
+</Tip>
 
 ## `[functions.function_name.experimentation]`
 

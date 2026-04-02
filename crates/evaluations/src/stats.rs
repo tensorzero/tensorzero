@@ -181,6 +181,8 @@ pub struct EvaluationInfo {
     pub response: InferenceResponse,
     pub evaluations: HashMap<String, Option<Value>>,
     pub evaluator_errors: HashMap<String, String>,
+    /// Wall-clock time for the inference call, in milliseconds
+    pub processing_time_ms: f64,
 }
 
 impl EvaluationInfo {
@@ -188,6 +190,7 @@ impl EvaluationInfo {
         datapoint: Datapoint,
         response: InferenceResponse,
         evaluation_result: evaluators::EvaluationResult,
+        processing_time_ms: f64,
     ) -> Self {
         let mut evaluations = HashMap::new();
         let mut evaluator_errors = HashMap::new();
@@ -206,6 +209,7 @@ impl EvaluationInfo {
             response,
             evaluations,
             evaluator_errors,
+            processing_time_ms,
         }
     }
 }

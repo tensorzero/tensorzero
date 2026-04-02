@@ -21,6 +21,7 @@ use crate::inference::types::resolved_input::{
 use crate::relay::TensorzeroRelay;
 use crate::utils::retries::RetryConfig;
 
+use crate::inference::types::RequestMessageExt;
 use crate::inference::types::{
     ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
     Unknown,
@@ -207,7 +208,7 @@ impl ChatCompletionConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
@@ -217,7 +218,7 @@ pub struct UninitializedInputWrappers {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
@@ -225,7 +226,7 @@ pub struct UninitializedChatTemplate {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
@@ -234,12 +235,12 @@ pub struct UninitializedChatTemplates {
     pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
+#[serde_with::skip_serializing_none]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
-    #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
     pub system_template: Option<ResolvedTomlPathData>,
@@ -267,14 +268,11 @@ pub struct UninitializedChatCompletionConfig {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
-    #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
     pub retries: RetryConfig,
-    #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
@@ -1744,6 +1742,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1829,6 +1829,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1928,6 +1930,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2033,6 +2037,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2167,6 +2173,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2294,6 +2302,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2634,6 +2644,8 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
+                        provider_cache_read_input_tokens: None,
+                        provider_cache_write_input_tokens: None,
                         cost: None,
                     })
                 );

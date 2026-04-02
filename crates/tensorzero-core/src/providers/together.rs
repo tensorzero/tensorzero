@@ -19,11 +19,11 @@ use crate::cache::ModelProviderRequest;
 use crate::error::DisplayOrDebugGateway;
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
-    ApiType, FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs,
 };
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
@@ -54,8 +54,7 @@ use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 use tensorzero_types_providers::together::{
-    TogetherChatChunk, TogetherFinishReason, TogetherResponse, TogetherResponseChoice,
-    TogetherResponseToolCall,
+    TogetherChatChunk, TogetherResponse, TogetherResponseChoice, TogetherResponseToolCall,
 };
 use uuid::Uuid;
 
@@ -466,6 +465,7 @@ impl<'a> TogetherRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -782,19 +782,6 @@ fn together_tool_call_to_tool_call(together_tool_call: TogetherResponseToolCall)
 
 // The thinking block processing has been moved to helpers_thinking_block.rs
 
-impl From<TogetherFinishReason> for FinishReason {
-    fn from(finish_reason: TogetherFinishReason) -> Self {
-        match finish_reason {
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::Eos => FinishReason::Stop,
-            TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
-            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
-            TogetherFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
 struct TogetherResponseWithMetadata<'a> {
     response: TogetherResponse,
     latency: Latency,
@@ -888,6 +875,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -898,7 +886,6 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
                 provider_latency: latency,
                 finish_reason: finish_reason.map(Into::into),
-                id: model_inference_id,
             },
         ))
     }
@@ -1098,10 +1085,10 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
     use tensorzero_types_providers::together::{
-        TogetherChatChunkChoice, TogetherDelta, TogetherFunctionCallChunk, TogetherResponseMessage,
-        TogetherToolCallChunk,
+        TogetherChatChunkChoice, TogetherDelta, TogetherFinishReason, TogetherFunctionCallChunk,
+        TogetherResponseMessage, TogetherToolCallChunk,
     };
 
     use crate::providers::chat_completions::{
@@ -1211,9 +1198,12 @@ mod tests {
                 },
                 finish_reason: None,
             }],
+            // Together has transparent backend caching but does not report cache
+            // token counts in its API responses. See cache.rs for details.
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1284,6 +1274,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1334,6 +1325,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
@@ -1390,6 +1382,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1744,6 +1737,7 @@ mod tests {
         let usage = OpenAIUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = TogetherChatChunk {
             choices: vec![],
@@ -1796,6 +1790,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -1937,6 +1933,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2012,6 +2009,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2085,6 +2083,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2244,6 +2243,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2281,6 +2281,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2333,6 +2334,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2365,6 +2367,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2396,6 +2399,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let result = tensorzero_to_together_assistant_message(Cow::Owned(content), config).await;
         assert!(result.is_err(), "should error on unknown reasoning_format");

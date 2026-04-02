@@ -70,6 +70,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIAPIType::ChatCompletions,
                 false,
                 Vec::new(),
+                std::collections::HashMap::new(),
             )?),
             "openrouter" => EmbeddingProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
@@ -121,7 +122,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -477,7 +478,8 @@ impl EmbeddingModelResponse {
             usage: Usage {
                 input_tokens: cache_lookup.input_tokens,
                 output_tokens: cache_lookup.output_tokens,
-
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -707,6 +709,7 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
+        crate::model::record_usage_metrics(&response.usage);
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
@@ -721,7 +724,7 @@ impl EmbeddingProviderInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -1002,6 +1005,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: Some(extra_body_config.clone()),
@@ -1049,6 +1053,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: None,

@@ -11,6 +11,7 @@ use crate::stored_inference::StoredInference;
 
 // Re-exported for backwards compatibility.
 pub use crate::endpoints::shared_types::OrderDirection;
+
 pub use tensorzero_types::inference_filters::{
     BooleanMetricFilter, DemonstrationFeedbackFilter, FloatComparisonOperator, FloatMetricFilter,
     InferenceFilter, OrderBy, OrderByTerm, TagComparisonOperator, TagFilter,
@@ -40,6 +41,7 @@ pub struct ListInferencesRequest {
     /// inference output or demonstration feedback (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
 
     /// The maximum number of inferences to return.
@@ -166,6 +168,7 @@ pub struct GetInferencesRequest {
     /// (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
     pub output_source: InferenceOutputSource,
 }
 

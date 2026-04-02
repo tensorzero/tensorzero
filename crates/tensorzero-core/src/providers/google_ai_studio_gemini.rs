@@ -20,6 +20,7 @@ use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
@@ -27,8 +28,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, TextChunk, Thought,
-    ThoughtChunk, Unknown, UnknownChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::types::{
@@ -975,9 +975,9 @@ enum GeminiFinishReason {
     Unknown,
 }
 
-impl From<GeminiFinishReason> for FinishReason {
-    fn from(finish_reason: GeminiFinishReason) -> Self {
-        match finish_reason {
+impl GeminiFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             GeminiFinishReason::Stop => FinishReason::Stop,
             GeminiFinishReason::MaxTokens => FinishReason::Length,
             GeminiFinishReason::Safety => FinishReason::ContentFilter,
@@ -1011,23 +1011,25 @@ struct GeminiUsageMetadata {
     candidates_token_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thoughts_token_count: Option<u32>,
+    /// Gemini reports cached content tokens as `cachedContentTokenCount`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cached_content_token_count: Option<u32>,
 }
 
-impl From<GeminiUsageMetadata> for Usage {
-    fn from(usage_metadata: GeminiUsageMetadata) -> Self {
+impl GeminiUsageMetadata {
+    fn into_usage(self) -> Usage {
         // Sum candidates + thoughts tokens for output_tokens
-        let output_tokens = match (
-            usage_metadata.candidates_token_count,
-            usage_metadata.thoughts_token_count,
-        ) {
+        let output_tokens = match (self.candidates_token_count, self.thoughts_token_count) {
             (Some(c), Some(t)) => Some(c + t),
             (Some(c), None) => Some(c),
             (None, Some(t)) => Some(t),
             (None, None) => None,
         };
         Usage {
-            input_tokens: usage_metadata.prompt_token_count,
+            input_tokens: self.prompt_token_count,
             output_tokens,
+            provider_cache_read_input_tokens: self.cached_content_token_count,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -1108,11 +1110,12 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = usage_metadata.into();
+        let usage = usage_metadata.into_usage();
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages: messages,
@@ -1122,8 +1125,9 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: first_candidate.finish_reason.map(Into::into),
-                id: model_inference_id,
+                finish_reason: first_candidate
+                    .finish_reason
+                    .map(GeminiFinishReason::into_finish_reason),
             },
         ))
     }
@@ -1216,14 +1220,16 @@ fn convert_stream_response_with_metadata_to_chunk(
     let usage = if first_candidate.finish_reason.as_ref().is_none() {
         None
     } else {
-        usage_metadata.map(Into::into)
+        usage_metadata.map(GeminiUsageMetadata::into_usage)
     };
     Ok(ProviderInferenceResponseChunk::new_with_raw_usage(
         content,
         usage,
         raw_response,
         latency,
-        first_candidate.finish_reason.map(Into::into),
+        first_candidate
+            .finish_reason
+            .map(GeminiFinishReason::into_finish_reason),
         raw_usage,
     ))
 }
@@ -1302,6 +1308,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -1721,6 +1728,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1777,6 +1785,8 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(10),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1826,6 +1836,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1893,6 +1904,8 @@ mod tests {
             Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -1963,6 +1976,7 @@ mod tests {
                 prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -2022,6 +2036,8 @@ mod tests {
             Usage {
                 input_tokens: Some(25),
                 output_tokens: Some(40),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }
         );
@@ -2274,6 +2290,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2341,6 +2358,7 @@ mod tests {
                 prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2412,6 +2430,7 @@ mod tests {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2473,6 +2492,7 @@ mod tests {
                 prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2531,6 +2551,7 @@ mod tests {
                 prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2580,6 +2601,7 @@ mod tests {
                 prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
                 thoughts_token_count: None,
+                cached_content_token_count: None,
             }),
         };
 
@@ -2661,6 +2683,7 @@ mod tests {
                     prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
                     thoughts_token_count: None,
+                    cached_content_token_count: None,
                 }),
             };
 

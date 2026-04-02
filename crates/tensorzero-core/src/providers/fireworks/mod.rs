@@ -23,8 +23,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    inject_extra_request_data_and_send_eventsource, inject_extra_request_data_and_send_with_headers,
 };
+use crate::inference::types::Usage;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
     cache::ModelProviderRequest,
@@ -33,12 +34,11 @@ use crate::{
     inference::{
         InferenceProvider,
         types::{
-            ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
-            ModelInferenceRequest, ModelInferenceRequestJsonMode,
-            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, RequestMessage, Text, TextChunk, Thought,
-            ThoughtChunk,
+            ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse, ProviderInferenceResponseArgs,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+            Text, TextChunk, Thought, ThoughtChunk,
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
@@ -200,7 +200,7 @@ impl InferenceProvider for FireworksProvider {
         let builder = http_client
             .post(request_url)
             .bearer_auth(api_key.expose_secret());
-        let (res, raw_request) = inject_extra_request_data_and_send(
+        let injected = inject_extra_request_data_and_send_with_headers(
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
             &request.extra_body,
@@ -210,11 +210,16 @@ impl InferenceProvider for FireworksProvider {
             request_body,
             builder,
         )
-        .await?;
+        .await
+        .map_err(|(e, _headers)| e)?;
+        let headers = injected.headers;
+        let res = injected.response;
+        let raw_request = injected.raw_request;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
+            let cached_prompt_tokens = extract_fireworks_cached_prompt_tokens(&headers);
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!(
@@ -245,6 +250,7 @@ impl InferenceProvider for FireworksProvider {
                 generic_request: request,
                 raw_response,
                 model_inference_id,
+                cached_prompt_tokens,
             }
             .try_into()?)
         } else {
@@ -475,6 +481,7 @@ impl<'a> FireworksRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -822,18 +829,6 @@ fn fireworks_tool_call_to_tensorzero(fireworks_tool_call: FireworksResponseToolC
     }
 }
 
-impl From<FireworksFinishReason> for FinishReason {
-    fn from(reason: FireworksFinishReason) -> Self {
-        match reason {
-            FireworksFinishReason::Stop => FinishReason::Stop,
-            FireworksFinishReason::Length => FinishReason::Length,
-            FireworksFinishReason::ToolCalls => FinishReason::ToolCall,
-            FireworksFinishReason::ContentFilter => FinishReason::ContentFilter,
-            FireworksFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
 /// Streams the Fireworks response events and converts them into ProviderInferenceResponseChunks
 /// This function handles parsing and processing of thinking blocks with proper state tracking
 fn stream_fireworks(
@@ -929,7 +924,7 @@ fn fireworks_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(|u| u.into());
+    let usage = chunk.usage.map(Into::into);
     let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
@@ -1023,6 +1018,8 @@ struct FireworksResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     model_inference_id: Uuid,
+    /// Cache token count from `fireworks-cached-prompt-tokens` HTTP header.
+    cached_prompt_tokens: Option<u32>,
 }
 
 impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1035,6 +1032,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             generic_request,
             raw_response,
             model_inference_id,
+            cached_prompt_tokens,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -1105,11 +1103,14 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let mut usage: Usage = response.usage.into();
+        // Fireworks reports cached prompt tokens in HTTP headers, not in the JSON body.
+        usage.provider_cache_read_input_tokens = cached_prompt_tokens;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -1119,8 +1120,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(FireworksFinishReason::into),
-                id: model_inference_id,
+                finish_reason: finish_reason.map(Into::into),
             },
         ))
     }
@@ -1132,6 +1132,14 @@ fn fireworks_usage_from_raw_response(raw_response: &str) -> Option<Value> {
         .and_then(|value| value.get("usage").filter(|v| !v.is_null()).cloned())
 }
 
+/// Extract cached prompt tokens from the `fireworks-cached-prompt-tokens` HTTP header.
+fn extract_fireworks_cached_prompt_tokens(headers: &http::HeaderMap) -> Option<u32> {
+    headers
+        .get("fireworks-cached-prompt-tokens")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u32>().ok())
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
@@ -1141,7 +1149,7 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
+    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
     use crate::providers::openai::OpenAIToolType;
     use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -1185,6 +1193,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1203,6 +1212,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let inference_response: ProviderInferenceResponse =
@@ -1350,6 +1360,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(10),
                 completion_tokens: Some(20),
+                prompt_tokens_details: None,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1387,6 +1398,7 @@ mod tests {
             .unwrap(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
         let inference_response: ProviderInferenceResponse =
             fireworks_response_with_metadata.try_into().unwrap();
@@ -1486,6 +1498,7 @@ mod tests {
         let usage = OpenAIUsage {
             prompt_tokens: Some(10),
             completion_tokens: Some(20),
+            prompt_tokens_details: None,
         };
         let chunk = FireworksChatChunk {
             choices: vec![],
@@ -1539,6 +1552,8 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             "expected usage to include provider raw_usage entries"
@@ -1773,6 +1788,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(15),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1785,6 +1801,7 @@ mod tests {
             raw_request: "test_request".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let result: ProviderInferenceResponse =
@@ -1852,6 +1869,7 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: Some(5),
                 completion_tokens: Some(15),
+                prompt_tokens_details: None,
             },
         };
 
@@ -1864,6 +1882,7 @@ mod tests {
             raw_request: "test_request".to_string(),
             generic_request: &generic_request,
             model_inference_id: Uuid::now_v7(),
+            cached_prompt_tokens: None,
         };
 
         let result: ProviderInferenceResponse =
@@ -1928,6 +1947,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
             .await
@@ -1967,6 +1987,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
             .await
@@ -2010,6 +2031,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             reasoning_field_name: ReasoningFieldName::ReasoningContent,
+            content_type_overrides: None,
         };
         let result =
             tensorzero_to_fireworks_assistant_message(Cow::Owned(content_blocks), config).await;
@@ -2139,5 +2161,22 @@ mod tests {
         assert!(logs_contain(
             "Fireworks does not support the inference parameter `verbosity`"
         ));
+    }
+
+    #[test]
+    fn test_extract_fireworks_cached_prompt_tokens() {
+        let mut headers = http::HeaderMap::new();
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), None);
+
+        headers.insert("fireworks-cached-prompt-tokens", "42".parse().unwrap());
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), Some(42));
+
+        // Non-numeric value should return None
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            "fireworks-cached-prompt-tokens",
+            "not-a-number".parse().unwrap(),
+        );
+        assert_eq!(extract_fireworks_cached_prompt_tokens(&headers), None);
     }
 }

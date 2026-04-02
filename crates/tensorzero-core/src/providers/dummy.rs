@@ -25,13 +25,14 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::{ApiType, RawUsageEntry};
 use crate::inference::types::{ContentBlock, FinishReason, Role};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, Usage, batch::StartBatchProviderInferenceResponse,
-    current_timestamp,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, current_timestamp,
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
@@ -86,26 +87,36 @@ impl DummyProvider {
             "input_tokens_zero" => Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(output_tokens),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             "output_tokens_zero" => Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(0),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             "input_tokens_output_tokens_zero" => Usage {
                 input_tokens: Some(0),
                 output_tokens: Some(0),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             "input_five_output_six" => Usage {
                 input_tokens: Some(5),
                 output_tokens: Some(6),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             _ => Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(output_tokens),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
         }
@@ -685,24 +696,26 @@ impl InferenceProvider for DummyProvider {
         } else {
             Some(FinishReason::Stop)
         };
-        Ok(ProviderInferenceResponse {
-            id,
-            output: content,
-            raw_request,
-            raw_response,
-            usage,
-            provider_latency: latency,
-            system,
-            input_messages,
-            finish_reason,
-            raw_usage: Some(vec![RawUsageEntry {
-                model_inference_id: id,
-                provider_type: "dummy".to_string(),
-                api_type: ApiType::ChatCompletions,
-                data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
-            }]),
-            relay_raw_response: None,
-        })
+        Ok(ProviderInferenceResponse::new(
+            ProviderInferenceResponseArgs {
+                id,
+                output: content,
+                raw_request,
+                raw_response,
+                usage,
+                provider_latency: latency,
+                system,
+                input_messages,
+                finish_reason,
+                raw_usage: Some(vec![RawUsageEntry {
+                    model_inference_id: id,
+                    provider_type: "dummy".to_string(),
+                    api_type: ApiType::ChatCompletions,
+                    data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
+                }]),
+                relay_raw_response: None,
+            },
+        ))
     }
 
     async fn infer_stream<'a>(
@@ -1047,6 +1060,8 @@ impl EmbeddingProvider for DummyProvider {
         let usage = Usage {
             input_tokens: Some(10),
             output_tokens: Some(0),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         };
         let latency = Latency::NonStreaming {

@@ -16,37 +16,27 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
-    #[serde(default = "default_gateway_auth_cache_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_gateway_auth_cache_ttl_ms")]
-    pub ttl_ms: u64,
+    pub enabled: Option<bool>,
+    pub ttl_ms: Option<u64>,
 }
 
-impl Default for GatewayAuthCacheConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_gateway_auth_cache_enabled(),
-            ttl_ms: default_gateway_auth_cache_ttl_ms(),
-        }
-    }
-}
-
-fn default_gateway_auth_cache_enabled() -> bool {
+pub fn default_gateway_auth_cache_enabled() -> bool {
     true
 }
 
-fn default_gateway_auth_cache_ttl_ms() -> u64 {
+pub fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
-    #[serde(default)]
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
@@ -54,12 +44,12 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
     vec![0.001, 0.01, 0.1]
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
     /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
-    #[serde(default)]
     pub tensorzero_inference_latency_overhead_seconds_buckets: Option<Vec<f64>>,
 }
 
@@ -111,38 +101,35 @@ impl MetricsConfig {
 }
 
 /// Which backend to use for model inference caching.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InferenceCacheBackend {
     /// Automatically select based on primary datastore:
     /// - ClickHouse primary → ClickHouse cache
     /// - Postgres primary → Valkey if available, else ClickHouse
-    #[default]
     Auto,
     ClickHouse,
     Valkey,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
     /// Whether caching is enabled.
     /// - `true`: require a cache backend (fail startup if unavailable)
     /// - `null` (default): use cache if available, warn and continue if not
     /// - `false`: disable caching entirely
-    #[serde(default)]
     pub enabled: Option<bool>,
     /// Which cache backend to use.
-    #[serde(default)]
-    pub backend: InferenceCacheBackend,
-    #[serde(default)]
-    pub valkey: ValkeyModelInferenceCacheConfig,
+    pub backend: Option<InferenceCacheBackend>,
+    pub valkey: Option<ValkeyModelInferenceCacheConfig>,
 }
 
 // By default, cache entries in Valkey are retained for 24 hours.
 const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValkeyModelInferenceCacheConfig {
     #[serde(default = "default_valkey_cache_ttl_s")]
@@ -161,49 +148,40 @@ impl Default for ValkeyModelInferenceCacheConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
-    #[serde(default)]
+    pub observability: Option<ObservabilityConfig>,
+    pub debug: Option<bool>,
     pub template_filesystem_access: Option<TemplateFilesystemAccess>,
-    #[serde(default)]
-    pub export: ExportConfig,
+    pub export: Option<ExportConfig>,
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
     // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
-    #[serde(default)]
-    pub unstable_disable_feedback_target_validation: bool,
+    pub unstable_disable_feedback_target_validation: Option<bool>,
     /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
     /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
     /// and may change at any time without warning.
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
-    #[serde(default)]
-    pub unstable_error_json: bool,
-    #[serde(default)]
-    pub disable_pseudonymous_usage_analytics: bool,
+    pub unstable_error_json: Option<bool>,
+    pub disable_pseudonymous_usage_analytics: Option<bool>,
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
-    #[serde(default)]
-    pub auth: AuthConfig,
+    pub auth: Option<AuthConfig>,
     pub global_outbound_http_timeout_ms: Option<u64>,
-    #[serde(default)]
     pub relay: Option<UninitializedRelayConfig>,
-    #[serde(default)]
-    pub metrics: MetricsConfig,
-    #[serde(default)]
-    pub cache: ModelInferenceCacheConfig,
+    pub metrics: Option<MetricsConfig>,
+    pub cache: Option<ModelInferenceCacheConfig>,
 }
 
 impl UninitializedGatewayConfig {
     pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
-        self.metrics.validate()?;
+        let metrics = self.metrics.unwrap_or_default();
+        metrics.validate()?;
         let fetch_and_encode_input_files_before_inference = if let Some(value) =
             self.fetch_and_encode_input_files_before_inference
         {
@@ -240,24 +218,27 @@ impl UninitializedGatewayConfig {
 
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability,
-            debug: self.debug,
+            observability: self.observability.unwrap_or_default(),
+            debug: self.debug.unwrap_or_default(),
             template_filesystem_access: self.template_filesystem_access.unwrap_or_default(),
-            export: self.export,
+            export: self.export.unwrap_or_default(),
             base_path: self.base_path,
-            unstable_error_json: self.unstable_error_json,
+            unstable_error_json: self.unstable_error_json.unwrap_or_default(),
             unstable_disable_feedback_target_validation: self
-                .unstable_disable_feedback_target_validation,
-            disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
+                .unstable_disable_feedback_target_validation
+                .unwrap_or_default(),
+            disable_pseudonymous_usage_analytics: self
+                .disable_pseudonymous_usage_analytics
+                .unwrap_or_default(),
             fetch_and_encode_input_files_before_inference,
-            auth: self.auth,
+            auth: self.auth.unwrap_or_default(),
             global_outbound_http_timeout: self
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
-            metrics: self.metrics,
-            cache: self.cache,
+            metrics,
+            cache: self.cache.unwrap_or_default(),
         })
     }
 }

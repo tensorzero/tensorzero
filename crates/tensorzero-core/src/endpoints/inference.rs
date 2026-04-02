@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -59,6 +60,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
@@ -335,11 +337,9 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
-    config
-        .gateway
-        .export
-        .otlp
-        .mark_openinference_chain_span(&span);
+    if let Some(otlp) = &config.gateway.export.otlp {
+        otlp.mark_openinference_chain_span(&span);
+    }
 
     // Automatically add internal tag when internal=true
     if params.internal {
@@ -464,6 +464,7 @@ pub async fn inference(
         }
         counter!("tensorzero_requests_total", &labels).increment(1);
         counter!("tensorzero_inferences_total", &labels).increment(1);
+        TENSORZERO_INFERENCES_TOTAL.fetch_add(1, Ordering::Relaxed);
     }
 
     // Should we stream the inference?
@@ -494,7 +495,7 @@ pub async fn inference(
         cache_manager,
         tags: tags.clone(),
         rate_limiting_manager,
-        otlp_config: config.gateway.export.otlp.clone(),
+        otlp_config: config.gateway.export.otlp.clone().unwrap_or_default(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
@@ -934,7 +935,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 snapshot_hash: config.hash.clone(),
             };
 
-            let async_writes = config.gateway.observability.async_writes;
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let postgres_connection_info = postgres_connection_info.clone();
             let config = config.clone();
@@ -942,11 +943,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // Capture the parent span (function_inference) so we can use it as the parent
             // for write_inference, even if the task is spawned.
             let parent_span = tracing::Span::current();
-            // Always spawn a tokio task here. This ensures that 'write_inference' will
-            // not be cancelled partway through execution if the outer '/inference' request
-            // is cancelled. This reduces the chances that we only write to some tables and not others
-            // (but this is inherently best-effort due to ClickHouse's lack of transactions).
-            let write_future = deferred_tasks.spawn(async move {
+            let write_future = async move {
                 let database = DelegatingDatabaseConnection::new(
                     clickhouse_connection_info,
                     postgres_connection_info,
@@ -961,13 +958,13 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 )
                 .await;
                 Ok::<_, Error>(())
-            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes)));
-            if !async_writes {
-                write_future.await.map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to await ClickHouse inference write: {e:?}"),
-                    })
-                })??;
+            }.instrument(tracing::debug_span!(parent: &parent_span, "write_inference", otel.name = "write_inference", stream = false, inference_id = %inference_id, async_writes = async_writes));
+            if async_writes {
+                deferred_tasks.spawn(write_future);
+            } else {
+                // It's safe to directly await this, since we ensure that the overall request future will be executed to completion
+                // See `possibly_prevent_request_cancellation` for more details.
+                write_future.await?;
             }
         }
 
@@ -1432,7 +1429,7 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            let async_writes = config.gateway.observability.async_writes;
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
             let write_future = async move {
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks_future.await;
@@ -2842,6 +2839,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: Some(raw_usage_entries.clone()),
@@ -2895,6 +2894,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
@@ -2932,6 +2933,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -2966,6 +2969,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: None,
@@ -3014,6 +3019,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(30),
                 output_tokens: Some(20),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             raw_usage: Some(raw_usage_entries),
@@ -3104,6 +3111,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -3206,6 +3215,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -3290,6 +3301,8 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(100),
                 output_tokens: Some(50),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             },
             latency: Latency::NonStreaming {
@@ -3375,6 +3388,8 @@ mod tests {
             usage: Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(5),
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
                 cost: None,
             }),
             ..Default::default()
@@ -3491,6 +3506,8 @@ mod tests {
                 usage: Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(5),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
                     cost: None,
                 },
                 latency: Latency::NonStreaming {

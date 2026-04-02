@@ -4,8 +4,8 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-use std::time::Duration;
 
+use super::ViewOffsetDeadline;
 use super::migration_0037::quantiles_sql_args;
 
 pub struct Migration0048<'a> {
@@ -47,8 +47,8 @@ impl Migration for Migration0048<'_> {
             ))
             .await?;
 
-        // 2. Record timestamp T (now + 15s offset)
-        let view_offset = Duration::from_secs(15);
+        // 2. Record timestamp T (now + offset)
+        let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -57,8 +57,8 @@ impl Migration for Migration0048<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_nanos();
+            + ViewOffsetDeadline::offset())
+        .as_nanos();
 
         // 3. Drop the existing MV
         self.clickhouse
@@ -100,7 +100,7 @@ impl Migration for Migration0048<'_> {
 
         // 5. Backfill if needed
         if !clean_start {
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
 
             let create_table = self
                 .clickhouse

@@ -159,7 +159,7 @@ test.describe("User questions", () => {
     // Insert a user_questions event via the database
     const eventId = v7();
     const { payload, q1Id, opt1Id } = buildMultipleChoicePayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     // Wait for the PendingQuestionCard to appear in the footer
     await expect(
@@ -191,7 +191,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload, q1Id } = buildFreeResponsePayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(
       page.getByText("What specific requirements do you have?"),
@@ -221,7 +221,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload, q1Id, opt1Id, opt2Id } = buildMultiSelectPayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(
       page.getByText("Which features should we include?"),
@@ -255,7 +255,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload, q1Id, q2Id, opt1Id } = buildMultiQuestionPayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     // Wait for Q1 (multiple choice)
     await expect(page.getByText("Which framework do you prefer?")).toBeVisible({
@@ -297,7 +297,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload, opt1Id } = buildMultiQuestionPayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(page.getByText("Which framework do you prefer?")).toBeVisible({
       timeout: 15000,
@@ -339,7 +339,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload, q1Id } = buildMultipleChoicePayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(
       page.getByText("Which authentication method should we use?"),
@@ -365,7 +365,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload } = buildMultipleChoicePayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     // Pending questions show "Action Required" badge in the event stream
     await expect(page.getByText("Action Required")).toBeVisible({
@@ -386,7 +386,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload } = buildFreeResponsePayload("Describe your requirements");
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(page.getByText("Describe your requirements")).toBeVisible({
       timeout: 15000,
@@ -422,7 +422,7 @@ test.describe("User questions", () => {
 
     const eventId = v7();
     const { payload } = buildMultipleChoicePayload();
-    insertEvent(eventId, sessionId, payload);
+    await insertEvent(eventId, sessionId, payload);
 
     await expect(
       page.getByText("Which authentication method should we use?"),

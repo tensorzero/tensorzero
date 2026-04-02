@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
+use tensorzero_core::config::{default_flush_interval_ms, default_max_rows};
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
@@ -289,7 +290,14 @@ async fn run() -> Result<(), ExitCode> {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
-    if unwritten_config.gateway.export.otlp.traces.enabled {
+    let export_config = &unwritten_config.gateway.export;
+    let otlp_traces_enabled = export_config
+        .otlp
+        .as_ref()
+        .and_then(|o| o.traces.as_ref())
+        .and_then(|t| t.enabled)
+        .unwrap_or(false);
+    if otlp_traces_enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
@@ -305,20 +313,19 @@ async fn run() -> Result<(), ExitCode> {
         }
 
         // Set config-level OTLP headers if we have a tracer wrapper
-        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer
-            && !unwritten_config
-                .gateway
-                .export
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            let extra_headers = export_config
                 .otlp
-                .traces
-                .extra_headers
-                .is_empty()
-        {
-            tracer_wrapper
-                .set_static_otlp_traces_extra_headers(
-                    &unwritten_config.gateway.export.otlp.traces.extra_headers,
-                )
-                .log_err_pretty("Failed to set OTLP config headers")?;
+                .as_ref()
+                .and_then(|o| o.traces.as_ref())
+                .and_then(|t| t.extra_headers.as_ref());
+            if let Some(headers) = extra_headers
+                && !headers.is_empty()
+            {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(headers)
+                    .log_err_pretty("Failed to set OTLP config headers")?;
+            }
         }
 
         match delayed_log_config.delayed_otel {
@@ -400,7 +407,10 @@ async fn run() -> Result<(), ExitCode> {
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
         metrics_handle,
-    );
+        gateway_handle.app_state.shutdown_token.clone(),
+    )
+    .await
+    .log_err_pretty("Failed to build router")?;
 
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {
@@ -458,16 +468,24 @@ async fn run() -> Result<(), ExitCode> {
         "├ ClickHouse: {}",
         gateway_handle.app_state.clickhouse_connection_info
     );
-    if config.gateway.observability.batch_writes.enabled {
+    let batch_writes = config
+        .gateway
+        .observability
+        .batch_writes
+        .clone()
+        .unwrap_or_default();
+    if batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
-            config.gateway.observability.batch_writes.flush_interval_ms,
-            config.gateway.observability.batch_writes.max_rows
+            batch_writes
+                .flush_interval_ms
+                .unwrap_or_else(default_flush_interval_ms),
+            batch_writes.max_rows.unwrap_or_else(default_max_rows)
         );
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
-    if config.gateway.observability.async_writes {
+    if config.gateway.observability.async_writes.unwrap_or(false) {
         tracing::info!("├ Async Writes: enabled");
     } else {
         tracing::info!("├ Async Writes: disabled");
@@ -517,7 +535,15 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print whether OpenTelemetry is enabled
-    if config.gateway.export.otlp.traces.enabled {
+    let otlp_traces_enabled = config
+        .gateway
+        .export
+        .otlp
+        .as_ref()
+        .and_then(|o| o.traces.as_ref())
+        .and_then(|t| t.enabled)
+        .unwrap_or(false);
+    if otlp_traces_enabled {
         tracing::info!("└ OpenTelemetry: enabled");
     } else {
         tracing::info!("└ OpenTelemetry: disabled");

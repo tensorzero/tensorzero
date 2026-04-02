@@ -23,12 +23,14 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
@@ -37,7 +39,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
     Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
+use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use crate::tool::{
@@ -904,6 +906,11 @@ fn convert_converse_response(
     let usage = Usage {
         input_tokens: Some(total_input_tokens),
         output_tokens: Some(response.usage.output_tokens as u32),
+        provider_cache_read_input_tokens: response.usage.cache_read_input_tokens.map(|v| v as u32),
+        provider_cache_write_input_tokens: response
+            .usage
+            .cache_write_input_tokens
+            .map(|v| v as u32),
         cost: None,
     };
 
@@ -919,6 +926,7 @@ fn convert_converse_response(
 
     Ok(ProviderInferenceResponse::new(
         ProviderInferenceResponseArgs {
+            id: model_inference_id,
             output: content,
             system: ctx.system,
             input_messages: ctx.input_messages,
@@ -929,7 +937,6 @@ fn convert_converse_response(
             relay_raw_response: None,
             provider_latency: latency,
             finish_reason: Some(convert_stop_reason(response.stop_reason)),
-            id: model_inference_id,
         },
     ))
 }
@@ -1275,6 +1282,14 @@ fn process_stream_event(
             let usage = Some(Usage {
                 input_tokens: Some(total_input_tokens),
                 output_tokens: Some(event.usage.output_tokens as u32),
+                provider_cache_read_input_tokens: event
+                    .usage
+                    .cache_read_input_tokens
+                    .map(|v| v as u32),
+                provider_cache_write_input_tokens: event
+                    .usage
+                    .cache_write_input_tokens
+                    .map(|v| v as u32),
                 cost: None,
             });
 
@@ -1298,6 +1313,7 @@ fn process_stream_event(
 mod tests {
     use super::*;
     use crate::utils::testing::reset_capture_logs;
+    use googletest::prelude::*;
 
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
@@ -1373,5 +1389,40 @@ mod tests {
         assert!(logs_contain(
             "Creating new AWS config for region: me-shire-2"
         ));
+    }
+
+    #[gtest]
+    fn test_aws_bedrock_usage_with_cache_tokens() {
+        use tensorzero_types_providers::aws_bedrock;
+
+        let bedrock_usage = aws_bedrock::Usage {
+            input_tokens: 50,
+            output_tokens: 30,
+            total_tokens: Some(80),
+            cache_read_input_tokens: Some(40),
+            cache_write_input_tokens: Some(10),
+        };
+
+        // Replicate the conversion logic from the provider:
+        // total_input_tokens includes cache tokens since Bedrock reports them separately
+        let total_input_tokens = bedrock_usage.input_tokens as u32
+            + bedrock_usage.cache_read_input_tokens.unwrap_or(0) as u32
+            + bedrock_usage.cache_write_input_tokens.unwrap_or(0) as u32;
+        let usage = Usage {
+            input_tokens: Some(total_input_tokens),
+            output_tokens: Some(bedrock_usage.output_tokens as u32),
+            provider_cache_read_input_tokens: bedrock_usage
+                .cache_read_input_tokens
+                .map(|v| v as u32),
+            provider_cache_write_input_tokens: bedrock_usage
+                .cache_write_input_tokens
+                .map(|v| v as u32),
+            cost: None,
+        };
+
+        expect_that!(usage.input_tokens, eq(Some(100)));
+        expect_that!(usage.output_tokens, eq(Some(30)));
+        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(40)));
+        expect_that!(usage.provider_cache_write_input_tokens, eq(Some(10)));
     }
 }

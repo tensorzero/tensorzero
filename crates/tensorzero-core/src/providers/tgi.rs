@@ -36,6 +36,7 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
+use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
@@ -46,7 +47,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{Credential, ModelProvider};
@@ -539,6 +540,7 @@ impl<'a> TGIRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 reasoning_field_name: ReasoningFieldName::ReasoningContent,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -633,11 +635,12 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 usage,
             )
         });
-        let usage = response.usage.into();
+        let usage = response.usage.into_usage();
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
+                id: model_inference_id,
                 output: content,
                 system,
                 input_messages,
@@ -647,8 +650,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_usage,
                 relay_raw_response: None,
                 provider_latency: latency,
-                finish_reason: finish_reason.map(Into::into),
-                id: model_inference_id,
+                finish_reason: finish_reason.map(TGIFinishReason::into_finish_reason),
             },
         ))
     }
@@ -690,11 +692,14 @@ struct TGIUsage {
     completion_tokens: u32,
 }
 
-impl From<TGIUsage> for Usage {
-    fn from(usage: TGIUsage) -> Self {
+impl TGIUsage {
+    fn into_usage(self) -> Usage {
         Usage {
-            input_tokens: Some(usage.prompt_tokens),
-            output_tokens: Some(usage.completion_tokens),
+            input_tokens: Some(self.prompt_tokens),
+            output_tokens: Some(self.completion_tokens),
+            // TGI does not report cache token counts.
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
             cost: None,
         }
     }
@@ -744,9 +749,9 @@ pub(super) enum TGIFinishReason {
     Unknown,
 }
 
-impl From<TGIFinishReason> for FinishReason {
-    fn from(finish_reason: TGIFinishReason) -> Self {
-        match finish_reason {
+impl TGIFinishReason {
+    fn into_finish_reason(self) -> FinishReason {
+        match self {
             TGIFinishReason::Stop => FinishReason::Stop,
             TGIFinishReason::StopSequence => FinishReason::StopSequence,
             TGIFinishReason::Length => FinishReason::Length,
@@ -840,12 +845,12 @@ fn tgi_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(Into::into);
+    let usage = chunk.usage.map(TGIUsage::into_usage);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
         if let Some(reason) = choice.finish_reason {
-            finish_reason = Some(reason.into());
+            finish_reason = Some(reason.into_finish_reason());
         }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {

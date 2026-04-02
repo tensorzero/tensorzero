@@ -198,30 +198,22 @@ pub struct EventPayloadStatusUpdate {
 }
 
 /// Tool result payload for an event.
+///
+/// Includes enriched fields from the originating tool call and authorization events,
+/// making this payload self-contained for UI rendering.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
-    /// Authorization source (Ui/Automatic/Whitelist). Optional because interrupted
-    /// tool results may not have a corresponding authorization event.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_authorization_source: Option<ToolCallDecisionSource>,
-    /// Authorization status (Approved/Rejected/NotAvailable). Optional for same reason.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_authorization_status: Option<ToolCallAuthorizationStatus>,
+    pub tool_call_arguments: serde_json::Value,
+    /// Authorization source (Ui/Automatic/Whitelist).
+    pub tool_call_authorization_source: ToolCallDecisionSource,
+    /// Authorization status (Approved/Rejected/NotAvailable).
+    pub tool_call_authorization_status: ToolCallAuthorizationStatus,
 }
 
 /// Internal event payload type - consumers should use `GatewayEventPayload` instead.
@@ -519,6 +511,8 @@ pub enum ToolCallDecisionSource {
     Ui,
     Automatic,
     Whitelist,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -528,15 +522,9 @@ pub struct EventPayloadToolCallAuthorization {
     pub tool_call_event_id: Uuid,
     pub status: ToolCallAuthorizationStatus,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 /// Minimal input payload for creating a tool call authorization event.
@@ -558,15 +546,9 @@ pub struct GatewayEventPayloadToolCallAuthorization {
     pub tool_call_event_id: Uuid,
     pub status: GatewayToolCallAuthorizationStatus,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_name: Option<String>,
+    pub tool_call_name: String,
     /// Populated by the server from the originating tool call event.
-    /// Optional for backwards compatibility until the API is deployed with enrichment.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    pub tool_call_arguments: Option<serde_json::Value>,
+    pub tool_call_arguments: serde_json::Value,
 }
 
 impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallAuthorization {
@@ -588,8 +570,12 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
-    Rejected { reason: String },
+    Rejected {
+        reason: String,
+    },
     NotAvailable,
+    /// The session was interrupted before authorization could occur.
+    Interrupted,
 }
 
 /// Authorization status for tool calls as seen by gateway consumers.
@@ -617,6 +603,9 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
             }
             ToolCallAuthorizationStatus::NotAvailable => {
                 Err("NotAvailable status should be filtered before conversion")
+            }
+            ToolCallAuthorizationStatus::Interrupted => {
+                Err("Interrupted status should be filtered before conversion")
             }
         }
     }
@@ -771,6 +760,10 @@ pub struct MultipleChoiceQuestion {
     pub options: Vec<MultipleChoiceOption>,
     /// Set to true to allow the user to select multiple options instead of just one.
     pub multi_select: bool,
+    /// Set to true to show a free-text textarea below the options for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub include_free_response: Option<bool>,
 }
 
 /// An option in a multiple choice question.
@@ -813,6 +806,10 @@ pub enum UserQuestionAnswer {
 pub struct MultipleChoiceAnswer {
     /// IDs of the selected options.
     pub selected: Vec<Uuid>,
+    /// Optional free-text response for additional context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub free_response_text: Option<String>,
 }
 
 /// A user's free-form text answer.
@@ -1039,6 +1036,98 @@ pub struct S3UploadResponse {
     pub secret_access_key: Option<String>,
     pub session_token: Option<String>,
     pub credential_expiration: DateTime<Utc>,
+}
+
+// =============================================================================
+// Failure Mode Analysis Types
+// =============================================================================
+
+/// Query parameters for cursor-based pagination on FMA endpoints.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FmaCursorPaginationParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Query parameters for listing failures.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListFailuresParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_mode_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unclassified: Option<bool>,
+}
+
+/// A failure mode returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureModeResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A failure returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureResponse {
+    pub id: Uuid,
+    pub analysis_id: Uuid,
+    pub failure_mode_id: Option<Uuid>,
+    pub episode_id: Uuid,
+    pub inference_id: Option<Uuid>,
+    pub characterization: String,
+    pub pinned: bool,
+    pub failure_mode_id_is_user_provided: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// An analysis returned by the FMA API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisResponse {
+    pub id: Uuid,
+    pub deployment_id: String,
+    pub function_name: String,
+    pub tool_name: String,
+    pub session_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruction: Option<String>,
+    pub filters: Option<serde_json::Value>,
+    pub max_failures: Option<i32>,
+    pub fit_score: Option<f64>,
+    pub failure_mode_count: i64,
+    pub failure_count: i64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Response from listing failure modes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailureModesResponse {
+    pub failure_modes: Vec<FailureModeResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing failures.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListFailuresResponse {
+    pub failures: Vec<FailureResponse>,
+    pub next_cursor: Option<Uuid>,
+}
+
+/// Response from listing analyses.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListAnalysesResponse {
+    pub analyses: Vec<AnalysisResponse>,
+    pub next_cursor: Option<Uuid>,
 }
 
 // =============================================================================

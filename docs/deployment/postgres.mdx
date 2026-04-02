@@ -193,6 +193,19 @@ TENSORZERO_POSTGRES_URL="postgres://[username]:[password]@[hostname]:[port]/[dat
 TENSORZERO_POSTGRES_URL="postgres://myuser:mypass@localhost:5432/tensorzero"
 ```
 
+<Warning>
+
+**Supabase Free Tier**
+
+Supabase's direct connection URL requires IPv4, which is not available on the free tier.
+Use the session pooler URL instead: in your Supabase dashboard, go to `Connect → Connection string` and select `Session pooler`.
+
+If migrations fail with `prepared statement "sqlx_s_1" already exists`, switch to port `5432` in the connection string.
+See [this Supabase issue](https://github.com/supabase/supavisor/issues/239#issuecomment-2085235022) for details.
+Migrations may be slower through the session pooler.
+
+</Warning>
+
 </Step>
 
 <Step title="Apply Postgres migrations">
