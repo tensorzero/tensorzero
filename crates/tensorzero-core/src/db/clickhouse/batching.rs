@@ -155,8 +155,14 @@ pub struct BatchWriter {
 impl BatchWriter {
     pub async fn process(self, clickhouse: ClickHouseConnectionInfo, config: BatchWritesConfig) {
         let mut join_set = JoinSet::new();
-        let batch_timeout = Duration::from_millis(config.flush_interval_ms);
-        let max_rows = config.max_rows;
+        let batch_timeout = Duration::from_millis(
+            config
+                .flush_interval_ms
+                .unwrap_or_else(crate::config::default_flush_interval_ms),
+        );
+        let max_rows = config
+            .max_rows
+            .unwrap_or_else(crate::config::default_max_rows);
 
         for (table_name, channel) in self.channels {
             let clickhouse = clickhouse.clone();

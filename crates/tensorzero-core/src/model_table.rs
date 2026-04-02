@@ -394,73 +394,123 @@ impl ProviderTypeDefaultCredentials {
     pub fn new(provider_types_config: &ProviderTypesConfig) -> Self {
         let anthropic_location = provider_types_config
             .anthropic
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let azure_location = provider_types_config
             .azure
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let deepseek_location = provider_types_config
             .deepseek
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let fireworks_location = provider_types_config
             .fireworks
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let google_ai_studio_gemini_location = provider_types_config
             .google_ai_studio_gemini
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let gcp_vertex_anthropic_location = provider_types_config
             .gcp_vertex_anthropic
-            .defaults
-            .credential_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .credential_location;
         let gcp_vertex_gemini_location = provider_types_config
             .gcp_vertex_gemini
-            .defaults
-            .credential_location
-            .clone();
-        let groq_location = provider_types_config.groq.defaults.api_key_location.clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .credential_location;
+        let groq_location = provider_types_config
+            .groq
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let hyperbolic_location = provider_types_config
             .hyperbolic
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let mistral_location = provider_types_config
             .mistral
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let openai_location = provider_types_config
             .openai
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let openrouter_location = provider_types_config
             .openrouter
-            .defaults
-            .api_key_location
-            .clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let sglang_location = provider_types_config
             .sglang
-            .defaults
-            .api_key_location
-            .clone();
-        let tgi_location = provider_types_config.tgi.defaults.api_key_location.clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
+        let tgi_location = provider_types_config
+            .tgi
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
         let together_location = provider_types_config
             .together
-            .defaults
-            .api_key_location
-            .clone();
-        let vllm_location = provider_types_config.vllm.defaults.api_key_location.clone();
-        let xai_location = provider_types_config.xai.defaults.api_key_location.clone();
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
+        let vllm_location = provider_types_config
+            .vllm
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
+        let xai_location = provider_types_config
+            .xai
+            .as_ref()
+            .and_then(|a| a.defaults.as_ref())
+            .cloned()
+            .unwrap_or_default()
+            .api_key_location;
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {

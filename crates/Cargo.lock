@@ -155,7 +155,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -166,7 +166,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -544,7 +544,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "config-applier"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "pathdiff",
  "schemars 1.2.1",
@@ -2194,7 +2194,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=03f2c5f820b57dff2bdcb60c081533d03605519f#03f2c5f820b57dff2bdcb60c081533d03605519f"
+source = "git+https://github.com/tensorzero/durable?rev=b5f2664bc12e154a3ed00281c1a14a8c7406eae1#b5f2664bc12e154a3ed00281c1a14a8c7406eae1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "async-trait",
  "durable",
@@ -2376,7 +2376,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2392,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2503,7 +2503,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2749,7 +2749,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "async-stream",
  "autopilot-client",
@@ -2974,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "googletest-matchers"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "googletest",
  "serde_json",
@@ -4154,7 +4154,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "minijinja",
  "serde",
@@ -4393,7 +4393,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4899,7 +4899,7 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "postgres-inference-load-test"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5488,7 +5488,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5826,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "async-stream",
  "futures",
@@ -6034,7 +6034,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6093,7 +6093,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6553,7 +6553,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6983,12 +6983,12 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "tensorzero"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -7015,7 +7015,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "axum",
  "chrono",
@@ -7035,11 +7035,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.3.5"
+version = "2026.4.0"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -7122,6 +7122,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
+ "serde_with",
  "sha2 0.11.0",
  "sqlx",
  "strum 0.28.0",
@@ -7168,7 +7169,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-error"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "autopilot-client",
  "axum",
@@ -7191,7 +7192,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-mcp"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "async-trait",
  "autopilot-client",
@@ -7209,7 +7210,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "config-applier",
  "napi",
@@ -7224,7 +7225,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -7261,7 +7262,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-provider-types"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "futures",
  "mime 0.4.0-a.0",
@@ -7281,7 +7282,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "evaluations",
  "futures",
@@ -7299,11 +7300,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-ts-types"
-version = "2026.3.5"
+version = "2026.4.0"
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "aws-smithy-types",
  "blake3",
@@ -7331,7 +7332,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.3.5"
+version = "2026.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -7341,7 +7342,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.3.5"
+version = "2026.4.0"
 
 [[package]]
 name = "termcolor"
@@ -8410,7 +8411,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

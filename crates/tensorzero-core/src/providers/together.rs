@@ -464,6 +464,7 @@ impl<'a> TogetherRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -2240,6 +2241,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2276,6 +2278,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2327,6 +2330,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2358,6 +2362,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
         };
         let msg = tensorzero_to_together_assistant_message(Cow::Owned(content), config)
             .await
@@ -2388,6 +2393,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
         };
         let result = tensorzero_to_together_assistant_message(Cow::Owned(content), config).await;
         assert!(result.is_err(), "should error on unknown reasoning_format");

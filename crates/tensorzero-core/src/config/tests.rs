@@ -90,8 +90,8 @@ async fn test_config_from_toml_table_valid() {
         }
         FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
-    // Check that the async flag is set to false by default
-    assert!(!config.gateway.observability.async_writes);
+    // Check that the async flag is not set by default
+    assert_eq!(config.gateway.observability.async_writes, None);
 
     // To test that variant default weights work correctly,
     // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
@@ -269,7 +269,7 @@ async fn test_config_from_toml_table_valid() {
         "get_temperature"
     );
 
-    assert_eq!(config.postgres.connection_pool_size, 10);
+    assert_eq!(config.postgres.connection_pool_size, Some(10));
 }
 
 /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

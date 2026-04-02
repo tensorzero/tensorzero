@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -59,6 +60,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
@@ -335,11 +337,9 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
-    config
-        .gateway
-        .export
-        .otlp
-        .mark_openinference_chain_span(&span);
+    if let Some(otlp) = &config.gateway.export.otlp {
+        otlp.mark_openinference_chain_span(&span);
+    }
 
     // Automatically add internal tag when internal=true
     if params.internal {
@@ -464,6 +464,7 @@ pub async fn inference(
         }
         counter!("tensorzero_requests_total", &labels).increment(1);
         counter!("tensorzero_inferences_total", &labels).increment(1);
+        TENSORZERO_INFERENCES_TOTAL.fetch_add(1, Ordering::Relaxed);
     }
 
     // Should we stream the inference?
@@ -494,7 +495,7 @@ pub async fn inference(
         cache_manager,
         tags: tags.clone(),
         rate_limiting_manager,
-        otlp_config: config.gateway.export.otlp.clone(),
+        otlp_config: config.gateway.export.otlp.clone().unwrap_or_default(),
         deferred_tasks,
         scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
         relay: config.gateway.relay.clone(),
@@ -934,7 +935,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 snapshot_hash: config.hash.clone(),
             };
 
-            let async_writes = config.gateway.observability.async_writes;
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let postgres_connection_info = postgres_connection_info.clone();
             let config = config.clone();
@@ -1428,7 +1429,7 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            let async_writes = config.gateway.observability.async_writes;
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
             let write_future = async move {
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks_future.await;

@@ -39,7 +39,7 @@ impl From<StoredEmbeddingModelConfig> for UninitializedEmbeddingModelConfig {
             routing,
             providers: providers.into_iter().map(|(k, v)| (k, v.into())).collect(),
             // Migration: prefer new field, fall back to deprecated
-            timeout_ms: timeout_ms.or(timeouts.non_streaming.total_ms),
+            timeout_ms: timeout_ms.or_else(|| timeouts.non_streaming.and_then(|ns| ns.total_ms)),
         }
     }
 }
@@ -100,7 +100,7 @@ impl From<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfi
         Self {
             config,
             // Migration: prefer new field, fall back to deprecated
-            timeout_ms: timeout_ms.or(timeouts.non_streaming.total_ms),
+            timeout_ms: timeout_ms.or_else(|| timeouts.non_streaming.and_then(|ns| ns.total_ms)),
             extra_body,
             extra_headers,
             cost,
@@ -155,7 +155,14 @@ mod tests {
             stored.timeout_ms.is_none(),
             "new field should not be set when only deprecated field is present"
         );
-        assert_eq!(stored.timeouts.non_streaming.total_ms, Some(5000));
+        assert_eq!(
+            stored
+                .timeouts
+                .non_streaming
+                .as_ref()
+                .and_then(|ns| ns.total_ms),
+            Some(5000)
+        );
 
         let uninit: UninitializedEmbeddingModelConfig = stored.into();
         assert_eq!(
@@ -183,7 +190,14 @@ mod tests {
         let stored: StoredEmbeddingModelConfig =
             toml::from_str(toml_str).expect("should parse deprecated provider timeouts");
         let provider = stored.providers.get("provider1").unwrap();
-        assert_eq!(provider.timeouts.non_streaming.total_ms, Some(7000));
+        assert_eq!(
+            provider
+                .timeouts
+                .non_streaming
+                .as_ref()
+                .and_then(|ns| ns.total_ms),
+            Some(7000)
+        );
 
         let uninit: UninitializedEmbeddingModelConfig = stored.into();
         let provider = uninit.providers.get("provider1").unwrap();

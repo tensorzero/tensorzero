@@ -1,4 +1,4 @@
-use durable::{ControlFlow, DurableError, TaskError};
+use durable::{ControlFlow, DurableError, NonControlTaskError, TaskError};
 use serde::de::Error as _;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use thiserror::Error;
@@ -68,52 +68,58 @@ impl From<TaskError> for ToolError {
     fn from(err: TaskError) -> Self {
         match err {
             TaskError::Control(cf) => ToolError::Control(cf),
-            TaskError::Database(e) => ToolError::Database(e),
-            TaskError::Serialization(e) => {
-                ToolError::NonControl(NonControlToolError::Serialization {
-                    message: e.to_string(),
-                })
-            }
-            TaskError::Timeout { step_name } => {
-                ToolError::NonControl(NonControlToolError::Timeout { step_name })
-            }
-            TaskError::Step { base_name, error } => {
-                ToolError::NonControl(NonControlToolError::Step {
-                    base_name,
-                    error: error.to_string(),
-                })
-            }
-            TaskError::User {
-                message,
-                error_data,
-            } => ToolError::NonControl(NonControlToolError::User {
-                message,
-                error_data,
-            }),
-            TaskError::Validation { message } => {
-                ToolError::NonControl(NonControlToolError::Validation { message })
-            }
-            TaskError::TaskPanicked { message } => {
-                ToolError::NonControl(NonControlToolError::TaskPanicked { message })
-            }
-            TaskError::ChildFailed { step_name, message } => {
-                ToolError::NonControl(NonControlToolError::ChildFailed { step_name, message })
-            }
-            TaskError::ChildCancelled { step_name } => {
-                ToolError::NonControl(NonControlToolError::ChildCancelled { step_name })
-            }
-            TaskError::SubtaskSpawnFailed { name, error } => {
-                ToolError::NonControl(NonControlToolError::SubtaskSpawnFailed {
-                    name,
-                    error: error.to_string(),
-                })
-            }
-            TaskError::EmitEventFailed { event_name, error } => {
-                ToolError::NonControl(NonControlToolError::EmitEventFailed {
-                    event_name,
-                    error: error.to_string(),
-                })
-            }
+            TaskError::NonControl(e) => non_control_task_error_to_tool_error(e),
+        }
+    }
+}
+
+fn non_control_task_error_to_tool_error(err: NonControlTaskError) -> ToolError {
+    match err {
+        NonControlTaskError::Database(e) => ToolError::Database(e),
+        NonControlTaskError::Serialization(e) => {
+            ToolError::NonControl(NonControlToolError::Serialization {
+                message: e.to_string(),
+            })
+        }
+        NonControlTaskError::Timeout { step_name } => {
+            ToolError::NonControl(NonControlToolError::Timeout { step_name })
+        }
+        NonControlTaskError::Step { base_name, error } => {
+            ToolError::NonControl(NonControlToolError::Step {
+                base_name,
+                error: error.to_string(),
+            })
+        }
+        NonControlTaskError::User {
+            message,
+            error_data,
+        } => ToolError::NonControl(NonControlToolError::User {
+            message,
+            error_data,
+        }),
+        NonControlTaskError::Validation { message } => {
+            ToolError::NonControl(NonControlToolError::Validation { message })
+        }
+        NonControlTaskError::TaskPanicked { message } => {
+            ToolError::NonControl(NonControlToolError::TaskPanicked { message })
+        }
+        NonControlTaskError::ChildFailed { step_name, message } => {
+            ToolError::NonControl(NonControlToolError::ChildFailed { step_name, message })
+        }
+        NonControlTaskError::ChildCancelled { step_name } => {
+            ToolError::NonControl(NonControlToolError::ChildCancelled { step_name })
+        }
+        NonControlTaskError::SubtaskSpawnFailed { name, error } => {
+            ToolError::NonControl(NonControlToolError::SubtaskSpawnFailed {
+                name,
+                error: error.to_string(),
+            })
+        }
+        NonControlTaskError::EmitEventFailed { event_name, error } => {
+            ToolError::NonControl(NonControlToolError::EmitEventFailed {
+                event_name,
+                error: error.to_string(),
+            })
         }
     }
 }
@@ -122,7 +128,7 @@ impl From<ToolError> for TaskError {
     fn from(err: ToolError) -> Self {
         match err {
             ToolError::Control(cf) => TaskError::Control(cf),
-            ToolError::Database(e) => TaskError::Database(e),
+            ToolError::Database(e) => NonControlTaskError::Database(e).into(),
             ToolError::NonControl(e) => non_control_tool_error_to_task_error(e),
         }
     }
@@ -135,29 +141,37 @@ impl From<ToolError> for TaskError {
 /// in `durable`, so the orphan rule prevents an impl here.
 pub fn non_control_tool_error_to_task_error(err: NonControlToolError) -> TaskError {
     match err {
-        NonControlToolError::Step { base_name, error } => TaskError::Step {
+        NonControlToolError::Step { base_name, error } => NonControlTaskError::Step {
             base_name,
             error: anyhow::anyhow!(error),
-        },
-        NonControlToolError::Timeout { step_name } => TaskError::Timeout { step_name },
+        }
+        .into(),
+        NonControlToolError::Timeout { step_name } => {
+            NonControlTaskError::Timeout { step_name }.into()
+        }
         NonControlToolError::User {
             message,
             error_data,
-        } => TaskError::User {
+        } => NonControlTaskError::User {
             message,
             error_data,
-        },
-        NonControlToolError::Validation { message } => TaskError::Validation { message },
+        }
+        .into(),
+        NonControlToolError::Validation { message } => {
+            NonControlTaskError::Validation { message }.into()
+        }
         NonControlToolError::ChildFailed { step_name, message } => {
-            TaskError::ChildFailed { step_name, message }
+            NonControlTaskError::ChildFailed { step_name, message }.into()
         }
         NonControlToolError::ChildCancelled { step_name } => {
-            TaskError::ChildCancelled { step_name }
+            NonControlTaskError::ChildCancelled { step_name }.into()
         }
         NonControlToolError::Serialization { message } => {
-            TaskError::Serialization(serde_json::Error::custom(message))
+            TaskError::from(serde_json::Error::custom(message))
         }
-        NonControlToolError::TaskPanicked { message } => TaskError::TaskPanicked { message },
+        NonControlToolError::TaskPanicked { message } => {
+            NonControlTaskError::TaskPanicked { message }.into()
+        }
         // For all other variants, use the Serialize impl to generate error_data
         other => {
             let error_data = serde_json::to_value(&other).unwrap_or_else(|e| {
@@ -167,10 +181,11 @@ pub fn non_control_tool_error_to_task_error(err: NonControlToolError) -> TaskErr
                 })
             });
             let message = other.to_string();
-            TaskError::User {
+            NonControlTaskError::User {
                 message,
                 error_data,
             }
+            .into()
         }
     }
 }
@@ -261,21 +276,23 @@ mod tests {
         tool_error.into()
     }
 
+    use durable::NonControlTaskError;
+
     #[test]
     fn step_error_retryable_after_round_trip() {
-        let err = TaskError::Step {
+        let err = TaskError::NonControl(NonControlTaskError::Step {
             base_name: "my_step".to_string(),
             error: anyhow::anyhow!("transient failure"),
-        };
+        });
         assert!(
             err.retryable(),
             "Step should be retryable before round-trip"
         );
 
-        let back = round_trip(TaskError::Step {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Step {
             base_name: "my_step".to_string(),
             error: anyhow::anyhow!("transient failure"),
-        });
+        }));
         assert!(
             back.retryable(),
             "Step must remain retryable after round-trip through ToolError, got: {back}"
@@ -284,68 +301,68 @@ mod tests {
 
     #[test]
     fn timeout_retryable_after_round_trip() {
-        let back = round_trip(TaskError::Timeout {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Timeout {
             step_name: "wait_for_event".to_string(),
-        });
+        }));
         assert!(back.retryable());
     }
 
     #[test]
     fn user_error_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::User {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::User {
             message: "bad input".to_string(),
             error_data: serde_json::json!({"message": "bad input"}),
-        });
+        }));
         assert!(!back.retryable());
     }
 
     #[test]
     fn validation_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::Validation {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Validation {
             message: "invalid".to_string(),
-        });
+        }));
         assert!(!back.retryable());
     }
 
     #[test]
     fn serialization_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::Serialization(serde_json::Error::custom(
-            "bad json",
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Serialization(
+            serde_json::Error::custom("bad json"),
         )));
         assert!(!back.retryable());
     }
 
     #[test]
     fn task_panicked_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::TaskPanicked {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::TaskPanicked {
             message: "panic".to_string(),
-        });
+        }));
         assert!(!back.retryable());
     }
 
     #[test]
     fn child_failed_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::ChildFailed {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::ChildFailed {
             step_name: "child".to_string(),
             message: "failed".to_string(),
-        });
+        }));
         assert!(!back.retryable());
     }
 
     #[test]
     fn child_cancelled_not_retryable_after_round_trip() {
-        let back = round_trip(TaskError::ChildCancelled {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::ChildCancelled {
             step_name: "child".to_string(),
-        });
+        }));
         assert!(!back.retryable());
     }
 
     #[test]
     fn step_error_preserves_message_after_round_trip() {
-        let back = round_trip(TaskError::Step {
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Step {
             base_name: "fetch_data".to_string(),
             error: anyhow::anyhow!("connection refused"),
-        });
+        }));
         let msg = format!("{back}");
         assert!(msg.contains("fetch_data"), "expected base_name in: {msg}");
         assert!(
@@ -357,8 +374,8 @@ mod tests {
 
     #[test]
     fn serialization_error_preserves_message_after_round_trip() {
-        let back = round_trip(TaskError::Serialization(serde_json::Error::custom(
-            "bad json",
+        let back = round_trip(TaskError::NonControl(NonControlTaskError::Serialization(
+            serde_json::Error::custom("bad json"),
         )));
         let msg = format!("{back}");
         assert!(msg.contains("bad json"), "expected error message in: {msg}");

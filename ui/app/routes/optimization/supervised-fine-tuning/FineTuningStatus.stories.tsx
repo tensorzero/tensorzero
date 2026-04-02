@@ -92,23 +92,24 @@ export const Completed: Story = {
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
-                non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null, total_ms: null },
+                non_streaming: { total_ms: undefined },
+                streaming: { ttft_ms: undefined, total_ms: undefined },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
               provider_tools: [],
+              content_type_overrides: {},
             },
           },
           timeouts: {
             non_streaming: {
-              total_ms: null,
+              total_ms: undefined,
             },
             streaming: {
-              ttft_ms: null,
-              total_ms: null,
+              ttft_ms: undefined,
+              total_ms: undefined,
             },
           },
           skip_relay: false,
@@ -204,14 +205,15 @@ export const LongJobId: Story = {
               model_name:
                 "ft:gpt-4o-mini-2024-07-18:my-org:custom-suffix:abc123",
               timeouts: {
-                non_streaming: { total_ms: null },
-                streaming: { ttft_ms: null, total_ms: null },
+                non_streaming: { total_ms: undefined },
+                streaming: { ttft_ms: undefined, total_ms: undefined },
               },
               discard_unknown_chunks: false,
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
               provider_tools: [],
+              content_type_overrides: {},
             },
           },
           timeouts: {

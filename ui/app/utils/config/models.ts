@@ -23,13 +23,28 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { timeouts, ...restProviderConfig } = providerConfig;
+  // Remove empty content_type_overrides to avoid cluttering the TOML output
+  const cleanedConfig = Object.fromEntries(
+    Object.entries(restProviderConfig).filter(([key, value]) => {
+      if (
+        key === "content_type_overrides" &&
+        typeof value === "object" &&
+        value !== null &&
+        Object.keys(value).length === 0
+      ) {
+        return false;
+      }
+      return true;
+    }),
+  );
   const fullyQualifiedProviderConfig = {
     models: {
       [modelName]: {
         routing: [modelName],
         providers: {
-          [modelName]: restProviderConfig,
+          [modelName]: cleanedConfig,
         },
       },
     },

@@ -43,7 +43,10 @@ use tensorzero_core::{
 use crate::{JobHandle, Optimizer};
 
 fn get_sft_config(provider_types: &ProviderTypesConfig) -> Option<&TogetherProviderSFTConfig> {
-    provider_types.together.sft.as_ref()
+    provider_types
+        .together
+        .as_ref()
+        .and_then(|t| t.sft.as_ref())
 }
 
 #[derive(Debug, Deserialize)]
@@ -404,6 +407,7 @@ impl<'a> TogetherSupervisedRow<'a> {
                 provider_type: PROVIDER_TYPE,
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -427,6 +431,7 @@ impl<'a> TogetherSupervisedRow<'a> {
                 provider_type: PROVIDER_TYPE,
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
             },
         )
         .await?;

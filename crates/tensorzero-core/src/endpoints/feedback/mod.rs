@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -28,6 +29,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, ContentBlockOutput, Text, parse_chat_output,
 };
 use crate::jsonschema_util::JSONSchema;
+use crate::observability::internal_metrics::TENSORZERO_FEEDBACKS_TOTAL;
 use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
@@ -207,6 +209,7 @@ async fn feedback_inner(
             "metric_name" => params.metric_name.to_string()
         )
         .increment(1);
+        TENSORZERO_FEEDBACKS_TOTAL.fetch_add(1, Ordering::Relaxed);
     }
 
     match feedback_metadata.r#type {

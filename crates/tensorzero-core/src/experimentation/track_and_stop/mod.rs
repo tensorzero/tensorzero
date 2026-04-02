@@ -266,7 +266,7 @@ impl Nursery {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedTrackAndStopExperimentationConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -281,13 +281,11 @@ pub struct UninitializedTrackAndStopExperimentationConfig {
     #[serde(default = "default_update_period_s")]
     update_period_s: u64,
     #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     min_prob: Option<f64>,
     #[serde(
         default = "default_max_samples_per_variant",
         skip_serializing_if = "Option::is_none"
     )]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
     max_samples_per_variant: Option<u64>,
 }
 

@@ -414,6 +414,7 @@ impl<'a> HyperbolicRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                content_type_overrides: None,
             },
         )
         .await?;
