@@ -24,6 +24,7 @@ members = [
     "tensorzero-mcp",
     "tensorzero-node",
     "tensorzero-optimizers",
+    "tensorzero-stored-config",
     "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless
     "tensorzero-ts-types",
     "tensorzero-types",
@@ -49,7 +50,7 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-serde_with = "3.18.0"
+serde_with = { version = "3.18.0", default-features = false, features = ["macros"] }
 uuid = { version = "1.22.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
@@ -122,7 +123,7 @@ schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.4"
 moka = { version = "0.12.15", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "03f2c5f820b57dff2bdcb60c081533d03605519f" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "b5f2664bc12e154a3ed00281c1a14a8c7406eae1" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
