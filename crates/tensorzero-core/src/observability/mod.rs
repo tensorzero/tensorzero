@@ -1257,6 +1257,18 @@ pub fn setup_metrics(metrics_config: Option<&MetricsConfig>) -> Result<Prometheu
         "Inferences performed by TensorZero",
     );
 
+    describe_counter!(
+        "tensorzero_input_tokens_total",
+        Unit::Count,
+        "Input tokens consumed by TensorZero inferences",
+    );
+
+    describe_counter!(
+        "tensorzero_output_tokens_total",
+        Unit::Count,
+        "Output tokens consumed by TensorZero inferences",
+    );
+
     if !buckets.is_empty() {
         describe_histogram!(
             "tensorzero_inference_latency_overhead_seconds",

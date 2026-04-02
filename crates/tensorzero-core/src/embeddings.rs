@@ -121,7 +121,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -708,6 +708,7 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
+        crate::model::record_usage_metrics(&response.usage);
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
@@ -722,7 +723,7 @@ impl EmbeddingProviderInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,

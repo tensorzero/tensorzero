@@ -14,15 +14,22 @@ use handler::TensorZeroMcpServer;
 ///
 /// The returned `Router<()>` is intended to be nested on the gateway router
 /// (e.g. via `nest_service("/mcp", ...)`) so MCP is served on the same port.
-pub fn build_mcp_router(
+pub async fn build_mcp_router(
     app_state: Arc<AppStateData>,
     shutdown_token: CancellationToken,
-) -> axum::Router {
+) -> Result<axum::Router, String> {
+    let tool_router = handler::build_tool_router(&app_state).await?;
+
     let service = StreamableHttpService::new(
-        move || Ok(TensorZeroMcpServer::new(app_state.clone())),
+        move || {
+            Ok(TensorZeroMcpServer::new(
+                app_state.clone(),
+                tool_router.clone(),
+            ))
+        },
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token()),
     );
 
-    axum::Router::new().fallback_service(service)
+    Ok(axum::Router::new().fallback_service(service))
 }

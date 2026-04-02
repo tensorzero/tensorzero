@@ -544,7 +544,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "arrow",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1199,16 +1199,16 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.8.3"
+version = "1.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2468ef7d57b3fb7e16b576e8377cdbde2320c60e1491e961d11da40fc4f02a2d"
+checksum = "4d2d5991425dfd0785aed03aedcf0b321d61975c9b5b3689c774a2610ae0b51e"
 dependencies = [
  "arrayref",
  "arrayvec",
  "cc",
  "cfg-if",
  "constant_time_eq",
- "cpufeatures 0.2.17",
+ "cpufeatures 0.3.0",
 ]
 
 [[package]]
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "config-applier"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "pathdiff",
  "schemars 1.2.1",
@@ -1858,9 +1858,9 @@ dependencies = [
 
 [[package]]
 name = "ctor"
-version = "0.6.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "424e0138278faeb2b401f174ad17e715c829512d74f3d1e81eb43365c2e0590e"
+checksum = "352d39c2f7bef1d6ad73db6f5160efcaed66d94ef8c6c573a8410c00bf909a98"
 dependencies = [
  "ctor-proc-macro",
  "dtor",
@@ -2172,9 +2172,9 @@ checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
 name = "dtor"
-version = "0.1.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "404d02eeb088a82cfd873006cb713fe411306c7d182c344905e101fb1167d301"
+checksum = "f1057d6c64987086ff8ed0fd3fbf377a6b7d205cc7715868cd401705f715cbe4"
 dependencies = [
  "dtor-proc-macro",
 ]
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "async-trait",
  "durable",
@@ -2392,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2402,12 +2402,14 @@ dependencies = [
  "googletest",
  "indicatif",
  "regex",
+ "rust_decimal",
  "serde",
  "serde_json",
  "serde_path_to_error",
  "tensorzero",
  "tensorzero-core",
  "tensorzero-derive",
+ "tensorzero-provider-types",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2501,7 +2503,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2747,7 +2749,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "async-stream",
  "autopilot-client",
@@ -2972,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "googletest-matchers"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "googletest",
  "serde_json",
@@ -3246,9 +3248,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.8.1"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ab2d4f250c3d7b1c9fcdff1cece94ea4e2dfbec68614f7b87cb205f24ca9d11"
+checksum = "6299f016b246a94207e63da54dbe807655bf9e00044f73ded42c3ac5305fbcca"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -3261,7 +3263,6 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "pin-utils",
  "smallvec",
  "tokio",
  "want",
@@ -4142,9 +4143,9 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "2.18.0"
+version = "2.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "328251e58ad8e415be6198888fc207502727dc77945806421ab34f35bf012e7d"
+checksum = "805bfd7352166bae857ee569628b52bcd85a1cecf7810861ebceb1686b72b75d"
 dependencies = [
  "memo-map",
  "serde",
@@ -4153,7 +4154,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "minijinja",
  "serde",
@@ -4287,9 +4288,9 @@ dependencies = [
 
 [[package]]
 name = "napi"
-version = "3.8.3"
+version = "3.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6944d0bf100571cd6e1a98a316cdca262deb6fccf8d93f5ae1502ca3fc88bd3"
+checksum = "fb7848c221fb7bb789e02f01875287ebb1e078b92a6566a34de01ef8806e7c2b"
 dependencies = [
  "bitflags",
  "ctor",
@@ -4309,9 +4310,9 @@ checksum = "d376940fd5b723c6893cd1ee3f33abbfd86acb1cd1ec079f3ab04a2a3bc4d3b1"
 
 [[package]]
 name = "napi-derive"
-version = "3.5.2"
+version = "3.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c914b5e420182bfb73504e0607592cdb8e2e21437d450883077669fb72a114d"
+checksum = "60867ff9a6f76e82350e0c3420cb0736f5866091b61d7d8a024baa54b0ec17dd"
 dependencies = [
  "convert_case 0.11.0",
  "ctor",
@@ -4898,7 +4899,7 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "postgres-inference-load-test"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5487,7 +5488,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5825,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "async-stream",
  "futures",
@@ -6987,7 +6988,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "async-trait",
  "clap",
@@ -7014,7 +7015,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "axum",
  "chrono",
@@ -7034,11 +7035,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.3.4"
+version = "2026.3.5"
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -7167,7 +7168,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-error"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "autopilot-client",
  "axum",
@@ -7190,20 +7191,25 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-mcp"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
+ "async-trait",
+ "autopilot-client",
+ "autopilot-tools",
  "axum",
+ "durable-tools",
  "rmcp",
  "serde",
  "serde_json",
+ "sqlx",
  "tensorzero-core",
  "tokio-util",
- "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "config-applier",
  "napi",
@@ -7218,7 +7224,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -7255,7 +7261,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-provider-types"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "derive_builder 0.20.2",
  "futures",
@@ -7280,7 +7286,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "evaluations",
  "futures",
@@ -7298,11 +7304,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-ts-types"
-version = "2026.3.4"
+version = "2026.3.5"
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "aws-smithy-types",
  "blake3",
@@ -7330,7 +7336,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.3.4"
+version = "2026.3.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -7340,7 +7346,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.3.4"
+version = "2026.3.5"
 
 [[package]]
 name = "termcolor"

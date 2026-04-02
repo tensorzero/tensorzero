@@ -1,4 +1,5 @@
 use durable::{ControlFlow, DurableError, TaskError};
+use serde::de::Error as _;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use thiserror::Error;
 
@@ -134,6 +135,10 @@ impl From<ToolError> for TaskError {
 /// in `durable`, so the orphan rule prevents an impl here.
 pub fn non_control_tool_error_to_task_error(err: NonControlToolError) -> TaskError {
     match err {
+        NonControlToolError::Step { base_name, error } => TaskError::Step {
+            base_name,
+            error: anyhow::anyhow!(error),
+        },
         NonControlToolError::Timeout { step_name } => TaskError::Timeout { step_name },
         NonControlToolError::User {
             message,
@@ -149,6 +154,10 @@ pub fn non_control_tool_error_to_task_error(err: NonControlToolError) -> TaskErr
         NonControlToolError::ChildCancelled { step_name } => {
             TaskError::ChildCancelled { step_name }
         }
+        NonControlToolError::Serialization { message } => {
+            TaskError::Serialization(serde_json::Error::custom(message))
+        }
+        NonControlToolError::TaskPanicked { message } => TaskError::TaskPanicked { message },
         // For all other variants, use the Serialize impl to generate error_data
         other => {
             let error_data = serde_json::to_value(&other).unwrap_or_else(|e| {
@@ -231,5 +240,128 @@ impl From<DurableError> for ToolError {
                 message: format!("schedule `{schedule_name}` not found in queue `{queue_name}`"),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The critical invariant: TaskError → ToolError → TaskError must preserve retryability.
+    ///
+    /// This is the round-trip that happens in `TaskToolAdapter::run()`:
+    /// 1. `TaskContext::step()` produces a `TaskError`
+    /// 2. `ToolContext::step()` converts it to `ToolError` (via `From<TaskError>`)
+    /// 3. `TaskToolAdapter::run()` converts it back to `TaskError` (via `From<ToolError>`)
+    ///
+    /// If retryability is lost in this round-trip, the durable worker won't retry
+    /// transient failures that should be retried.
+    fn round_trip(original: TaskError) -> TaskError {
+        let tool_error: ToolError = original.into();
+        tool_error.into()
+    }
+
+    #[test]
+    fn step_error_retryable_after_round_trip() {
+        let err = TaskError::Step {
+            base_name: "my_step".to_string(),
+            error: anyhow::anyhow!("transient failure"),
+        };
+        assert!(
+            err.retryable(),
+            "Step should be retryable before round-trip"
+        );
+
+        let back = round_trip(TaskError::Step {
+            base_name: "my_step".to_string(),
+            error: anyhow::anyhow!("transient failure"),
+        });
+        assert!(
+            back.retryable(),
+            "Step must remain retryable after round-trip through ToolError, got: {back}"
+        );
+    }
+
+    #[test]
+    fn timeout_retryable_after_round_trip() {
+        let back = round_trip(TaskError::Timeout {
+            step_name: "wait_for_event".to_string(),
+        });
+        assert!(back.retryable());
+    }
+
+    #[test]
+    fn user_error_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::User {
+            message: "bad input".to_string(),
+            error_data: serde_json::json!({"message": "bad input"}),
+        });
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn validation_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::Validation {
+            message: "invalid".to_string(),
+        });
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn serialization_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::Serialization(serde_json::Error::custom(
+            "bad json",
+        )));
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn task_panicked_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::TaskPanicked {
+            message: "panic".to_string(),
+        });
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn child_failed_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::ChildFailed {
+            step_name: "child".to_string(),
+            message: "failed".to_string(),
+        });
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn child_cancelled_not_retryable_after_round_trip() {
+        let back = round_trip(TaskError::ChildCancelled {
+            step_name: "child".to_string(),
+        });
+        assert!(!back.retryable());
+    }
+
+    #[test]
+    fn step_error_preserves_message_after_round_trip() {
+        let back = round_trip(TaskError::Step {
+            base_name: "fetch_data".to_string(),
+            error: anyhow::anyhow!("connection refused"),
+        });
+        let msg = format!("{back}");
+        assert!(msg.contains("fetch_data"), "expected base_name in: {msg}");
+        assert!(
+            msg.contains("connection refused"),
+            "expected error message in: {msg}"
+        );
+        assert!(back.retryable());
+    }
+
+    #[test]
+    fn serialization_error_preserves_message_after_round_trip() {
+        let back = round_trip(TaskError::Serialization(serde_json::Error::custom(
+            "bad json",
+        )));
+        let msg = format!("{back}");
+        assert!(msg.contains("bad json"), "expected error message in: {msg}");
+        assert!(!back.retryable());
     }
 }

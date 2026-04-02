@@ -208,7 +208,7 @@ impl ChatCompletionConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
@@ -218,7 +218,7 @@ pub struct UninitializedInputWrappers {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
@@ -226,7 +226,7 @@ pub struct UninitializedChatTemplate {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
@@ -236,7 +236,7 @@ pub struct UninitializedChatTemplates {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
@@ -1745,9 +1745,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -1832,9 +1832,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -1933,9 +1933,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2040,9 +2040,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2176,9 +2176,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2305,9 +2305,9 @@ mod tests {
             Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(1),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }
         );
         match result {
@@ -2647,9 +2647,9 @@ mod tests {
                     Some(&Usage {
                         input_tokens: Some(10),
                         output_tokens: Some(16),
-                        cost: None,
                         provider_cache_read_input_tokens: None,
                         provider_cache_write_input_tokens: None,
+                        cost: None,
                     })
                 );
                 break;

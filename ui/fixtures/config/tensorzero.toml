@@ -1,5 +1,6 @@
 [gateway]
 debug = true
+disable_pseudonymous_usage_analytics = true
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │

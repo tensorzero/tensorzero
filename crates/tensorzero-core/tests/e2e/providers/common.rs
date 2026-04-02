@@ -10410,16 +10410,18 @@ pub async fn check_parallel_tool_use_inference_response(
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     let is_groq = provider.model_provider_name == "groq";
-    if is_openrouter || is_groq {
-        // For Groq and OpenRouter, check that there are at least 2 tool calls
-        // (these providers may include an empty text block)
+    let is_together = provider.model_provider_name == "together";
+    if is_openrouter || is_groq || is_together {
+        let provider_name = &provider.model_provider_name;
+        // For Groq, OpenRouter, and Together, check that there are at least 2 tool calls
+        // (these providers may include an empty text block or thought block)
         let tool_calls = output
             .iter()
             .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
             .count();
         assert_eq!(
             tool_calls, 2,
-            "Expected 2 tool calls for OpenRouter, got {tool_calls}"
+            "Expected 2 tool calls for {provider_name}, got {tool_calls}"
         );
     } else {
         // For other providers, expect exactly 2 blocks total
@@ -10444,6 +10446,10 @@ pub async fn check_parallel_tool_use_inference_response(
             }
             StoredContentBlock::Text(text) if text.text.trim().is_empty() && is_groq => {
                 // Skip empty text blocks for Groq
+                continue;
+            }
+            StoredContentBlock::Thought(_thought) => {
+                // Skip thought blocks
                 continue;
             }
             _ => {

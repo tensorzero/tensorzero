@@ -15,6 +15,7 @@ use uuid::Uuid;
 use evaluations::sse_events::{
     EvaluationRunCompleteEvent, EvaluationRunErrorEvent, EvaluationRunEvent,
     EvaluationRunFatalErrorEvent, EvaluationRunStartEvent, EvaluationRunSuccessEvent,
+    EvaluationRunUsageSummary,
 };
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
 use evaluations::{
@@ -116,6 +117,7 @@ fn success_event_from_info(
         response,
         evaluations: info.evaluations,
         evaluator_errors: info.evaluator_errors,
+        processing_time_ms: info.processing_time_ms,
     })
 }
 
@@ -173,11 +175,15 @@ fn create_evaluation_stream(
             }
         }
 
+        // Accumulate usage statistics across all successful inferences
+        let mut usage_summary = EvaluationRunUsageSummary::default();
+
         // Stream evaluation updates
         while let Some(update) = receiver.recv().await {
             let event = match update {
                 EvaluationUpdate::RunInfo(_) => continue, // Already sent start event
                 EvaluationUpdate::Success(info) => {
+                    usage_summary.record_success(&info);
                     match success_event_from_info(evaluation_run_id, info) {
                         Ok(success_event) => EvaluationRunEvent::Success(success_event),
                         Err(e) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
@@ -188,6 +194,7 @@ fn create_evaluation_stream(
                     }
                 }
                 EvaluationUpdate::Error(EvaluationError { datapoint_id, message }) => {
+                    usage_summary.record_error();
                     EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                         evaluation_run_id,
                         datapoint_id,
@@ -225,9 +232,10 @@ fn create_evaluation_stream(
             }
         }
 
-        // Send complete event
+        // Send complete event with aggregated usage
         let complete_event = EvaluationRunEvent::Complete(EvaluationRunCompleteEvent {
             evaluation_run_id,
+            usage: usage_summary,
         });
         if let Ok(data) = serde_json::to_string(&complete_event) {
             yield Ok(Event::default().event("event").data(data));

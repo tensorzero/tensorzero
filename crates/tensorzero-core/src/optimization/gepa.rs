@@ -103,7 +103,7 @@ pub struct GEPAConfig {
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {

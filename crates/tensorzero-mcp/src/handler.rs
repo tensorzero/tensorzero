@@ -1,85 +1,49 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
+use autopilot_client::AutopilotSideInfo;
+use autopilot_tools::ToolVisitor;
+use durable_tools::tensorzero_client::EmbeddedClient;
+use durable_tools::{
+    Heartbeater, NoopHeartbeater, SimpleTool, SimpleToolContext, TaskTool, TensorZeroClient,
+    ToolMetadata, ToolRegistry,
+};
 use rmcp::{
     ErrorData as McpError, ServerHandler,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo},
-    tool, tool_handler, tool_router,
+    handler::server::{
+        router::tool::{ToolRoute, ToolRouter},
+        tool::ToolCallContext,
+    },
+    model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo, Tool},
+    tool_handler,
 };
-use tensorzero_core::error::Error;
-use tracing::instrument;
-
-use tensorzero_core::endpoints::stored_inferences::v1::types::{
-    GetInferencesRequest, ListInferencesRequest,
-};
-use tensorzero_core::endpoints::stored_inferences::v1::{get_inferences, list_inferences};
 use tensorzero_core::utils::gateway::AppStateData;
+use uuid::Uuid;
 
-/// Converts a TensorZero error into either a tool-level error result (for client errors)
-/// or an MCP protocol error (for server errors).
-fn handle_tool_error(e: Error) -> Result<CallToolResult, McpError> {
-    if e.status_code().is_client_error() {
-        Ok(CallToolResult::error(vec![Content::text(e.to_string())]))
-    } else {
-        Err(McpError::internal_error(e.to_string(), None))
+/// TODO - refactor the way we wrap client-side tool so that we can avoid
+/// constructing a dummy side info
+fn dummy_side_info(config_snapshot_hash: String) -> AutopilotSideInfo {
+    AutopilotSideInfo {
+        tool_call_event_id: Uuid::nil(),
+        session_id: Uuid::nil(),
+        config_snapshot_hash,
+        optimization: Default::default(),
     }
 }
 
 #[derive(Clone)]
 pub(crate) struct TensorZeroMcpServer {
+    #[expect(dead_code, reason = "retained for future tool implementations")]
     app_state: Arc<AppStateData>,
     tool_router: ToolRouter<Self>,
 }
 
-#[tool_router]
 impl TensorZeroMcpServer {
-    pub fn new(app_state: Arc<AppStateData>) -> Self {
+    pub fn new(app_state: Arc<AppStateData>, tool_router: ToolRouter<Self>) -> Self {
         Self {
             app_state,
-            tool_router: Self::tool_router(),
+            tool_router,
         }
-    }
-
-    #[tool(
-        description = "List inferences stored in TensorZero with filtering, pagination, and sorting. Returns inference data including inputs, outputs, function/variant names, timestamps, and tags."
-    )]
-    #[instrument(skip_all)]
-    async fn list_inferences(
-        &self,
-        Parameters(request): Parameters<ListInferencesRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        let database = self.app_state.get_delegating_database();
-        let response = match list_inferences(&self.app_state.config, &database, request).await {
-            Ok(response) => response,
-            Err(e) => return handle_tool_error(e),
-        };
-
-        let json = serde_json::to_string(&response).map_err(|e| {
-            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
-        })?;
-
-        Ok(CallToolResult::success(vec![Content::text(json)]))
-    }
-
-    #[tool(
-        description = "Retrieve specific inferences by their IDs. Returns full inference data including inputs, outputs, function/variant names, timestamps, and tags."
-    )]
-    #[instrument(skip_all)]
-    async fn get_inferences(
-        &self,
-        Parameters(request): Parameters<GetInferencesRequest>,
-    ) -> Result<CallToolResult, McpError> {
-        let database = self.app_state.get_delegating_database();
-        let response = match get_inferences(&self.app_state.config, &database, request).await {
-            Ok(response) => response,
-            Err(e) => return handle_tool_error(e),
-        };
-
-        let json = serde_json::to_string(&response).map_err(|e| {
-            McpError::internal_error(format!("Failed to serialize response: {e}"), None)
-        })?;
-
-        Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 }
 
@@ -92,4 +56,139 @@ impl ServerHandler for TensorZeroMcpServer {
                 "TensorZero MCP Server - query observability data from TensorZero".to_string(),
             )
     }
+}
+
+/// Visitor that registers autopilot tool metadata as MCP tool routes.
+///
+/// Each tool's name, description, and parameter schema are extracted from its
+/// `ToolMetadata` implementation and registered on a `ToolRouter`. For `SimpleTool`s,
+/// the handler calls `T::execute` directly using an embedded TensorZero client.
+/// `TaskTool`s are skipped for now.
+struct McpToolVisitor {
+    router: ToolRouter<TensorZeroMcpServer>,
+    client: Arc<dyn TensorZeroClient>,
+    heartbeater: Arc<dyn Heartbeater>,
+    registry: Arc<ToolRegistry>,
+    config_snapshot_hash: String,
+}
+
+impl McpToolVisitor {
+    fn new(app_state: &AppStateData) -> Self {
+        Self {
+            router: ToolRouter::new(),
+            client: Arc::new(EmbeddedClient::new(app_state.clone())),
+            heartbeater: Arc::new(NoopHeartbeater),
+            registry: Arc::new(ToolRegistry::new()),
+            config_snapshot_hash: app_state.config.hash.to_string(),
+        }
+    }
+
+    fn into_router(self) -> ToolRouter<TensorZeroMcpServer> {
+        self.router
+    }
+}
+
+/// Build an rmcp `Tool` definition from a `ToolMetadata` impl.
+fn tool_attr_from_metadata(tool: &impl ToolMetadata) -> Result<Tool, String> {
+    let name = tool.name();
+    let description = tool.description();
+    let schema = tool
+        .parameters_schema()
+        .map_err(|e| format!("Failed to generate schema for tool `{name}`: {e:?}"))?;
+    let schema_value = serde_json::to_value(&schema)
+        .map_err(|e| format!("Failed to serialize schema for tool `{name}`: {e}"))?;
+    let schema_object = match schema_value {
+        serde_json::Value::Object(map) => map,
+        other => {
+            return Err(format!(
+                "Schema for tool `{name}` is not a JSON object: {other}"
+            ));
+        }
+    };
+    Ok(Tool::new(name, description, Arc::new(schema_object)))
+}
+
+#[async_trait]
+impl ToolVisitor for McpToolVisitor {
+    type Error = String;
+
+    async fn visit_task_tool<T>(&mut self, _tool: T) -> Result<(), String>
+    where
+        T: TaskTool<SideInfo = AutopilotSideInfo, ExtraState = ()>,
+    {
+        // TaskTools are skipped for now — they require durable execution context.
+        Ok(())
+    }
+
+    async fn visit_simple_tool<T>(&mut self) -> Result<(), String>
+    where
+        T: SimpleTool<SideInfo = AutopilotSideInfo> + Default,
+    {
+        let tool_attr = tool_attr_from_metadata(&T::default())?;
+        let client = self.client.clone();
+        let heartbeater = self.heartbeater.clone();
+        let registry = self.registry.clone();
+        let config_snapshot_hash = self.config_snapshot_hash.clone();
+        let route = ToolRoute::new_dyn(
+            tool_attr,
+            move |ctx: ToolCallContext<'_, TensorZeroMcpServer>| {
+                let client = client.clone();
+                let heartbeater = heartbeater.clone();
+                let registry = registry.clone();
+                let config_snapshot_hash = config_snapshot_hash.clone();
+                Box::pin(async move {
+                    let arguments = ctx.arguments.unwrap_or_default();
+
+                    let params: <T as ToolMetadata>::LlmParams =
+                        serde_json::from_value(serde_json::Value::Object(arguments)).map_err(
+                            |e| McpError::invalid_params(format!("Invalid parameters: {e}"), None),
+                        )?;
+
+                    let simple_ctx =
+                        SimpleToolContext::new_without_pool(&client, &heartbeater, &registry);
+
+                    let idempotency_key = Uuid::now_v7().to_string();
+                    let result = T::execute(
+                        params,
+                        dummy_side_info(config_snapshot_hash),
+                        simple_ctx,
+                        &idempotency_key,
+                    )
+                    .await;
+
+                    match result {
+                        Ok(output) => {
+                            let json = serde_json::to_string(&output).map_err(|e| {
+                                McpError::internal_error(
+                                    format!("Failed to serialize response: {e}"),
+                                    None,
+                                )
+                            })?;
+                            Ok(CallToolResult::success(vec![Content::text(json)]))
+                        }
+                        Err(e) => Ok(CallToolResult::error(vec![Content::text(e.to_string())])),
+                    }
+                })
+            },
+        );
+        self.router.add_route(route);
+        Ok(())
+    }
+
+    async fn visit_standalone_task_tool<T>(&mut self, _tool: T) -> Result<(), String>
+    where
+        T: TaskTool<SideInfo = (), ExtraState = ()>,
+    {
+        // Standalone TaskTools are skipped for now.
+        Ok(())
+    }
+}
+
+/// Build the MCP tool router by visiting all autopilot tools.
+pub(crate) async fn build_tool_router(
+    app_state: &AppStateData,
+) -> Result<ToolRouter<TensorZeroMcpServer>, String> {
+    let mut visitor = McpToolVisitor::new(app_state);
+    autopilot_tools::for_each_tool(&mut visitor).await?;
+    Ok(visitor.into_router())
 }

@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockall::automock;
 
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 use crate::error::Error;
 use crate::inference::types::StoredModelInference;
 
@@ -43,4 +43,13 @@ pub trait ModelInferenceQueries {
     /// Get the inputs used for the database's latency quantiles query.
     /// ([0.01, 0.5, 0.90, 0.99], etc - not the actual quantile values.)
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64];
+
+    /// Get cache statistics timeseries data grouped by model and provider.
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error>;
 }

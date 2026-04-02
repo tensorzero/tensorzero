@@ -3017,6 +3017,7 @@ async fn test_glob_relative_path() {
     let VariantConfig::ChatCompletion(variant) = &function.variants["my_variant"].inner else {
         panic!("Variant should be a chat completion variant");
     };
+    let canonical_temp_dir = temp_dir.path().canonicalize().unwrap();
     assert_eq!(
         variant
             .templates()
@@ -3027,7 +3028,7 @@ async fn test_glob_relative_path() {
             .get_template_key(),
         format!(
             "{}/second/second_template.minijinja",
-            temp_dir.path().display()
+            canonical_temp_dir.display()
         )
     );
     assert_eq!(
@@ -3049,8 +3050,8 @@ async fn test_glob_relative_path() {
             .path
             .get_template_key(),
         format!(
-            "{}/./first/first_template.minijinja",
-            temp_dir.path().display()
+            "{}/first/first_template.minijinja",
+            canonical_temp_dir.display()
         )
     );
 

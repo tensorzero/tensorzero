@@ -88,7 +88,7 @@ impl MixtureOfNConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
@@ -110,7 +110,7 @@ pub struct FuserConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {
@@ -1250,9 +1250,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(50),
                 output_tokens: Some(100),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1290,9 +1290,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1349,9 +1349,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1392,9 +1392,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1477,9 +1477,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1517,9 +1517,9 @@ mod tests {
             usage: Usage {
                 input_tokens: Some(15),
                 output_tokens: Some(25),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1645,9 +1645,9 @@ mod tests {
         let expected_usage = Usage {
             input_tokens: Some(35),
             output_tokens: Some(46),
-            cost: None,
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
+            cost: None,
         };
         let expected_content = InternalJsonInferenceOutput {
             raw: Some("{\"answer\":\"Hello\"}".to_string()),
@@ -1927,9 +1927,9 @@ mod tests {
             Some(Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(20),
-                cost: None,
                 provider_cache_read_input_tokens: None,
                 provider_cache_write_input_tokens: None,
+                cost: None,
             }),
             None, // raw_usage_entries
         )
@@ -1980,9 +1980,9 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: Some(10),
                     output_tokens: Some(20),
-                    cost: None,
                     provider_cache_read_input_tokens: None,
                     provider_cache_write_input_tokens: None,
+                    cost: None,
                 }),
                 raw_usage: None,
                 raw_response: None,
