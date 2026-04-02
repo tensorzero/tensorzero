@@ -17,12 +17,12 @@ use crate::endpoints::internal::models::types::{
     GetCacheStatisticsQueryParams, GetModelLatencyQueryParams, GetModelUsageQueryParams,
 };
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Handler for `GET /internal/models/count`
 ///
 /// Returns the count of distinct models that have been used.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "models.count", skip_all)]
 pub async fn count_models_handler(
     State(app_state): AppState,
@@ -37,7 +37,7 @@ pub async fn count_models_handler(
 /// Handler for `GET /internal/models/usage`
 ///
 /// Returns model usage timeseries data (tokens, counts over time).
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "models.usage", skip_all)]
 pub async fn get_model_usage_handler(
     State(app_state): AppState,
@@ -55,7 +55,7 @@ pub async fn get_model_usage_handler(
 /// Handler for `GET /internal/models/latency`
 ///
 /// Returns model latency quantile distributions.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "models.latency", skip_all)]
 pub async fn get_model_latency_handler(
     State(app_state): AppState,
@@ -76,7 +76,7 @@ pub async fn get_model_latency_handler(
 /// Handler for `GET /internal/models/cache_statistics`
 ///
 /// Returns cache statistics timeseries data grouped by model and provider.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "models.cache_statistics", skip_all)]
 pub async fn get_cache_statistics_handler(
     State(app_state): AppState,

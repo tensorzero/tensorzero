@@ -13,7 +13,7 @@ use crate::{
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     utils::{
-        gateway::{AppState, AppStateData, StructuredJson},
+        gateway::{AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData},
         uuid::{
             WORKFLOW_EVALUATION_THRESHOLD, compare_timestamps,
             generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
@@ -39,7 +39,7 @@ pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
 }
 
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
@@ -49,7 +49,7 @@ pub async fn workflow_evaluation_run_handler(
 
 /// Creates a new workflow evaluation run.
 pub async fn workflow_evaluation_run(
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
     params: WorkflowEvaluationRunParams,
 ) -> Result<WorkflowEvaluationRunResponse, Error> {
     validate_tags(&params.tags, params.internal)?;
@@ -86,7 +86,7 @@ pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }
 
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,
     Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
@@ -98,7 +98,7 @@ pub async fn workflow_evaluation_run_episode_handler(
 }
 
 pub async fn workflow_evaluation_run_episode(
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
     run_id: Uuid,
     params: WorkflowEvaluationRunEpisodeParams,
 ) -> Result<WorkflowEvaluationRunEpisodeResponse, Error> {

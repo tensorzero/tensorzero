@@ -11,7 +11,7 @@ use crate::db::inferences::{
     ListInferenceMetadataParams, PaginationParams,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for the inference_metadata endpoint
 #[derive(Debug, Deserialize)]
@@ -39,7 +39,7 @@ pub struct ListInferenceMetadataResponse {
 }
 
 /// HTTP handler for listing inference metadata
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "get_inference_metadata_handler", skip_all)]
 pub async fn get_inference_metadata_handler(
     State(app_state): AppState,

@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     db::inferences::{CountInferencesParams, InferenceQueries},
     error::Error,
-    utils::gateway::{AppState, AppStateData},
+    utils::gateway::{AppState, SwappableAppStateData},
 };
 use axum::{
     Json, debug_handler,
@@ -20,7 +20,7 @@ pub struct GetEpisodeInferenceCountResponse {
 }
 
 /// HTTP handler for getting inference counts for an episode
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_episode_inference_count_handler",
     skip_all,
@@ -56,6 +56,7 @@ pub async fn get_episode_inference_count(
 mod tests {
     use super::*;
     use crate::db::inferences::MockInferenceQueries;
+    use crate::utils::gateway::SwappableAppStateData;
     use std::sync::Arc;
 
     #[tokio::test]

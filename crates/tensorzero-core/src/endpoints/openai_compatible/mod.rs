@@ -18,7 +18,7 @@ use axum::Router;
 use axum::routing::post;
 
 use crate::endpoints::RouteHandlers;
-use crate::utils::gateway::AppStateData;
+use crate::utils::gateway::SwappableAppStateData;
 
 /// Constructs (but does not register) all of our OpenAI-compatible endpoints.
 /// The `RouterExt::register_openai_compatible_routes` is a convenience method
@@ -45,7 +45,7 @@ pub trait RouterExt {
     fn register_openai_compatible_routes(self) -> Self;
 }
 
-impl RouterExt for Router<AppStateData> {
+impl RouterExt for Router<SwappableAppStateData> {
     fn register_openai_compatible_routes(mut self) -> Self {
         for (path, handler) in build_openai_compatible_routes().routes {
             self = self.route(path, handler);

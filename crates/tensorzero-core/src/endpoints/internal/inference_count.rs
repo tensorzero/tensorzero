@@ -17,7 +17,7 @@ use crate::db::inferences::{
 use crate::endpoints::stored_inferences::v1::types::DemonstrationFeedbackFilter;
 use crate::error::{Error, ErrorDetails};
 use crate::function::DEFAULT_FUNCTION_NAME;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, ResolvedAppStateData, SwappableAppStateData};
 
 /// Query parameters for the inference count endpoint
 #[derive(Debug, Deserialize)]
@@ -125,7 +125,7 @@ pub struct ListFunctionsWithInferenceCountResponse {
 }
 
 /// HTTP handler for the inference count endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_inference_count_handler",
     skip_all,
@@ -145,7 +145,7 @@ pub async fn get_inference_count_handler(
 }
 
 /// HTTP handler for the feedback stats endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_inference_with_feedback_count_handler",
     skip_all,
@@ -288,14 +288,14 @@ async fn get_inference_with_feedback_count(
 }
 
 /// HTTP handler for the function throughput by variant endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_function_throughput_by_variant_handler",
     skip_all,
     fields(function_name = %function_name),
 )]
 pub async fn get_function_throughput_by_variant_handler(
-    State(state): State<AppStateData>,
+    State(state): State<ResolvedAppStateData>,
     Path(function_name): Path<String>,
     Query(params): Query<FunctionThroughputByVariantQueryParams>,
 ) -> Result<Json<GetFunctionThroughputByVariantResponse>, Error> {
@@ -331,10 +331,10 @@ pub async fn get_function_throughput_by_variant(
 }
 
 /// HTTP handler for listing all functions with their inference counts
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "list_functions_with_inference_count_handler", skip_all)]
 pub async fn list_functions_with_inference_count_handler(
-    State(state): State<AppStateData>,
+    State(state): State<ResolvedAppStateData>,
 ) -> Result<Json<ListFunctionsWithInferenceCountResponse>, Error> {
     let database = state.get_delegating_database();
     let response = list_functions_with_inference_count(&database).await?;

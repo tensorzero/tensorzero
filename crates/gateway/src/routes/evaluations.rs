@@ -26,7 +26,9 @@ use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
-use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
+use tensorzero_core::utils::gateway::{
+    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+};
 
 // =============================================================================
 // Request/Response Types
@@ -259,7 +261,7 @@ struct ResolvedEvaluationConfig {
 /// Resolves evaluation and function configs from the request.
 fn resolve_evaluation_config(
     request: &RunEvaluationRequest,
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
 ) -> Result<ResolvedEvaluationConfig, Error> {
     match &request.source {
         EvaluationIdentifier::LegacyNamedEvaluation {
@@ -338,7 +340,7 @@ fn resolve_evaluation_config(
 fn resolve_evaluators(
     function_name: &str,
     evaluator_names: &[String],
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
 ) -> Result<HashMap<String, EvaluatorConfig>, Error> {
     let function_config = app_state
         .config
@@ -365,7 +367,7 @@ fn resolve_evaluators(
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 pub async fn run_evaluation_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<RunEvaluationRequest>,

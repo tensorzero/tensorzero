@@ -31,7 +31,9 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::observability::internal_metrics::TENSORZERO_FEEDBACKS_TOTAL;
 use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{
+    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+};
 use crate::utils::uuid::uuid_elapsed;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -111,7 +113,7 @@ pub struct FeedbackResponse {
 }
 
 /// A handler for the feedback endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -131,7 +133,7 @@ pub async fn feedback_handler(
   )
 )]
 pub async fn feedback(
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
     mut params: Params,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {

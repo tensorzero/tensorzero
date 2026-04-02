@@ -22,7 +22,7 @@ use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::batching::PostgresBatchSender;
 pub use tensorzero_core::evaluations::EvaluationFunctionConfig;
 pub use tensorzero_core::statistics_util::{mean, std_deviation};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::ResolvedAppStateData;
 pub use types::*;
 
 use tensorzero_core::cache::CacheEnabledMode;
@@ -429,7 +429,7 @@ pub async fn run_evaluation(
 /// - `evaluation_config`: The evaluation configuration
 #[instrument(skip_all, fields(evaluation_name = ?params.evaluation_name, dataset_name = ?params.dataset_name, variant = ?params.variant, concurrency = %params.concurrency))]
 pub async fn run_evaluation_with_app_state(
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
     params: RunEvaluationWithAppStateParams,
 ) -> Result<EvaluationStreamResult> {
     // Create fresh ClickHouse and Postgres clients for the evaluation (with independent batch writers)
