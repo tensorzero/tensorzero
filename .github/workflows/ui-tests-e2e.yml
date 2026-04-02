@@ -457,7 +457,7 @@ jobs:
         if: matrix.auth_mode != 'no_gateway_auth'
         working-directory: ui
         run: |
-          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
+          sed -i '3a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
       - name: Generate gateway API key and configure for auth mode
         if: matrix.auth_mode != 'no_gateway_auth'
