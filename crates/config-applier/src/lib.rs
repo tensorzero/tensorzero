@@ -353,8 +353,8 @@ mod tests {
     use tensorzero_core::config::path::ResolvedTomlPathData;
     use tensorzero_core::config::{UninitializedVariantConfig, UninitializedVariantInfo};
     use tensorzero_core::evaluations::{
-        ExactMatchConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
-        LLMJudgeOutputType, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
+        ExactMatchConfig, LLMJudgeInputFormat, LLMJudgeOptimize, LLMJudgeOutputType,
+        UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
         UninitializedInferenceEvaluationConfig, UninitializedLLMJudgeChatCompletionVariantConfig,
         UninitializedLLMJudgeConfig, UninitializedLLMJudgeVariantConfig,
         UninitializedLLMJudgeVariantInfo,
@@ -538,11 +538,11 @@ type = "exact_match"
 
         #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Messages,
+            input_format: Some(LLMJudgeInputFormat::Messages),
             variants,
             output_type: LLMJudgeOutputType::Boolean,
             optimize: LLMJudgeOptimize::Max,
-            include: LLMJudgeIncludeConfig::default(),
+            include: None,
             cutoff: None,
             description: None,
         });
@@ -877,11 +877,11 @@ type = "exact_match"
 
         #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Messages,
+            input_format: Some(LLMJudgeInputFormat::Messages),
             variants: HashMap::new(),
             output_type: LLMJudgeOutputType::Boolean,
             optimize: LLMJudgeOptimize::Max,
-            include: LLMJudgeIncludeConfig::default(),
+            include: None,
             cutoff: None,
             description: None,
         });
@@ -916,11 +916,11 @@ type = "exact_match"
 
         #[expect(deprecated)]
         let evaluator = UninitializedEvaluatorConfig::LLMJudge(UninitializedLLMJudgeConfig {
-            input_format: LLMJudgeInputFormat::Messages,
+            input_format: Some(LLMJudgeInputFormat::Messages),
             variants: HashMap::new(),
             output_type: LLMJudgeOutputType::Boolean,
             optimize: LLMJudgeOptimize::Max,
-            include: LLMJudgeIncludeConfig::default(),
+            include: None,
             cutoff: None,
             description: None,
         });

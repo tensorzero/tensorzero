@@ -61,20 +61,22 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
         } = config;
         Self {
             bind_address,
-            observability: observability.into(),
-            debug,
+            observability: observability.unwrap_or_default().into(),
+            debug: debug.unwrap_or_default(),
             template_filesystem_access,
-            export,
+            export: export.unwrap_or_default(),
             base_path,
-            unstable_disable_feedback_target_validation,
-            unstable_error_json,
-            disable_pseudonymous_usage_analytics,
+            unstable_disable_feedback_target_validation:
+                unstable_disable_feedback_target_validation.unwrap_or_default(),
+            unstable_error_json: unstable_error_json.unwrap_or_default(),
+            disable_pseudonymous_usage_analytics: disable_pseudonymous_usage_analytics
+                .unwrap_or_default(),
             fetch_and_encode_input_files_before_inference,
-            auth,
+            auth: auth.unwrap_or_default(),
             global_outbound_http_timeout_ms,
             relay,
-            metrics,
-            cache: cache.into(),
+            metrics: metrics.unwrap_or_default(),
+            cache: cache.unwrap_or_default().into(),
         }
     }
 }
@@ -100,20 +102,22 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
         } = stored;
         Self {
             bind_address,
-            observability: observability.into(),
-            debug,
+            observability: Some(observability.into()),
+            debug: Some(debug),
             template_filesystem_access,
-            export,
+            export: Some(export),
             base_path,
-            unstable_disable_feedback_target_validation,
-            unstable_error_json,
-            disable_pseudonymous_usage_analytics,
+            unstable_disable_feedback_target_validation: Some(
+                unstable_disable_feedback_target_validation,
+            ),
+            unstable_error_json: Some(unstable_error_json),
+            disable_pseudonymous_usage_analytics: Some(disable_pseudonymous_usage_analytics),
             fetch_and_encode_input_files_before_inference,
-            auth,
+            auth: Some(auth),
             global_outbound_http_timeout_ms,
             relay,
-            metrics,
-            cache: cache.into(),
+            metrics: Some(metrics),
+            cache: Some(cache.into()),
         }
     }
 }

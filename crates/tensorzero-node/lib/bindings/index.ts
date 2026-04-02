@@ -51,6 +51,7 @@ export * from "./CommentFeedbackRow";
 export * from "./CommentTargetType";
 export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
+export * from "./ContentBlockType";
 export * from "./CountFeedbackByTargetIdResponse";
 export * from "./CountInferencesRequest";
 export * from "./CountInferencesResponse";

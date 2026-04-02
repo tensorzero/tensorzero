@@ -107,6 +107,7 @@ async fn test_from_components_basic() {
     // Build client using FromComponents mode
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::FromComponents {
         config,
+        runtime_overlay: Arc::new(tensorzero_core::config::RuntimeOverlay::default()),
         clickhouse_connection_info,
         postgres_connection_info,
         valkey_connection_info: ValkeyConnectionInfo::Disabled,

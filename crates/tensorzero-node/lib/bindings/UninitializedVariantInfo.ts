@@ -8,7 +8,7 @@ import type { UninitializedDiclConfig } from "./UninitializedDiclConfig";
 import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNConfig";
 
 export type UninitializedVariantInfo = {
-  timeouts: TimeoutsConfig | null;
+  timeouts?: TimeoutsConfig;
   namespace?: Namespace;
 } & (
   | ({ type: "chat_completion" } & UninitializedChatCompletionConfig)

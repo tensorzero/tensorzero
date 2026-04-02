@@ -93,8 +93,8 @@ impl UiConfig {
 
         // Load functions (sync, no FS/network — file data embedded in ResolvedTomlPathData)
         let mut all_functions = HashMap::new();
-        let mut all_metrics = metrics;
-        for (name, func) in functions {
+        let mut all_metrics = metrics.unwrap_or_default();
+        for (name, func) in functions.unwrap_or_default() {
             let loaded = func.load(&name, &all_metrics)?;
             for (fn_name, fn_config) in loaded.evaluator_functions {
                 all_functions.insert(fn_name, Arc::new(fn_config));
@@ -105,6 +105,7 @@ impl UiConfig {
 
         // Load tools (sync, same reason)
         let loaded_tools: HashMap<String, Arc<StaticToolConfig>> = tools
+            .unwrap_or_default()
             .into_iter()
             .map(|(name, tool)| tool.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<_, _>>()?;
@@ -112,7 +113,7 @@ impl UiConfig {
         // Load evaluations (sync, needs loaded functions)
         // Also collects generated evaluation functions and metrics
         let mut loaded_evaluations = HashMap::new();
-        for (name, eval_config) in evaluations {
+        for (name, eval_config) in evaluations.unwrap_or_default() {
             let (eval, eval_functions, eval_metrics) = eval_config.load(&all_functions, &name)?;
             loaded_evaluations.insert(name, Arc::new(EvaluationConfig::Inference(eval)));
             all_functions.extend(eval_functions);
@@ -120,7 +121,11 @@ impl UiConfig {
         }
 
         // Model names — just keys, no initialization (only inference models, matching from_config)
-        let model_names: Vec<String> = models.keys().map(|s| s.to_string()).collect();
+        let model_names: Vec<String> = models
+            .unwrap_or_default()
+            .keys()
+            .map(|s| s.to_string())
+            .collect();
 
         Ok(Self {
             functions: all_functions,

@@ -441,7 +441,12 @@ impl Variant for VariantInfo {
                 }
             }
         };
-        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+        if let Some(timeout) = self
+            .timeouts
+            .non_streaming
+            .as_ref()
+            .and_then(|ns| ns.total_ms)
+        {
             let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
@@ -549,9 +554,10 @@ impl Variant for VariantInfo {
         let ttft_timeout = self
             .timeouts
             .streaming
-            .ttft_ms
+            .as_ref()
+            .and_then(|s| s.ttft_ms)
             .map(tokio::time::Duration::from_millis);
-        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let streaming_total_ms = self.timeouts.streaming.as_ref().and_then(|s| s.total_ms);
         let total_timeout = streaming_total_ms.map(tokio::time::Duration::from_millis);
         let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
             (Some(ttft), Some(total)) => {

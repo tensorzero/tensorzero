@@ -10,7 +10,7 @@ pub struct StoredCacheConfig {
     #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
-    pub backend: InferenceCacheBackend,
+    pub backend: Option<InferenceCacheBackend>,
     #[serde(default)]
     pub valkey: ValkeyModelInferenceCacheConfig,
 }
@@ -25,7 +25,7 @@ impl From<ModelInferenceCacheConfig> for StoredCacheConfig {
         Self {
             enabled,
             backend,
-            valkey,
+            valkey: valkey.unwrap_or_default(),
         }
     }
 }
@@ -40,7 +40,7 @@ impl From<StoredCacheConfig> for ModelInferenceCacheConfig {
         Self {
             enabled,
             backend,
-            valkey,
+            valkey: Some(valkey),
         }
     }
 }

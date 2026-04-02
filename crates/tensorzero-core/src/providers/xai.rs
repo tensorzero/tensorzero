@@ -683,6 +683,7 @@ impl<'a> XAIRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                content_type_overrides: None,
             },
         )
         .await?;
@@ -1169,6 +1170,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1206,6 +1208,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1244,6 +1247,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1281,6 +1285,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = tensorzero_to_xai_assistant_message(&content_blocks, messages_config)
@@ -1371,6 +1376,7 @@ mod tests {
             json_mode: Some(&ModelInferenceRequestJsonMode::On),
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = prepare_xai_messages(system, &messages, messages_config)
@@ -1413,6 +1419,7 @@ mod tests {
             json_mode: Some(&ModelInferenceRequestJsonMode::On),
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = prepare_xai_messages(system, &messages, messages_config)

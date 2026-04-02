@@ -104,9 +104,9 @@ pub async fn get_clean_clickhouse(
         &clickhouse_url,
         BatchWritesConfig {
             enabled: false,
-            __force_allow_embedded_batch_writes: false,
-            flush_interval_ms: 1000,
-            max_rows: 100,
+            __force_allow_embedded_batch_writes: Some(false),
+            flush_interval_ms: Some(1000),
+            max_rows: Some(100),
             max_rows_postgres: None,
             write_queue_capacity: None,
         },

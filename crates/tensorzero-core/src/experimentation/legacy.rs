@@ -15,13 +15,12 @@ use super::static_experimentation::{StaticExperimentationConfig, WeightedVariant
 use crate::variant::VariantInfo;
 
 /// Legacy `type = "uniform"` config. Converts to `StaticExperimentationConfig` with equal weights.
+#[serde_with::skip_serializing_none]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct LegacyUniformExperimentationConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     candidate_variants: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     fallback_variants: Option<Vec<String>>,
 }
 

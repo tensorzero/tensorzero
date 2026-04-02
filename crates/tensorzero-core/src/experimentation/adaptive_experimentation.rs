@@ -30,23 +30,22 @@ use super::track_and_stop::{TrackAndStopConfig, UninitializedTrackAndStopExperim
 /// Algorithm used for adaptive experimentation.
 /// Currently only `TrackAndStop` is supported.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptiveExperimentationAlgorithm {
-    #[default]
     TrackAndStop,
 }
 
 /// Uninitialized adaptive experimentation config.
 /// Wraps a track-and-stop config (the only algorithm currently supported) with
 /// an additional `algorithm` field.
+#[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedAdaptiveExperimentationConfig {
-    #[serde(default)]
-    pub algorithm: AdaptiveExperimentationAlgorithm,
+    pub algorithm: Option<AdaptiveExperimentationAlgorithm>,
     // All track-and-stop fields are flattened in (since this is the only option at the moment)
     #[serde(flatten)]
     pub inner: UninitializedTrackAndStopExperimentationConfig,
@@ -72,7 +71,9 @@ impl UninitializedAdaptiveExperimentationConfig {
     ) -> Result<AdaptiveExperimentationConfig, Error> {
         let inner = self.inner.load(variants, metrics, namespace)?;
         Ok(AdaptiveExperimentationConfig {
-            algorithm: self.algorithm,
+            algorithm: self
+                .algorithm
+                .unwrap_or(AdaptiveExperimentationAlgorithm::TrackAndStop),
             inner,
         })
     }

@@ -599,14 +599,14 @@ impl GCPVertexGeminiProvider {
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
-            GCPVertexGeminiProviderTypeConfig {
+            Some(GCPVertexGeminiProviderTypeConfig {
                 batch:
                     Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
                         input_uri_prefix,
                         output_uri_prefix,
                     })),
                 ..
-            } => {
+            }) => {
                 // Use mock API base for testing if set, otherwise default API base
                 let batch_request_url = if let Some(api_base) = get_mock_provider_api_base("") {
                     format!(

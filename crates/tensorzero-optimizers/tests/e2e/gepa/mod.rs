@@ -176,6 +176,7 @@ pub async fn build_gateway_client(
 ) -> Client {
     ClientBuilder::new(ClientBuilderMode::FromComponents {
         config,
+        runtime_overlay: Arc::new(tensorzero_core::config::RuntimeOverlay::default()),
         clickhouse_connection_info: clickhouse,
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         valkey_connection_info: ValkeyConnectionInfo::Disabled,

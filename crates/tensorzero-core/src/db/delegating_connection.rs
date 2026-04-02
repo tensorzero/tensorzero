@@ -94,7 +94,7 @@ impl PrimaryDatastore {
         postgres: &PostgresConnectionInfo,
     ) -> Result<Self, Error> {
         let resolved = match observability_config.backend {
-            ObservabilityBackend::Auto => {
+            None | Some(ObservabilityBackend::Auto) => {
                 if clickhouse.client_type() != ClickHouseClientType::Disabled {
                     Self::ClickHouse
                 } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
@@ -103,8 +103,8 @@ impl PrimaryDatastore {
                     Self::Disabled
                 }
             }
-            ObservabilityBackend::ClickHouse => Self::ClickHouse,
-            ObservabilityBackend::Postgres => Self::Postgres,
+            Some(ObservabilityBackend::ClickHouse) => Self::ClickHouse,
+            Some(ObservabilityBackend::Postgres) => Self::Postgres,
         };
 
         match observability_config.enabled {

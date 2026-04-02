@@ -7,7 +7,10 @@ use std::{
     sync::Arc,
 };
 use tensorzero_core::{
-    config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
+    config::{
+        Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+        RuntimeOverlay,
+    },
     db::{postgres::PostgresConnectionInfo, valkey::ValkeyConnectionInfo},
     endpoints::feedback::{Params, feedback},
     http::TensorzeroHttpClient,
@@ -281,6 +284,7 @@ async fn test_comment_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
+        Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
@@ -1658,6 +1662,7 @@ async fn test_float_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
+        Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
@@ -2002,6 +2007,7 @@ async fn test_boolean_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
+        Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,

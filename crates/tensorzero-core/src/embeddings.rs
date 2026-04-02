@@ -70,6 +70,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIAPIType::ChatCompletions,
                 false,
                 Vec::new(),
+                std::collections::HashMap::new(),
             )?),
             "openrouter" => EmbeddingProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
@@ -1004,6 +1005,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: Some(extra_body_config.clone()),
@@ -1051,6 +1053,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: None,

@@ -12,7 +12,8 @@ use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, RuntimeOverlay};
+use tensorzero_core::db::HowdyQueries;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
@@ -56,6 +57,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     .unwrap();
     let handle = GatewayHandle::new_with_database_and_http_client(
         config,
+        Arc::new(RuntimeOverlay::default()),
         clickhouse,
         PostgresConnectionInfo::Disabled,
         ValkeyConnectionInfo::Disabled,
@@ -90,8 +92,8 @@ async fn test_get_howdy_report() {
     .await
     .unwrap();
     let howdy_report = get_howdy_report(
-        &clickhouse,
-        &deployment_id,
+        Some(&clickhouse as &(dyn HowdyQueries + Sync)),
+        Some(deployment_id.as_str()),
         PrimaryDatastore::ClickHouse,
         Uuid::now_v7(),
     )
@@ -187,8 +189,8 @@ async fn test_get_howdy_report() {
 
     // Get the howdy report again
     let new_howdy_report = get_howdy_report(
-        &clickhouse,
-        &deployment_id,
+        Some(&clickhouse as &(dyn HowdyQueries + Sync)),
+        Some(deployment_id.as_str()),
         PrimaryDatastore::ClickHouse,
         Uuid::now_v7(),
     )
