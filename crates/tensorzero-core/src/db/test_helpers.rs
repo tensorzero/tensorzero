@@ -31,9 +31,9 @@ pub trait TestDatabaseHelpers: Send + Sync {
 #[async_trait]
 impl TestDatabaseHelpers for ClickHouseConnectionInfo {
     /// For ClickHouse, this flushes the async insert queue.
-    /// Uses `run_query_synchronous_delayed_err` to avoid the automatic ERROR log
-    /// from `run_query_synchronous`, since this command requires SYSTEM privileges
-    /// that may not be granted (e.g. ClickHouse LTS 25.12 in the merge queue).
+    /// Uses `run_query_synchronous_delayed_err` + `log_at_level(WARN)` to avoid the
+    /// automatic ERROR log, since this command requires SYSTEM privileges that may not
+    /// be granted (e.g. ClickHouse LTS 25.12). The migration test asserts no ERROR logs.
     async fn flush_pending_writes(&self) {
         if let Err(e) = self
             .run_query_synchronous_delayed_err(
@@ -42,9 +42,11 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
             )
             .await
         {
-            tracing::warn!(
-                "Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}",
-                e.get_details()
+            // log_at_level sets `reported = true`, preventing the Drop impl
+            // from logging at ERROR level.
+            e.log_at_level(
+                "Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`",
+                tracing::Level::WARN,
             );
         }
     }
