@@ -10,6 +10,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::{Cow, ToOwned};
+use std::collections::HashMap;
 use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
@@ -111,6 +112,22 @@ impl From<OpenAIAPIType> for ApiType {
     }
 }
 
+/// Controls which OpenAI content block type to use for a given MIME type.
+///
+/// By default, TensorZero maps `image/*` → `image_url`, `audio/*` → `input_audio`,
+/// and everything else → `file`. Some OpenAI-compatible providers (e.g. Vertex AI)
+/// don't support `file` blocks but accept PDFs as `image_url`. Use
+/// `content_type_overrides` on the provider config to override the default mapping.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum ContentBlockType {
+    ImageUrl,
+    File,
+    InputAudio,
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -122,6 +139,8 @@ pub struct OpenAIProvider {
     include_encrypted_reasoning: bool,
     api_type: OpenAIAPIType,
     provider_tools: Vec<Value>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    content_type_overrides: HashMap<String, ContentBlockType>,
 }
 
 impl OpenAIProvider {
@@ -132,6 +151,7 @@ impl OpenAIProvider {
         api_type: OpenAIAPIType,
         include_encrypted_reasoning: bool,
         provider_tools: Vec<Value>,
+        content_type_overrides: HashMap<String, ContentBlockType>,
     ) -> Result<Self, Error> {
         if !matches!(api_type, OpenAIAPIType::Responses) && include_encrypted_reasoning {
             return Err(Error::new(ErrorDetails::Config {
@@ -158,6 +178,7 @@ impl OpenAIProvider {
             api_type,
 
             provider_tools,
+            content_type_overrides,
         })
     }
 
@@ -301,7 +322,12 @@ impl WrappedProvider for OpenAIProvider {
                 })
             })?),
             OpenAIAPIType::ChatCompletions => Ok(serde_json::to_value(
-                OpenAIRequest::new(&self.model_name, request).await?,
+                OpenAIRequest::new(
+                    &self.model_name,
+                    request,
+                    Some(&self.content_type_overrides),
+                )
+                .await?,
             )
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -642,16 +668,22 @@ impl InferenceProvider for OpenAIProvider {
                 let request_url =
                     get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
-                let request_body =
-                    serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Error serializing OpenAI request: {}",
-                                    DisplayOrDebugGateway::new(e)
-                                ),
-                            })
-                        })?;
+                let request_body = serde_json::to_value(
+                    OpenAIRequest::new(
+                        &self.model_name,
+                        request,
+                        Some(&self.content_type_overrides),
+                    )
+                    .await?,
+                )
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing OpenAI request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
 
                 let mut request_builder = http_client.post(request_url);
                 if let Some(api_key) = api_key {
@@ -1731,6 +1763,8 @@ pub struct OpenAIMessagesConfig<'a> {
     pub json_mode: Option<&'a ModelInferenceRequestJsonMode>,
     pub provider_type: &'a str,
     pub fetch_and_encode_input_files_before_inference: bool,
+    #[doc(hidden)]
+    pub content_type_overrides: Option<&'a HashMap<String, ContentBlockType>>,
 }
 
 fn supports_detail_parameter(provider_type: &str) -> bool {
@@ -2015,57 +2049,70 @@ pub(super) async fn prepare_file_message(
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
             let base64_url = format!("data:{};base64,{}", file.mime_type, data);
-            if file.mime_type.type_() == mime::IMAGE {
-                let detail_to_use = if file.detail.is_some()
-                    && !supports_detail_parameter(messages_config.provider_type)
-                {
-                    tracing::warn!(
-                        "The image detail setting is not supported by `{}`. The `detail` field will be ignored.",
-                        messages_config.provider_type
-                    );
-                    None
-                } else {
-                    file.detail.clone()
-                };
-                Ok(OpenAIContentBlock::ImageUrl {
-                    image_url: OpenAIImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing file data)
-                        url: base64_url,
-                        detail: detail_to_use,
-                    },
-                })
-            } else if file.mime_type.type_() == mime::AUDIO {
-                // Audio files use the input_audio format with unprefixed base64 and format field
-                let format = mime_type_to_audio_format(&file.mime_type)?;
-                Ok(OpenAIContentBlock::InputAudio {
-                    input_audio: OpenAIInputAudio {
-                        data: Cow::Owned(data.clone()),
-                        format: Cow::Owned(format.to_string()),
-                    },
-                })
-            } else {
-                // OpenAI doesn't document how they determine the content type of the base64 blob
-                // - let's try to pick a good suffix for the filename, in case they don't sniff
-                // the mime type from the actual file content.
-                let filename = if let Some(ref user_filename) = file.filename {
-                    // Use the user-provided filename if available
-                    Cow::Owned(user_filename.clone())
-                } else {
-                    // Otherwise, generate a filename with the appropriate extension
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    Cow::Owned(format!("input.{suffix}"))
-                };
-                Ok(OpenAIContentBlock::File {
-                    file: OpenAIFile {
-                        file_data: Some(Cow::Owned(base64_url)),
-                        filename: Some(filename),
-                    },
-                })
+
+            // Check for a content_type_override for this MIME type.
+            // If present, it takes precedence over the default MIME → content block mapping.
+            let override_block_type = messages_config
+                .content_type_overrides
+                .and_then(|m| m.get(&file.mime_type.to_string()));
+
+            let effective_block_type = match override_block_type {
+                Some(&block_type) => block_type,
+                None if file.mime_type.type_() == mime::IMAGE => ContentBlockType::ImageUrl,
+                None if file.mime_type.type_() == mime::AUDIO => ContentBlockType::InputAudio,
+                None => ContentBlockType::File,
+            };
+
+            match effective_block_type {
+                ContentBlockType::ImageUrl => {
+                    let detail_to_use = if file.detail.is_some()
+                        && !supports_detail_parameter(messages_config.provider_type)
+                    {
+                        tracing::warn!(
+                            "The image detail setting is not supported by `{}`. The `detail` field will be ignored.",
+                            messages_config.provider_type
+                        );
+                        None
+                    } else {
+                        file.detail.clone()
+                    };
+                    Ok(OpenAIContentBlock::ImageUrl {
+                        image_url: OpenAIImageUrl {
+                            url: base64_url,
+                            detail: detail_to_use,
+                        },
+                    })
+                }
+                ContentBlockType::InputAudio => {
+                    let format = mime_type_to_audio_format(&file.mime_type)?;
+                    Ok(OpenAIContentBlock::InputAudio {
+                        input_audio: OpenAIInputAudio {
+                            data: Cow::Owned(data.clone()),
+                            format: Cow::Owned(format.to_string()),
+                        },
+                    })
+                }
+                ContentBlockType::File => {
+                    let filename = if let Some(ref user_filename) = file.filename {
+                        Cow::Owned(user_filename.clone())
+                    } else {
+                        let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidMessage {
+                                message: format!(
+                                    "Mime type {} has no filetype suffix",
+                                    file.mime_type
+                                ),
+                            })
+                        })?;
+                        Cow::Owned(format!("input.{suffix}"))
+                    };
+                    Ok(OpenAIContentBlock::File {
+                        file: OpenAIFile {
+                            file_data: Some(Cow::Owned(base64_url)),
+                            filename: Some(filename),
+                        },
+                    })
+                }
             }
         }
     }
@@ -2568,6 +2615,7 @@ impl<'a> OpenAIRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        content_type_overrides: Option<&'a HashMap<String, ContentBlockType>>,
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format =
             OpenAIResponseFormat::new(request.json_mode, request.output_schema, model);
@@ -2589,6 +2637,7 @@ impl<'a> OpenAIRequest<'a> {
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
+                content_type_overrides,
             },
         )
         .await?;
@@ -2652,7 +2701,7 @@ impl<'a> OpenAIBatchFileInput<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<Self, Error> {
-        let body = OpenAIRequest::new(model, request).await?;
+        let body = OpenAIRequest::new(model, request, None).await?;
         Ok(Self {
             custom_id: inference_id.to_string(),
             method: "POST".to_string(),
@@ -3445,7 +3494,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4.1-mini", &basic_request)
+        let openai_request = OpenAIRequest::new("gpt-4.1-mini", &basic_request, None)
             .await
             .unwrap();
 
@@ -3486,7 +3535,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools, None)
             .await
             .unwrap();
 
@@ -3545,7 +3594,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools, None)
             .await
             .unwrap();
 
@@ -3588,7 +3637,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools)
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools, None)
             .await
             .unwrap();
 
@@ -3634,7 +3683,9 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("o1-preview", &request).await.unwrap();
+        let openai_request = OpenAIRequest::new("o1-preview", &request, None)
+            .await
+            .unwrap();
 
         assert_eq!(openai_request.model, "o1-preview");
         assert_eq!(openai_request.messages.len(), 1);
@@ -3671,7 +3722,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request_with_system = OpenAIRequest::new("o1-mini", &request_with_system)
+        let openai_request_with_system = OpenAIRequest::new("o1-mini", &request_with_system, None)
             .await
             .unwrap();
 
@@ -4072,6 +4123,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                content_type_overrides: None,
             },
         )
         .await
@@ -4100,6 +4152,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                content_type_overrides: None,
             },
         )
         .await
@@ -4137,6 +4190,7 @@ mod tests {
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
                 fetch_and_encode_input_files_before_inference: false,
+                content_type_overrides: None,
             },
         )
         .await
@@ -4715,6 +4769,7 @@ mod tests {
             &file,
             OpenAIMessagesConfig {
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
             },
@@ -4739,6 +4794,7 @@ mod tests {
             &file,
             OpenAIMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
+                content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
             },
@@ -4770,6 +4826,7 @@ mod tests {
             &file,
             OpenAIMessagesConfig {
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
             },
@@ -4796,6 +4853,7 @@ mod tests {
         let logs_contain = capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: true,
+            content_type_overrides: None,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
         };
@@ -4854,6 +4912,7 @@ mod tests {
     async fn test_file_url_warn_mime_type() {
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
             json_mode: None,
             provider_type: PROVIDER_TYPE,
         };
@@ -4910,6 +4969,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -4949,6 +5009,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -4985,6 +5046,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5021,6 +5083,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5058,6 +5121,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
         let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
         let res = prepare_file_message(
@@ -5156,6 +5220,7 @@ mod tests {
             OpenAIAPIType::ChatCompletions,
             false,
             Vec::new(),
+            HashMap::new(),
         );
 
         let _ = OpenAIProvider::new(
@@ -5165,6 +5230,7 @@ mod tests {
             OpenAIAPIType::ChatCompletions,
             false,
             Vec::new(),
+            HashMap::new(),
         );
 
         // Invalid cases (should warn)
@@ -5176,6 +5242,7 @@ mod tests {
             OpenAIAPIType::ChatCompletions,
             false,
             Vec::new(),
+            HashMap::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
@@ -5188,6 +5255,7 @@ mod tests {
             OpenAIAPIType::ChatCompletions,
             false,
             Vec::new(),
+            HashMap::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
@@ -5224,7 +5292,7 @@ mod tests {
             ..Default::default()
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4o", &request)
+        let openai_request = OpenAIRequest::new("gpt-4o", &request, None)
             .await
             .expect("Failed to create OpenAI request");
 
@@ -5262,6 +5330,7 @@ mod tests {
             &file,
             OpenAIMessagesConfig {
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
             },
@@ -5305,6 +5374,7 @@ mod tests {
             &file,
             OpenAIMessagesConfig {
                 fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
                 json_mode: None,
                 provider_type: PROVIDER_TYPE,
             },
@@ -5324,6 +5394,73 @@ mod tests {
                 },
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_file_message_with_content_type_override() {
+        // Test that content_type_overrides can force a PDF to use image_url (e.g. for Vertex AI)
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: None,
+                mime_type: mime::APPLICATION_PDF,
+                storage_path: dummy_storage_path.clone(),
+                detail: None,
+                filename: None,
+            },
+            data: BASE64_STANDARD.encode(b"%PDF-1.4"),
+        }));
+
+        // Without override: PDF should become a File block
+        let res_no_override = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: None,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .expect("prepare_file_message should succeed without override");
+
+        assert!(
+            matches!(res_no_override, OpenAIContentBlock::File { .. }),
+            "PDF without override should produce a File block"
+        );
+
+        // With override: PDF should become an ImageUrl block
+        let mut overrides = HashMap::new();
+        overrides.insert("application/pdf".to_string(), ContentBlockType::ImageUrl);
+        let res_with_override = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                content_type_overrides: Some(&overrides),
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .expect("prepare_file_message should succeed with override");
+
+        let expected_url = format!(
+            "data:application/pdf;base64,{}",
+            BASE64_STANDARD.encode(b"%PDF-1.4")
+        );
+        match res_with_override {
+            OpenAIContentBlock::ImageUrl { image_url } => {
+                assert_eq!(
+                    image_url.url, expected_url,
+                    "image_url should contain the base64 PDF data URI"
+                );
+                assert_eq!(image_url.detail, None, "detail should be None");
+            }
+            other => panic!("Expected ImageUrl block with content_type_override, got: {other:?}"),
+        }
     }
 
     #[tokio::test]
@@ -5355,6 +5492,7 @@ mod tests {
                 &file,
                 OpenAIMessagesConfig {
                     fetch_and_encode_input_files_before_inference: true,
+                    content_type_overrides: None,
                     json_mode: None,
                     provider_type: PROVIDER_TYPE,
                 },
@@ -5974,6 +6112,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6018,6 +6157,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6068,6 +6208,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6109,6 +6250,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6153,6 +6295,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6237,6 +6380,7 @@ mod tests {
             json_mode: None,
             provider_type: "deepseek",
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result =
@@ -6281,6 +6425,7 @@ mod tests {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
+            content_type_overrides: None,
         };
 
         let result = tensorzero_to_openai_messages(&message, messages_config)

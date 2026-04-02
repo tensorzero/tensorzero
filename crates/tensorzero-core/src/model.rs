@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
@@ -33,6 +34,9 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::observability::internal_metrics::{
+    TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
+};
 use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
 use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -89,9 +93,11 @@ use crate::providers::{
 pub(crate) fn record_usage_metrics(usage: &Usage) {
     if let Some(input_tokens) = usage.input_tokens {
         counter!("tensorzero_input_tokens_total").increment(input_tokens as u64);
+        TENSORZERO_INPUT_TOKENS_TOTAL.fetch_add(input_tokens as u64, Ordering::Relaxed);
     }
     if let Some(output_tokens) = usage.output_tokens {
         counter!("tensorzero_output_tokens_total").increment(output_tokens as u64);
+        TENSORZERO_OUTPUT_TOKENS_TOTAL.fetch_add(output_tokens as u64, Ordering::Relaxed);
     }
 }
 
@@ -1433,6 +1439,9 @@ pub enum UninitializedProviderConfig {
         include_encrypted_reasoning: bool,
         #[serde(default)]
         provider_tools: Vec<Value>,
+        #[serde(default)]
+        content_type_overrides:
+            std::collections::HashMap<String, crate::providers::openai::ContentBlockType>,
     },
     OpenRouter {
         model_name: String,
@@ -1578,6 +1587,7 @@ impl UninitializedProviderConfig {
                             OpenAIAPIType::ChatCompletions,
                             false,
                             Vec::new(),
+                            std::collections::HashMap::new(),
                             )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1733,6 +1743,7 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
+                content_type_overrides,
             } => {
                 // Use mock API base for testing if set, otherwise defer to the API base set
                 let api_base = get_mock_provider_api_base("openai").or(api_base);
@@ -1749,6 +1760,7 @@ impl UninitializedProviderConfig {
                     api_type,
                     include_encrypted_reasoning,
                     provider_tools,
+                    content_type_overrides,
                 )?)
             }
             UninitializedProviderConfig::OpenRouter {
@@ -2859,6 +2871,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::Responses,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 } else {
                     ProviderConfig::OpenAI(OpenAIProvider::new(
@@ -2870,6 +2883,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::ChatCompletions,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 }
             }
