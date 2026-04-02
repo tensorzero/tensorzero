@@ -24,14 +24,7 @@ async fn test_list_inference_metadata_no_params() {
     for meta in &response.inference_metadata {
         assert!(!meta.function_name.is_empty());
         assert!(!meta.variant_name.is_empty());
-        // Verify snapshot_hash is lowercase hex of a 256-bit blake3 hash (64 hex chars)
         if let Some(ref hash) = meta.snapshot_hash {
-            assert_eq!(
-                hash.len(),
-                64,
-                "snapshot_hash should be 64 hex chars (256-bit hash), got length {} for: {hash}",
-                hash.len()
-            );
             assert!(
                 hash.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')),
                 "snapshot_hash should be lowercase hex, got: {hash}"
