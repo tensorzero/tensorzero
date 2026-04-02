@@ -18,7 +18,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use tensorzero_types_providers::fireworks::*;
+use tensorzero_provider_wire::fireworks::*;
 use tokio::time::Instant;
 use url::Url;
 
@@ -1155,7 +1155,7 @@ fn extract_fireworks_cached_prompt_tokens(headers: &http::HeaderMap) -> Option<u
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-    use tensorzero_types_providers::openai::OpenAIUsage;
+    use tensorzero_provider_wire::openai::OpenAIUsage;
     use uuid::Uuid;
 
     use super::*;

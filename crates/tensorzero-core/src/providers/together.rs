@@ -53,7 +53,7 @@ use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
-use tensorzero_types_providers::together::{
+use tensorzero_provider_wire::together::{
     TogetherChatChunk, TogetherResponse, TogetherResponseChoice, TogetherResponseToolCall,
 };
 use uuid::Uuid;
@@ -1084,7 +1084,7 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
-    use tensorzero_types_providers::together::{
+    use tensorzero_provider_wire::together::{
         TogetherChatChunkChoice, TogetherDelta, TogetherFinishReason, TogetherFunctionCallChunk,
         TogetherResponseMessage, TogetherToolCallChunk,
     };

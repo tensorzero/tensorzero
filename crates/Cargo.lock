@@ -7132,8 +7132,8 @@ dependencies = [
  "tensorzero-derive",
  "tensorzero-error",
  "tensorzero-provider-types",
+ "tensorzero-provider-wire",
  "tensorzero-types",
- "tensorzero-types-providers",
  "tensorzero-unsafe-helpers",
  "thiserror 2.0.18",
  "tokio",
@@ -7276,12 +7276,22 @@ dependencies = [
  "sqlx",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-provider-wire",
  "tensorzero-types",
- "tensorzero-types-providers",
  "tracing",
  "ts-rs",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tensorzero-provider-wire"
+version = "2026.3.5"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "tensorzero-derive",
 ]
 
 [[package]]
@@ -7332,16 +7342,6 @@ dependencies = [
  "ts-rs",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "tensorzero-types-providers"
-version = "2026.3.5"
-dependencies = [
- "serde",
- "serde_json",
- "serde_path_to_error",
- "tensorzero-derive",
 ]
 
 [[package]]

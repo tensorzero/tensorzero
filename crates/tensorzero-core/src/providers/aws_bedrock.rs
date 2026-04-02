@@ -45,7 +45,7 @@ use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use tensorzero_provider_types::FunctionToolDef;
 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice};
-use tensorzero_types_providers::aws_bedrock::{
+use tensorzero_provider_wire::aws_bedrock::{
     self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
     ConverseRequest, ConverseResponse, InferenceConfig, Message, MessageStopEvent, MetadataEvent,
@@ -1393,7 +1393,7 @@ mod tests {
 
     #[gtest]
     fn test_aws_bedrock_usage_with_cache_tokens() {
-        use tensorzero_types_providers::aws_bedrock;
+        use tensorzero_provider_wire::aws_bedrock;
 
         let bedrock_usage = aws_bedrock::Usage {
             input_tokens: 50,

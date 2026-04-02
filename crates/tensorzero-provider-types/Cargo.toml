@@ -19,7 +19,7 @@ tensorzero-derive = { path = "../tensorzero-derive" }
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
 tensorzero-types = { path = "../tensorzero-types" }
-tensorzero-types-providers = { path = "../tensorzero-types-providers" }
+tensorzero-provider-wire = { path = "../tensorzero-provider-wire" }
 url = { workspace = true, features = ["serde"] }
 uuid.workspace = true
 

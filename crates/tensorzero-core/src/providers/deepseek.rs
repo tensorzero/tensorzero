@@ -41,7 +41,7 @@ use crate::providers::openai::{
 };
 use crate::tool::ToolCallChunk;
 use serde_json::Value;
-use tensorzero_types_providers::deepseek::{
+use tensorzero_provider_wire::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
 };
 use uuid::Uuid;
@@ -844,8 +844,8 @@ mod tests {
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
     };
     use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
-    use tensorzero_types_providers::deepseek::{DeepSeekResponseMessage, DeepSeekUsage};
-    use tensorzero_types_providers::openai::OpenAIFinishReason;
+    use tensorzero_provider_wire::deepseek::{DeepSeekResponseMessage, DeepSeekUsage};
+    use tensorzero_provider_wire::openai::OpenAIFinishReason;
 
     #[tokio::test]
     async fn test_deepseek_request_new() {
@@ -1475,7 +1475,7 @@ mod tests {
 
     #[gtest]
     fn test_deepseek_usage_with_cache_tokens() {
-        use tensorzero_types_providers::deepseek::DeepSeekUsage;
+        use tensorzero_provider_wire::deepseek::DeepSeekUsage;
 
         let deepseek_usage = DeepSeekUsage {
             prompt_tokens: Some(100),

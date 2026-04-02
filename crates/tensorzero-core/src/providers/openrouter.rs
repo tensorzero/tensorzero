@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::Cow;
 // TODO: Remove this import after migrating OpenRouter streaming chunk types to `tensorzero-types-providers`
-use tensorzero_types_providers::serde_util::empty_string_as_none;
+use tensorzero_provider_wire::serde_util::empty_string_as_none;
 
 use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
@@ -44,10 +44,10 @@ use crate::inference::types::{
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
-use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
-use tensorzero_types_providers::openrouter::{
+use tensorzero_provider_wire::openrouter::{
     ReasoningConfig as OpenRouterReasoningConfig, ReasoningDetail as OpenRouterReasoningDetail,
 };
+use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
 use uuid::Uuid;
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -70,7 +70,7 @@ use super::openai::{
 use crate::inference::TensorZeroEventError;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::providers::openai::OpenAIEmbeddingUsage;
-use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
+use tensorzero_provider_wire::openai::OpenAIPromptTokensDetails;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {

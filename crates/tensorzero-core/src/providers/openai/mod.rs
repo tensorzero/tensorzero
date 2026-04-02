@@ -14,7 +14,7 @@ use std::io::Write;
 use std::pin::Pin;
 use std::time::Duration;
 // TODO: Remove this import after migrating OpenAI streaming chunk types to `tensorzero-types-providers`
-use tensorzero_types_providers::serde_util::empty_string_as_none;
+use tensorzero_provider_wire::serde_util::empty_string_as_none;
 use tokio::time::Instant;
 use tracing::instrument;
 use url::Url;
@@ -2694,7 +2694,7 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
-pub(crate) use tensorzero_types_providers::openai::{
+pub(crate) use tensorzero_provider_wire::openai::{
     OpenAIFinishReason, OpenAIResponseToolCall, OpenAIUsage,
 };
 
@@ -3272,7 +3272,7 @@ mod tests {
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
-    use tensorzero_types_providers::openai::OpenAIResponseFunctionCall;
+    use tensorzero_provider_wire::openai::OpenAIResponseFunctionCall;
 
     use super::*;
 
@@ -5881,7 +5881,7 @@ mod tests {
 
     #[test]
     fn test_usage_from_openai_usage_with_cached_tokens() {
-        use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
+        use tensorzero_provider_wire::openai::OpenAIPromptTokensDetails;
 
         // OpenAI reports cached tokens in prompt_tokens_details.cached_tokens
         let openai_usage = Some(OpenAIUsage {

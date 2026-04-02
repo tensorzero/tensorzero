@@ -4785,7 +4785,7 @@ dependencies = [
  "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-types",
- "tensorzero-types-providers",
+ "tensorzero-provider-wire",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -4865,7 +4865,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero-types-providers"
+name = "tensorzero-provider-wire"
 version = "2026.3.3"
 dependencies = [
  "serde",
