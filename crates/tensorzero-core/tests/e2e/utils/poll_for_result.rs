@@ -3,7 +3,7 @@ use std::future::Future;
 use std::time::Duration;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
-const POLL_TIMEOUT: Duration = Duration::from_secs(30);
+const POLL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Polls a query until the result matches a predicate.
 ///
