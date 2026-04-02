@@ -72,7 +72,7 @@ thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.1"
 reqwest-sse-stream = { path = "reqwest-sse-stream" }
-minijinja = { version = "2.18.0", features = [
+minijinja = { version = "2.19.0", features = [
     "loader",
     "debug",
     "json",
@@ -119,7 +119,7 @@ metrics-exporter-prometheus = { version = "0.18.1", features = [
 ], default-features = false }
 schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
-blake3 = "1.8.3"
+blake3 = "1.8.4"
 moka = { version = "0.12.15", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "03f2c5f820b57dff2bdcb60c081533d03605519f" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
