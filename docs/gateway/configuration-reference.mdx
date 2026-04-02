@@ -1872,6 +1872,29 @@ model_name = "gpt-4o-mini-2024-07-18"
 # ...
 ```
 
+##### `content_type_overrides`
+
+- **Type:** map of string to string
+- **Required:** no (default: `{}`)
+
+Overrides the default MIME type to content block type mapping when serializing file inputs for the OpenAI API.
+
+By default, TensorZero maps `image/*` MIME types to `image_url` blocks, `audio/*` to `input_audio` blocks, and everything else to `file` blocks.
+Some OpenAI-compatible providers don't support `file` blocks but accept certain file types (e.g. PDFs) as `image_url` blocks with `data:` URIs.
+Use this option to override the mapping for specific MIME types.
+
+Each key is a MIME type string (e.g. `"application/pdf"`) and each value is one of: `"image_url"`, `"file"`, or `"input_audio"`.
+
+```toml title="tensorzero.toml"
+[models.gemini-flash.providers.vertex]
+type = "openai"
+model_name = "google/gemini-2.0-flash"
+api_base = "https://aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
+
+[models.gemini-flash.providers.vertex.content_type_overrides]
+"application/pdf" = "image_url"  # Send PDFs as image_url blocks (required for Vertex AI)
+```
+
 ##### `provider_tools`
 
 - **Type:** array of objects
