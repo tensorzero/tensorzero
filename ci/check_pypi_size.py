@@ -82,8 +82,8 @@ def main() -> None:
     parser.add_argument(
         "--max-size-gb",
         type=float,
-        default=10.0,
-        help="Maximum total size in GB (default: 10.0)",
+        default=20.0,
+        help="Maximum total size in GB (default: 20.0)",
     )
     args = parser.parse_args()
 
