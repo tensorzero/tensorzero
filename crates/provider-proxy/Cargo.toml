@@ -17,7 +17,7 @@ hex = "0.4.3"
 http = "1.4.0"
 http-body-util = { workspace = true }
 http-serde-ext = "1.0.2"
-hyper = { version = "1.7.0", features = ["client", "server", "http1", "http2"] }
+hyper = { version = "1.9.0", features = ["client", "server", "http1", "http2"] }
 hyper-util = "0.1.19"
 moka = { version = "0.12.15", features = ["sync"] }
 pin-project = "1.1.11"

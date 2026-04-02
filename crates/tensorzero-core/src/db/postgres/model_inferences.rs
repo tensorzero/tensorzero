@@ -15,7 +15,7 @@ use rust_decimal::Decimal;
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
-use crate::db::{ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ContentBlockOutput, FinishReason, StoredModelInference, StoredRequestMessage,
@@ -175,6 +175,24 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
 
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         POSTGRES_QUANTILES
+    }
+
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+        let pool = self.get_pool_result()?;
+        get_cache_statistics_timeseries_impl(
+            pool,
+            time_window,
+            max_periods,
+            model_name,
+            model_provider_name,
+        )
+        .await
     }
 }
 
@@ -384,6 +402,133 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
     )
     .fetch_all(pool)
     .await?;
+
+    Ok(rows)
+}
+
+async fn get_cache_statistics_timeseries_impl(
+    pool: &PgPool,
+    time_window: TimeWindow,
+    max_periods: u32,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+    if time_window == TimeWindow::Cumulative {
+        return get_cache_statistics_cumulative(pool, model_name, model_provider_name).await;
+    }
+
+    let mut query_builder = build_cache_statistics_timeseries_query(
+        &time_window,
+        max_periods,
+        model_name,
+        model_provider_name,
+    );
+    let mut rows: Vec<CacheStatisticsTimePoint> =
+        query_builder.build_query_as().fetch_all(pool).await?;
+
+    for point in &mut rows {
+        point.cache_read_ratio = match (point.cache_read_input_tokens, point.input_tokens) {
+            (Some(read), Some(total)) if total > 0 => Some(read as f64 / total as f64),
+            _ => None,
+        };
+    }
+
+    Ok(rows)
+}
+
+fn build_cache_statistics_timeseries_query(
+    time_window: &TimeWindow,
+    max_periods: u32,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> QueryBuilder<sqlx::Postgres> {
+    let time_unit = time_window.to_postgres_time_unit();
+
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT date_trunc('");
+    query_builder.push(time_unit);
+    query_builder.push(
+        "', minute) as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE minute >= (
+            SELECT COALESCE(MAX(date_trunc('",
+    );
+    query_builder.push(time_unit);
+    query_builder.push(
+        "', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.model_provider_statistics
+        ) - INTERVAL '",
+    );
+    query_builder.push(max_periods.to_string());
+    query_builder.push(" ");
+    query_builder.push(time_unit);
+    query_builder.push("s'");
+
+    if let Some(name) = model_name {
+        query_builder.push(" AND model_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+    if let Some(name) = model_provider_name {
+        query_builder.push(" AND model_provider_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+
+    query_builder.push(
+        "
+        GROUP BY period_start, model_name, model_provider_name
+        ORDER BY period_start DESC, model_name, model_provider_name",
+    );
+
+    query_builder
+}
+
+async fn get_cache_statistics_cumulative(
+    pool: &PgPool,
+    model_name: Option<&str>,
+    model_provider_name: Option<&str>,
+) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+    let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+        "SELECT
+            '1970-01-01'::TIMESTAMPTZ as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE TRUE",
+    );
+
+    if let Some(name) = model_name {
+        query_builder.push(" AND model_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+    if let Some(name) = model_provider_name {
+        query_builder.push(" AND model_provider_name = ");
+        query_builder.push_bind(name.to_string());
+    }
+
+    query_builder.push(
+        "
+        GROUP BY model_name, model_provider_name
+        ORDER BY model_name, model_provider_name",
+    );
+
+    let mut rows: Vec<CacheStatisticsTimePoint> =
+        query_builder.build_query_as().fetch_all(pool).await?;
+
+    for point in &mut rows {
+        point.cache_read_ratio = match (point.cache_read_input_tokens, point.input_tokens) {
+            (Some(read), Some(total)) if total > 0 => Some(read as f64 / total as f64),
+            _ => None,
+        };
+    }
 
     Ok(rows)
 }
@@ -658,6 +803,27 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelLatencyDatapoint {
             response_time_ms_quantiles,
             ttft_ms_quantiles,
             count: count as u64,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for CacheStatisticsTimePoint {
+    fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        let period_start: DateTime<Utc> = row.try_get("period_start")?;
+        let input_tokens: Option<i64> = row.try_get("input_tokens")?;
+        let cache_read_input_tokens: Option<i64> = row.try_get("cache_read_input_tokens")?;
+        let cache_write_input_tokens: Option<i64> = row.try_get("cache_write_input_tokens")?;
+        let count: Option<i64> = row.try_get("count")?;
+
+        Ok(CacheStatisticsTimePoint {
+            period_start,
+            model_name: row.try_get("model_name")?,
+            model_provider_name: row.try_get("model_provider_name")?,
+            input_tokens: input_tokens.map(|v| v as u64),
+            cache_read_input_tokens: cache_read_input_tokens.map(|v| v as u64),
+            cache_write_input_tokens: cache_write_input_tokens.map(|v| v as u64),
+            count: count.map(|v| v as u64),
+            cache_read_ratio: None, // Computed after fetch
         })
     }
 }
@@ -1170,6 +1336,82 @@ mod tests {
                 "Expected TTFT quantiles to be zero when the single TTFT bucket has lower bound 0"
             );
         }
+    }
+
+    // =========================================================================
+    // Model inference query tests (existing)
+    // =========================================================================
+
+    // =========================================================================
+    // Cache statistics query tests
+    // =========================================================================
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_hour_no_filters() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Hour, 24, None, None);
+        assert_query_equals(
+            qb.sql().as_str(),
+            r"SELECT date_trunc('hour', minute) as period_start,
+            model_name,
+            model_provider_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_provider_cache_read_input_tokens)::BIGINT as cache_read_input_tokens,
+            SUM(total_provider_cache_write_input_tokens)::BIGINT as cache_write_input_tokens,
+            SUM(inference_count)::BIGINT as count
+        FROM tensorzero.model_provider_statistics
+        WHERE minute >= (
+            SELECT COALESCE(MAX(date_trunc('hour', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.model_provider_statistics
+        ) - INTERVAL '24 hours'
+        GROUP BY period_start, model_name, model_provider_name
+        ORDER BY period_start DESC, model_name, model_provider_name",
+        );
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_day_with_model_filter() {
+        let qb =
+            build_cache_statistics_timeseries_query(&TimeWindow::Day, 7, Some("my_model"), None);
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('day', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '7 days'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_does_not_contain(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_week_with_both_filters() {
+        let qb = build_cache_statistics_timeseries_query(
+            &TimeWindow::Week,
+            4,
+            Some("my_model"),
+            Some("my_provider"),
+        );
+        let sql = qb.sql();
+        assert_query_contains(sql.as_str(), "date_trunc('week', minute) as period_start");
+        assert_query_contains(sql.as_str(), "INTERVAL '4 weeks'");
+        assert_query_contains(sql.as_str(), "AND model_name =");
+        assert_query_contains(sql.as_str(), "AND model_provider_name =");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_month() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Month, 12, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('month', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '12 months'");
+    }
+
+    #[test]
+    fn test_build_cache_statistics_timeseries_query_minute() {
+        let qb = build_cache_statistics_timeseries_query(&TimeWindow::Minute, 60, None, None);
+        assert_query_contains(
+            qb.sql().as_str(),
+            "date_trunc('minute', minute) as period_start",
+        );
+        assert_query_contains(qb.sql().as_str(), "INTERVAL '60 minutes'");
     }
 
     // =========================================================================

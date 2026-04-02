@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::{check_detached_table_exists, check_table_exists};
+use super::{ViewOffsetDeadline, check_detached_table_exists, check_table_exists};
 
 /// NOTE: This migration supersedes migration_0023.
 /// Migration 0023 was inefficient due to its use of joins.
@@ -110,7 +108,7 @@ impl Migration for Migration0028<'_> {
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
-        let view_offset = Duration::from_secs(10);
+        let view_deadline = ViewOffsetDeadline::new();
         let current_time = std::time::SystemTime::now();
         let view_timestamp = (current_time
             .duration_since(std::time::UNIX_EPOCH)
@@ -120,8 +118,8 @@ impl Migration for Migration0028<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_secs();
+            + ViewOffsetDeadline::offset())
+        .as_secs();
         let view_timestamp_where_clause = if clean_start {
             String::new()
         } else {
@@ -309,8 +307,7 @@ impl Migration for Migration0028<'_> {
             .await?;
 
         if !clean_start {
-            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
             let current_timestamp = current_time
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| {

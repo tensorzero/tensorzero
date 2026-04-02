@@ -75,7 +75,6 @@ pub mod provider_types;
 pub mod rate_limiting;
 pub mod snapshot;
 mod span_map;
-pub mod stored;
 #[cfg(test)]
 mod tests;
 pub mod unwritten;
@@ -107,7 +106,7 @@ pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T
 }
 
 /// Configuration for the autopilot system.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AutopilotConfig {
     /// Tools that are automatically approved without manual intervention.
@@ -142,7 +141,7 @@ pub struct Config {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
@@ -152,7 +151,7 @@ pub struct NonStreamingTimeouts {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
@@ -167,7 +166,7 @@ pub struct StreamingTimeouts {
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
@@ -230,7 +229,7 @@ impl TimeoutsConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
@@ -1897,7 +1896,7 @@ pub trait LoadableConfig<T> {
 ///
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     #[serde(default)]
@@ -1929,7 +1928,7 @@ pub struct UninitializedConfig {
     pub autopilot: AutopilotConfig,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedRelayConfig {
     /// If set, all models will be forwarded to this gateway URL
@@ -2104,7 +2103,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     }
 }
 
-#[derive(Clone, Debug, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -2113,13 +2112,13 @@ pub enum UninitializedFunctionConfig {
     Json(UninitializedFunctionConfigJson),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
     path: ResolvedTomlPathData,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(transparent)]
 pub struct UninitializedSchemas {
@@ -2138,7 +2137,7 @@ impl UninitializedSchemas {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -2160,7 +2159,7 @@ pub struct UninitializedFunctionConfigChat {
     pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -2583,7 +2582,7 @@ impl UninitializedFunctionConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
@@ -2600,7 +2599,7 @@ pub struct UninitializedVariantInfo {
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, TensorZeroDeserialize, Serialize)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, TensorZeroDeserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -2678,7 +2677,7 @@ impl UninitializedVariantInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
@@ -2717,7 +2716,7 @@ impl PathWithContents {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct PostgresConfig {
     /// DEPRECATED (2026.3+): Postgres connectivity is now determined by the

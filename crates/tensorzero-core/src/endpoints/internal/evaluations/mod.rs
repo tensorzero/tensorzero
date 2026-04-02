@@ -9,6 +9,7 @@ mod get_human_feedback;
 mod get_run_infos;
 mod get_run_metadata;
 mod get_statistics;
+mod get_usage_statistics;
 mod list_runs;
 mod search_runs;
 pub mod types;
@@ -23,5 +24,6 @@ pub use get_run_infos::{
 };
 pub use get_run_metadata::get_run_metadata_handler;
 pub use get_statistics::get_evaluation_statistics_handler;
+pub use get_usage_statistics::get_evaluation_usage_statistics_handler;
 pub use list_runs::list_evaluation_runs_handler;
 pub use search_runs::search_evaluation_runs_handler;

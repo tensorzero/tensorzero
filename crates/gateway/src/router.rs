@@ -22,17 +22,19 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
 };
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use tokio_util::sync::CancellationToken;
 use tower_http::decompression::RequestDecompressionLayer;
 use tracing::Instrument;
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.
-pub fn build_axum_router(
+pub async fn build_axum_router(
     base_path: &str,
     otel_tracer: Option<Arc<TracerWrapper>>,
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
-) -> (Router, InFlightRequestsData) {
+    shutdown_token: CancellationToken,
+) -> Result<(Router, InFlightRequestsData), Error> {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
     let mut router = if base_path.is_empty() {
@@ -41,7 +43,18 @@ pub fn build_axum_router(
         Router::new().nest(base_path, api_routes)
     };
 
-    router = router.fallback(endpoints::fallback::handle_404);
+    // Serve the MCP endpoint on the same port, respecting `base_path`.
+    let mcp_router = tensorzero_mcp::build_mcp_router(Arc::new(app_state.clone()), shutdown_token)
+        .await
+        .map_err(|e| Error::new(ErrorDetails::InternalError { message: e }))?;
+    let mcp_path = if base_path.is_empty() {
+        "/mcp".to_string()
+    } else {
+        format!("{base_path}/mcp")
+    };
+    router = router
+        .nest_service(&mcp_path, mcp_router)
+        .fallback(endpoints::fallback::handle_404);
 
     if app_state.config.gateway.auth.enabled {
         let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
@@ -78,7 +91,7 @@ pub fn build_axum_router(
             tensorzero_core::observability::request_logging::request_logging_middleware,
         ))
         .with_state(app_state.clone());
-    (final_router, in_flight_requests_data)
+    Ok((final_router, in_flight_requests_data))
 }
 
 /// Routes that should not require authentication

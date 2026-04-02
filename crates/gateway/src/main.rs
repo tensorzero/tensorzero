@@ -400,7 +400,10 @@ async fn run() -> Result<(), ExitCode> {
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
         metrics_handle,
-    );
+        gateway_handle.app_state.shutdown_token.clone(),
+    )
+    .await
+    .log_err_pretty("Failed to build router")?;
 
     // Bind to the socket address specified in the CLI, config, or default to 0.0.0.0:3000
     if args.bind_address.is_some() && config.gateway.bind_address.is_some() {

@@ -27,7 +27,7 @@ export type ListInferencesToolParams = {
    * inference output or demonstration feedback (manually-curated output) if available.
    * Defaults to `Inference` if not specified.
    */
-  output_source: InferenceOutputSource;
+  output_source?: InferenceOutputSource;
   /**
    * The maximum number of inferences to return.
    * Defaults to 20.

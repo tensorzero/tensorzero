@@ -156,75 +156,69 @@ impl SpanMap {
 mod tests {
     use std::borrow::Cow;
 
+    use googletest::prelude::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
     use toml::{Spanned, de::DeValue};
 
     use super::*;
 
-    #[test]
+    #[gtest]
     fn test_resolve_toml_relative_paths() {
-        // Create a temporary file to test with
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
+        // Create a schema file in a temp directory, and create a config file that references it.
         let mut temp_file = NamedTempFile::new().unwrap();
         write!(temp_file, r#"{{"test": "data"}}"#).unwrap();
         let temp_path = temp_file.path().to_path_buf();
-
-        // Get the directory containing the temp file
         let temp_dir = temp_path.parent().unwrap();
 
-        // Create a config that references this temp file
         let config_str = format!(
             r#"functions.my_function.system_schema = "{}""#,
             temp_path.file_name().unwrap().to_str().unwrap()
         );
         let table = DeTable::parse(&config_str).unwrap();
 
-        // Use the temp directory as the base path
         let config_path = temp_dir.join("fake_config.toml");
         let resolved =
             resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_single_file(config_path))
                 .unwrap();
 
-        // Verify the path was resolved and the data was loaded
+        // After resolution, the remapped path should be the canonicalized path.
         let schema_table = resolved["functions"]["my_function"]["system_schema"]
             .as_table()
             .unwrap();
-        assert_eq!(
+        expect_that!(
             schema_table["__tensorzero_remapped_path"].as_str().unwrap(),
-            temp_path.to_str().unwrap()
+            eq(temp_path.canonicalize().unwrap().to_str().unwrap())
         );
-        assert_eq!(
+        expect_that!(
             schema_table["__data"].as_str().unwrap(),
-            r#"{"test": "data"}"#
+            eq(r#"{"test": "data"}"#)
         );
     }
 
-    #[test]
+    #[gtest]
     fn test_invalid_resolve_toml_relative_paths() {
         let table = DeTable::parse("functions.my_function.system_schema = 123").unwrap();
         let err =
             resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_empty()).unwrap_err();
-        assert_eq!(
-            *err.get_details(),
-            ErrorDetails::Config {
-                message: "`functions.my_function.system_schema`: Expected a string, found integer"
-                    .to_string(),
-            }
-        );
+        let expected = ErrorDetails::Config {
+            message: "`functions.my_function.system_schema`: Expected a string, found integer"
+                .to_string(),
+        };
+        expect_that!(*err.get_details(), eq(&expected));
     }
 
-    #[test]
+    #[gtest]
     fn test_merge_empty() {
         let mut target = DeTable::new();
         let source = DeTable::new();
         let span_map = SpanMap::new_empty();
         let error_path = vec![];
         merge_tomls(&mut target, &source, &span_map, error_path).unwrap();
-        assert_eq!(target.len(), 0);
+        expect_that!(target.len(), eq(0));
     }
 
-    #[test]
+    #[gtest]
     fn test_merge_invalid_type() {
         let mut target = DeTable::new();
         let mut inner_table = DeTable::new();
@@ -244,15 +238,13 @@ mod tests {
         let span_map = SpanMap::new_empty();
         let error_path = vec![];
         let err = merge_tomls(&mut target, &source, &span_map, error_path).unwrap_err();
-        assert_eq!(
-            *err.get_details(),
-            ErrorDetails::Config {
-                message: "`outer_table`: Cannot merge `string` from file `<unknown TOML file>` into a table from file `<unknown TOML file>`".to_string(),
-            }
-        );
+        let expected = ErrorDetails::Config {
+            message: "`outer_table`: Cannot merge `string` from file `<unknown TOML file>` into a table from file `<unknown TOML file>`".to_string(),
+        };
+        expect_that!(*err.get_details(), eq(&expected));
     }
 
-    #[test]
+    #[gtest]
     fn test_merge_duplicate_key() {
         let mut target = DeTable::new();
         let mut target_inner = DeTable::new();
@@ -295,11 +287,9 @@ mod tests {
         };
         let error_path = vec![];
         let err = merge_tomls(&mut target, &source, &span_map, error_path).unwrap_err();
-        assert_eq!(
-            *err.get_details(),
-            ErrorDetails::Config {
-                message: "`outer_table.inner_key`: Found duplicate values in globbed TOML config files `target.toml` and `source.toml`".to_string(),
-            }
-        );
+        let expected = ErrorDetails::Config {
+            message: "`outer_table.inner_key`: Found duplicate values in globbed TOML config files `target.toml` and `source.toml`".to_string(),
+        };
+        expect_that!(*err.get_details(), eq(&expected));
     }
 }

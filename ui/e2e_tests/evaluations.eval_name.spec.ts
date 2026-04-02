@@ -8,6 +8,12 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
 
+  // Assert that the Usage column header is visible
+  await expect(page.getByText("Usage")).toBeVisible();
+  // Assert that usage summary stats are rendered (token counts with "tok" suffix and inference counts with "n=" prefix)
+  await expect(page.getByText(/tok/).first()).toBeVisible();
+  await expect(page.getByText(/n=/).first()).toBeVisible();
+
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });

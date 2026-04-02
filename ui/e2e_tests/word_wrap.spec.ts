@@ -11,9 +11,11 @@ test("ensure word wrap persists between pages", async ({ page }) => {
   // Reload the page to avoid any quirks
   await page.reload();
 
-  await expect(page.getByText("Input")).toBeVisible();
-
   const getWordWrapToggle = () => page.getByTitle("Toggle word wrap").first();
+
+  // Wait for the word wrap toggle to be visible (ensures the real content has loaded,
+  // not just the Suspense skeleton which also has an "Input" heading)
+  await expect(getWordWrapToggle()).toBeVisible();
   const getWordWrap = async () =>
     await page.evaluate(() => localStorage.getItem("word-wrap"));
 
@@ -41,8 +43,8 @@ test("ensure word wrap persists between pages", async ({ page }) => {
   // ensure that it is still set to false on page reload...
   {
     await page.reload();
-    // Sleep to try to fix flakiness. TODO - figure out what event we should wait for.
-    await page.waitForTimeout(1000);
+    // Wait for the word wrap toggle to reappear after Suspense resolves
+    await expect(getWordWrapToggle()).toBeVisible();
 
     const button = getWordWrapToggle();
     expect(await button.getAttribute("aria-pressed")).toBe("false");

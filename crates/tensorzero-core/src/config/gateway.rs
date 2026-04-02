@@ -16,7 +16,7 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -42,7 +42,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -54,7 +54,7 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
     vec![0.001, 0.01, 0.1]
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
@@ -123,7 +123,7 @@ pub enum InferenceCacheBackend {
     Valkey,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
     /// Whether caching is enabled.
@@ -142,7 +142,7 @@ pub struct ModelInferenceCacheConfig {
 // By default, cache entries in Valkey are retained for 24 hours.
 const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValkeyModelInferenceCacheConfig {
     #[serde(default = "default_valkey_cache_ttl_s")]
@@ -161,7 +161,7 @@ impl Default for ValkeyModelInferenceCacheConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]

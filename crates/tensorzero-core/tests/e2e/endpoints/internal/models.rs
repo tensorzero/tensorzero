@@ -2,7 +2,7 @@
 
 use reqwest::Client;
 use tensorzero_core::endpoints::internal::models::types::{
-    CountModelsResponse, GetModelLatencyResponse, GetModelUsageResponse,
+    CountModelsResponse, GetCacheStatisticsResponse, GetModelLatencyResponse, GetModelUsageResponse,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -86,6 +86,81 @@ async fn test_model_usage_endpoint_missing_params() {
     let http_client = Client::new();
     // Missing required parameters
     let url = get_gateway_endpoint("/internal/models/usage");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "Expected client error for missing params, got: {:?}",
+        resp.status()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cache_statistics_endpoint() {
+    let http_client = Client::new();
+    let url =
+        get_gateway_endpoint("/internal/models/cache_statistics?time_window=week&max_periods=10");
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "cache_statistics request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetCacheStatisticsResponse = resp.json().await.unwrap();
+
+    // Verify we can deserialize the response and data points have expected structure
+    for point in &response.data {
+        assert!(
+            !point.model_name.is_empty(),
+            "model_name should not be empty"
+        );
+        assert!(
+            !point.model_provider_name.is_empty(),
+            "model_provider_name should not be empty"
+        );
+        // cache_read_ratio should be None or between 0.0 and 1.0
+        if let Some(ratio) = point.cache_read_ratio {
+            assert!(
+                (0.0..=1.0).contains(&ratio),
+                "cache_read_ratio should be between 0.0 and 1.0, got {ratio}"
+            );
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cache_statistics_with_model_filter() {
+    let http_client = Client::new();
+    let url = get_gateway_endpoint(
+        "/internal/models/cache_statistics?time_window=week&max_periods=10&model_name=dummy%3A%3Agood",
+    );
+
+    let resp = http_client.get(url).send().await.unwrap();
+    assert!(
+        resp.status().is_success(),
+        "cache_statistics with model filter request failed: status={:?}",
+        resp.status()
+    );
+
+    let response: GetCacheStatisticsResponse = resp.json().await.unwrap();
+
+    // All returned data points should match the filter
+    for point in &response.data {
+        assert_eq!(
+            point.model_name, "dummy::good",
+            "Expected model_name to be `dummy::good`, got `{}`",
+            point.model_name
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cache_statistics_missing_params() {
+    let http_client = Client::new();
+    // Missing required parameters
+    let url = get_gateway_endpoint("/internal/models/cache_statistics");
 
     let resp = http_client.get(url).send().await.unwrap();
     assert!(

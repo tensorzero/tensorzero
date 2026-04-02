@@ -21,6 +21,7 @@ import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type { EvaluationRunInfoById as EvaluationRunInfo } from "~/types/tensorzero";
 import type {
   EvaluationStatistics,
+  EvaluationUsageStatistics,
   EvaluationResultRow,
   Input,
   RunMetricMetadata,
@@ -212,6 +213,7 @@ interface EvaluationTableProps {
   selected_evaluation_run_infos: EvaluationRunInfo[];
   evaluation_results: EvaluationResultRow[];
   evaluation_statistics: EvaluationStatistics[];
+  evaluation_usage_statistics: EvaluationUsageStatistics[];
   metric_names: string[];
   evaluation_name: string;
   function_name: string;
@@ -251,6 +253,7 @@ export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
+  evaluation_usage_statistics,
   metric_names,
   evaluation_name,
   function_name,
@@ -454,7 +457,7 @@ export function EvaluationTable({
                       );
                     })}
                     <TableHead className="py-2 text-center align-top">
-                      Usage
+                      <UsageHeader usageStats={evaluation_usage_statistics} />
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -704,6 +707,92 @@ function formatDuration(ms: number): string {
   }
   return `${ms}ms`;
 }
+
+const UsageHeader = ({
+  usageStats,
+}: {
+  usageStats: EvaluationUsageStatistics[];
+}) => {
+  const [searchParams] = useSearchParams();
+  const selectedRunIdsParam = searchParams.get("evaluation_run_ids") || "";
+  const selectedRunIds = selectedRunIdsParam
+    ? selectedRunIdsParam.split(",")
+    : [];
+
+  const statsByRunId = new Map(
+    usageStats.map((stat) => [stat.evaluation_run_id, stat]),
+  );
+
+  const orderedStats = selectedRunIds
+    .filter((runId) => statsByRunId.has(runId))
+    .map((runId) => statsByRunId.get(runId)!);
+
+  const assigner = useColorAssigner();
+
+  return (
+    <div>
+      <div>Usage</div>
+      {orderedStats.length > 0 && (
+        <div className="text-muted-foreground mt-2 text-center text-xs">
+          {orderedStats.map((stat) => {
+            const variantColorClass = assigner.getColor(
+              stat.evaluation_run_id,
+              false,
+            );
+            return (
+              <div
+                key={stat.evaluation_run_id}
+                className="mt-1 flex items-center justify-center gap-1.5"
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
+                ></div>
+                <UsageSummary stat={stat} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const UsageSummary = ({ stat }: { stat: EvaluationUsageStatistics }) => {
+  const parts: string[] = [];
+
+  const inputTokens =
+    stat.total_input_tokens != null ? Number(stat.total_input_tokens) : null;
+  const outputTokens =
+    stat.total_output_tokens != null ? Number(stat.total_output_tokens) : null;
+
+  if (inputTokens != null && outputTokens != null) {
+    parts.push(`${formatTokenCount(inputTokens + outputTokens)} tok`);
+  } else if (inputTokens != null) {
+    parts.push(`${formatTokenCount(inputTokens)} in`);
+  } else if (outputTokens != null) {
+    parts.push(`${formatTokenCount(outputTokens)} out`);
+  }
+
+  if (stat.total_cost != null) {
+    parts.push(formatCost(stat.total_cost));
+  }
+
+  if (stat.avg_processing_time_ms != null) {
+    parts.push(
+      `avg ${formatDuration(Math.round(stat.avg_processing_time_ms))}`,
+    );
+  }
+
+  if (parts.length === 0) {
+    return <span>n={stat.inference_count}</span>;
+  }
+
+  return (
+    <span>
+      {parts.join(" · ")} (n={stat.inference_count})
+    </span>
+  );
+};
 
 const UsageCell = ({ usage }: { usage?: UsageInfo }) => {
   if (!usage) return <span className="text-muted-foreground">-</span>;

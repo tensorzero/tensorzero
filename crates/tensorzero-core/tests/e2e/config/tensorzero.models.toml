@@ -418,12 +418,12 @@ type = "together"
 model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 api_key_location = "dynamic::together_api_key"
 
-[models."llama4-maverick-instruct-together"]
+[models."glm-4.7-together"]
 routing = ["together"]
 
-[models."llama4-maverick-instruct-together".providers.together]
+[models."glm-4.7-together".providers.together]
 type = "together"
-model_name = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+model_name = "zai-org/GLM-4.7"
 
 [models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]

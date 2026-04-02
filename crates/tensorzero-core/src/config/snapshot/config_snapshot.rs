@@ -1,13 +1,10 @@
 use num_bigint::BigUint;
 use std::collections::HashMap;
 
+use crate::config::SnapshotHash;
+use crate::config::UninitializedConfig;
+use crate::config::snapshot::StoredConfig;
 use crate::error::{Error, ErrorDetails};
-
-use crate::config::stored::StoredConfig;
-
-use super::UninitializedConfig;
-
-pub use tensorzero_types::SnapshotHash;
 
 /// A serializable snapshot of a config suitable for storage in the database.
 ///

@@ -132,6 +132,19 @@ async fn test_prometheus_metrics_inference_helper(stream: bool) {
             "Expected bucket with le=\"{bucket}\" not found"
         );
     }
+
+    // Verify token metrics are present and non-zero
+    let input_tokens: u64 = metrics["tensorzero_input_tokens_total"].parse().unwrap();
+    assert!(
+        input_tokens > 0,
+        "Input tokens should be greater than 0, got {input_tokens}"
+    );
+
+    let output_tokens: u64 = metrics["tensorzero_output_tokens_total"].parse().unwrap();
+    assert!(
+        output_tokens > 0,
+        "Output tokens should be greater than 0, got {output_tokens}"
+    );
 }
 
 #[tokio::test]

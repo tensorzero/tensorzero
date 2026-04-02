@@ -27,8 +27,9 @@ use crate::db::datasets::{
 };
 use crate::db::evaluation_queries::{
     EvaluationQueries, EvaluationResultRow, EvaluationRunInfoByIdRow, EvaluationRunInfoRow,
-    EvaluationRunSearchResult, EvaluationStatisticsRow, InferenceEvaluationHumanFeedbackRow,
-    InferenceEvaluationRunInsert, InferenceEvaluationRunMetadata,
+    EvaluationRunSearchResult, EvaluationStatisticsRow, EvaluationUsageStatisticsRow,
+    InferenceEvaluationHumanFeedbackRow, InferenceEvaluationRunInsert,
+    InferenceEvaluationRunMetadata,
 };
 use crate::db::feedback::{
     BooleanMetricFeedbackInsert, CommentFeedbackInsert, CumulativeFeedbackTimeSeriesPoint,
@@ -54,9 +55,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::db::{
-    ConfigQueries, DICLExampleWithDistance, DICLQueries, DeploymentIdQueries, EpisodeByIdRow,
-    EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
-    ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
+    CacheStatisticsTimePoint, ConfigQueries, DICLExampleWithDistance, DICLQueries,
+    DeploymentIdQueries, EpisodeByIdRow, EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts,
+    HowdyQueries, HowdyTokenUsage, ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample,
+    TableBoundsWithCount,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
@@ -707,6 +709,23 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
             .get_model_latency_quantile_function_inputs()
     }
 
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+        self.get_database()
+            .get_cache_statistics_timeseries(
+                time_window,
+                max_periods,
+                model_name,
+                model_provider_name,
+            )
+            .await
+    }
+
     async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {
         if rows.is_empty() {
             return Ok(());
@@ -943,6 +962,17 @@ impl EvaluationQueries for DelegatingDatabaseConnection {
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
         self.get_database()
             .get_evaluation_run_infos_for_datapoint(datapoint_id, function_name, function_type)
+            .await
+    }
+
+    async fn get_evaluation_usage_statistics(
+        &self,
+        function_name: &str,
+        function_type: FunctionConfigType,
+        evaluation_run_ids: &[Uuid],
+    ) -> Result<Vec<EvaluationUsageStatisticsRow>, Error> {
+        self.get_database()
+            .get_evaluation_usage_statistics(function_name, function_type, evaluation_run_ids)
             .await
     }
 

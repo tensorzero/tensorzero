@@ -1,10 +1,10 @@
+use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use crate::utils::uuid::get_workflow_evaluation_cutoff_uuid;
 use async_trait::async_trait;
-use std::time::Duration;
 
 /*
  * This migration sets up the EpisodeById table.
@@ -52,7 +52,7 @@ impl Migration for Migration0038<'_> {
     }
 
     async fn apply(&self, clean_start: bool) -> Result<(), Error> {
-        let view_offset = Duration::from_secs(15);
+        let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -61,8 +61,8 @@ impl Migration for Migration0038<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_nanos();
+            + ViewOffsetDeadline::offset())
+        .as_nanos();
 
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
@@ -139,7 +139,7 @@ impl Migration for Migration0038<'_> {
 
         // Backfill if needed
         if !clean_start {
-            tokio::time::sleep(view_offset).await;
+            view_deadline.wait().await;
 
             let create_chat_table = self
                 .clickhouse
