@@ -24,6 +24,7 @@ members = [
     "tensorzero-mcp",
     "tensorzero-node",
     "tensorzero-optimizers",
+    "tensorzero-stored-config",
     "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless
     "tensorzero-ts-types",
     "tensorzero-types",
@@ -49,7 +50,7 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
-serde_with = "3.18.0"
+serde_with = { version = "3.18.0", default-features = false, features = ["macros"] }
 uuid = { version = "1.22.0", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }

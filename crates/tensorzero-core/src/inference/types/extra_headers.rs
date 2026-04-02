@@ -1,6 +1,9 @@
 use super::{deserialize_delete, serialize_delete};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
+};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
@@ -178,6 +181,34 @@ pub mod dynamic {
 }
 
 pub use dynamic::ExtraHeader as DynamicExtraHeader;
+
+// ─── Stored → Uninitialized conversions ──────────────────────────────────────
+
+impl From<StoredExtraHeaderKind> for ExtraHeaderKind {
+    fn from(stored: StoredExtraHeaderKind) -> Self {
+        match stored {
+            StoredExtraHeaderKind::Value(v) => ExtraHeaderKind::Value(v),
+            StoredExtraHeaderKind::Delete => ExtraHeaderKind::Delete,
+        }
+    }
+}
+
+impl From<StoredExtraHeader> for ExtraHeader {
+    fn from(stored: StoredExtraHeader) -> Self {
+        ExtraHeader {
+            name: stored.name,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraHeadersConfig> for ExtraHeadersConfig {
+    fn from(stored: StoredExtraHeadersConfig) -> Self {
+        ExtraHeadersConfig {
+            data: stored.data.into_iter().map(Into::into).collect(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
