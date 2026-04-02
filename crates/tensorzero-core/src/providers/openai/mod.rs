@@ -889,6 +889,19 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response,
             }),
             BatchStatus::Completed => {
+                // If error_file_id is set but there's no output_file_id, the entire
+                // batch failed — no usable results exist. If both are set, it's a
+                // partial failure and we should still process the available output.
+                if response.error_file_id.is_some() && response.output_file_id.is_none() {
+                    tracing::warn!(
+                        "OpenAI batch completed with error_file_id but no output_file_id. \
+                         Marking as failed. Raw response: {raw_response}"
+                    );
+                    return Ok(PollBatchInferenceResponse::Failed {
+                        raw_request,
+                        raw_response,
+                    });
+                }
                 let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: "Output file ID is missing".to_string(),
@@ -3183,7 +3196,7 @@ struct OpenAIBatchResponse {
     // completion_window: String,
     status: OpenAIBatchStatus,
     output_file_id: Option<String>,
-    // error_file_id: String,
+    error_file_id: Option<String>,
     // created_at: i64,
     // in_progress_at: Option<i64>,
     // expires_at: i64,
@@ -6491,5 +6504,86 @@ mod tests {
         let delta: OpenAIDelta =
             serde_json::from_value(json_with_both_null).expect("should deserialize with both null");
         expect_that!(delta.reasoning_content, none());
+    }
+
+    #[test]
+    fn test_batch_response_deserialization_error_json() {
+        // When the API returns an error JSON (e.g. batch was deleted),
+        // deserialization into OpenAIBatchResponse should fail.
+        let error_json = r#"{"error":{"message":"No such batch: batch_abc123","type":"invalid_request_error","param":null,"code":null}}"#;
+        let result = serde_json::from_str::<OpenAIBatchResponse>(error_json);
+        assert!(
+            result.is_err(),
+            "error JSON should not deserialize as OpenAIBatchResponse"
+        );
+    }
+
+    #[test]
+    fn test_batch_response_deserialization_valid() {
+        // A valid batch response should deserialize successfully.
+        let valid_json = json!({
+            "id": "batch_abc123",
+            "status": "completed",
+            "output_file_id": "file-output-123",
+            "error_file_id": null,
+            "errors": null
+        });
+        let result = serde_json::from_value::<OpenAIBatchResponse>(valid_json);
+        assert!(
+            result.is_ok(),
+            "valid batch JSON should deserialize as OpenAIBatchResponse"
+        );
+        let response = result.expect("should deserialize");
+        assert_eq!(response.id, "batch_abc123");
+        assert!(matches!(response.status, OpenAIBatchStatus::Completed));
+        assert_eq!(response.output_file_id.as_deref(), Some("file-output-123"));
+        assert!(response.error_file_id.is_none());
+    }
+
+    #[test]
+    fn test_batch_response_completed_with_error_file_only() {
+        // Completed batch with error_file_id but no output_file_id — total failure.
+        let json_val = json!({
+            "id": "batch_fail",
+            "status": "completed",
+            "output_file_id": null,
+            "error_file_id": "file-error-456",
+            "errors": null
+        });
+        let response: OpenAIBatchResponse =
+            serde_json::from_value(json_val).expect("should deserialize");
+        assert!(
+            response.error_file_id.is_some(),
+            "error_file_id should be set"
+        );
+        assert!(
+            response.output_file_id.is_none(),
+            "output_file_id should be None"
+        );
+        // This combination should trigger the Failed path in poll_batch_inference.
+    }
+
+    #[test]
+    fn test_batch_response_completed_with_both_files() {
+        // Completed batch with both output_file_id and error_file_id — partial failure.
+        // Should NOT be treated as total failure; output should be processed.
+        let json_val = json!({
+            "id": "batch_partial",
+            "status": "completed",
+            "output_file_id": "file-output-789",
+            "error_file_id": "file-error-789",
+            "errors": null
+        });
+        let response: OpenAIBatchResponse =
+            serde_json::from_value(json_val).expect("should deserialize");
+        assert!(
+            response.error_file_id.is_some(),
+            "error_file_id should be set"
+        );
+        assert!(
+            response.output_file_id.is_some(),
+            "output_file_id should also be set for partial failures"
+        );
+        // This combination should NOT trigger the Failed path — output is still usable.
     }
 }
