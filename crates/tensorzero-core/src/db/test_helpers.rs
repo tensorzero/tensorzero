@@ -30,10 +30,17 @@ impl TestDatabaseHelpers for ClickHouseConnectionInfo {
     /// For ClickHouse, this flushes the async insert queue.
     async fn flush_pending_writes(&self) {
         if let Err(e) = self
-            .run_query_synchronous_no_params("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
+            .run_query_synchronous_delayed_err(
+                "SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(),
+                &std::collections::HashMap::new(),
+            )
             .await
         {
-            tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
+            // Suppress the ERROR log — older ClickHouse versions (e.g. 25.12 LTS)
+            // may lack the SYSTEM FLUSH privilege, and the ERROR would trip
+            // `logs_contain("ERROR")` assertions in the migration test.
+            let msg = e.suppress_logging_of_error_message();
+            tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {msg}");
         }
     }
 
