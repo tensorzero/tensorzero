@@ -1885,6 +1885,16 @@ Use this option to override the mapping for specific MIME types.
 
 Each key is a MIME type string (e.g. `"application/pdf"`) and each value is one of: `"image_url"`, `"file"`, or `"input_audio"`.
 
+**Common use case: Vertex AI with PDFs.**
+When using Vertex AI's OpenAI-compatible endpoint (`type = "openai"` with `api_base` pointing at Vertex AI), sending PDFs fails with an error like:
+
+```
+Unrecognized 'type' field in an object element of an array 'content' field; found: 'file'.
+```
+
+This happens because TensorZero converts PDFs to `type: "file"` content blocks, but Vertex AI only accepts PDFs as `image_url` blocks with `data:application/pdf;base64,...` data URIs.
+To fix this, add a `content_type_overrides` entry that maps `"application/pdf"` to `"image_url"`:
+
 ```toml title="tensorzero.toml"
 [models.gemini-flash.providers.vertex]
 type = "openai"
