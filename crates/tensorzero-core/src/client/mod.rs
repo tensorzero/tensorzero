@@ -995,7 +995,7 @@ impl Client {
                 // so we don't have an API key here
                 Ok(with_embedded_timeout(*timeout, async {
                     crate::endpoints::feedback::feedback(
-                        gateway.handle.app_state.clone(),
+                        gateway.handle.app_state.load_latest(),
                         params,
                         None,
                     )
@@ -1165,15 +1165,16 @@ impl Client {
             ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
+                    let app_state = gateway.handle.app_state.load_latest();
                     let res = Box::pin(crate::endpoints::inference::inference(
-                        gateway.handle.app_state.config.clone(),
-                        &gateway.handle.app_state.http_client,
-                        gateway.handle.app_state.clickhouse_connection_info.clone(),
-                        gateway.handle.app_state.postgres_connection_info.clone(),
-                        gateway.handle.app_state.cache_manager.clone(),
-                        gateway.handle.app_state.deferred_tasks.clone(),
-                        gateway.handle.app_state.rate_limiting_manager.clone(),
-                        gateway.handle.app_state.primary_datastore,
+                        app_state.config.clone(),
+                        &app_state.http_client,
+                        app_state.clickhouse_connection_info.clone(),
+                        app_state.postgres_connection_info.clone(),
+                        app_state.cache_manager.clone(),
+                        app_state.deferred_tasks.clone(),
+                        app_state.rate_limiting_manager.clone(),
+                        app_state.primary_datastore,
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1230,8 +1231,9 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
+                    let config = gateway.handle.app_state.config.load();
                     crate::endpoints::object_storage::get_object(
-                        gateway.handle.app_state.config.object_store_info.as_ref(),
+                        config.object_store_info.as_ref(),
                         storage_path,
                     )
                     .await

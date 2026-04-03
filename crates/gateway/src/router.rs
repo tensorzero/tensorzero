@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
-use tensorzero_core::{endpoints, utils::gateway::AppStateData};
+use tensorzero_core::{endpoints, utils::gateway::SwappableAppStateData};
 use tensorzero_core::{
     endpoints::TensorzeroAuthMiddlewareState,
     error::{Error, ErrorDetails},
@@ -31,7 +31,7 @@ use tracing::Instrument;
 pub async fn build_axum_router(
     base_path: &str,
     otel_tracer: Option<Arc<TracerWrapper>>,
-    app_state: AppStateData,
+    app_state: SwappableAppStateData,
     metrics_handle: PrometheusHandle,
     shutdown_token: CancellationToken,
 ) -> Result<(Router, InFlightRequestsData), Error> {
@@ -56,12 +56,13 @@ pub async fn build_axum_router(
         .nest_service(&mcp_path, mcp_router)
         .fallback(endpoints::fallback::handle_404);
 
-    if app_state.config.gateway.auth.enabled {
+    let config = app_state.config.load();
+    if config.gateway.auth.enabled {
         let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
             unauthenticated_routes: UNAUTHENTICATED_ROUTES,
             auth_cache: app_state.auth_cache.clone(),
             pool: app_state.postgres_connection_info.get_pool().cloned(),
-            error_json: app_state.config.gateway.unstable_error_json,
+            error_json: config.gateway.unstable_error_json,
             base_path: (!base_path.is_empty()).then(|| base_path.to_string()),
         });
         router = router.layer(middleware::from_fn_with_state(
@@ -113,7 +114,7 @@ const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health", "/internal/autop
 /// We guarantee that if we *start* processing a request, we will run our handler/stream logic to completion,
 /// including all our side effects (writing to the database, handling rate limiting, etc.).
 async fn possibly_prevent_request_cancellation(
-    State(state): State<AppStateData>,
+    State(state): State<SwappableAppStateData>,
     request: Request,
     next: Next,
 ) -> Response {

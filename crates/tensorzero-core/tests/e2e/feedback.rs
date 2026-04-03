@@ -303,7 +303,7 @@ async fn test_comment_feedback_validation_disabled() {
         value: json!("foo bar"),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params, None)
+    let val = feedback(handle.app_state.load_latest(), params, None)
         .await
         .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1681,7 +1681,7 @@ async fn test_float_feedback_validation_disabled() {
         value: json!(3.1),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params, None)
+    let val = feedback(handle.app_state.load_latest(), params, None)
         .await
         .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -2026,7 +2026,7 @@ async fn test_boolean_feedback_validation_disabled() {
         value: json!(true),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params, None)
+    let val = feedback(handle.app_state.load_latest(), params, None)
         .await
         .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;

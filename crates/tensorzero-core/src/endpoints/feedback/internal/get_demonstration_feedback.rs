@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::feedback::{DemonstrationFeedbackRow, FeedbackQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 #[derive(Debug, Deserialize)]
 pub struct GetDemonstrationFeedbackParams {
@@ -25,7 +25,7 @@ pub struct GetDemonstrationFeedbackResponse {
 }
 
 /// HTTP handler for getting demonstration feedback by inference ID
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_demonstration_feedback_handler",
     skip_all,

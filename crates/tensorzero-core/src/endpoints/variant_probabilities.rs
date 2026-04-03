@@ -9,7 +9,7 @@ use crate::config::Config;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::DEFAULT_FUNCTION_NAME;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for the variant sampling probabilities endpoint
 #[derive(Debug, Deserialize)]
@@ -29,7 +29,7 @@ pub struct GetVariantSamplingProbabilitiesResponse {
 }
 
 /// HTTP handler for the variant sampling probabilities endpoint (path-based)
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn get_variant_sampling_probabilities_by_function_handler(
     State(app_state): AppState,
     Path(function_name): Path<String>,

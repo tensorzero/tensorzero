@@ -18,7 +18,9 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, InputExt};
 use crate::jsonschema_util::JSONSchema;
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{
+    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+};
 
 use super::types::{
     UpdateChatDatapointRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
@@ -39,7 +41,7 @@ pub struct UpdateDatapointsPathParams {
     pub dataset_name: String,
 }
 
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.update_datapoints", skip(app_state, request))]
 pub async fn update_datapoints_handler(
     State(app_state): AppState,
@@ -59,7 +61,7 @@ pub async fn update_datapoints_handler(
 /// TODO(#5691): implement update_datapints on DatasetQueries trait, make Clickhouse call get + insert,
 /// and make Postgres call update directly.
 pub async fn update_datapoints(
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
     dataset_name: &str,
     request: UpdateDatapointsRequest,
 ) -> Result<UpdateDatapointsResponse, Error> {
@@ -183,7 +185,7 @@ struct PreparedUpdate {
 }
 
 async fn prepare_chat_update(
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateChatDatapointRequest,
@@ -257,7 +259,7 @@ async fn prepare_chat_update(
 }
 
 async fn prepare_json_update(
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateJsonDatapointRequest,
@@ -388,7 +390,7 @@ pub struct UpdateDatapointsMetadataPathParams {
     pub dataset_name: String,
 }
 
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "datasets.v1.update_datapoints_metadata",
     skip(app_state, request)
@@ -523,7 +525,7 @@ mod tests {
     };
     use crate::jsonschema_util::JSONSchema;
     use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
-    use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
+    use crate::utils::gateway::{GatewayHandle, GatewayHandleTestOptions, ResolvedAppStateData};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
@@ -791,7 +793,7 @@ mod tests {
         use super::*;
 
         /// Helper to create a minimal AppStateData for testing
-        fn create_test_app_state() -> AppStateData {
+        fn create_test_app_state() -> ResolvedAppStateData {
             let mut mock_client = MockClickHouseClient::new();
             mock_client.expect_batcher_join_handle().returning(|| None);
             mock_client
@@ -844,7 +846,7 @@ mod tests {
                     postgres_healthy: true,
                 },
             );
-            gateway_handle.app_state.clone()
+            gateway_handle.app_state.load_latest()
         }
 
         /// Helper to create a sample ChatInferenceDatapoint
