@@ -31,13 +31,13 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 use tensorzero_error::Error;
+use tensorzero_types::inference_params::JsonMode;
+use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
 use tensorzero_types_providers::deepseek::DeepSeekUsage;
 use tensorzero_types_providers::fireworks::FireworksFinishReason;
 use tensorzero_types_providers::openai::{OpenAIFinishReason, OpenAIUsage};
 use tensorzero_types_providers::together::TogetherFinishReason;
 use tensorzero_types_providers::xai::XAIUsage;
-use tensorzero_types::inference_params::JsonMode;
-use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
 use url::Url;
 use uuid::Uuid;
 

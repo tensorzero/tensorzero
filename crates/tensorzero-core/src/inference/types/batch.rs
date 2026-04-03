@@ -11,7 +11,7 @@ use super::{
 use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
-use tensorzero_provider_types::ProviderToolCallConfig;
+use tensorzero_inference_types::ProviderToolCallConfig;
 
 use crate::{
     endpoints::{

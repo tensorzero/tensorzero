@@ -12,7 +12,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::Value;
 
-use tensorzero_provider_types::{
+use tensorzero_inference_types::{
     FunctionToolDef, OpenAICustomTool, ProviderTool, ProviderToolCallConfig,
 };
 
@@ -103,7 +103,7 @@ pub struct DynamicImplicitToolConfig {
     pub parameters: JSONSchema,
 }
 
-pub use tensorzero_provider_types::{AllowedTools, AllowedToolsChoice};
+pub use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.

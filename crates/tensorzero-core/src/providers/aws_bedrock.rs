@@ -42,7 +42,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
-use tensorzero_provider_types::FunctionToolDef;
+use tensorzero_inference_types::FunctionToolDef;
 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice};
 use tensorzero_types_providers::aws_bedrock::{

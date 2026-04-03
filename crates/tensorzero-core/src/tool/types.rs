@@ -255,7 +255,7 @@ impl FunctionTool {
     }
 }
 
-pub use tensorzero_provider_types::{
+pub use tensorzero_inference_types::{
     OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition, OpenAIGrammarSyntax,
     ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider,
 };

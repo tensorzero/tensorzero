@@ -48,7 +48,7 @@ use crate::{
     },
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
-use tensorzero_provider_types::FunctionToolDef;
+use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
 
 use super::openai::{
@@ -1096,7 +1096,7 @@ mod tests {
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
     use crate::tool::{AllowedTools, ToolCallConfig};
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types_providers::mistral::{
         MistralChatChunkChoice, MistralDelta, MistralResponseFunctionCall, MistralResponseMessage,
         MistralThinkingSubChunk,

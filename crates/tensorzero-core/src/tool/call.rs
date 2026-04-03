@@ -4,7 +4,7 @@
 //! - `InferenceResponseToolCallExt` - Extension trait for `InferenceResponseToolCall`
 //! - `ToolCallChunk` - A streaming chunk of a tool call
 
-use tensorzero_provider_types::ProviderToolCallConfig;
+use tensorzero_inference_types::ProviderToolCallConfig;
 
 use super::config::ToolCallConfig;
 use super::wire::ToolCall;
@@ -122,4 +122,4 @@ impl InferenceResponseToolCallExt for InferenceResponseToolCall {
     }
 }
 
-pub use tensorzero_provider_types::ToolCallChunk;
+pub use tensorzero_inference_types::ToolCallChunk;

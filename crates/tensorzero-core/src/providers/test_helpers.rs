@@ -4,7 +4,7 @@ use crate::jsonschema_util::JSONSchema;
 use crate::tool::{FunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice};
 use lazy_static::lazy_static;
 use serde_json::json;
-use tensorzero_provider_types::ProviderToolCallConfig;
+use tensorzero_inference_types::ProviderToolCallConfig;
 
 lazy_static! {
     /// These are useful for tests which don't need mutable tools.

@@ -4863,7 +4863,7 @@ dependencies = [
  "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-error",
- "tensorzero-provider-types",
+ "tensorzero-inference-types",
  "tensorzero-types",
  "tensorzero-types-providers",
  "thiserror 2.0.18",
@@ -4944,7 +4944,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero-provider-types"
+name = "tensorzero-inference-types"
 version = "2026.3.5"
 dependencies = [
  "futures",

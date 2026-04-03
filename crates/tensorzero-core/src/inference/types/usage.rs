@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 
-pub use tensorzero_provider_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
+pub use tensorzero_inference_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
 
 pub use tensorzero_types::{ApiType, RawResponseEntry};
 

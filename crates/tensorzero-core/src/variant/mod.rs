@@ -45,7 +45,7 @@ use crate::model::ModelTable;
 use crate::model::StreamResponse;
 use crate::model::StreamResponseAndMessages;
 use crate::relay::TensorzeroRelay;
-use tensorzero_provider_types::ProviderToolCallConfig;
+use tensorzero_inference_types::ProviderToolCallConfig;
 
 use crate::tool::{ToolCallConfig, create_dynamic_implicit_tool_config};
 use crate::utils::retries::RetryConfig;

@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::error::Error;
 use crate::inference::types::ModelInferenceRequest;
@@ -255,7 +255,7 @@ mod tests {
     use super::*;
     use crate::tool::{AllowedTools, AllowedToolsChoice};
     use serde_json::json;
-    use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+    use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
     // Helper to create a test function tool def
     fn create_function_tool_def() -> FunctionToolDef {

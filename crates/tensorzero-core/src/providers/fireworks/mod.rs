@@ -47,7 +47,7 @@ use crate::{
     model::{Credential, ModelProvider},
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
-use tensorzero_provider_types::FunctionToolDef;
+use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
 
 use super::{

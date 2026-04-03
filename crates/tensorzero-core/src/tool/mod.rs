@@ -26,7 +26,7 @@ pub use storage::{
     LegacyToolCallConfigDatabaseInsert, ToolCallConfigDatabaseInsert,
     apply_dynamic_tool_params_update_to_tool_call_config, deserialize_optional_tool_info,
 };
-pub use tensorzero_provider_types::{
+pub use tensorzero_inference_types::{
     AllowedTools, AllowedToolsChoice, FunctionToolDef, OpenAICustomTool, OpenAICustomToolFormat,
     OpenAIGrammarDefinition, OpenAIGrammarSyntax, ProviderTool, ProviderToolCallConfig,
     ProviderToolScope, ProviderToolScopeModelProvider, ToolConfigRef,

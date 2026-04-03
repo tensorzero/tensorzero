@@ -21,7 +21,7 @@ use crate::inference::types::{
 };
 use crate::model::StreamResponse;
 use crate::serde_util::{deserialize_json_string, serialize_json_string};
-use tensorzero_provider_types::ProviderToolCallConfig;
+use tensorzero_inference_types::ProviderToolCallConfig;
 
 use crate::tool::{InferenceResponseToolCall, InferenceResponseToolCallExt};
 use crate::utils::spawn_ignoring_shutdown;
@@ -669,7 +669,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage,
     };
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types::Role;
 
     use super::*;

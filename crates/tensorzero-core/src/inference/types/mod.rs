@@ -133,7 +133,7 @@ pub use streams::{
 };
 pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
 
-pub use tensorzero_provider_types::{
+pub use tensorzero_inference_types::{
     AllowedTools, AllowedToolsChoice, BatchStatus, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FileFuture, FileUrl, FinishReason, FlattenUnknown, FunctionToolDef,
     Latency, LazyFile, ModelInferenceRequest, ModelInferenceRequestBuilder,

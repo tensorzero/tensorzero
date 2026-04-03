@@ -65,7 +65,7 @@ use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::tool::{FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::mock::get_mock_provider_api_base;
@@ -3259,7 +3259,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::JSONSchema;
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
 
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolResult};

@@ -1,4 +1,4 @@
-pub use tensorzero_provider_types::extra_headers::*;
+pub use tensorzero_inference_types::extra_headers::*;
 
 use tensorzero_stored_config::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,

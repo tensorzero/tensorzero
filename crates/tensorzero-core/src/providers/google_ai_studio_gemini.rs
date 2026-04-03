@@ -40,7 +40,7 @@ use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContent;
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContentPart;
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiPartData;
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiRole;
-use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 #[cfg(test)]
 use crate::tool::FunctionToolConfig;
@@ -1294,7 +1294,7 @@ mod tests {
     use crate::inference::types::{
         FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role, Text,
     };
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
 
     use crate::providers::test_helpers::{
         MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL,

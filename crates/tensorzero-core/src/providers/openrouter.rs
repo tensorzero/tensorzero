@@ -44,10 +44,10 @@ use crate::inference::types::{
 };
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
 use tensorzero_types_providers::openrouter::{
     ReasoningConfig as OpenRouterReasoningConfig, ReasoningDetail as OpenRouterReasoningDetail,
 };
-use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
 use uuid::Uuid;
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -2077,7 +2077,7 @@ mod tests {
     };
     use serde_json::json;
     use std::borrow::Cow;
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
 
     #[test]
     fn test_get_chat_url() {

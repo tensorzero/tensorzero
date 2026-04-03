@@ -10,14 +10,14 @@ exclude = ["tests/", "fixtures/"]
 [features]
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
-e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-provider-types/e2e_tests"]
+e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests"]
 optimization_tests = ["e2e_tests"]
-pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-provider-types/pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3"]
 ts-bindings = [
     "dep:ts-rs",
     "tensorzero-types/ts-bindings",
     "tensorzero-error/ts-bindings",
-    "tensorzero-provider-types/ts-bindings",
+    "tensorzero-inference-types/ts-bindings",
     "autopilot-client/ts-bindings",
     "tensorzero-auth/ts-bindings",
 ]
@@ -89,7 +89,7 @@ tracing-subscriber = { version = "0.3.23", features = [
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
-tensorzero-provider-types = { path = "../tensorzero-provider-types" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }

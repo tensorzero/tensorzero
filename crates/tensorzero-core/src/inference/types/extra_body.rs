@@ -1,4 +1,4 @@
-pub use tensorzero_provider_types::extra_body::*;
+pub use tensorzero_inference_types::extra_body::*;
 
 use tensorzero_stored_config::{
     StoredExtraBodyConfig, StoredExtraBodyReplacement, StoredExtraBodyReplacementKind,

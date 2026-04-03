@@ -1488,7 +1488,7 @@ mod tests {
     };
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types_providers::groq::{
         GroqChatChunkChoice, GroqDelta, GroqFunctionCallChunk, GroqResponseFunctionCall,
         GroqResponseMessage, GroqToolCallChunk,

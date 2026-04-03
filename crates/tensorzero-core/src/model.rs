@@ -3036,7 +3036,7 @@ mod tests {
         rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 

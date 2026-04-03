@@ -889,7 +889,7 @@ mod tests {
     use crate::providers::anthropic::{AnthropicFunctionTool, AnthropicMessageContent};
     use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
     use crate::tool::ToolResult;
-    use tensorzero_provider_types::FunctionToolDef;
+    use tensorzero_inference_types::FunctionToolDef;
 
     fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropicUsage {
         serde_json::from_value(usage_info.clone()).unwrap_or_default()

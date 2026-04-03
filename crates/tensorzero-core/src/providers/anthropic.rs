@@ -44,7 +44,7 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::deprecation_warning;
@@ -1839,7 +1839,7 @@ mod tests {
     use crate::providers::test_helpers::WEATHER_PROVIDER_TOOL_CONFIG;
     use crate::tool::ToolResult;
     use crate::utils::testing::capture_logs;
-    use tensorzero_provider_types::FunctionToolDef;
+    use tensorzero_inference_types::FunctionToolDef;
 
     #[test]
     fn test_try_from_tool_call_config() {
@@ -3946,7 +3946,7 @@ mod tests {
     fn test_anthropic_respects_allowed_tools() {
         use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
         use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Create a ToolCallConfig with two tools but only allow one
         let tool_config = ToolCallConfig {

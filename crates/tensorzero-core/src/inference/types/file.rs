@@ -59,7 +59,7 @@ pub use tensorzero_types::{
     ObjectStoragePointer, UrlFile,
 };
 
-pub use tensorzero_provider_types::{PendingObjectStoreFile, sanitize_raw_request};
+pub use tensorzero_inference_types::{PendingObjectStoreFile, sanitize_raw_request};
 
 /// Extension trait for File operations that require tensorzero-core dependencies.
 pub trait FileExt {
@@ -309,7 +309,7 @@ mod tests {
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
     };
-    use tensorzero_provider_types::sanitize_raw_request;
+    use tensorzero_inference_types::sanitize_raw_request;
 
     #[test]
     fn test_sanitize_input() {

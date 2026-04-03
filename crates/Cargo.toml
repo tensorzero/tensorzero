@@ -30,7 +30,7 @@ members = [
     "tensorzero-types",
     "tensorzero-types-providers",
     "tensorzero-error",
-    "tensorzero-provider-types",
+    "tensorzero-inference-types",
     "tensorzero-unsafe-helpers",
 ]
 resolver = "2"

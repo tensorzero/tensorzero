@@ -626,7 +626,7 @@ mod tests {
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
     #[tokio::test]

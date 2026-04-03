@@ -864,7 +864,7 @@ mod tests {
         },
         tool::{ToolCallConfig, ToolChoice},
     };
-    use tensorzero_provider_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
 
     use super::*;
 

@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 use super::InferenceResult;
 
-pub use tensorzero_provider_types::{
+pub use tensorzero_inference_types::{
     ContentBlockChunk, ProviderInferenceResponseChunk, TextChunk, ThoughtChunk, UnknownChunk,
 };
 
@@ -752,7 +752,7 @@ fn tool_call_chunk_to_tool_call(tool_call: ToolCallChunk) -> ToolCall {
 // (due to the fact that unsized coercions are not supported on `Peekable` or other user-defined types).
 // This would require `stream_<provider>` functions to first introduce a local variable with the correct
 // `Pin<Box<dyn Stream>>` type, and then call `.peekable()` on that.
-pub use tensorzero_provider_types::{
+pub use tensorzero_inference_types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseStreamInner,
 };
 

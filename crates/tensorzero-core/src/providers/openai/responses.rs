@@ -3316,7 +3316,7 @@ mod tests {
         use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
         use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Create a tool config with explicit allowed_tools and auto tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -3371,7 +3371,7 @@ mod tests {
         use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
         use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Create a tool config with explicit allowed_tools and required tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -3430,7 +3430,7 @@ mod tests {
         use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
         use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test that when tool_choice is None but allowed_tools is set,
         // we use AllowedTools variant with Auto mode
@@ -3479,7 +3479,7 @@ mod tests {
     async fn test_openai_responses_request_without_allowed_tools() {
         use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test that when allowed_tools is not set (FunctionDefault),
         // we use the regular tool_choice conversion
@@ -3521,7 +3521,7 @@ mod tests {
     async fn test_openai_responses_request_with_specific_tool_without_allowed_tools() {
         use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test that Specific tool choice without allowed_tools converts to AllowedTools with mode Required
         let tool_config = WEATHER_TOOL_CONFIG.clone();
@@ -3574,7 +3574,7 @@ mod tests {
         use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
         use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
-        use tensorzero_provider_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test edge case: explicit allowed_tools but empty list
         let mut tool_config = MULTI_TOOL_CONFIG.clone();

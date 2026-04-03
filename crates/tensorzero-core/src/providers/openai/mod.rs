@@ -64,7 +64,7 @@ use crate::providers::openai::responses::{
     OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
     get_responses_url,
 };
-use tensorzero_provider_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::tool::{
     FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice,
