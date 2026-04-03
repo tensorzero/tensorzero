@@ -627,7 +627,7 @@ mod tests {
 
     use crate::tool::{ToolCallConfig, ToolChoice};
     use tensorzero_provider_types::ProviderToolCallConfig;
-    use tensorzero_provider_wire::openai::OpenAIPromptTokensDetails;
+    use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
     #[tokio::test]
     async fn test_vllm_request_new() {

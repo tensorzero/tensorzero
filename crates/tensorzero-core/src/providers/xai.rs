@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::{Value, json};
-use tensorzero_provider_wire::xai::{
+use tensorzero_types_providers::xai::{
     XAIAssistantRequestMessage, XAIRequestMessage, XAIResponse as XAIResponseGeneric,
     XAISystemRequestMessage, XAIToolRequestMessage, XAIUserRequestMessage,
 };
@@ -908,7 +908,7 @@ mod tests {
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
     use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
-    use tensorzero_provider_wire::xai::XAIUsage;
+    use tensorzero_types_providers::xai::XAIUsage;
 
     #[tokio::test]
     async fn test_xai_request_new() {

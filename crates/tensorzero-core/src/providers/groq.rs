@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::borrow::Cow;
 use std::time::Duration;
-use tensorzero_provider_wire::groq::{
+use tensorzero_types_providers::groq::{
     GroqChatChunk, GroqFinishReason, GroqResponse, GroqResponseChoice, GroqResponseFormat,
     GroqResponseToolCall, GroqToolType, GroqUsage,
 };
@@ -1489,7 +1489,7 @@ mod tests {
     use crate::tool::ToolCallConfig;
     use crate::utils::testing::capture_logs;
     use tensorzero_provider_types::ProviderToolCallConfig;
-    use tensorzero_provider_wire::groq::{
+    use tensorzero_types_providers::groq::{
         GroqChatChunkChoice, GroqDelta, GroqFunctionCallChunk, GroqResponseFunctionCall,
         GroqResponseMessage, GroqToolCallChunk,
     };

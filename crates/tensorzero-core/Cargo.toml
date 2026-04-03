@@ -93,7 +93,7 @@ tensorzero-provider-types = { path = "../tensorzero-provider-types" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
-tensorzero-provider-wire = { path = "../tensorzero-provider-wire" }
+tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 minijinja-utils = { path = "../minijinja-utils" }
 clap = { workspace = true }

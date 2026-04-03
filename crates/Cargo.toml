@@ -28,7 +28,7 @@ members = [
     "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless
     "tensorzero-ts-types",
     "tensorzero-types",
-    "tensorzero-provider-wire",
+    "tensorzero-types-providers",
     "tensorzero-error",
     "tensorzero-provider-types",
     "tensorzero-unsafe-helpers",

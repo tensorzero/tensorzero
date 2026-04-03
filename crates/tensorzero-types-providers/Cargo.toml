@@ -1,5 +1,5 @@
 [package]
-name = "tensorzero-provider-wire"
+name = "tensorzero-types-providers"
 edition.workspace = true
 version.workspace = true
 rust-version.workspace = true

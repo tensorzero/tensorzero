@@ -11,7 +11,7 @@ use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
-use tensorzero_provider_wire::mistral::{
+use tensorzero_types_providers::mistral::{
     MistralChatChunk, MistralContent, MistralContentChunk, MistralFinishReason, MistralResponse,
     MistralResponseChoice, MistralResponseFormat, MistralResponseToolCall, MistralThinkingSubChunk,
     MistralUsage,
@@ -1097,7 +1097,7 @@ mod tests {
     use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
     use crate::tool::{AllowedTools, ToolCallConfig};
     use tensorzero_provider_types::ProviderToolCallConfig;
-    use tensorzero_provider_wire::mistral::{
+    use tensorzero_types_providers::mistral::{
         MistralChatChunkChoice, MistralDelta, MistralResponseFunctionCall, MistralResponseMessage,
         MistralThinkingSubChunk,
     };
@@ -2229,7 +2229,7 @@ mod tests {
 
     #[gtest]
     fn test_mistral_usage_with_cache_tokens() {
-        use tensorzero_provider_wire::mistral::{MistralPromptTokensDetails, MistralUsage};
+        use tensorzero_types_providers::mistral::{MistralPromptTokensDetails, MistralUsage};
 
         let mistral_usage = MistralUsage {
             prompt_tokens: 100,
