@@ -962,7 +962,7 @@ impl AllowedTools {
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
             AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
-                Some(self.tools.into_iter().collect())
+                Some(self.tools)
             }
         }
     }
