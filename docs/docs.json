@@ -58,6 +58,7 @@
               "gateway/guides/episodes",
               "gateway/guides/inference-caching",
               "gateway/guides/inference-time-optimizations",
+              "gateway/guides/mcp-server",
               "gateway/guides/metrics-feedback",
               "gateway/guides/retries-fallbacks",
               "gateway/guides/tool-use",
