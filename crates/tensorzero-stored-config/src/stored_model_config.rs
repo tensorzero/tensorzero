@@ -126,6 +126,7 @@ pub enum StoredProviderConfig {
         api_type: Option<StoredOpenAIAPIType>,
         include_encrypted_reasoning: Option<bool>,
         provider_tools: Option<Vec<Value>>,
+        content_type_overrides: Option<HashMap<String, StoredContentBlockType>>,
     },
     OpenRouter {
         model_name: String,
@@ -174,4 +175,12 @@ pub enum StoredHostedProviderKind {
 pub enum StoredOpenAIAPIType {
     ChatCompletions,
     Responses,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoredContentBlockType {
+    ImageUrl,
+    File,
+    InputAudio,
 }

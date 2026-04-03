@@ -1,3 +1,4 @@
+use crate::providers::openai::ContentBlockType;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use indexmap::IndexMap;
@@ -11,8 +12,8 @@ use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredHostedProviderKind, StoredModelConfig, StoredModelProvider, StoredOpenAIAPIType,
-    StoredProviderConfig,
+    StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
+    StoredOpenAIAPIType, StoredProviderConfig,
 };
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -280,6 +281,16 @@ impl From<StoredOpenAIAPIType> for OpenAIAPIType {
     }
 }
 
+impl From<StoredContentBlockType> for ContentBlockType {
+    fn from(stored: StoredContentBlockType) -> Self {
+        match stored {
+            StoredContentBlockType::ImageUrl => Self::ImageUrl,
+            StoredContentBlockType::File => Self::File,
+            StoredContentBlockType::InputAudio => Self::InputAudio,
+        }
+    }
+}
+
 fn parse_optional_url(url: Option<String>, field_name: &str) -> Result<Option<Url>, Error> {
     url.map(|u| {
         u.parse::<Url>().map_err(|e| {
@@ -440,6 +451,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
+                content_type_overrides,
             } => Ok(Self::OpenAI {
                 model_name,
                 api_base: parse_optional_url(api_base, "api_base")?,
@@ -447,7 +459,11 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 api_type: api_type.map(OpenAIAPIType::from).unwrap_or_default(),
                 include_encrypted_reasoning: include_encrypted_reasoning.unwrap_or_default(),
                 provider_tools: provider_tools.unwrap_or_default(),
-                content_type_overrides: Default::default(),
+                content_type_overrides: content_type_overrides
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(k, v)| (k, ContentBlockType::from(v)))
+                    .collect(),
             }),
             StoredProviderConfig::OpenRouter {
                 model_name,
