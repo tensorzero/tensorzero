@@ -12,8 +12,11 @@
 
 import { createContext, use } from "react";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Will gain fields as new feature flags are added
-export interface FeatureFlags {}
+export interface FeatureFlags {
+  // Add feature flags here as needed, e.g.:
+  // myFlag: boolean;
+  [key: string]: never;
+}
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {};
 

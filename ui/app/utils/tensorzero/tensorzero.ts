@@ -12,6 +12,8 @@ import {
 } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
+  ApplyConfigTomlRequest,
+  ApplyConfigTomlResponse,
   AutopilotStatusResponse,
   CacheEnabledMode,
   CloneDatapointsResponse,
@@ -37,6 +39,7 @@ import type {
   EvaluationRunStatsResponse,
   FeedbackRow,
   FunctionInferenceCount,
+  GetConfigTomlResponse,
   GetDatapointCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -90,6 +93,8 @@ import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
+  ValidateConfigTomlRequest,
+  ValidateConfigTomlResponse,
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
@@ -637,6 +642,45 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as UiConfig;
+  }
+
+  async getConfigToml(): Promise<GetConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetConfigTomlResponse;
+  }
+
+  async applyConfigToml(
+    request: ApplyConfigTomlRequest,
+  ): Promise<ApplyConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/apply", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ApplyConfigTomlResponse;
+  }
+
+  async validateConfigToml(
+    request: ValidateConfigTomlRequest,
+  ): Promise<ValidateConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/validate", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ValidateConfigTomlResponse;
   }
 
   /**
