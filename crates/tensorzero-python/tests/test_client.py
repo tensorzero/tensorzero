@@ -3540,8 +3540,8 @@ async def test_async_clickhouse_batch_writes():
 
 
 def test_sync_cannot_enable_batch_writes():
-    # Enabling batch_writes without disabling async_writes (which defaults to true)
-    # should fail because they can't both be enabled at the same time.
+    # Enabling batch_writes in embedded mode should fail because
+    # batch_writes is not yet supported in embedded gateway mode.
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
@@ -3552,13 +3552,13 @@ def test_sync_cannot_enable_batch_writes():
                 config_file=temp_file.name,
                 clickhouse_url=clickhouse_url,
             )
-        assert "Batch writes and async writes cannot be enabled at the same time" in str(exc_info.value)
+        assert "batch_writes" in str(exc_info.value).lower()
 
 
 @pytest.mark.asyncio
 async def test_async_cannot_enable_batch_writes():
-    # Enabling batch_writes without disabling async_writes (which defaults to true)
-    # should fail because they can't both be enabled at the same time.
+    # Enabling batch_writes in embedded mode should fail because
+    # batch_writes is not yet supported in embedded gateway mode.
     with tempfile.NamedTemporaryFile() as temp_file:
         temp_file.write(b"gateway.observability.enabled = true\n")
         temp_file.write(b"gateway.observability.batch_writes.enabled = true\n")
@@ -3571,7 +3571,7 @@ async def test_async_cannot_enable_batch_writes():
         assert inspect.isawaitable(client_fut)
         with pytest.raises(TensorZeroInternalError) as exc_info:
             await client_fut
-        assert "Batch writes and async writes cannot be enabled at the same time" in str(exc_info.value)
+        assert "batch_writes" in str(exc_info.value).lower()
 
 
 def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
