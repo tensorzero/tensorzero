@@ -220,6 +220,7 @@ impl TensorZeroClient for Client {
                     payload: request.payload,
                     previous_user_message_event_id: request.previous_user_message_event_id,
                     config_snapshot_hash,
+                    deployment_context: None,
                 };
 
                 tensorzero_core::endpoints::internal::autopilot::create_event(

@@ -363,12 +363,26 @@ pub async fn create_event_handler(
         msg.metadata = EventPayloadMessageMetadata { resolved_uuids };
     }
 
+    // For new sessions, compute deployment context so the agent starts with rich knowledge
+    let deployment_context = if session_id.is_nil() {
+        match super::autopilot_context::compute_deployment_context(&app_state).await {
+            Ok(ctx) => Some(ctx),
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to compute deployment context");
+                None // Graceful degradation: session still works without prefetch
+            }
+        }
+    } else {
+        None
+    };
+
     let request = CreateEventRequest {
         deployment_id,
         tensorzero_version: TENSORZERO_VERSION.to_string(),
         payload: http_request.payload,
         previous_user_message_event_id: http_request.previous_user_message_event_id,
         config_snapshot_hash,
+        deployment_context,
     };
 
     let response = create_event(&client, session_id, request, extra_headers).await?;

@@ -1260,6 +1260,7 @@ impl AutopilotClient {
             ),
             previous_user_message_event_id: None,
             config_snapshot_hash: None,
+            deployment_context: None,
         };
         if let Err(e) = self
             .create_event(session_id, request, Default::default())

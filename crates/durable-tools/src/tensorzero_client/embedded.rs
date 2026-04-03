@@ -157,6 +157,7 @@ impl TensorZeroClient for EmbeddedClient {
             payload: request.payload,
             previous_user_message_event_id: request.previous_user_message_event_id,
             config_snapshot_hash,
+            deployment_context: None,
         };
 
         create_event(
