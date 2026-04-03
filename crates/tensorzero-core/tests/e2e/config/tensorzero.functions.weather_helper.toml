@@ -264,7 +264,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.together-tool]
 type = "chat_completion"
-model = "glm-4.7-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 500
 

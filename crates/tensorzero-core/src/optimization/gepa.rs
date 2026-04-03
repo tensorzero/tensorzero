@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::StoredGEPAConfig;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -151,6 +152,31 @@ impl std::fmt::Display for UninitializedGEPAConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredGEPAConfig> for UninitializedGEPAConfig {
+    fn from(stored: StoredGEPAConfig) -> Self {
+        UninitializedGEPAConfig {
+            function_name: stored.function_name,
+            evaluation_name: stored.evaluation_name,
+            initial_variants: stored.initial_variants,
+            variant_prefix: stored.variant_prefix,
+            batch_size: stored.batch_size.unwrap_or_else(default_batch_size),
+            max_iterations: stored.max_iterations.unwrap_or_else(default_max_iterations),
+            max_concurrency: stored
+                .max_concurrency
+                .unwrap_or_else(default_max_concurrency),
+            analysis_model: stored.analysis_model,
+            mutation_model: stored.mutation_model,
+            seed: stored.seed,
+            timeout: stored.timeout.unwrap_or_else(default_timeout),
+            include_inference_for_mutation: stored
+                .include_inference_for_mutation
+                .unwrap_or_else(default_include_inference_for_mutation),
+            retries: stored.retries.map(RetryConfig::from).unwrap_or_default(),
+            max_tokens: stored.max_tokens,
+        }
     }
 }
 

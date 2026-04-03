@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use indexmap::IndexMap;
+use tensorzero_stored_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 
 use crate::cache::{
     CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
@@ -14,8 +15,10 @@ use crate::cost::{CostConfig, ResponseMode, compute_cost, load_unified_cost_conf
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
-use crate::inference::types::extra_body::ExtraBodyConfig;
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_body::{ExtraBodyConfig, extra_body_config_from_stored};
+use crate::inference::types::extra_headers::{
+    ExtraHeadersConfig, extra_headers_config_from_stored,
+};
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -157,6 +160,42 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeout_ms,
+        })
+    }
+}
+
+impl TryFrom<StoredEmbeddingModelConfig> for UninitializedEmbeddingModelConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredEmbeddingModelConfig) -> Result<Self, Error> {
+        let providers = stored
+            .providers
+            .into_iter()
+            .map(|(name, provider)| {
+                let provider: UninitializedEmbeddingProviderConfig = provider.try_into()?;
+                Ok((Arc::<str>::from(name), provider))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(UninitializedEmbeddingModelConfig {
+            routing: stored.routing.into_iter().map(Arc::<str>::from).collect(),
+            providers,
+            timeout_ms: stored.timeout_ms,
+        })
+    }
+}
+
+impl TryFrom<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredEmbeddingProviderConfig) -> Result<Self, Error> {
+        let config: UninitializedProviderConfig = stored.provider.try_into()?;
+        let cost: Option<UninitializedUnifiedCostConfig> = stored.cost.map(Into::into);
+        Ok(UninitializedEmbeddingProviderConfig {
+            config,
+            timeout_ms: stored.timeout_ms,
+            extra_body: stored.extra_body.map(extra_body_config_from_stored),
+            extra_headers: stored.extra_headers.map(extra_headers_config_from_stored),
+            cost,
         })
     }
 }

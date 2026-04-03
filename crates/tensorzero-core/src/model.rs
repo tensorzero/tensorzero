@@ -1,3 +1,4 @@
+use crate::providers::openai::ContentBlockType;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use indexmap::IndexMap;
@@ -10,6 +11,10 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
+    StoredOpenAIAPIType, StoredProviderConfig,
+};
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{Level, Span, span};
@@ -50,8 +55,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_body::{ExtraBodyConfig, extra_body_config_from_stored};
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_headers::extra_headers_config_from_stored;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RawResponseEntry, RequestMessage, Thought, Unknown,
@@ -208,6 +214,314 @@ impl UninitializedModelConfig {
             skip_relay,
             namespace: self.namespace,
         })
+    }
+}
+
+impl TryFrom<StoredModelConfig> for UninitializedModelConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredModelConfig) -> Result<Self, Error> {
+        let providers = stored
+            .providers
+            .into_iter()
+            .map(|(name, provider)| {
+                let provider: UninitializedModelProvider = provider.try_into()?;
+                Ok((Arc::<str>::from(name), provider))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(UninitializedModelConfig {
+            routing: stored.routing.into_iter().map(Arc::<str>::from).collect(),
+            providers,
+            timeouts: stored
+                .timeouts
+                .map(TimeoutsConfig::from)
+                .unwrap_or_default(),
+            skip_relay: stored.skip_relay,
+            namespace: stored.namespace.map(Namespace::new).transpose()?,
+        })
+    }
+}
+
+impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
+    type Error = Error;
+
+    fn try_from(stored: StoredModelProvider) -> Result<Self, Error> {
+        let config: UninitializedProviderConfig = stored.provider.try_into()?;
+        let cost = stored.cost.map(UninitializedCostConfig::from);
+        let batch_cost = stored.batch_cost.map(UninitializedUnifiedCostConfig::from);
+        Ok(UninitializedModelProvider {
+            config,
+            extra_body: stored.extra_body.map(extra_body_config_from_stored),
+            extra_headers: stored.extra_headers.map(extra_headers_config_from_stored),
+            timeouts: stored
+                .timeouts
+                .map(TimeoutsConfig::from)
+                .unwrap_or_default(),
+            discard_unknown_chunks: stored.discard_unknown_chunks.unwrap_or_default(),
+            cost,
+            batch_cost,
+        })
+    }
+}
+
+impl From<StoredHostedProviderKind> for HostedProviderKind {
+    fn from(stored: StoredHostedProviderKind) -> Self {
+        match stored {
+            StoredHostedProviderKind::OpenAI => Self::OpenAI,
+            StoredHostedProviderKind::TGI => Self::TGI,
+        }
+    }
+}
+
+impl From<StoredOpenAIAPIType> for OpenAIAPIType {
+    fn from(stored: StoredOpenAIAPIType) -> Self {
+        match stored {
+            StoredOpenAIAPIType::ChatCompletions => Self::ChatCompletions,
+            StoredOpenAIAPIType::Responses => Self::Responses,
+        }
+    }
+}
+
+impl From<StoredContentBlockType> for ContentBlockType {
+    fn from(stored: StoredContentBlockType) -> Self {
+        match stored {
+            StoredContentBlockType::ImageUrl => Self::ImageUrl,
+            StoredContentBlockType::File => Self::File,
+            StoredContentBlockType::InputAudio => Self::InputAudio,
+        }
+    }
+}
+
+fn parse_optional_url(url: Option<String>, field_name: &str) -> Result<Option<Url>, Error> {
+    url.map(|u| {
+        u.parse::<Url>().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to parse `{field_name}` URL: {e}"),
+            })
+        })
+    })
+    .transpose()
+}
+
+fn parse_url(url: String, field_name: &str) -> Result<Url, Error> {
+    url.parse::<Url>().map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Failed to parse `{field_name}` URL: {e}"),
+        })
+    })
+}
+
+impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredProviderConfig) -> Result<Self, Error> {
+        match stored {
+            StoredProviderConfig::Anthropic {
+                model_name,
+                api_base,
+                api_key_location,
+                beta_structured_outputs,
+                provider_tools,
+            } => Ok(Self::Anthropic {
+                model_name,
+                api_base: parse_optional_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+                beta_structured_outputs,
+                provider_tools: provider_tools.unwrap_or_default(),
+            }),
+            StoredProviderConfig::AWSBedrock {
+                model_id,
+                region,
+                allow_auto_detect_region,
+                endpoint_url,
+                api_key,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Ok(Self::AWSBedrock {
+                model_id,
+                region: region.map(Into::into),
+                allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
+                endpoint_url: endpoint_url.map(Into::into),
+                api_key: api_key.map(Into::into),
+                access_key_id: access_key_id.map(Into::into),
+                secret_access_key: secret_access_key.map(Into::into),
+                session_token: session_token.map(Into::into),
+            }),
+            StoredProviderConfig::AWSSagemaker {
+                endpoint_name,
+                model_name,
+                region,
+                allow_auto_detect_region,
+                hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Ok(Self::AWSSagemaker {
+                endpoint_name,
+                model_name,
+                region: region.map(Into::into),
+                allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
+                hosted_provider: hosted_provider.into(),
+                endpoint_url: endpoint_url.map(Into::into),
+                access_key_id: access_key_id.map(Into::into),
+                secret_access_key: secret_access_key.map(Into::into),
+                session_token: session_token.map(Into::into),
+            }),
+            StoredProviderConfig::Azure {
+                deployment_id,
+                endpoint,
+                api_key_location,
+            } => Ok(Self::Azure {
+                deployment_id,
+                endpoint: endpoint.into(),
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+                credential_location,
+                provider_tools,
+            } => Ok(Self::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+                credential_location: credential_location.map(Into::into),
+                provider_tools: provider_tools.unwrap_or_default(),
+            }),
+            StoredProviderConfig::GCPVertexGemini {
+                model_id,
+                endpoint_id,
+                location,
+                project_id,
+                credential_location,
+            } => Ok(Self::GCPVertexGemini {
+                model_id,
+                endpoint_id,
+                location,
+                project_id,
+                credential_location: credential_location.map(Into::into),
+            }),
+            StoredProviderConfig::GoogleAIStudioGemini {
+                model_name,
+                api_key_location,
+            } => Ok(Self::GoogleAIStudioGemini {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Groq {
+                model_name,
+                api_key_location,
+                reasoning_format,
+            } => Ok(Self::Groq {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                reasoning_format,
+            }),
+            StoredProviderConfig::Hyperbolic {
+                model_name,
+                api_key_location,
+            } => Ok(Self::Hyperbolic {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Fireworks {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => Ok(Self::Fireworks {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                parse_think_blocks,
+            }),
+            StoredProviderConfig::Mistral {
+                model_name,
+                api_key_location,
+                prompt_mode,
+            } => Ok(Self::Mistral {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                prompt_mode,
+            }),
+            StoredProviderConfig::OpenAI {
+                model_name,
+                api_base,
+                api_key_location,
+                api_type,
+                include_encrypted_reasoning,
+                provider_tools,
+                content_type_overrides,
+            } => Ok(Self::OpenAI {
+                model_name,
+                api_base: parse_optional_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+                api_type: api_type.map(OpenAIAPIType::from).unwrap_or_default(),
+                include_encrypted_reasoning: include_encrypted_reasoning.unwrap_or_default(),
+                provider_tools: provider_tools.unwrap_or_default(),
+                content_type_overrides: content_type_overrides
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(k, v)| (k, ContentBlockType::from(v)))
+                    .collect(),
+            }),
+            StoredProviderConfig::OpenRouter {
+                model_name,
+                api_key_location,
+            } => Ok(Self::OpenRouter {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Together {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => Ok(Self::Together {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                parse_think_blocks,
+            }),
+            StoredProviderConfig::VLLM {
+                model_name,
+                api_base,
+                api_key_location,
+            } => Ok(Self::VLLM {
+                model_name,
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::XAI {
+                model_name,
+                api_key_location,
+            } => Ok(Self::XAI {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::TGI {
+                api_base,
+                api_key_location,
+            } => Ok(Self::TGI {
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => Ok(Self::SGLang {
+                model_name,
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::DeepSeek {
+                model_name,
+                api_key_location,
+            } => Ok(Self::DeepSeek {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+        }
     }
 }
 

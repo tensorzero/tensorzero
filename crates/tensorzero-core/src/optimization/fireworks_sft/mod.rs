@@ -2,6 +2,7 @@
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::StoredFireworksOptimizerSFTConfig;
 use url::Url;
 
 fn default_deploy_after_training() -> bool {
@@ -67,6 +68,30 @@ impl std::fmt::Display for UninitializedFireworksSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredFireworksOptimizerSFTConfig> for UninitializedFireworksSFTConfig {
+    fn from(stored: StoredFireworksOptimizerSFTConfig) -> Self {
+        UninitializedFireworksSFTConfig {
+            model: stored.model,
+            early_stop: stored.early_stop,
+            epochs: stored.epochs,
+            learning_rate: stored.learning_rate,
+            max_context_length: stored.max_context_length,
+            lora_rank: stored.lora_rank,
+            batch_size: stored.batch_size,
+            display_name: stored.display_name,
+            output_model: stored.output_model,
+            warm_start_from: stored.warm_start_from,
+            is_turbo: stored.is_turbo,
+            eval_auto_carveout: stored.eval_auto_carveout,
+            nodes: stored.nodes,
+            mtp_enabled: stored.mtp_enabled,
+            mtp_num_draft_tokens: stored.mtp_num_draft_tokens,
+            mtp_freeze_base_model: stored.mtp_freeze_base_model,
+            deploy_after_training: stored.deploy_after_training,
+        }
     }
 }
 

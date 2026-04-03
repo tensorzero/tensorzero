@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::StoredOptimizerConfig;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -259,6 +260,42 @@ impl UninitializedOptimizerInfo {
     pub fn load(self) -> OptimizerInfo {
         OptimizerInfo {
             inner: self.inner.load(),
+        }
+    }
+}
+
+impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerInfo {
+    type Error = Error;
+
+    fn try_from(stored: StoredOptimizerConfig) -> Result<Self, Error> {
+        Ok(UninitializedOptimizerInfo {
+            inner: stored.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredOptimizerConfig) -> Result<Self, Error> {
+        match stored {
+            StoredOptimizerConfig::Dicl(c) => Ok(UninitializedOptimizerConfig::Dicl(c.into())),
+            StoredOptimizerConfig::OpenAISFT(c) => {
+                Ok(UninitializedOptimizerConfig::OpenAISFT(c.into()))
+            }
+            StoredOptimizerConfig::OpenAIRFT(c) => Ok(UninitializedOptimizerConfig::OpenAIRFT(
+                Box::new((*c).into()),
+            )),
+            StoredOptimizerConfig::FireworksSFT(c) => {
+                Ok(UninitializedOptimizerConfig::FireworksSFT(c.into()))
+            }
+            StoredOptimizerConfig::GCPVertexGeminiSFT(c) => {
+                Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(c.into()))
+            }
+            StoredOptimizerConfig::GEPA(c) => Ok(UninitializedOptimizerConfig::GEPA(c.into())),
+            StoredOptimizerConfig::TogetherSFT(c) => Ok(UninitializedOptimizerConfig::TogetherSFT(
+                Box::new((*c).into()),
+            )),
         }
     }
 }

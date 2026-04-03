@@ -6,6 +6,10 @@ use std::sync::Arc;
 
 use axum::Extension;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
+    StoredRateLimitingConfig,
+};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -160,6 +164,84 @@ impl Default for RateLimitingConfig {
         }
     }
 }
+
+// These would ideally be `From` impls, but the orphan rule prevents it since both
+// types are defined in other crates (`tensorzero-error` and `tensorzero-stored-config`).
+fn convert_resource(stored: StoredRateLimitResource) -> RateLimitResource {
+    match stored {
+        StoredRateLimitResource::ModelInference => RateLimitResource::ModelInference,
+        StoredRateLimitResource::Token => RateLimitResource::Token,
+        StoredRateLimitResource::Cost => RateLimitResource::Cost,
+    }
+}
+
+fn convert_interval(stored: StoredRateLimitInterval) -> RateLimitInterval {
+    match stored {
+        StoredRateLimitInterval::Second => RateLimitInterval::Second,
+        StoredRateLimitInterval::Minute => RateLimitInterval::Minute,
+        StoredRateLimitInterval::Hour => RateLimitInterval::Hour,
+        StoredRateLimitInterval::Day => RateLimitInterval::Day,
+        StoredRateLimitInterval::Week => RateLimitInterval::Week,
+        StoredRateLimitInterval::Month => RateLimitInterval::Month,
+    }
+}
+
+fn convert_backend(stored: StoredRateLimitingBackend) -> RateLimitingBackend {
+    match stored {
+        StoredRateLimitingBackend::Auto => RateLimitingBackend::Auto,
+        StoredRateLimitingBackend::Postgres => RateLimitingBackend::Postgres,
+        StoredRateLimitingBackend::Valkey => RateLimitingBackend::Valkey,
+    }
+}
+
+impl TryFrom<StoredRateLimitingConfig> for UninitializedRateLimitingConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredRateLimitingConfig) -> Result<Self, Error> {
+        let rules = stored
+            .rules
+            .unwrap_or_default()
+            .into_iter()
+            .map(|rule| {
+                let limits = rule
+                    .limits
+                    .into_iter()
+                    .map(|limit| {
+                        Ok(Arc::new(RateLimit {
+                            resource: convert_resource(limit.resource),
+                            interval: convert_interval(limit.interval),
+                            capacity: limit.capacity,
+                            refill_rate: limit.refill_rate,
+                        }))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+                let scope = serde_json::from_value(rule.scope).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to deserialize rate limiting scope: {e}"),
+                    })
+                })?;
+                let priority = serde_json::from_value(rule.priority).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to deserialize rate limiting priority: {e}"),
+                    })
+                })?;
+                Ok(RateLimitingConfigRule {
+                    limits,
+                    scope,
+                    priority,
+                })
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        let backend = stored.backend.map(convert_backend);
+        Ok(UninitializedRateLimitingConfig {
+            rules: Some(rules),
+            enabled: stored.enabled,
+            backend,
+            default_nano_cost: stored.default_nano_cost,
+        })
+    }
+}
+
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.

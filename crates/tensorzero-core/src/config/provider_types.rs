@@ -1,5 +1,13 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredApiKeyDefaults, StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,
+    StoredGCPBatchConfigCloudStorage, StoredGCPBatchConfigType, StoredGCPCredentialDefaults,
+    StoredGCPCredentialProviderTypeConfig, StoredGCPProviderSFTConfig,
+    StoredGCPVertexGeminiProviderTypeConfig, StoredProviderTypesConfig,
+    StoredSimpleProviderTypeConfig, StoredTogetherProviderSFTConfig,
+    StoredTogetherProviderTypeConfig,
+};
 
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -457,6 +465,175 @@ impl Default for XAIDefaults {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "XAI_API_KEY".to_string(),
             )),
+        }
+    }
+}
+
+impl From<StoredProviderTypesConfig> for ProviderTypesConfig {
+    fn from(stored: StoredProviderTypesConfig) -> Self {
+        ProviderTypesConfig {
+            anthropic: stored.anthropic.map(Into::into),
+            azure: stored.azure.map(Into::into),
+            deepseek: stored.deepseek.map(Into::into),
+            fireworks: stored.fireworks.map(Into::into),
+            gcp_vertex_gemini: stored.gcp_vertex_gemini.map(Into::into),
+            gcp_vertex_anthropic: stored.gcp_vertex_anthropic.map(Into::into),
+            google_ai_studio_gemini: stored.google_ai_studio_gemini.map(Into::into),
+            groq: stored.groq.map(Into::into),
+            hyperbolic: stored.hyperbolic.map(Into::into),
+            mistral: stored.mistral.map(Into::into),
+            openai: stored.openai.map(Into::into),
+            openrouter: stored.openrouter.map(Into::into),
+            sglang: stored.sglang.map(Into::into),
+            tgi: stored.tgi.map(Into::into),
+            together: stored.together.map(Into::into),
+            vllm: stored.vllm.map(Into::into),
+            xai: stored.xai.map(Into::into),
+        }
+    }
+}
+
+fn convert_api_key_defaults(
+    stored: Option<StoredApiKeyDefaults>,
+) -> Option<CredentialLocationWithFallback> {
+    stored.and_then(|d| d.api_key_location.map(Into::into))
+}
+
+fn convert_gcp_credential_defaults(
+    stored: Option<StoredGCPCredentialDefaults>,
+) -> Option<CredentialLocationWithFallback> {
+    stored.and_then(|d| d.credential_location.map(Into::into))
+}
+
+// --- Simple provider types (api_key_location only) ---
+
+macro_rules! impl_from_simple_provider_type {
+    ($stored:ty => $target:ty, $defaults:ident) => {
+        impl From<$stored> for $target {
+            fn from(stored: $stored) -> Self {
+                Self {
+                    defaults: convert_api_key_defaults(stored.defaults)
+                        .map(|api_key_location| $defaults { api_key_location }),
+                }
+            }
+        }
+    };
+}
+
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AnthropicProviderTypeConfig, AnthropicDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AzureProviderTypeConfig, AzureDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => DeepSeekProviderTypeConfig, DeepSeekDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GoogleAIStudioGeminiProviderTypeConfig, GoogleAIStudioGeminiDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GroqProviderTypeConfig, GroqDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => HyperbolicProviderTypeConfig, HyperbolicDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => MistralProviderTypeConfig, MistralDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenAIProviderTypeConfig, OpenAIDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenRouterProviderTypeConfig, OpenRouterDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => SGLangProviderTypeConfig, SGLangDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => TGIProviderTypeConfig, TGIDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => VLLMProviderTypeConfig, VLLMDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => XAIProviderTypeConfig, XAIDefaults);
+
+// --- Fireworks ---
+
+impl From<StoredFireworksProviderTypeConfig> for FireworksProviderTypeConfig {
+    fn from(stored: StoredFireworksProviderTypeConfig) -> Self {
+        Self {
+            sft: stored.sft.map(Into::into),
+            defaults: convert_api_key_defaults(stored.defaults)
+                .map(|api_key_location| FireworksDefaults { api_key_location }),
+        }
+    }
+}
+
+impl From<StoredFireworksProviderSFTConfig> for FireworksSFTConfig {
+    fn from(stored: StoredFireworksProviderSFTConfig) -> Self {
+        Self {
+            account_id: stored.account_id,
+        }
+    }
+}
+
+// --- GCP Vertex Anthropic ---
+
+impl From<StoredGCPCredentialProviderTypeConfig> for GCPVertexAnthropicProviderTypeConfig {
+    fn from(stored: StoredGCPCredentialProviderTypeConfig) -> Self {
+        Self {
+            defaults: convert_gcp_credential_defaults(stored.defaults).map(|credential_location| {
+                GCPDefaults {
+                    credential_location,
+                }
+            }),
+        }
+    }
+}
+
+// --- GCP Vertex Gemini ---
+
+impl From<StoredGCPVertexGeminiProviderTypeConfig> for GCPVertexGeminiProviderTypeConfig {
+    fn from(stored: StoredGCPVertexGeminiProviderTypeConfig) -> Self {
+        Self {
+            batch: stored.batch.map(Into::into),
+            sft: stored.sft.map(Into::into),
+            defaults: convert_gcp_credential_defaults(stored.defaults).map(|credential_location| {
+                GCPDefaults {
+                    credential_location,
+                }
+            }),
+        }
+    }
+}
+
+impl From<StoredGCPBatchConfigType> for GCPBatchConfigType {
+    fn from(stored: StoredGCPBatchConfigType) -> Self {
+        match stored {
+            StoredGCPBatchConfigType::None => Self::None,
+            StoredGCPBatchConfigType::CloudStorage(cs) => Self::CloudStorage(cs.into()),
+        }
+    }
+}
+
+impl From<StoredGCPBatchConfigCloudStorage> for GCPBatchConfigCloudStorage {
+    fn from(stored: StoredGCPBatchConfigCloudStorage) -> Self {
+        Self {
+            input_uri_prefix: stored.input_uri_prefix,
+            output_uri_prefix: stored.output_uri_prefix,
+        }
+    }
+}
+
+impl From<StoredGCPProviderSFTConfig> for GCPSFTConfig {
+    fn from(stored: StoredGCPProviderSFTConfig) -> Self {
+        Self {
+            project_id: stored.project_id,
+            region: stored.region,
+            bucket_name: stored.bucket_name,
+            bucket_path_prefix: stored.bucket_path_prefix,
+            service_account: stored.service_account,
+            kms_key_name: stored.kms_key_name,
+        }
+    }
+}
+
+// --- Together ---
+
+impl From<StoredTogetherProviderTypeConfig> for TogetherProviderTypeConfig {
+    fn from(stored: StoredTogetherProviderTypeConfig) -> Self {
+        Self {
+            sft: stored.sft.map(Into::into),
+            defaults: convert_api_key_defaults(stored.defaults)
+                .map(|api_key_location| TogetherDefaults { api_key_location }),
+        }
+    }
+}
+
+impl From<StoredTogetherProviderSFTConfig> for TogetherSFTConfig {
+    fn from(stored: StoredTogetherProviderSFTConfig) -> Self {
+        Self {
+            wandb_api_key: stored.wandb_api_key,
+            wandb_base_url: stored.wandb_base_url,
+            wandb_project_name: stored.wandb_project_name,
+            hf_api_token: stored.hf_api_token,
         }
     }
 }

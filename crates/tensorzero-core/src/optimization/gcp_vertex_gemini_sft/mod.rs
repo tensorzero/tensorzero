@@ -2,6 +2,7 @@
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::StoredGCPVertexGeminiOptimizerSFTConfig;
 use url::Url;
 
 /// Initialized GCP Vertex Gemini SFT Config (per-job settings only).
@@ -41,6 +42,20 @@ impl std::fmt::Display for UninitializedGCPVertexGeminiSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredGCPVertexGeminiOptimizerSFTConfig> for UninitializedGCPVertexGeminiSFTConfig {
+    fn from(stored: StoredGCPVertexGeminiOptimizerSFTConfig) -> Self {
+        UninitializedGCPVertexGeminiSFTConfig {
+            model: stored.model,
+            learning_rate_multiplier: stored.learning_rate_multiplier,
+            adapter_size: stored.adapter_size,
+            n_epochs: stored.n_epochs,
+            export_last_checkpoint_only: stored.export_last_checkpoint_only,
+            seed: stored.seed,
+            tuned_model_display_name: stored.tuned_model_display_name,
+        }
     }
 }
 

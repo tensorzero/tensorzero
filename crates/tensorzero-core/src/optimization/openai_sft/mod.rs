@@ -42,6 +42,19 @@ impl std::fmt::Display for UninitializedOpenAISFTConfig {
     }
 }
 
+impl From<tensorzero_stored_config::StoredOpenAISFTConfig> for UninitializedOpenAISFTConfig {
+    fn from(stored: tensorzero_stored_config::StoredOpenAISFTConfig) -> Self {
+        UninitializedOpenAISFTConfig {
+            model: stored.model,
+            batch_size: stored.batch_size,
+            learning_rate_multiplier: stored.learning_rate_multiplier,
+            n_epochs: stored.n_epochs,
+            seed: stored.seed,
+            suffix: stored.suffix,
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedOpenAISFTConfig {
