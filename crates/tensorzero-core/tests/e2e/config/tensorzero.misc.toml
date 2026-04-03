@@ -4,6 +4,7 @@
 
 [gateway]
 debug = true
+observability.async_writes = false
 template_filesystem_access.base_path = ".."
 export.otlp.traces.enabled = true
 export.otlp.traces.extra_headers."x-config-static-header" = "config-static-value"

@@ -27,10 +27,10 @@ If you need strict data durability guarantees (ensuring data is persisted in the
 
 As a rule of thumb, consider the following decision matrix:
 
-|                             | **High throughput**          | **Low throughput**              |
-| --------------------------- | ---------------------------- | ------------------------------- |
-| **Latency is critical**     | `batch_writes`               | `async_writes` (default)        |
-| **Latency is not critical** | `batch_writes`               | Synchronous writes              |
+|                             | **High throughput** | **Low throughput**       |
+| --------------------------- | ------------------- | ------------------------ |
+| **Latency is critical**     | `batch_writes`      | `async_writes` (default) |
+| **Latency is not critical** | `batch_writes`      | Synchronous writes       |
 
 See the [Configuration Reference](/gateway/configuration-reference/) for more details.
 
