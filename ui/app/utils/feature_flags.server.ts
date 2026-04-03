@@ -8,6 +8,7 @@
  */
 
 import type { FeatureFlags } from "~/context/feature-flags";
+import { getEnv } from "~/utils/env.server";
 
 export type { FeatureFlags } from "~/context/feature-flags";
 
@@ -15,7 +16,9 @@ export type { FeatureFlags } from "~/context/feature-flags";
  * Load feature flags from environment variables.
  */
 export function loadFeatureFlags(): FeatureFlags {
-  return {};
+  return {
+    configEditor: getEnv().TENSORZERO_UI_ENABLE_CONFIG_EDITOR,
+  };
 }
 
 /**
