@@ -42,7 +42,7 @@ license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-reqwest = { version = "0.13", features = ["multipart"] }
+reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"] }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 serde_with = { version = "3.18.0", default-features = false, features = ["macros"] }
