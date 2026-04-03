@@ -10,6 +10,8 @@ use crate::{
     StoredTimeoutsConfig,
 };
 
+pub const STORED_VARIANT_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 /// Reference to a `variant_configs` row.
 /// Replaces inline variant configs in stored function config.
 #[serde_with::skip_serializing_none]

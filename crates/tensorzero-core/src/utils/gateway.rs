@@ -257,6 +257,7 @@ impl AppStateData<SwappableConfig> {
     pub fn load_latest(&self) -> AppStateData<Arc<Config>> {
         AppStateData {
             config: self.config.load(),
+            uninitialized_config: self.uninitialized_config.clone(),
             runtime_overlay: self.runtime_overlay.clone(),
             http_client: self.http_client.clone(),
             clickhouse_connection_info: self.clickhouse_connection_info.clone(),

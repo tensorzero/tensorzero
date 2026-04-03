@@ -50,8 +50,8 @@ pub use stored_extra_headers::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
 };
 pub use stored_function_config::{
-    StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
-    StoredChatFunctionConfig, StoredExperimentationConfig,
+    STORED_FUNCTION_CONFIG_SCHEMA_REVISION, StoredAdaptiveExperimentationAlgorithm,
+    StoredAdaptiveExperimentationConfig, StoredChatFunctionConfig, StoredExperimentationConfig,
     StoredExperimentationConfigWithNamespaces, StoredFunctionConfig, StoredJsonFunctionConfig,
     StoredStaticExperimentationConfig, StoredToolChoice,
 };
@@ -95,7 +95,8 @@ pub use stored_rate_limiting_config::{
 pub use stored_storage_kind::StoredStorageKind;
 pub use stored_tool_config::StoredToolConfig;
 pub use stored_variant_config::{
-    StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredDiclVariantConfig,
-    StoredInputWrappers, StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
+    STORED_VARIANT_CONFIG_SCHEMA_REVISION, StoredBestOfNVariantConfig,
+    StoredChatCompletionVariantConfig, StoredDiclVariantConfig, StoredInputWrappers,
+    StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
     StoredVariantVersionConfig,
 };

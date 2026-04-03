@@ -5,6 +5,8 @@ use tensorzero_types::ToolChoice;
 
 use crate::{StoredEvaluatorConfig, StoredPromptRef, StoredVariantRef};
 
+pub const STORED_FUNCTION_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 /// Stored in `function_configs.config`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]

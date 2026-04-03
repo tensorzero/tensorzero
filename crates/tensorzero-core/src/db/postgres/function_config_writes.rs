@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use sqlx::{FromRow, Postgres, Transaction};
 use tensorzero_stored_config::{
+    STORED_FUNCTION_CONFIG_SCHEMA_REVISION, STORED_VARIANT_CONFIG_SCHEMA_REVISION,
     StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
     StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredChatFunctionConfig,
     StoredDiclVariantConfig, StoredEvaluatorConfig, StoredExactMatchConfig,
@@ -40,8 +41,6 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 
 use super::PostgresConnectionInfo;
-
-const STORED_CONFIG_SCHEMA_REVISION: i32 = 1;
 
 #[derive(Debug)]
 pub struct WriteFunctionConfigParams<'a> {
@@ -370,7 +369,7 @@ async fn write_variant_versions(
                 .push_bind(function_name.to_string())
                 .push_bind(pv.variant_type.clone())
                 .push_bind(name.clone())
-                .push_bind(STORED_CONFIG_SCHEMA_REVISION)
+                .push_bind(STORED_VARIANT_CONFIG_SCHEMA_REVISION)
                 .push_bind(pv.config_json.clone())
                 .push_bind(pv.content_hash.clone())
                 .push_bind(creation_source.to_string())
@@ -410,7 +409,7 @@ async fn write_function_version(
     .bind(function_version_id)
     .bind(function_name)
     .bind(stored_function_type(config))
-    .bind(STORED_CONFIG_SCHEMA_REVISION)
+    .bind(STORED_FUNCTION_CONFIG_SCHEMA_REVISION)
     .bind(&config_json)
     .bind(creation_source)
     .bind(source_autopilot_session_id)
