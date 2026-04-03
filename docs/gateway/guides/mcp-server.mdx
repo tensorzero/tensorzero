@@ -1,5 +1,5 @@
 ---
-title: MCP Server
+title: Connect via MCP
 description: Connect AI coding tools to TensorZero using the Model Context Protocol (MCP) for direct access to observability, datasets, evaluations, and optimization.
 ---
 
@@ -15,6 +15,7 @@ MCP support is under active development and may have breaking changes.
 ## Setup
 
 The MCP server runs automatically alongside the gateway at `http://<host>:<port>/mcp` using the Streamable HTTP transport.
+If your gateway is configured with a `base_path`, the MCP endpoint will be at `http://<host>:<port>/<base_path>/mcp` instead.
 No additional configuration is needed.
 
 ## Client Setup
@@ -66,7 +67,6 @@ Your MCP client will need to include the appropriate credentials in its requests
 | `create_datapoints_from_inferences` | Create datapoints from existing inferences |
 | `update_datapoints` | Update existing datapoints (input, output, tags, metadata) |
 | `delete_datapoints` | Soft-delete datapoints by ID |
-| `upload_dataset` | Upload a dataset to S3 as Parquet |
 
 ### Feedback Analysis
 
@@ -83,10 +83,8 @@ Your MCP client will need to include the appropriate credentials in its requests
 | `get_config` | Get the live config snapshot or a historical snapshot by hash |
 | `write_config` | Write a config snapshot to storage |
 
-### Evaluation & Optimization
+### Evaluation
 
 | Tool | Description |
 | --- | --- |
 | `run_evaluation` | Run an evaluation on a dataset with configured evaluators |
-| `launch_optimization_workflow` | Launch an optimization workflow (fine-tuning, prompt optimization, etc.) |
-| `gepa` | Run GEPA (Genetic Evolution with Pareto Analysis) prompt optimization |
