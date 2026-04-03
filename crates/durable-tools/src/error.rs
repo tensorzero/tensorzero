@@ -172,8 +172,17 @@ pub fn non_control_tool_error_to_task_error(err: NonControlToolError) -> TaskErr
         NonControlToolError::TaskPanicked { message } => {
             NonControlTaskError::TaskPanicked { message }.into()
         }
-        // For all other variants, use the Serialize impl to generate error_data
-        other => {
+        // For remaining variants, use the Serialize impl to generate error_data
+        other @ (NonControlToolError::ToolNotFound { .. }
+        | NonControlToolError::DuplicateToolName { .. }
+        | NonControlToolError::InvalidParams { .. }
+        | NonControlToolError::SchemaGeneration { .. }
+        | NonControlToolError::Internal { .. }
+        | NonControlToolError::InvalidConfiguration { .. }
+        | NonControlToolError::ReservedHeaderPrefix { .. }
+        | NonControlToolError::InvalidEventName { .. }
+        | NonControlToolError::SubtaskSpawnFailed { .. }
+        | NonControlToolError::EmitEventFailed { .. }) => {
             let error_data = serde_json::to_value(&other).unwrap_or_else(|e| {
                 serde_json::json!({
                     "kind": "error_serialization_failed",
