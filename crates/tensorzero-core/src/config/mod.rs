@@ -515,7 +515,7 @@ pub struct BatchWritesConfig {
 impl Default for BatchWritesConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             __force_allow_embedded_batch_writes: Some(false),
             flush_interval_ms: Some(default_flush_interval_ms()),
             max_rows: Some(default_max_rows()),
@@ -1612,11 +1612,11 @@ impl Config {
             .as_ref()
             .cloned()
             .unwrap_or_default();
-        if batch_writes.enabled && self.gateway.observability.async_writes.unwrap_or(false) {
+        if batch_writes.enabled && self.gateway.observability.async_writes.unwrap_or(true) {
             return Err(ErrorDetails::Config {
                 message: "Batch writes and async writes cannot be enabled at the same time. \
-                    Batch writes are enabled by default; to use async writes, set \
-                    `gateway.observability.batch_writes = { enabled = false }`."
+                    Async writes are enabled by default; to use batch writes, set \
+                    `gateway.observability.async_writes = false`."
                     .to_string(),
             }
             .into());

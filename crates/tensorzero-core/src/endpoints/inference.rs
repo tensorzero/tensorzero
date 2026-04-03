@@ -935,7 +935,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 snapshot_hash: config.hash.clone(),
             };
 
-            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(true);
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let postgres_connection_info = postgres_connection_info.clone();
             let config = config.clone();
@@ -1429,7 +1429,7 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            let async_writes = config.gateway.observability.async_writes.unwrap_or(false);
+            let async_writes = config.gateway.observability.async_writes.unwrap_or(true);
             let write_future = async move {
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks_future.await;

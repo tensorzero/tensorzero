@@ -18,19 +18,19 @@ The TensorZero Gateway can achieve &lt;1ms P99 latency overhead at 10,000+ QPS. 
 
 ### Observability data collection strategy
 
-By default, the gateway uses `batch_writes` to write observability data asynchronously in batches, returning the response to the client immediately without waiting for database writes to complete.
-This provides a good balance of performance and throughput for most applications.
+By default, the gateway uses `async_writes` to write observability data asynchronously, returning the response to the client immediately without waiting for database writes to complete.
+Each database insert is handled immediately in separate background tasks.
 
-For low-throughput applications where latency is critical, you can use `gateway.observability.async_writes` instead, which inserts each row individually in background tasks rather than batching.
+For high-throughput applications, you can use `gateway.observability.batch_writes` instead, which collects multiple records and writes them together in batches for more efficient writes.
 
-If you need strict data durability guarantees (ensuring data is persisted in the database before sending a response), you can disable batch writes by setting `gateway.observability.batch_writes = { enabled = false }`.
+If you need strict data durability guarantees (ensuring data is persisted in the database before sending a response), you can disable async writes by setting `gateway.observability.async_writes = false`.
 
 As a rule of thumb, consider the following decision matrix:
 
-|                             | **High throughput**          | **Low throughput**           |
-| --------------------------- | ---------------------------- | ---------------------------- |
-| **Latency is critical**     | `batch_writes` (default)     | `async_writes`               |
-| **Latency is not critical** | `batch_writes` (default)     | Synchronous writes           |
+|                             | **High throughput**          | **Low throughput**              |
+| --------------------------- | ---------------------------- | ------------------------------- |
+| **Latency is critical**     | `batch_writes`               | `async_writes` (default)        |
+| **Latency is not critical** | `batch_writes`               | Synchronous writes              |
 
 See the [Configuration Reference](/gateway/configuration-reference/) for more details.
 

@@ -123,6 +123,7 @@ async fn test_clickhouse_bulk_insert() {
             "
     [gateway.observability]
     enabled = true
+    async_writes = false
     batch_writes = { enabled = true }
     ",
         )

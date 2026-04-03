@@ -186,26 +186,25 @@ mod tests {
         );
     }
 
-    /// Historical: before batch_writes defaulted to enabled, stored configs without
-    /// a `batch_writes` section should still parse with `enabled: false`.
+    /// Historical: before async_writes defaulted to enabled, stored configs without
+    /// an `async_writes` field should still parse with `async_writes: false`.
     #[test]
-    fn test_historical_no_batch_writes_defaults_to_disabled() {
+    fn test_historical_no_async_writes_defaults_to_disabled() {
         let toml_str = r"
             enabled = true
-            async_writes = false
         ";
 
         let stored: StoredObservabilityConfig =
-            toml::from_str(toml_str).expect("should parse without batch_writes section");
+            toml::from_str(toml_str).expect("should parse without async_writes field");
         assert!(
-            !stored.batch_writes.enabled,
-            "stored snapshot without batch_writes should default to disabled"
+            !stored.async_writes,
+            "stored snapshot without async_writes should default to false"
         );
         let config: ObservabilityConfig = stored.into();
-        let batch_writes = config.batch_writes.expect("batch_writes should be Some");
-        assert!(
-            !batch_writes.enabled,
-            "converted config should preserve disabled batch_writes from stored snapshot"
+        assert_eq!(
+            config.async_writes,
+            Some(false),
+            "converted config should preserve disabled async_writes from stored snapshot"
         );
     }
 
