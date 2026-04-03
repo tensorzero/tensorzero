@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use tensorzero_types::ToolChoice;
@@ -19,31 +19,31 @@ pub enum StoredFunctionConfig {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredChatFunctionConfig {
-    pub variants: Option<HashMap<String, StoredVariantRef>>,
+    pub variants: Option<BTreeMap<String, StoredVariantRef>>,
     pub system_schema: Option<StoredPromptRef>,
     pub user_schema: Option<StoredPromptRef>,
     pub assistant_schema: Option<StoredPromptRef>,
-    pub schemas: Option<HashMap<String, StoredPromptRef>>,
+    pub schemas: Option<BTreeMap<String, StoredPromptRef>>,
     pub tools: Option<Vec<String>>,
     pub tool_choice: Option<StoredToolChoice>,
     pub parallel_tool_calls: Option<bool>,
     pub description: Option<String>,
     pub experimentation: Option<StoredExperimentationConfigWithNamespaces>,
-    pub evaluators: Option<HashMap<String, StoredEvaluatorConfig>>,
+    pub evaluators: Option<BTreeMap<String, StoredEvaluatorConfig>>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredJsonFunctionConfig {
-    pub variants: Option<HashMap<String, StoredVariantRef>>,
+    pub variants: Option<BTreeMap<String, StoredVariantRef>>,
     pub system_schema: Option<StoredPromptRef>,
     pub user_schema: Option<StoredPromptRef>,
     pub assistant_schema: Option<StoredPromptRef>,
-    pub schemas: Option<HashMap<String, StoredPromptRef>>,
+    pub schemas: Option<BTreeMap<String, StoredPromptRef>>,
     pub output_schema: Option<StoredPromptRef>,
     pub description: Option<String>,
     pub experimentation: Option<StoredExperimentationConfigWithNamespaces>,
-    pub evaluators: Option<HashMap<String, StoredEvaluatorConfig>>,
+    pub evaluators: Option<BTreeMap<String, StoredEvaluatorConfig>>,
 }
 
 // --- ToolChoice ---
@@ -76,7 +76,7 @@ impl From<&ToolChoice> for StoredToolChoice {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredExperimentationConfigWithNamespaces {
     pub base: StoredExperimentationConfig,
-    pub namespaces: Option<HashMap<String, StoredExperimentationConfig>>,
+    pub namespaces: Option<BTreeMap<String, StoredExperimentationConfig>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -91,7 +91,7 @@ pub enum StoredExperimentationConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredStaticExperimentationConfig {
     /// Always stored as a map of variant name → weight.
-    pub candidate_variants: Option<HashMap<String, f64>>,
+    pub candidate_variants: Option<BTreeMap<String, f64>>,
     pub fallback_variants: Option<Vec<String>>,
 }
 

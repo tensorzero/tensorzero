@@ -37,7 +37,9 @@ use crate::experimentation::{
     track_and_stop::UninitializedTrackAndStopExperimentationConfig,
 };
 use crate::utils::retries::RetryConfig;
-use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::variant::chat_completion::{
+    UninitializedChatCompletionConfig, UninitializedInputWrappers,
+};
 use crate::variant::dicl::UninitializedDiclConfig;
 
 use super::PostgresConnectionInfo;
@@ -108,10 +110,14 @@ pub(super) async fn write_function_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteFunctionConfigParams<'_>,
 ) -> Result<WriteFunctionConfigResult, Error> {
-    // Lock the current latest version (if any) to serialize concurrent writes.
-    let actual_latest_id = lock_latest_function_version(tx, params.function_name).await?;
+    // Acquire an advisory lock on the function name to serialize concurrent writes,
+    // including first writes where there is no existing row to lock via FOR UPDATE.
+    acquire_function_advisory_lock(tx, params.function_name).await?;
 
-    // Compare-and-swap: verify the caller's expected version matches the locked row.
+    // With the advisory lock held, read the latest version for the CAS check.
+    let actual_latest_id = fetch_latest_function_version(tx, params.function_name).await?;
+
+    // Compare-and-swap: verify the caller's expected version matches the current row.
     if actual_latest_id != params.expected_current_version_id {
         return Err(Error::new(ErrorDetails::Config {
             message: format!(
@@ -158,9 +164,38 @@ pub(super) async fn write_function_config_in_tx(
     })
 }
 
-/// Lock the latest function config row for the given name using `FOR UPDATE`.
-/// Returns `None` if no row exists (first write for this function).
-async fn lock_latest_function_version(
+/// Acquires a transaction-level exclusive advisory lock keyed on the function name.
+///
+/// The lock key is derived by taking the first 8 bytes of the BLAKE3 hash of
+/// `"tensorzero::function_name::{name}"` interpreted as a little-endian `i64`.
+/// This serializes all concurrent writes for the same function (including first
+/// writes where no row exists yet, which `SELECT ... FOR UPDATE` cannot handle).
+/// The lock is released automatically when the transaction ends.
+async fn acquire_function_advisory_lock(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+) -> Result<(), Error> {
+    let lock_key = function_advisory_lock_key(function_name);
+    sqlx::query("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(lock_key)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| {
+            postgres_query_error("Failed to lock function config for update; another client is updating this function. Please reload the function config", e)
+        })?;
+    Ok(())
+}
+
+fn function_advisory_lock_key(function_name: &str) -> i64 {
+    let key = format!("tensorzero::function_name::{function_name}");
+    let hash = blake3::hash(key.as_bytes());
+    // BLAKE3 output is always 32 bytes; read the first 8 as a little-endian i64.
+    let bytes: [u8; 8] = hash.as_bytes()[..8].try_into().unwrap_or([0u8; 8]);
+    i64::from_le_bytes(bytes)
+}
+
+/// Returns the ID of the latest function config version, or `None` on first write.
+async fn fetch_latest_function_version(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
 ) -> Result<Option<Uuid>, Error> {
@@ -169,13 +204,12 @@ async fn lock_latest_function_version(
          FROM tensorzero.function_configs \
          WHERE name = $1 \
          ORDER BY created_at DESC \
-         LIMIT 1 \
-         FOR UPDATE",
+         LIMIT 1",
     )
     .bind(function_name)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(|e| postgres_query_error("Failed to lock latest function config version", e))
+    .map_err(|e| postgres_query_error("Failed to fetch latest function config version", e))
 }
 
 async fn write_prompt_template_versions(
@@ -533,14 +567,19 @@ fn collect_chat_completion_prompt_templates(
     if let Some(assistant_template) = &config.assistant_template {
         add_prompt_template(templates, assistant_template)?;
     }
-    if let Some(input_wrappers) = &config.input_wrappers {
-        if let Some(user) = input_wrappers.user.as_ref() {
+    if let Some(UninitializedInputWrappers {
+        user,
+        assistant,
+        system,
+    }) = &config.input_wrappers
+    {
+        if let Some(user) = user {
             add_prompt_template(templates, user)?;
         }
-        if let Some(assistant) = input_wrappers.assistant.as_ref() {
+        if let Some(assistant) = assistant {
             add_prompt_template(templates, assistant)?;
         }
-        if let Some(system) = input_wrappers.system.as_ref() {
+        if let Some(system) = system {
             add_prompt_template(templates, system)?;
         }
     }
@@ -696,8 +735,8 @@ fn convert_function_config(
 fn convert_variant_refs(
     variants: &HashMap<String, UninitializedVariantInfo>,
     variant_version_ids: &HashMap<String, Uuid>,
-) -> Result<HashMap<String, StoredVariantRef>, Error> {
-    let mut stored_variants = HashMap::with_capacity(variants.len());
+) -> Result<BTreeMap<String, StoredVariantRef>, Error> {
+    let mut stored_variants = BTreeMap::new();
     for variant_name in variants.keys() {
         let variant_version_id = variant_version_ids.get(variant_name).ok_or_else(|| {
             Error::new(ErrorDetails::Config {
@@ -719,8 +758,8 @@ fn convert_variant_refs(
 fn convert_named_prompt_refs<'a>(
     entries: impl Iterator<Item = (&'a String, &'a ResolvedTomlPathData)>,
     prompt_template_version_ids: &HashMap<String, Uuid>,
-) -> Result<HashMap<String, StoredPromptRef>, Error> {
-    let mut refs = HashMap::new();
+) -> Result<BTreeMap<String, StoredPromptRef>, Error> {
+    let mut refs = BTreeMap::new();
     for (name, path) in entries {
         refs.insert(
             name.clone(),
@@ -837,7 +876,7 @@ fn convert_chat_completion_variant(
                     prompt_ref_for(&template.path, prompt_template_version_ids)
                         .map(|template_ref| (name.clone(), template_ref))
                 })
-                .collect::<Result<HashMap<_, _>, Error>>()?,
+                .collect::<Result<BTreeMap<_, _>, Error>>()?,
         ),
         temperature: config.temperature,
         top_p: config.top_p,
@@ -922,8 +961,8 @@ fn convert_dicl_variant(
 fn convert_evaluators(
     evaluators: &HashMap<String, UninitializedEvaluatorConfig>,
     prompt_template_version_ids: &HashMap<String, Uuid>,
-) -> Result<HashMap<String, StoredEvaluatorConfig>, Error> {
-    let mut stored = HashMap::with_capacity(evaluators.len());
+) -> Result<BTreeMap<String, StoredEvaluatorConfig>, Error> {
+    let mut stored = BTreeMap::new();
     for (name, evaluator) in evaluators {
         stored.insert(
             name.clone(),
@@ -955,7 +994,7 @@ fn convert_llm_judge_config(
     config: &UninitializedLLMJudgeConfig,
     prompt_template_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeConfig, Error> {
-    let mut variants = HashMap::with_capacity(config.variants.len());
+    let mut variants = BTreeMap::new();
     for (name, variant) in &config.variants {
         variants.insert(
             name.clone(),
@@ -1160,7 +1199,7 @@ impl From<&UninitializedExperimentationConfig> for StoredExperimentationConfig {
                         variants
                             .iter()
                             .map(|variant| (variant.clone(), 1.0))
-                            .collect::<HashMap<_, _>>()
+                            .collect::<BTreeMap<_, _>>()
                     }),
                     fallback_variants: config.fallback_variants.clone(),
                 })
@@ -1172,7 +1211,7 @@ impl From<&UninitializedExperimentationConfig> for StoredExperimentationConfig {
                             .candidate_variants
                             .iter()
                             .map(|(k, v)| (k.clone(), *v))
-                            .collect::<HashMap<_, _>>(),
+                            .collect::<BTreeMap<_, _>>(),
                     ),
                     fallback_variants: Some(config.fallback_variants.clone()),
                 })
@@ -1312,14 +1351,19 @@ fn validate_chat_completion_prompt_refs(
     if let Some(assistant_template) = &config.assistant_template {
         validate_prompt_ref(assistant_template, valid_prompt_ids)?;
     }
-    if let Some(input_wrappers) = &config.input_wrappers {
-        if let Some(user) = &input_wrappers.user {
+    if let Some(StoredInputWrappers {
+        user,
+        assistant,
+        system,
+    }) = &config.input_wrappers
+    {
+        if let Some(user) = user {
             validate_prompt_ref(user, valid_prompt_ids)?;
         }
-        if let Some(assistant) = &input_wrappers.assistant {
+        if let Some(assistant) = assistant {
             validate_prompt_ref(assistant, valid_prompt_ids)?;
         }
-        if let Some(system) = &input_wrappers.system {
+        if let Some(system) = system {
             validate_prompt_ref(system, valid_prompt_ids)?;
         }
     }
@@ -1376,12 +1420,12 @@ fn validate_function_config_refs(
 }
 
 fn validate_common_function_refs(
-    variants: Option<&HashMap<String, StoredVariantRef>>,
+    variants: Option<&BTreeMap<String, StoredVariantRef>>,
     system_schema: Option<&StoredPromptRef>,
     user_schema: Option<&StoredPromptRef>,
     assistant_schema: Option<&StoredPromptRef>,
-    schemas: Option<&HashMap<String, StoredPromptRef>>,
-    evaluators: Option<&HashMap<String, StoredEvaluatorConfig>>,
+    schemas: Option<&BTreeMap<String, StoredPromptRef>>,
+    evaluators: Option<&BTreeMap<String, StoredEvaluatorConfig>>,
     ctx: &RefValidationContext<'_>,
 ) -> Result<(), Error> {
     if let Some(variants) = variants {
@@ -1520,14 +1564,14 @@ fn missing_prompt_template_error(template_key: &str) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::{BTreeMap, HashSet};
 
     use super::*;
 
     #[test]
     fn validate_function_config_refs_rejects_unknown_variant() {
         let config = StoredFunctionConfig::Chat(StoredChatFunctionConfig {
-            variants: Some(HashMap::from([(
+            variants: Some(BTreeMap::from([(
                 "chat".to_string(),
                 StoredVariantRef {
                     variant_version_id: Uuid::now_v7(),
@@ -1536,13 +1580,13 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            schemas: Some(HashMap::new()),
+            schemas: Some(BTreeMap::new()),
             tools: Some(vec![]),
             tool_choice: Some(StoredToolChoice::Auto),
             parallel_tool_calls: None,
             description: None,
             experimentation: None,
-            evaluators: Some(HashMap::new()),
+            evaluators: Some(BTreeMap::new()),
         });
         let error = validate_function_config_refs(&config, &HashSet::new(), &HashSet::new())
             .expect_err("unknown variant refs should fail");

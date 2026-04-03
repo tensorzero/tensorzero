@@ -17,7 +17,7 @@ Stored types must NOT use `deny_unknown_fields`. This allows additive field addi
 Stored types must NOT use `#[serde(default)]`. The write path always writes the complete canonical form. On the read side:
 
 - `Option<T>` fields: missing keys deserialize to `None` naturally.
-- Non-`Option` collections (`Vec`, `HashMap`) and structs with defaults (`RetryConfig`): wrap in `Option<T>`. `None` means "this row predates the field"; `Some(vec![])` means "explicitly empty." The conversion to `Uninitialized*` maps `None` to the appropriate default.
+- Non-`Option` collections (`Vec`, `BTreeMap`) and structs with defaults (`RetryConfig`): wrap in `Option<T>`. `None` means "this row predates the field"; `Some(vec![])` means "explicitly empty." The conversion to `Uninitialized*` maps `None` to the appropriate default.
 
 ### No `#[serde(flatten)]`
 
@@ -47,6 +47,10 @@ Derive `PartialEq` on all stored types for use in conversion tests and assertion
 ### No dependency on `tensorzero-core`
 
 This crate must not depend on `tensorzero-core` (it would be circular). Types from core that appear in stored configs (e.g., `ExtraBodyConfig`, `ExtraHeadersConfig`) have parallel stored equivalents in this crate. Types from `tensorzero-types` (e.g., `JsonMode`, `ServiceTier`) can be used directly. We should soon move all config types in here.
+
+### No `HashMap`
+
+In multiple places we hash the content of a config to get a value for dedupe purposes. This does not work with HashMaps, which do not guarantee element ordering. Use BTreeMap to guarantee that entries are sorted by key.
 
 ### Schema revision policy
 

@@ -445,11 +445,11 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         some(eq("JSON test function"))
     );
     assert_that!(
-        stored_function.variants.as_ref().map(HashMap::len),
+        stored_function.variants.as_ref().map(BTreeMap::len),
         some(eq(5))
     );
     assert_that!(
-        stored_function.schemas.as_ref().map(HashMap::len),
+        stored_function.schemas.as_ref().map(BTreeMap::len),
         some(eq(1))
     );
     assert_that!(
@@ -460,7 +460,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         some(eq("functions.test.output_schema"))
     );
     assert_that!(
-        stored_function.evaluators.as_ref().map(HashMap::len),
+        stored_function.evaluators.as_ref().map(BTreeMap::len),
         some(eq(2))
     );
     let judge = match stored_function
@@ -471,7 +471,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         Some(StoredEvaluatorConfig::LLMJudge(judge)) => judge,
         _ => panic!("expected stored LLM judge config"),
     };
-    assert_that!(judge.variants.as_ref().map(HashMap::len), some(eq(2)));
+    assert_that!(judge.variants.as_ref().map(BTreeMap::len), some(eq(2)));
     assert_that!(
         judge
             .include
@@ -496,7 +496,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         some(eq("functions.test.variants.chat.system_template"))
     );
     assert_that!(
-        chat_variant.templates.as_ref().map(HashMap::len),
+        chat_variant.templates.as_ref().map(BTreeMap::len),
         some(eq(2))
     );
     assert_that!(

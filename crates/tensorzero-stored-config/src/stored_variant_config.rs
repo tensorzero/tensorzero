@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub struct StoredChatCompletionVariantConfig {
     pub user_template: Option<StoredPromptRef>,
     pub assistant_template: Option<StoredPromptRef>,
     pub input_wrappers: Option<StoredInputWrappers>,
-    pub templates: Option<HashMap<String, StoredPromptRef>>,
+    pub templates: Option<BTreeMap<String, StoredPromptRef>>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
