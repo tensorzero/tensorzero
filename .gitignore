@@ -62,7 +62,7 @@ crates/tensorzero-node/bindings/
 *.junit.xml
 crates/tensorzero-core/schemas
 crates/tensorzero-types/schemas
-crates/tensorzero-provider-types/schemas
+crates/tensorzero-inference-types/schemas
 
 # Rust ICE logs
 rustc-ice-*.txt
