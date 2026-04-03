@@ -80,6 +80,7 @@ pub async fn start_gateway_expect_failure(
         r"
         [gateway]
         {bind_address_config}
+        observability.async_writes = false
         {config_suffix}
     "
     );
@@ -136,6 +137,7 @@ async fn start_gateway_impl(
         r"
         [gateway]
         {bind_address_config}
+        observability.async_writes = false
         {config_suffix}
     "
     );
