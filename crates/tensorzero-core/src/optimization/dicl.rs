@@ -90,6 +90,28 @@ impl std::fmt::Display for UninitializedDiclOptimizationConfig {
     }
 }
 
+impl From<tensorzero_stored_config::StoredDiclOptimizationConfig>
+    for UninitializedDiclOptimizationConfig
+{
+    fn from(stored: tensorzero_stored_config::StoredDiclOptimizationConfig) -> Self {
+        UninitializedDiclOptimizationConfig {
+            embedding_model: stored.embedding_model,
+            variant_name: stored.variant_name,
+            function_name: stored.function_name,
+            dimensions: stored.dimensions,
+            batch_size: stored.batch_size.unwrap_or_else(default_batch_size),
+            max_concurrency: stored
+                .max_concurrency
+                .unwrap_or_else(default_max_concurrency),
+            k: stored.k.unwrap_or_else(default_k),
+            model: stored.model,
+            append_to_existing_variants: stored
+                .append_to_existing_variants
+                .unwrap_or_else(default_append_to_existing_variants),
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedDiclOptimizationConfig {

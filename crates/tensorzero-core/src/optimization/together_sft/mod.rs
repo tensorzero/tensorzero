@@ -5,6 +5,10 @@ use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredTogetherBatchSize, StoredTogetherLRScheduler, StoredTogetherOptimizerSFTConfig,
+    StoredTogetherTrainingMethod, StoredTogetherTrainingType,
+};
 use url::Url;
 
 // Default functions for hyperparameters
@@ -157,6 +161,84 @@ impl std::fmt::Display for UninitializedTogetherSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredTogetherBatchSize> for TogetherBatchSize {
+    fn from(stored: StoredTogetherBatchSize) -> Self {
+        match stored {
+            StoredTogetherBatchSize::Number { value } => Self::Number(value),
+            StoredTogetherBatchSize::Max => Self::Description(TogetherBatchSizeDescription::Max),
+        }
+    }
+}
+
+impl From<StoredTogetherLRScheduler> for TogetherLRScheduler {
+    fn from(stored: StoredTogetherLRScheduler) -> Self {
+        match stored {
+            StoredTogetherLRScheduler::Linear { min_lr_ratio } => Self::Linear {
+                min_lr_ratio: min_lr_ratio.unwrap_or_default(),
+            },
+            StoredTogetherLRScheduler::Cosine {
+                min_lr_ratio,
+                num_cycles,
+            } => Self::Cosine {
+                min_lr_ratio: min_lr_ratio.unwrap_or_default(),
+                num_cycles: num_cycles.unwrap_or_default(),
+            },
+        }
+    }
+}
+
+impl From<StoredTogetherTrainingType> for TogetherTrainingType {
+    fn from(stored: StoredTogetherTrainingType) -> Self {
+        match stored {
+            StoredTogetherTrainingType::Full => Self::Full {},
+            StoredTogetherTrainingType::Lora {
+                lora_r,
+                lora_alpha,
+                lora_dropout,
+                lora_trainable_modules,
+            } => Self::Lora {
+                lora_r,
+                lora_alpha,
+                lora_dropout,
+                lora_trainable_modules,
+            },
+        }
+    }
+}
+
+impl From<StoredTogetherTrainingMethod> for TogetherTrainingMethod {
+    fn from(stored: StoredTogetherTrainingMethod) -> Self {
+        match stored {
+            StoredTogetherTrainingMethod::Sft { train_on_inputs } => Self::Sft { train_on_inputs },
+        }
+    }
+}
+
+impl From<StoredTogetherOptimizerSFTConfig> for UninitializedTogetherSFTConfig {
+    fn from(stored: StoredTogetherOptimizerSFTConfig) -> Self {
+        UninitializedTogetherSFTConfig {
+            model: stored.model,
+            n_epochs: stored.n_epochs.unwrap_or_else(default_n_epochs),
+            n_checkpoints: stored.n_checkpoints.unwrap_or_else(default_n_checkpoints),
+            n_evals: stored.n_evals,
+            batch_size: stored.batch_size.map(Into::into).unwrap_or_default(),
+            learning_rate: stored.learning_rate.unwrap_or_else(default_learning_rate),
+            warmup_ratio: stored.warmup_ratio.unwrap_or_else(default_warmup_ratio),
+            max_grad_norm: stored.max_grad_norm.unwrap_or_else(default_max_grad_norm),
+            weight_decay: stored.weight_decay.unwrap_or_else(default_weight_decay),
+            suffix: stored.suffix,
+            lr_scheduler: stored.lr_scheduler.map(Into::into).unwrap_or_default(),
+            wandb_name: stored.wandb_name,
+            training_method: stored.training_method.map(Into::into).unwrap_or_default(),
+            training_type: stored.training_type.map(Into::into).unwrap_or_default(),
+            from_checkpoint: stored.from_checkpoint,
+            from_hf_model: stored.from_hf_model,
+            hf_model_revision: stored.hf_model_revision,
+            hf_output_repo_name: stored.hf_output_repo_name,
+        }
     }
 }
 

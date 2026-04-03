@@ -116,6 +116,14 @@ pub struct AutopilotConfig {
     pub tool_whitelist: Option<Vec<String>>,
 }
 
+impl From<tensorzero_stored_config::StoredAutopilotConfig> for AutopilotConfig {
+    fn from(stored: tensorzero_stored_config::StoredAutopilotConfig) -> Self {
+        AutopilotConfig {
+            tool_whitelist: stored.tool_whitelist,
+        }
+    }
+}
+
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
@@ -477,6 +485,14 @@ pub struct ClickHouseConfig {
     pub disable_automatic_migrations: Option<bool>,
 }
 
+impl From<tensorzero_stored_config::StoredClickHouseConfig> for ClickHouseConfig {
+    fn from(stored: tensorzero_stored_config::StoredClickHouseConfig) -> Self {
+        ClickHouseConfig {
+            disable_automatic_migrations: stored.disable_automatic_migrations,
+        }
+    }
+}
+
 impl ObservabilityConfig {
     /// Returns true when observability writes (inferences, feedback) should be persisted.
     /// Defaults to true when `enabled` is not explicitly set.
@@ -688,6 +704,46 @@ impl MetricConfigLevel {
         match self {
             MetricConfigLevel::Inference => "id",
             MetricConfigLevel::Episode => "episode_id",
+        }
+    }
+}
+
+// ─── Stored → Uninitialized conversions for metric config ────────────────────
+
+impl From<tensorzero_stored_config::StoredMetricType> for MetricConfigType {
+    fn from(stored: tensorzero_stored_config::StoredMetricType) -> Self {
+        match stored {
+            tensorzero_stored_config::StoredMetricType::Boolean => MetricConfigType::Boolean,
+            tensorzero_stored_config::StoredMetricType::Float => MetricConfigType::Float,
+        }
+    }
+}
+
+impl From<tensorzero_stored_config::StoredMetricOptimize> for MetricConfigOptimize {
+    fn from(stored: tensorzero_stored_config::StoredMetricOptimize) -> Self {
+        match stored {
+            tensorzero_stored_config::StoredMetricOptimize::Min => MetricConfigOptimize::Min,
+            tensorzero_stored_config::StoredMetricOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
+impl From<tensorzero_stored_config::StoredMetricLevel> for MetricConfigLevel {
+    fn from(stored: tensorzero_stored_config::StoredMetricLevel) -> Self {
+        match stored {
+            tensorzero_stored_config::StoredMetricLevel::Inference => MetricConfigLevel::Inference,
+            tensorzero_stored_config::StoredMetricLevel::Episode => MetricConfigLevel::Episode,
+        }
+    }
+}
+
+impl From<tensorzero_stored_config::StoredMetricConfig> for MetricConfig {
+    fn from(stored: tensorzero_stored_config::StoredMetricConfig) -> Self {
+        MetricConfig {
+            r#type: stored.r#type.into(),
+            optimize: stored.optimize.into(),
+            level: stored.level.into(),
+            description: stored.description,
         }
     }
 }
@@ -2768,6 +2824,18 @@ impl Default for PostgresConfig {
             connection_pool_size: Some(20),
             inference_metadata_retention_days: None,
             inference_data_retention_days: None,
+        }
+    }
+}
+
+impl From<tensorzero_stored_config::StoredPostgresConfig> for PostgresConfig {
+    fn from(stored: tensorzero_stored_config::StoredPostgresConfig) -> Self {
+        #[expect(deprecated)]
+        PostgresConfig {
+            enabled: None,
+            connection_pool_size: stored.connection_pool_size,
+            inference_metadata_retention_days: stored.inference_metadata_retention_days,
+            inference_data_retention_days: stored.inference_data_retention_days,
         }
     }
 }

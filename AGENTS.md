@@ -12,6 +12,7 @@
 - Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
 - Prefer early returns over nested `match`/`if` blocks. For example, use `let ... else { return Err(...) };` or `if !condition { return Err(...) }` to reduce nesting.
 - For internally-tagged enums (`#[serde(tag = "...")]`) without lifetimes, use `TensorZeroDeserialize` instead of `Deserialize` for better error messages via `serde_path_to_error`.
+- When converting between `Stored*` types and core types, use explicit match-based conversions (e.g. `From` impls or helper functions). Do not round-trip through `serde_json::to_value`/`serde_json::from_value` for type conversions — `serde_json` is only appropriate when the source is already a `serde_json::Value`.
 
 ## Rust Testing
 
