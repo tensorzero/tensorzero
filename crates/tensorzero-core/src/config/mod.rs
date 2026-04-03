@@ -483,6 +483,13 @@ impl ObservabilityConfig {
     pub fn writes_enabled(&self) -> bool {
         self.enabled.unwrap_or(true)
     }
+
+    /// Returns whether async writes are enabled.
+    /// Defaults to `true` in production, `false` in e2e tests (where tests
+    /// write data and immediately query for it).
+    pub fn async_writes(&self) -> bool {
+        self.async_writes.unwrap_or(!cfg!(feature = "e2e_tests"))
+    }
 }
 
 pub fn default_flush_interval_ms() -> u64 {
@@ -1612,7 +1619,7 @@ impl Config {
             .as_ref()
             .cloned()
             .unwrap_or_default();
-        if batch_writes.enabled && self.gateway.observability.async_writes.unwrap_or(true) {
+        if batch_writes.enabled && self.gateway.observability.async_writes() {
             return Err(ErrorDetails::Config {
                 message: "Batch writes and async writes cannot be enabled at the same time. \
                     Async writes are enabled by default; to use batch writes, set \
