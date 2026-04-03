@@ -4,7 +4,7 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 use super::{
-    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
+    ModelInferenceRequest, RequestMessage, StoredInput,
     chat_completion_inference_params::ServiceTier,
 };
 
@@ -24,28 +24,8 @@ use crate::{
     utils::uuid::validate_tensorzero_uuid,
 };
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "text", rename_all = "snake_case")]
-pub enum BatchStatus {
-    Pending,
-    Completed,
-    Failed,
-}
-
-/// Returned from start_batch_inference from an InferenceProvider
-/// This is the original response type for start_batch_inference.
-/// The types below add additional context to the response as it is returned
-/// through the call stack.
-pub struct StartBatchProviderInferenceResponse {
-    pub batch_id: Uuid,
-    pub raw_requests: Vec<String>, // The raw text of each individual batch request
-    pub batch_params: Value,
-    pub raw_request: String,  // The raw text of the batch request body
-    pub raw_response: String, // The raw text of the response from the batch request
-    pub status: BatchStatus,
-    pub errors: Vec<Value>,
-}
+pub use tensorzero_inference_types::BatchStatus;
+pub use tensorzero_inference_types::StartBatchProviderInferenceResponse;
 
 /// Returned from start_batch_inference from a model
 /// Adds the model provider name to the response
@@ -137,20 +117,7 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
     }
 }
 
-// TODO (#503): add errors even for Pending batches and Failed batches
-// this will require those variants to wrap structs of their own
-#[derive(Debug)]
-pub enum PollBatchInferenceResponse {
-    Pending {
-        raw_request: String,
-        raw_response: String,
-    },
-    Completed(ProviderBatchInferenceResponse),
-    Failed {
-        raw_request: String,
-        raw_response: String,
-    },
-}
+pub use tensorzero_inference_types::PollBatchInferenceResponse;
 
 /// Data retrieved from the BatchRequest table.
 /// In Postgres, `raw_request` and `raw_response` live in a separate
@@ -177,23 +144,10 @@ pub struct BatchRequestRow<'a> {
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
-#[derive(Debug)]
-pub struct ProviderBatchInferenceOutput {
-    pub id: Uuid,
-    pub output: Vec<ContentBlockOutput>,
-    pub raw_response: String,
-    pub usage: Usage,
-    pub finish_reason: Option<FinishReason>,
-}
+pub use tensorzero_inference_types::ProviderBatchInferenceOutput;
 
-#[derive(Debug)]
-pub struct ProviderBatchInferenceResponse {
-    // Inference ID -> Output
-    pub raw_request: String,
-    pub raw_response: String,
-    pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
-    // TODO (#503): add errors
-}
+// TODO (#503): add errors to ProviderBatchInferenceResponse
+pub use tensorzero_inference_types::ProviderBatchInferenceResponse;
 
 /// Additional metadata needed to write to ClickHouse that isn't available at the variant level
 #[derive(Debug)]
