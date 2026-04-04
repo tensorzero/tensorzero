@@ -14,11 +14,13 @@ pub use config_snapshot::ConfigSnapshot;
 mod embedding_model_config;
 mod gateway_config;
 mod observability_config;
+mod optimizer_info;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 pub use gateway_config::StoredGatewayConfig;
 pub use observability_config::StoredObservabilityConfig;
+pub use optimizer_info::{StoredGEPAConfig, StoredOptimizerConfig, StoredOptimizerInfo};
 pub use tensorzero_types::SnapshotHash;
 
 use serde::{Deserialize, Serialize};
@@ -34,7 +36,6 @@ use crate::config::{
 use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
-use crate::optimization::UninitializedOptimizerInfo;
 use crate::rate_limiting::UninitializedRateLimitingConfig;
 
 /// Top-level stored config type.
@@ -67,7 +68,7 @@ pub struct StoredConfig {
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
     #[serde(default)]
-    pub optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    pub optimizers: HashMap<String, StoredOptimizerInfo>,
 
     // Fields WITH deprecations or custom serde - use Stored* types
     #[serde(default)]
@@ -111,7 +112,11 @@ impl From<UninitializedConfig> for StoredConfig {
             tools: tools.unwrap_or_default(),
             evaluations: evaluations.unwrap_or_default(),
             provider_types: provider_types.unwrap_or_default(),
-            optimizers: optimizers.unwrap_or_default(),
+            optimizers: optimizers
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
             rate_limiting: rate_limiting.unwrap_or_default(),
             embedding_models: embedding_models
                 .unwrap_or_default()
@@ -167,7 +172,7 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
             tools: Some(tools),
             evaluations: Some(evaluations),
             provider_types: Some(provider_types),
-            optimizers: Some(optimizers),
+            optimizers: Some(optimizers.into_iter().map(|(k, v)| (k, v.into())).collect()),
             rate_limiting: Some(rate_limiting),
             embedding_models: Some(
                 embedding_models
@@ -510,5 +515,33 @@ type = "exact_match"
         let _uninit: UninitializedConfig = stored
             .try_into()
             .expect("should convert to UninitializedConfig");
+    }
+
+    /// Historical GEPA snapshots with legacy `evaluation_name` should still parse.
+    #[test]
+    fn test_historical_stored_gepa_optimizer_with_evaluation_name() {
+        let toml_str = r#"
+            [optimizers.test_gepa]
+            type = "gepa"
+            function_name = "basic_test"
+            evaluation_name = "test_evaluation"
+            analysis_model = "openai::gpt-4.1-mini"
+            mutation_model = "openai::gpt-4.1-mini"
+        "#;
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("legacy GEPA optimizer should parse from snapshot");
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+
+        let optimizer = uninit
+            .optimizers
+            .as_ref()
+            .and_then(|m| m.get("test_gepa"))
+            .expect("GEPA optimizer should exist after conversion");
+        let crate::optimization::UninitializedOptimizerConfig::GEPA(gepa) = &optimizer.inner else {
+            panic!("Expected GEPA optimizer config")
+        };
+        assert_eq!(gepa.evaluation_name.as_deref(), Some("test_evaluation"));
+        assert!(gepa.evaluator_names.is_none());
     }
 }

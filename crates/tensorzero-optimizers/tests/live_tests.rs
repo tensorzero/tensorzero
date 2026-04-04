@@ -1,5 +1,8 @@
 use common::dicl::{test_dicl_optimization_chat, test_dicl_optimization_json};
-use common::gepa::{test_gepa_optimization_chat, test_gepa_optimization_json};
+use common::gepa::{
+    test_gepa_optimization_chat, test_gepa_optimization_chat_evaluator_names,
+    test_gepa_optimization_json,
+};
 use common::gepa_durable::{
     test_gepa_durable_optimization_chat, test_gepa_durable_optimization_json,
 };
@@ -36,6 +39,11 @@ async fn test_slow_optimization_gepa_chat() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_slow_optimization_gepa_json() {
     test_gepa_optimization_json().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_slow_optimization_gepa_chat_evaluator_names() {
+    test_gepa_optimization_chat_evaluator_names().await;
 }
 
 // Durable GEPA Tests
