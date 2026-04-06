@@ -244,6 +244,12 @@ impl AutopilotClientBuilder {
             .time_to_live(self.tool_call_cache_ttl)
             .build();
 
+        // Cache for deduplicating tool spawns across reconnections
+        let spawned_tool_calls = Cache::builder()
+            .max_capacity(DEFAULT_TOOL_CALL_CACHE_CAPACITY)
+            .time_to_live(DEFAULT_TOOL_CALL_CACHE_TTL)
+            .build();
+
         Ok(AutopilotClient {
             http_client,
             sse_http_client,
@@ -251,6 +257,7 @@ impl AutopilotClientBuilder {
             api_key,
             spawn_client,
             tool_call_cache,
+            spawned_tool_calls,
             available_tools: Arc::new(available_tools),
             tool_whitelist: Arc::new(self.tool_whitelist.unwrap_or_default()),
             deployment_id,
@@ -271,6 +278,11 @@ pub struct AutopilotClient {
     api_key: SecretString,
     spawn_client: Arc<SpawnClient>,
     tool_call_cache: Cache<Uuid, EventPayloadToolCall>,
+    /// Tracks tool_call_event_ids that this instance has already spawned.
+    /// Prevents duplicate spawns on SSE reconnection (when historical events are replayed).
+    /// Does NOT deduplicate across gateway instances — the durable worker's
+    /// `FOR UPDATE SKIP LOCKED` prevents concurrent execution in that case.
+    spawned_tool_calls: Cache<Uuid, ()>,
     /// Set of available tool names for filtering unknown tool calls.
     available_tools: Arc<HashSet<String>>,
     /// Set of tool names that are automatically approved without manual intervention.
@@ -373,6 +385,17 @@ impl AutopilotClient {
         session_id: Uuid,
         tool_call_event_id: Uuid,
     ) -> Result<(), AutopilotError> {
+        // Dedup: skip if this instance already spawned this tool call.
+        // This prevents duplicate spawns on SSE reconnection when historical
+        // events are replayed. Does not help with multi-gateway dedup.
+        if self.spawned_tool_calls.get(&tool_call_event_id).is_some() {
+            tracing::debug!(
+                tool_call_event_id = %tool_call_event_id,
+                "Skipping already-spawned tool call"
+            );
+            return Ok(());
+        }
+
         // Check cache first, otherwise fetch the tool call event directly
         let autopilot_tool_call = match self.tool_call_cache.get(&tool_call_event_id) {
             Some(tc) => tc,
@@ -400,6 +423,9 @@ impl AutopilotClient {
                 SpawnOptions::default(),
             )
             .await?;
+
+        // Mark as spawned to prevent duplicate spawns on reconnection or multi-gateway
+        self.spawned_tool_calls.insert(tool_call_event_id, ());
 
         Ok(())
     }
