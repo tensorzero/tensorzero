@@ -589,20 +589,20 @@ extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
 type = "chat_completion"
 model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 300
 
 [functions.basic_test.variants.together-extra-body]
 type = "chat_completion"
 model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 300
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.together-extra-headers]
 type = "chat_completion"
 model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 300
 extra_headers = [
     { name = "Authorization", value = "Bearer invalid_together_auth" },
 ]
@@ -611,13 +611,13 @@ extra_headers = [
 type = "chat_completion"
 model = "glm-5-together-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 300
 
 [functions.basic_test.variants.together-shorthand]
 type = "chat_completion"
 model = "together::zai-org/GLM-5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 300
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
