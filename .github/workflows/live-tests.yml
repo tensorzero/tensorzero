@@ -7,6 +7,7 @@ env:
   CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   NEXTEST_EXPERIMENTAL_RECORD: 1
+  NEXTEST_USER_CONFIG_FILE: ${{ github.workspace }}/ci/nextest-record.toml
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
@@ -131,7 +132,7 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }} \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile e2e -j 32 \${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not (\$CARGO_NEXTEST_FLAKY_TESTS)\"}; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+            sh -c "printf '[experimental]\nrecord = true\n[record]\nenabled = true\n' > /tmp/nextest-record.toml && cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --user-config-file /tmp/nextest-record.toml --profile e2e -j 32 \${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not (\$CARGO_NEXTEST_FLAKY_TESTS)\"}; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest --user-config-file /tmp/nextest-record.toml -o /app/target/nextest/trace.json || true; exit \$exitcode"
 
       - name: Upload nextest chrome trace
         if: always()
@@ -257,7 +258,7 @@ jobs:
             -e NEXTEST_EXPERIMENTAL_RECORD=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+            sh -c "printf '[experimental]\nrecord = true\n[record]\nenabled = true\n' > /tmp/nextest-record.toml && cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --user-config-file /tmp/nextest-record.toml --profile evaluations -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest --user-config-file /tmp/nextest-record.toml -o /app/target/nextest/trace.json || true; exit \$exitcode"
 
       - name: Upload nextest chrome trace
         if: always()

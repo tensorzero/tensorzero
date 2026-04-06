@@ -7,6 +7,7 @@ env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
   NEXTEST_EXPERIMENTAL_RECORD: 1
+  NEXTEST_USER_CONFIG_FILE: ${{ github.workspace }}/ci/nextest-record.toml
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -86,9 +87,9 @@ jobs:
             -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
             -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
-            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
-            --profile cache -E '${{ matrix.test_filter }}' -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+            sh -c "printf '[experimental]\nrecord = true\n[record]\nenabled = true\n' > /tmp/nextest-record.toml && cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
+            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --user-config-file /tmp/nextest-record.toml \
+            --profile cache -E '${{ matrix.test_filter }}' -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest --user-config-file /tmp/nextest-record.toml -o /app/target/nextest/trace.json || true; exit \$exitcode"
 
       - name: Upload nextest chrome trace
         if: always()
