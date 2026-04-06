@@ -74,6 +74,7 @@ jobs:
 
       - name: Start infrastructure services
         run: >
+          PROVIDER_PROXY_CACHE_MODE=read-only-require-hit
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
           up ${{ matrix.services }} -d --wait
 
