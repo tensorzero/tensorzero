@@ -246,7 +246,14 @@ jobs:
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4"
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-live-tests-${{ matrix.database }}-batch-writes-${{ matrix.batch_writes }}
+          path: target/nextest/trace.json
 
       - name: Print evaluation tests logs
         if: always()

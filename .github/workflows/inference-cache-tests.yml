@@ -86,7 +86,14 @@ jobs:
             live-tests \
             sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
             --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
-            --profile cache -E '${{ matrix.test_filter }}' -j 4"
+            --profile cache -E '${{ matrix.test_filter }}' -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-cache-tests-${{ matrix.cache_backend }}
+          path: target/nextest/trace.json
 
       - name: Upload provider-proxy cache
         if: github.event_name == 'merge_group' && matrix.cache_backend == 'clickhouse'

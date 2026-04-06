@@ -104,6 +104,18 @@ jobs:
         run: |
           cargo test-live-batch --no-fail-fast
 
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-live-batch-tests
+          path: crates/trace.json
+
       - name: Print batch logs
         if: always()
         working-directory: crates
