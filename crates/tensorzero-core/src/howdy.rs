@@ -165,13 +165,13 @@ async fn synchronize_deployment_id(
     }
 
     // If ClickHouse has a deployment_id, sync it to Postgres
-    if clickhouse.client_type() == ClickHouseClientType::Production {
-        if let Ok(id) = clickhouse.get_deployment_id().await {
-            if let Err(e) = postgres.insert_deployment_id(&id).await {
-                tracing::debug!("Failed to sync deployment ID to Postgres: {e:?}");
-            }
-            return Ok(());
+    if clickhouse.client_type() == ClickHouseClientType::Production
+        && let Ok(id) = clickhouse.get_deployment_id().await
+    {
+        if let Err(e) = postgres.insert_deployment_id(&id).await {
+            tracing::debug!("Failed to sync deployment ID to Postgres: {e:?}");
         }
+        return Ok(());
     }
 
     // No ClickHouse deployment_id — ensure Postgres has one (get_or_create)
@@ -197,13 +197,10 @@ pub async fn get_deployment_id(
     // Make sure deployment ID is consistent between ClickHouse and Postgres
     synchronize_deployment_id(clickhouse, postgres, primary_datastore).await?;
 
-    let result = DelegatingDatabaseConnection::new(
-        clickhouse.clone(),
-        postgres.clone(),
-        primary_datastore,
-    )
-    .get_deployment_id()
-    .await;
+    let result =
+        DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore)
+            .get_deployment_id()
+            .await;
 
     match result {
         Ok(id) => Ok(id),

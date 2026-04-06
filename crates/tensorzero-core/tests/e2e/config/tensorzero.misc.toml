@@ -11,6 +11,9 @@ export.otlp.traces.extra_headers."x-config-override-header" = "config-original-v
 unstable_error_json = true
 disable_pseudonymous_usage_analytics = true
 
+[autopilot]
+tool_whitelist = ["get_config"]
+
 [object_storage]
 type = "disabled"
 
