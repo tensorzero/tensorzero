@@ -80,6 +80,8 @@ fn make_model_inference(inference_id: Uuid) -> StoredModelInference {
     StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,

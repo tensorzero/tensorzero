@@ -1,16 +1,17 @@
+use super::ViewOffsetDeadline;
+use super::check_column_exists;
 use super::check_table_exists;
+use super::migration_0037::quantiles_sql_args;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
-use std::time::Duration;
 
-use super::migration_0037::quantiles_sql_args;
-
-/// Creates the `VariantStatistics` AggregatingMergeTree table and three materialized views
-/// that feed it:
-/// - `VariantStatisticsModelView`: triggers on `ModelInference`, JOINs with `InferenceById`
-///   to obtain `function_name` and `variant_name`, aggregates token/cost metrics.
+/// Denormalizes `function_name` and `variant_name` onto the `ModelInference` table,
+/// then creates the `VariantStatistics` AggregatingMergeTree table and three
+/// materialized views that feed it:
+/// - `VariantStatisticsModelView`: triggers on `ModelInference`, reads denormalized
+///   `function_name` and `variant_name` directly, aggregates token/cost metrics.
 /// - `VariantStatisticsChatView`: triggers on `ChatInference`, aggregates latency and count.
 /// - `VariantStatisticsJsonView`: triggers on `JsonInference`, aggregates latency and count.
 ///
@@ -27,12 +28,7 @@ const MIGRATION_ID: &str = "0053";
 #[async_trait]
 impl Migration for Migration0053<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
-        for table in [
-            "ModelInference",
-            "ChatInference",
-            "JsonInference",
-            "InferenceById",
-        ] {
+        for table in ["ModelInference", "ChatInference", "JsonInference"] {
             if !check_table_exists(self.clickhouse, table, MIGRATION_ID).await? {
                 return Err(Error::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
@@ -44,6 +40,26 @@ impl Migration for Migration0053<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
+        // Check denormalization columns
+        let has_fn = check_column_exists(
+            self.clickhouse,
+            "ModelInference",
+            "function_name",
+            MIGRATION_ID,
+        )
+        .await?;
+        let has_vn = check_column_exists(
+            self.clickhouse,
+            "ModelInference",
+            "variant_name",
+            MIGRATION_ID,
+        )
+        .await?;
+        if !(has_fn && has_vn) {
+            return Ok(true);
+        }
+
+        // Check VariantStatistics tables
         for table in [
             "VariantStatistics",
             "VariantStatisticsModelView",
@@ -61,6 +77,37 @@ impl Migration for Migration0053<'_> {
         let qs = quantiles_sql_args();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
+        // ── Phase 1: Denormalize function_name/variant_name onto ModelInference ──
+
+        self.clickhouse
+            .run_query_synchronous_no_params(format!(
+                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS function_name LowCardinality(String) DEFAULT ''"
+            ))
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(format!(
+                "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String) DEFAULT ''"
+            ))
+            .await?;
+
+        if !clean_start {
+            for inference_table in ["ChatInference", "JsonInference"] {
+                tracing::info!(
+                    "Backfilling `ModelInference.function_name`/`variant_name` from `{inference_table}`"
+                );
+                self.clickhouse
+                    .run_query_synchronous_no_params(format!(
+                        r"ALTER TABLE ModelInference UPDATE
+                        function_name = (SELECT {inference_table}.function_name FROM {inference_table} WHERE {inference_table}.id = ModelInference.inference_id LIMIT 1),
+                        variant_name = (SELECT {inference_table}.variant_name FROM {inference_table} WHERE {inference_table}.id = ModelInference.inference_id LIMIT 1)
+                    WHERE function_name = '' AND inference_id IN (SELECT id FROM {inference_table})"
+                    ))
+                    .await?;
+            }
+        }
+
+        // ── Phase 2: Create VariantStatistics table and materialized views ──
+
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_name: "VariantStatistics",
@@ -69,7 +116,6 @@ impl Migration for Migration0053<'_> {
             },
         );
 
-        // 1. Create the target table
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"CREATE TABLE IF NOT EXISTS VariantStatistics{on_cluster_name} (
@@ -91,8 +137,8 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // 2. Record timestamp T (now + 15s offset)
-        let view_offset = Duration::from_secs(15);
+        // Record timestamp T (now + offset) for MV WHERE clauses
+        let deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -101,14 +147,15 @@ impl Migration for Migration0053<'_> {
                     message: e.to_string(),
                 })
             })?
-            + view_offset)
-            .as_nanos();
+            + ViewOffsetDeadline::offset())
+        .as_nanos();
 
-        // 3. Create the three materialized views
         let model_view_where = if clean_start {
-            "1=1".to_string()
+            "mi.function_name != ''".to_string()
         } else {
-            format!("UUIDv7ToDateTime(mi.id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
+            format!(
+                "mi.function_name != '' AND UUIDv7ToDateTime(mi.id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})"
+            )
         };
 
         let inference_view_where = if clean_start {
@@ -118,7 +165,9 @@ impl Migration for Migration0053<'_> {
         };
 
         // MV 1: VariantStatisticsModelView (triggers on ModelInference inserts)
-        // JOINs with InferenceById to obtain function_name and variant_name.
+        // Reads denormalized function_name/variant_name directly from ModelInference.
+        // The `function_name != ''` filter excludes rows that predate the denormalization
+        // and haven't been backfilled yet.
         self.clickhouse
             .run_query_synchronous_no_params(format!(
                 r"
@@ -126,8 +175,8 @@ impl Migration for Migration0053<'_> {
                 TO VariantStatistics
                 AS
                 SELECT
-                    ibi.function_name AS function_name,
-                    ibi.variant_name AS variant_name,
+                    mi.function_name AS function_name,
+                    mi.variant_name AS variant_name,
                     toStartOfMinute(mi.timestamp) AS minute,
                     sumState(mi.input_tokens) AS total_input_tokens,
                     sumState(mi.output_tokens) AS total_output_tokens,
@@ -136,9 +185,8 @@ impl Migration for Migration0053<'_> {
                     sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
                     countState(mi.cost) AS count_with_cost
                 FROM ModelInference mi
-                INNER JOIN InferenceById ibi ON toUInt128(mi.inference_id) = ibi.id_uint
                 WHERE {model_view_where}
-                GROUP BY ibi.function_name, ibi.variant_name, minute
+                GROUP BY mi.function_name, mi.variant_name, minute
                 "
             ))
             .await?;
@@ -185,9 +233,10 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // 4. Backfill historical data if not a clean start
+        // ── Phase 3: Backfill historical data ──
+
         if !clean_start {
-            tokio::time::sleep(view_offset).await;
+            deadline.wait().await;
 
             let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
 
@@ -208,38 +257,33 @@ impl Migration for Migration0053<'_> {
             }
 
             // Backfill from ModelInference (token/cost metrics)
-            // Enrich with function_name/variant_name by joining through
-            // ChatInference/JsonInference (which have these columns natively)
-            // instead of InferenceById, to avoid building a large hash table.
+            // Reads denormalized function_name/variant_name directly — no JOIN needed.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
-            for inference_table in ["ChatInference", "JsonInference"] {
-                tracing::info!("Backfilling model inference metrics via `{inference_table}`");
-                self.clickhouse
-                    .run_query_synchronous_no_params(format!(
-                        r"
-                        INSERT INTO VariantStatistics
-                            (function_name, variant_name, minute,
-                             total_input_tokens, total_output_tokens, total_cost,
-                             total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
-                             count_with_cost)
-                        SELECT
-                            {inference_table}.function_name AS function_name,
-                            {inference_table}.variant_name AS variant_name,
-                            toStartOfMinute(mi.timestamp) AS minute,
-                            sumState(mi.input_tokens) AS total_input_tokens,
-                            sumState(mi.output_tokens) AS total_output_tokens,
-                            sumState(mi.cost) AS total_cost,
-                            sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
-                            sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
-                            countState(mi.cost) AS count_with_cost
-                        FROM ModelInference mi
-                        INNER JOIN {inference_table} ON mi.inference_id = {inference_table}.id
-                        WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                        GROUP BY {inference_table}.function_name, {inference_table}.variant_name, minute
-                        "
-                    ))
-                    .await?;
-            }
+            self.clickhouse
+                .run_query_synchronous_no_params(format!(
+                    r"
+                    INSERT INTO VariantStatistics
+                        (function_name, variant_name, minute,
+                         total_input_tokens, total_output_tokens, total_cost,
+                         total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
+                         count_with_cost)
+                    SELECT
+                        mi.function_name AS function_name,
+                        mi.variant_name AS variant_name,
+                        toStartOfMinute(mi.timestamp) AS minute,
+                        sumState(mi.input_tokens) AS total_input_tokens,
+                        sumState(mi.output_tokens) AS total_output_tokens,
+                        sumState(mi.cost) AS total_cost,
+                        sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
+                        sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
+                        countState(mi.cost) AS count_with_cost
+                    FROM ModelInference mi
+                    WHERE mi.function_name != ''
+                        AND UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                    GROUP BY mi.function_name, mi.variant_name, minute
+                    "
+                ))
+                .await?;
 
             // Backfill from ChatInference (latency/count metrics)
             tracing::info!("Running backfill of `VariantStatistics` from `ChatInference`");
@@ -296,7 +340,9 @@ impl Migration for Migration0053<'_> {
             DROP TABLE IF EXISTS VariantStatisticsModelView{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS VariantStatisticsChatView{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS VariantStatisticsJsonView{on_cluster_name} SYNC;
-            DROP TABLE IF EXISTS VariantStatistics{on_cluster_name} SYNC;"
+            DROP TABLE IF EXISTS VariantStatistics{on_cluster_name} SYNC;
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN IF EXISTS function_name;
+            ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN IF EXISTS variant_name;"
         )
     }
 

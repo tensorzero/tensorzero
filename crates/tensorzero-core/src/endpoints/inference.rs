@@ -1654,15 +1654,23 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_inferences = result
-        .get_model_inferences(metadata.snapshot_hash.clone())
+        .get_model_inferences(
+            &metadata.function_name,
+            &metadata.variant_name,
+            metadata.snapshot_hash.clone(),
+        )
         .await;
     let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> =
         input.clone().write_all_files(config);
-    // Write chat/json inferences first so that ClickHouse materialized views on
-    // ModelInference can JOIN against InferenceById (populated by chat/json inserts).
-    // With `wait_for_async_insert=1`, the INSERT returns only after data is flushed
-    // and MVs have processed, so this ordering guarantees the JOIN target exists.
+    // Write the model inferences to the database (dual-write via ModelInferenceQueries trait)
+    futures.push(
+        async {
+            let _ = database.insert_model_inferences(&model_inferences).await;
+        }
+        .boxed(),
+    );
     futures.push(Box::pin(async {
+        // Write the inference to the Inference table (dual-write via InferenceQueries trait)
         match result {
             InferenceResult::Chat(result) => {
                 let stored_input = input.clone().into_stored_input();
@@ -1679,8 +1687,6 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
         }
     }));
     futures::future::join_all(futures).await;
-    // Write model inferences after chat/json inferences are flushed.
-    let _ = database.insert_model_inferences(&model_inferences).await;
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client

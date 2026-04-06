@@ -33,13 +33,6 @@
 - Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up`.)
 - We use RFC 3339 as the standard format for datetime.
 
-## ClickHouse write ordering
-
-- **Always write chat/json inferences before model inferences.** ClickHouse materialized views (MVs) trigger at INSERT time and JOINs that miss are permanent — there is no retry. MVs on `ModelInference` JOIN against `InferenceById`, which is populated by chat/json inference inserts. Writing chat/json first (and awaiting the result) ensures the JOIN target exists when the MV fires.
-- This works because we use `wait_for_async_insert=1`, which means INSERT returns only after data is flushed and MVs have processed.
-- ClickHouse has no cross-table transactions, so write ordering is the only way to guarantee JOIN consistency in MVs.
-- `batch_inference.rs` already follows this pattern (chat/json via `try_join!`, then model inferences sequentially). Keep any new write paths consistent.
-
 ## The responsibility between API handlers and database interfaces
 
 - API handler will be a thin function that handles properties injected by Axum and calls a function to perform business logic.

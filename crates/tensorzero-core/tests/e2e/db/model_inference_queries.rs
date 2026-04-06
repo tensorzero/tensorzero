@@ -205,6 +205,8 @@ async fn test_insert_and_read_model_inference(conn: impl ModelInferenceQueries) 
     let model_inference = StoredModelInference {
         id: model_inference_id,
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some(r#"{"model": "test-model", "messages": []}"#.to_string()),
         raw_response: Some(
             r#"{"choices": [{"message": {"content": "test response"}}]}"#.to_string(),
@@ -278,6 +280,8 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some(r#"{"model": "primary-model"}"#.to_string()),
             raw_response: Some(r#"{"error": "rate limited"}"#.to_string()),
             system: None,
@@ -300,6 +304,8 @@ async fn test_insert_multiple_model_inferences_for_same_inference(
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some(r#"{"model": "fallback-model"}"#.to_string()),
             raw_response: Some(r#"{"choices": [{"message": {"content": "success"}}]}"#.to_string()),
             system: None,
@@ -366,6 +372,8 @@ async fn test_insert_model_inference_with_all_finish_reasons(conn: impl ModelInf
         let model_inference = StoredModelInference {
             id: Uuid::now_v7(),
             inference_id,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
             raw_request: Some("{}".to_string()),
             raw_response: Some("{}".to_string()),
             system: None,
@@ -410,6 +418,8 @@ async fn test_insert_model_inference_with_null_finish_reason(conn: impl ModelInf
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -453,6 +463,8 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
     let model_inference_cached = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: inference_id_cached,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -490,6 +502,8 @@ async fn test_insert_model_inference_cached_flag(conn: impl ModelInferenceQuerie
     let model_inference_not_cached = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: inference_id_not_cached,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -535,6 +549,8 @@ async fn test_insert_model_inference_cost_non_cached(conn: impl ModelInferenceQu
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -582,6 +598,8 @@ async fn test_insert_model_inference_cost_cached(conn: impl ModelInferenceQuerie
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -626,6 +644,8 @@ async fn test_insert_model_inference_cost_null(conn: impl ModelInferenceQueries)
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -671,6 +691,8 @@ async fn test_insert_model_inference_cost_high_precision(conn: impl ModelInferen
     let model_inference = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
