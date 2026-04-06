@@ -61,10 +61,36 @@ async fn write_stored_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteStoredConfigParams<'_>,
 ) -> Result<(), Error> {
-    let config = params.config;
+    // Exhaustive destructure so the compiler forces us to handle every field
+    // when new ones are added to `WriteStoredConfigParams`.
+    let WriteStoredConfigParams {
+        config,
+        creation_source,
+        source_autopilot_session_id,
+        extra_templates,
+    } = params;
+
+    // Exhaustive destructure of `UninitializedConfig` so the compiler forces
+    // us to handle every section when new ones are added.
+    let UninitializedConfig {
+        gateway,
+        clickhouse,
+        postgres,
+        rate_limiting,
+        object_storage,
+        models,
+        embedding_models,
+        functions,
+        metrics,
+        tools,
+        evaluations,
+        provider_types,
+        optimizers,
+        autopilot,
+    } = config;
 
     // 1. Singleton tables (append-only)
-    if let Some(gateway) = &config.gateway {
+    if let Some(gateway) = gateway {
         let stored = StoredGatewayConfig::from(gateway.clone());
         insert_singleton_config_row(
             tx,
@@ -75,7 +101,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(clickhouse) = &config.clickhouse {
+    if let Some(clickhouse) = clickhouse {
         let stored = StoredClickHouseConfig::from(clickhouse);
         insert_singleton_config_row(
             tx,
@@ -86,7 +112,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(postgres) = &config.postgres {
+    if let Some(postgres) = postgres {
         let stored = StoredPostgresConfig::from(postgres);
         insert_singleton_config_row(
             tx,
@@ -97,7 +123,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(object_storage) = &config.object_storage {
+    if let Some(object_storage) = object_storage {
         let stored = StoredStorageKind::from(object_storage);
         insert_singleton_config_row(
             tx,
@@ -108,7 +134,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(rate_limiting) = &config.rate_limiting {
+    if let Some(rate_limiting) = rate_limiting {
         let stored = StoredRateLimitingConfig::from(rate_limiting);
         insert_singleton_config_row(
             tx,
@@ -119,7 +145,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(autopilot) = &config.autopilot {
+    if let Some(autopilot) = autopilot {
         let stored = StoredAutopilotConfig::from(autopilot);
         insert_singleton_config_row(
             tx,
@@ -130,7 +156,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    if let Some(provider_types) = &config.provider_types {
+    if let Some(provider_types) = provider_types {
         let stored = StoredProviderTypesConfig::from(provider_types);
         insert_singleton_config_row(
             tx,
@@ -142,7 +168,7 @@ async fn write_stored_config_in_tx(
     }
 
     // 2. Named collection tables (upsert-by-name)
-    for (name, model_config) in config.models.as_ref().into_iter().flat_map(|m| m.iter()) {
+    for (name, model_config) in models.as_ref().into_iter().flat_map(|m| m.iter()) {
         let stored = StoredModelConfig::try_from(model_config)?;
         upsert_named_config_row(
             tx,
@@ -154,11 +180,8 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    for (name, embedding_model_config) in config
-        .embedding_models
-        .as_ref()
-        .into_iter()
-        .flat_map(|m| m.iter())
+    for (name, embedding_model_config) in
+        embedding_models.as_ref().into_iter().flat_map(|m| m.iter())
     {
         let stored = StoredEmbeddingModelConfig::try_from(embedding_model_config)?;
         upsert_named_config_row(
@@ -171,7 +194,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    for (name, metric_config) in config.metrics.as_ref().into_iter().flat_map(|m| m.iter()) {
+    for (name, metric_config) in metrics.as_ref().into_iter().flat_map(|m| m.iter()) {
         let stored = StoredMetricConfig::from(metric_config);
         upsert_named_config_row(
             tx,
@@ -183,12 +206,7 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    for (name, optimizer_info) in config
-        .optimizers
-        .as_ref()
-        .into_iter()
-        .flat_map(|m| m.iter())
-    {
+    for (name, optimizer_info) in optimizers.as_ref().into_iter().flat_map(|m| m.iter()) {
         let stored = StoredOptimizerConfig::from(optimizer_info.clone());
         upsert_named_config_row(
             tx,
@@ -201,12 +219,12 @@ async fn write_stored_config_in_tx(
     }
 
     // 3. Tools (with prompt templates)
-    for (name, tool_config) in config.tools.as_ref().into_iter().flat_map(|m| m.iter()) {
+    for (name, tool_config) in tools.as_ref().into_iter().flat_map(|m| m.iter()) {
         let prompt_template_version_ids = write_prompt_templates_in_tx(
             tx,
             tool_config.prompt_templates_for_db().into_iter(),
-            params.creation_source,
-            params.source_autopilot_session_id,
+            creation_source,
+            source_autopilot_session_id,
         )
         .await?;
         let stored_tool = tool_config.convert_for_db(&prompt_template_version_ids)?;
@@ -226,17 +244,12 @@ async fn write_stored_config_in_tx(
     }
 
     // 4. Evaluations (with prompt templates)
-    for (name, eval_config) in config
-        .evaluations
-        .as_ref()
-        .into_iter()
-        .flat_map(|m| m.iter())
-    {
+    for (name, eval_config) in evaluations.as_ref().into_iter().flat_map(|m| m.iter()) {
         let prompt_template_version_ids = write_prompt_templates_in_tx(
             tx,
             eval_config.prompt_templates_for_db().into_iter(),
-            params.creation_source,
-            params.source_autopilot_session_id,
+            creation_source,
+            source_autopilot_session_id,
         )
         .await?;
         let stored_eval = eval_config.to_stored_for_db(&prompt_template_version_ids)?;
@@ -256,18 +269,16 @@ async fn write_stored_config_in_tx(
     }
 
     // 5. Functions (via existing write_function_config_in_tx)
-    for (function_name, function_config) in
-        config.functions.as_ref().into_iter().flat_map(|m| m.iter())
-    {
+    for (function_name, function_config) in functions.as_ref().into_iter().flat_map(|m| m.iter()) {
         write_function_config_in_tx(
             tx,
             WriteFunctionConfigParams {
                 function_name,
                 config: function_config,
                 expected_current_version_id: None,
-                creation_source: params.creation_source,
-                source_autopilot_session_id: params.source_autopilot_session_id,
-                extra_templates: params.extra_templates,
+                creation_source,
+                source_autopilot_session_id,
+                extra_templates,
             },
         )
         .await?;
