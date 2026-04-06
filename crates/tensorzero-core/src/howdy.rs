@@ -179,7 +179,7 @@ async fn synchronize_deployment_id(
     Ok(())
 }
 
-/// Gets the deployment ID.
+/// Gets the deployment ID, creating one if it doesn't exist.
 /// This is a 64 char hex hash that is used to identify the deployment.
 pub async fn get_deployment_id(
     clickhouse: &ClickHouseConnectionInfo,
@@ -189,12 +189,32 @@ pub async fn get_deployment_id(
     // Make sure deployment ID is consistent between ClickHouse and Postgres
     synchronize_deployment_id(clickhouse, postgres, primary_datastore).await?;
 
-    DelegatingDatabaseConnection::new(clickhouse.clone(), postgres.clone(), primary_datastore)
-        .get_deployment_id()
-        .await
-        .map_err(|e| {
-            e.log_at_level("Failed to get deployment ID: ", Level::DEBUG);
-        })
+    let result = DelegatingDatabaseConnection::new(
+        clickhouse.clone(),
+        postgres.clone(),
+        primary_datastore,
+    )
+    .get_deployment_id()
+    .await;
+
+    match result {
+        Ok(id) => Ok(id),
+        Err(_) => {
+            // Deployment ID not found in primary datastore — create one in Postgres
+            // (Postgres has get_or_create semantics; ClickHouse creates during migrations)
+            tracing::info!("No deployment ID found — generating one in Postgres");
+            match postgres.get_deployment_id().await {
+                Ok(id) => {
+                    tracing::info!("Generated deployment ID: {id}");
+                    Ok(id)
+                }
+                Err(e) => {
+                    e.log_at_level("Failed to generate deployment ID: ", Level::WARN);
+                    Err(())
+                }
+            }
+        }
+    }
 }
 
 /// Gets the howdy report.
