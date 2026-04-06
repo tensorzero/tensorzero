@@ -4,6 +4,7 @@ name: Mocked Batch Tests (for Merge Queue)
 env:
   CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: "fake_anthropic_key"
+  NEXTEST_EXPERIMENTAL_RECORD: 1
   AWS_ACCESS_KEY_ID: "fake_aws_access_key"
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"

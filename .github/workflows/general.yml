@@ -13,6 +13,7 @@ concurrency:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  NEXTEST_EXPERIMENTAL_RECORD: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

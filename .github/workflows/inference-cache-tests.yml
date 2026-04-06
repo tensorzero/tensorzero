@@ -6,6 +6,7 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  NEXTEST_EXPERIMENTAL_RECORD: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -81,6 +82,7 @@ jobs:
         run: |
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --no-deps --rm \
             -e TENSORZERO_CI=1 \
+            -e NEXTEST_EXPERIMENTAL_RECORD=1 \
             -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
             -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
             live-tests \

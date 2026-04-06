@@ -6,6 +6,7 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  NEXTEST_EXPERIMENTAL_RECORD: 1
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
   AWS_REGION: "us-east-1"
@@ -126,9 +127,18 @@ jobs:
         run: |
           DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
+            -e NEXTEST_EXPERIMENTAL_RECORD=1 \
             -e TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }} \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
-            live-tests
+            live-tests \
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile e2e -j 32 \${CARGO_NEXTEST_FLAKY_TESTS:+-E \"not (\$CARGO_NEXTEST_FLAKY_TESTS)\"}; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-live-tests-${{ matrix.database }}-batch-writes-${{ matrix.batch_writes }}
+          path: target/nextest/trace.json
 
       - name: Print live tests logs
         if: always()
@@ -244,6 +254,7 @@ jobs:
         run: |
           DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
+            -e NEXTEST_EXPERIMENTAL_RECORD=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
             sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile evaluations -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest -o /app/target/nextest/trace.json || true; exit \$exitcode"
@@ -252,7 +263,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: nextest-trace-live-tests-${{ matrix.database }}-batch-writes-${{ matrix.batch_writes }}
+          name: nextest-trace-evaluation-tests-${{ matrix.database }}
           path: target/nextest/trace.json
 
       - name: Print evaluation tests logs
