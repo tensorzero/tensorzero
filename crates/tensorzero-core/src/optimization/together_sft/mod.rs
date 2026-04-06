@@ -217,6 +217,61 @@ impl From<StoredTogetherTrainingMethod> for TogetherTrainingMethod {
     }
 }
 
+// --- Reverse conversions: core -> stored ---
+
+impl From<TogetherBatchSize> for StoredTogetherBatchSize {
+    fn from(batch_size: TogetherBatchSize) -> Self {
+        match batch_size {
+            TogetherBatchSize::Number(value) => Self::Number { value },
+            TogetherBatchSize::Description(TogetherBatchSizeDescription::Max) => Self::Max,
+        }
+    }
+}
+
+impl From<TogetherLRScheduler> for StoredTogetherLRScheduler {
+    fn from(scheduler: TogetherLRScheduler) -> Self {
+        match scheduler {
+            TogetherLRScheduler::Linear { min_lr_ratio } => Self::Linear {
+                min_lr_ratio: Some(min_lr_ratio),
+            },
+            TogetherLRScheduler::Cosine {
+                min_lr_ratio,
+                num_cycles,
+            } => Self::Cosine {
+                min_lr_ratio: Some(min_lr_ratio),
+                num_cycles: Some(num_cycles),
+            },
+        }
+    }
+}
+
+impl From<TogetherTrainingType> for StoredTogetherTrainingType {
+    fn from(training_type: TogetherTrainingType) -> Self {
+        match training_type {
+            TogetherTrainingType::Full {} => Self::Full,
+            TogetherTrainingType::Lora {
+                lora_r,
+                lora_alpha,
+                lora_dropout,
+                lora_trainable_modules,
+            } => Self::Lora {
+                lora_r,
+                lora_alpha,
+                lora_dropout,
+                lora_trainable_modules,
+            },
+        }
+    }
+}
+
+impl From<TogetherTrainingMethod> for StoredTogetherTrainingMethod {
+    fn from(method: TogetherTrainingMethod) -> Self {
+        match method {
+            TogetherTrainingMethod::Sft { train_on_inputs } => Self::Sft { train_on_inputs },
+        }
+    }
+}
+
 impl From<StoredTogetherOptimizerSFTConfig> for UninitializedTogetherSFTConfig {
     fn from(stored: StoredTogetherOptimizerSFTConfig) -> Self {
         UninitializedTogetherSFTConfig {
@@ -238,6 +293,31 @@ impl From<StoredTogetherOptimizerSFTConfig> for UninitializedTogetherSFTConfig {
             from_hf_model: stored.from_hf_model,
             hf_model_revision: stored.hf_model_revision,
             hf_output_repo_name: stored.hf_output_repo_name,
+        }
+    }
+}
+
+impl From<UninitializedTogetherSFTConfig> for StoredTogetherOptimizerSFTConfig {
+    fn from(config: UninitializedTogetherSFTConfig) -> Self {
+        StoredTogetherOptimizerSFTConfig {
+            model: config.model,
+            n_epochs: Some(config.n_epochs),
+            n_checkpoints: Some(config.n_checkpoints),
+            n_evals: config.n_evals,
+            batch_size: Some(config.batch_size.into()),
+            learning_rate: Some(config.learning_rate),
+            warmup_ratio: Some(config.warmup_ratio),
+            max_grad_norm: Some(config.max_grad_norm),
+            weight_decay: Some(config.weight_decay),
+            suffix: config.suffix,
+            lr_scheduler: Some(config.lr_scheduler.into()),
+            wandb_name: config.wandb_name,
+            training_method: Some(config.training_method.into()),
+            training_type: Some(config.training_type.into()),
+            from_checkpoint: config.from_checkpoint,
+            from_hf_model: config.from_hf_model,
+            hf_model_revision: config.hf_model_revision,
+            hf_output_repo_name: config.hf_output_repo_name,
         }
     }
 }
@@ -496,5 +576,125 @@ impl Default for TogetherTrainingMethod {
         Self::Sft {
             train_on_inputs: Some("auto".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    fn sample_full_config() -> UninitializedTogetherSFTConfig {
+        UninitializedTogetherSFTConfig {
+            model: "meta-llama/Llama-3-8b".to_string(),
+            n_epochs: 4,
+            n_checkpoints: 2,
+            n_evals: Some(3),
+            batch_size: TogetherBatchSize::Number(64),
+            learning_rate: 1e-5,
+            warmup_ratio: 0.05,
+            max_grad_norm: 1.0,
+            weight_decay: 0.01,
+            suffix: Some("my-suffix".to_string()),
+            lr_scheduler: TogetherLRScheduler::Cosine {
+                min_lr_ratio: 0.1,
+                num_cycles: 0.5,
+            },
+            wandb_name: Some("my-run".to_string()),
+            training_method: TogetherTrainingMethod::Sft {
+                train_on_inputs: Some("true".to_string()),
+            },
+            training_type: TogetherTrainingType::Lora {
+                lora_r: Some(8),
+                lora_alpha: Some(16),
+                lora_dropout: Some(0.0),
+                lora_trainable_modules: Some("all-linear".to_string()),
+            },
+            from_checkpoint: Some("ckpt-id".to_string()),
+            from_hf_model: Some("hf-model".to_string()),
+            hf_model_revision: Some("rev".to_string()),
+            hf_output_repo_name: Some("repo".to_string()),
+        }
+    }
+
+    #[gtest]
+    fn test_together_sft_config_round_trip_full() {
+        let original = sample_full_config();
+        let stored: StoredTogetherOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedTogetherSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_together_sft_config_round_trip_full_training() {
+        let mut original = sample_full_config();
+        original.training_type = TogetherTrainingType::Full {};
+        let stored: StoredTogetherOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedTogetherSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_together_sft_config_round_trip_linear_scheduler_max_batch() {
+        let mut original = sample_full_config();
+        original.lr_scheduler = TogetherLRScheduler::Linear { min_lr_ratio: 0.2 };
+        original.batch_size = TogetherBatchSize::Description(TogetherBatchSizeDescription::Max);
+        let stored: StoredTogetherOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedTogetherSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_together_batch_size_round_trip() {
+        for original in [
+            TogetherBatchSize::Number(32),
+            TogetherBatchSize::Description(TogetherBatchSizeDescription::Max),
+        ] {
+            let stored: StoredTogetherBatchSize = original.clone().into();
+            let restored: TogetherBatchSize = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_together_lr_scheduler_round_trip() {
+        for original in [
+            TogetherLRScheduler::Linear { min_lr_ratio: 0.0 },
+            TogetherLRScheduler::Cosine {
+                min_lr_ratio: 0.1,
+                num_cycles: 0.5,
+            },
+        ] {
+            let stored: StoredTogetherLRScheduler = original.clone().into();
+            let restored: TogetherLRScheduler = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_together_training_type_round_trip() {
+        for original in [
+            TogetherTrainingType::Full {},
+            TogetherTrainingType::Lora {
+                lora_r: Some(4),
+                lora_alpha: Some(8),
+                lora_dropout: Some(0.1),
+                lora_trainable_modules: Some("all-linear".to_string()),
+            },
+        ] {
+            let stored: StoredTogetherTrainingType = original.clone().into();
+            let restored: TogetherTrainingType = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_together_training_method_round_trip() {
+        let original = TogetherTrainingMethod::Sft {
+            train_on_inputs: Some("auto".to_string()),
+        };
+        let stored: StoredTogetherTrainingMethod = original.clone().into();
+        let restored: TogetherTrainingMethod = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

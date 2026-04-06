@@ -35,3 +35,23 @@ pub fn extra_body_config_from_stored(stored: StoredExtraBodyConfig) -> ExtraBody
             .collect(),
     }
 }
+
+// ─── Uninitialized → Stored conversions ──────────────────────────────────────
+
+pub fn extra_body_config_to_stored(config: &ExtraBodyConfig) -> StoredExtraBodyConfig {
+    StoredExtraBodyConfig {
+        data: config
+            .data
+            .iter()
+            .map(|replacement| StoredExtraBodyReplacement {
+                pointer: replacement.pointer.clone(),
+                kind: match &replacement.kind {
+                    ExtraBodyReplacementKind::Value(value) => {
+                        StoredExtraBodyReplacementKind::Value(value.clone())
+                    }
+                    ExtraBodyReplacementKind::Delete => StoredExtraBodyReplacementKind::Delete,
+                },
+            })
+            .collect(),
+    }
+}

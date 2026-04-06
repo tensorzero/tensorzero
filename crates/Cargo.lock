@@ -550,7 +550,7 @@ dependencies = [
  "durable-tools-spawn",
  "futures",
  "moka",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "reqwest-sse-stream",
  "schemars 1.2.1",
  "secrecy",
@@ -1696,6 +1696,16 @@ dependencies = [
 
 [[package]]
 name = "core-foundation"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "core-foundation"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
@@ -2769,7 +2779,7 @@ dependencies = [
  "http-body-util",
  "metrics-exporter-prometheus",
  "mimalloc",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "reqwest-sse-stream",
  "rmcp",
  "secrecy",
@@ -3286,7 +3296,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -3320,9 +3329,11 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2",
+ "system-configuration",
  "tokio",
  "tower-service",
  "tracing",
+ "windows-registry",
 ]
 
 [[package]]
@@ -4248,7 +4259,7 @@ dependencies = [
  "mimalloc",
  "object_store",
  "rand 0.10.0",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "sse-stream",
@@ -4958,7 +4969,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "rlt",
  "serde",
  "serde_json",
@@ -5131,7 +5142,7 @@ dependencies = [
  "pin-project",
  "rand 0.10.0",
  "rcgen",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "reqwest-sse-stream",
  "rustls",
  "serde",
@@ -5810,7 +5821,6 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
- "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -5832,7 +5842,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams 0.4.2",
  "web-sys",
- "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -5843,6 +5852,7 @@ checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
 dependencies = [
  "base64 0.22.1",
  "bytes",
+ "encoding_rs",
  "futures-channel",
  "futures-core",
  "futures-util",
@@ -5855,6 +5865,8 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime 0.3.17",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -5886,7 +5898,7 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "http-body 1.0.1",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "sse-stream",
  "thiserror 2.0.18",
 ]
@@ -6135,7 +6147,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d99feebc72bae7ab76ba994bb5e121b8d83d910ca40b36e0921f53becc41784"
 dependencies = [
- "core-foundation",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
  "jni",
  "log",
@@ -6266,7 +6278,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
 dependencies = [
  "bitflags",
- "core-foundation",
+ "core-foundation 0.10.1",
  "core-foundation-sys",
  "libc",
  "security-framework-sys",
@@ -6978,6 +6990,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "system-configuration"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
+dependencies = [
+ "bitflags",
+ "core-foundation 0.9.4",
+ "system-configuration-sys",
+]
+
+[[package]]
+name = "system-configuration-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
 name = "tabled"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7051,7 +7084,7 @@ dependencies = [
  "mime 0.4.0-a.0",
  "paste",
  "pyo3",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "reqwest-sse-stream",
  "serde",
  "serde_json",
@@ -7166,7 +7199,7 @@ dependencies = [
  "redis",
  "redis-test",
  "regex",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "reqwest-sse-stream",
  "rmcp",
  "rust_decimal",
@@ -7319,7 +7352,7 @@ dependencies = [
  "object_store",
  "paste",
  "rand 0.10.0",
- "reqwest 0.12.28",
+ "reqwest 0.13.2",
  "schemars 1.2.1",
  "secrecy",
  "serde",
@@ -7369,6 +7402,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sqlx",
+ "tensorzero-error",
  "tensorzero-types",
  "uuid",
 ]
@@ -8535,6 +8569,17 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link",
+ "windows-result",
+ "windows-strings",
+]
 
 [[package]]
 name = "windows-result"

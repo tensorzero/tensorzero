@@ -31,3 +31,21 @@ pub fn extra_headers_config_from_stored(stored: StoredExtraHeadersConfig) -> Ext
             .collect(),
     }
 }
+
+// ─── Uninitialized → Stored conversions ──────────────────────────────────────
+
+pub fn extra_headers_config_to_stored(config: &ExtraHeadersConfig) -> StoredExtraHeadersConfig {
+    StoredExtraHeadersConfig {
+        data: config
+            .data
+            .iter()
+            .map(|header| StoredExtraHeader {
+                name: header.name.clone(),
+                kind: match &header.kind {
+                    ExtraHeaderKind::Value(value) => StoredExtraHeaderKind::Value(value.clone()),
+                    ExtraHeaderKind::Delete => StoredExtraHeaderKind::Delete,
+                },
+            })
+            .collect(),
+    }
+}

@@ -31,7 +31,8 @@ pub async fn test_gepa_optimization_chat() {
 
     let gepa_config = GEPAConfig {
         function_name: "basic_test".to_string(),
-        evaluation_name: "test_gepa_pinocchio_chat".to_string(),
+        evaluation_name: Some("test_gepa_pinocchio_chat".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some(variant_prefix.clone()),
         batch_size: 4,
@@ -158,6 +159,126 @@ pub async fn test_gepa_optimization_chat() {
     }
 }
 
+/// Core test for GEPA optimization using function-scoped evaluators (Chat)
+///
+/// Same as `test_gepa_optimization_chat` but uses `evaluator_names` instead of
+/// a named evaluation, validating the inline evaluator path.
+#[allow(clippy::allow_attributes, dead_code)] // False positive
+pub async fn test_gepa_optimization_chat_evaluator_names() {
+    let variant_prefix = format!("gepa_pinocchio_evalnames_test_{}", Uuid::now_v7());
+
+    let gepa_config = GEPAConfig {
+        function_name: "basic_test".to_string(),
+        evaluation_name: None,
+        evaluator_names: Some(vec![
+            "validate_nose_growth".to_string(),
+            "answer_aligns_with_persona".to_string(),
+        ]),
+        initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
+        variant_prefix: Some(variant_prefix.clone()),
+        batch_size: 4,
+        max_iterations: 3,
+        max_concurrency: 4,
+        analysis_model: "openai::gpt-5-mini".to_string(),
+        mutation_model: "openai::gpt-5-mini".to_string(),
+        seed: Some(42),
+        timeout: 300,
+        include_inference_for_mutation: true,
+        retries: RetryConfig::default(),
+        max_tokens: Some(16_384),
+    };
+
+    let client = TensorzeroHttpClient::new_testing().unwrap();
+
+    let train_examples = get_gepa_chat_examples();
+    let val_examples = Some(get_gepa_chat_examples());
+
+    let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
+    let clickhouse = get_clickhouse().await;
+
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
+
+    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(&config_glob, false)
+            .await
+            .unwrap()
+            .into_config_without_writing_for_tests(),
+    );
+
+    let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> = Arc::new(clickhouse);
+    let job_handle = gepa_config
+        .launch(
+            &client,
+            train_examples,
+            val_examples,
+            &credentials,
+            &db,
+            config.clone(),
+        )
+        .await
+        .unwrap();
+
+    let status = job_handle
+        .poll(
+            &client,
+            &credentials,
+            &ProviderTypeDefaultCredentials::default(),
+            &config.provider_types,
+        )
+        .await
+        .unwrap();
+
+    match status {
+        OptimizationJobInfo::Completed { output } => match output {
+            OptimizerOutput::Variants(variants) => {
+                assert!(
+                    !variants.is_empty(),
+                    "GEPA should produce at least one evolved variant"
+                );
+                assert!(
+                    variants.len() <= gepa_config.max_iterations as usize,
+                    "Should not exceed max_iterations variants, got {}",
+                    variants.len()
+                );
+
+                for (variant_name, variant_config) in &variants {
+                    assert!(
+                        variant_name.starts_with(&variant_prefix),
+                        "Variant name '{variant_name}' should have prefix '{variant_prefix}'"
+                    );
+
+                    let chat_config = match &**variant_config {
+                        tensorzero_core::config::UninitializedVariantConfig::ChatCompletion(
+                            config,
+                        ) => config,
+                        _ => panic!("Expected ChatCompletion variant"),
+                    };
+
+                    assert!(
+                        !chat_config.templates.inner.is_empty(),
+                        "Variant should have at least one template"
+                    );
+                }
+
+                println!(
+                    "GEPA evaluator_names optimization test passed with {} evolved variants",
+                    variants.len()
+                );
+            }
+            _ => panic!("Expected Variants output from GEPA"),
+        },
+        OptimizationJobInfo::Failed { message, .. } => {
+            println!("GEPA evaluator_names optimization completed but found no improvements:");
+            println!("   {message}");
+        }
+        OptimizationJobInfo::Pending { .. } => {
+            panic!("Expected Completed or Failed status, got: Pending");
+        }
+    }
+}
+
 /// Core test for GEPA optimization using Pinocchio pattern (JSON)
 ///
 /// This test validates that GEPA can evolve system templates for JSON functions
@@ -168,7 +289,8 @@ pub async fn test_gepa_optimization_json() {
 
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
-        evaluation_name: "test_gepa_pinocchio_json".to_string(),
+        evaluation_name: Some("test_gepa_pinocchio_json".to_string()),
+        evaluator_names: None,
         initial_variants: Some(vec!["openai".to_string(), "anthropic".to_string()]),
         variant_prefix: Some(variant_prefix.clone()),
         batch_size: 4,

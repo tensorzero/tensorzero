@@ -7,10 +7,10 @@ use tracing::instrument;
 use super::types::GetWorkflowEvaluationProjectCountResponse;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Handler for `GET /internal/workflow_evaluations/projects/count`
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.count_projects", skip_all)]
 pub async fn get_workflow_evaluation_project_count_handler(
     State(app_state): AppState,

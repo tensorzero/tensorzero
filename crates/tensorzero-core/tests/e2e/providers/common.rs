@@ -41,7 +41,7 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::ResolvedAppStateData;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -1417,13 +1417,17 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
     assert_eq!(result, FERRIS_PNG);
 }
 
-async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath, expected_data: &[u8]) {
+async fn check_object_fetch(
+    data: ResolvedAppStateData,
+    storage_path: &StoragePath,
+    expected_data: &[u8],
+) {
     check_object_fetch_via_embedded(data.clone(), storage_path, expected_data).await;
     check_object_fetch_via_gateway(storage_path, expected_data).await;
 }
 
 async fn check_object_fetch_via_embedded(
-    data: AppStateData,
+    data: ResolvedAppStateData,
     storage_path: &StoragePath,
     expected_data: &[u8],
 ) {
@@ -1504,7 +1508,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
         "PDF in object store does not match expect pdf"
     );
     check_object_fetch(
-        client.get_app_state_data().unwrap().clone(),
+        client.get_app_state_data().unwrap().load_latest(),
         &storage_path,
         DEEPSEEK_PAPER_PDF,
     )
@@ -1541,7 +1545,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
     check_object_fetch(
-        client.get_app_state_data().unwrap().clone(),
+        client.get_app_state_data().unwrap().load_latest(),
         &storage_path,
         FERRIS_PNG,
     )
@@ -1620,7 +1624,10 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
         .await;
 
     check_object_fetch(
-        tensorzero_client.get_app_state_data().unwrap().clone(),
+        tensorzero_client
+            .get_app_state_data()
+            .unwrap()
+            .load_latest(),
         &storage_path,
         FERRIS_PNG,
     )

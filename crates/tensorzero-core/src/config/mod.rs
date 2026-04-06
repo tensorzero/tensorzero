@@ -30,12 +30,16 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_stored_config::StoredTimeoutsConfig;
+use tensorzero_stored_config::{
+    StoredMetricLevel, StoredMetricOptimize, StoredMetricType, StoredNonStreamingTimeouts,
+    StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
+};
 use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
 use url::Url;
+use uuid::Uuid;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -58,7 +62,9 @@ use crate::model::{
     CredentialLocationWithFallback, ModelConfig, ModelTable, UninitializedModelConfig,
 };
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
-use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
+use crate::optimization::{
+    OptimizerInfo, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+};
 use crate::tool::{StaticToolConfig, ToolChoice, create_json_mode_tool_call_config};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
@@ -181,6 +187,23 @@ pub struct StreamingTimeouts {
 pub struct TimeoutsConfig {
     pub non_streaming: Option<NonStreamingTimeouts>,
     pub streaming: Option<StreamingTimeouts>,
+}
+
+impl From<&TimeoutsConfig> for StoredTimeoutsConfig {
+    fn from(config: &TimeoutsConfig) -> Self {
+        StoredTimeoutsConfig {
+            non_streaming: config
+                .non_streaming
+                .as_ref()
+                .map(|ns| StoredNonStreamingTimeouts {
+                    total_ms: ns.total_ms,
+                }),
+            streaming: config.streaming.as_ref().map(|s| StoredStreamingTimeouts {
+                ttft_ms: s.ttft_ms,
+                total_ms: s.total_ms,
+            }),
+        }
+    }
 }
 
 impl TimeoutsConfig {
@@ -654,6 +677,15 @@ pub enum MetricConfigType {
     Float,
 }
 
+impl From<MetricConfigType> for StoredMetricType {
+    fn from(value: MetricConfigType) -> Self {
+        match value {
+            MetricConfigType::Boolean => Self::Boolean,
+            MetricConfigType::Float => Self::Float,
+        }
+    }
+}
+
 impl MetricConfigType {
     pub fn to_clickhouse_table_name(&self) -> &'static str {
         match self {
@@ -681,6 +713,15 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
+impl From<MetricConfigOptimize> for StoredMetricOptimize {
+    fn from(value: MetricConfigOptimize) -> Self {
+        match value {
+            MetricConfigOptimize::Min => Self::Min,
+            MetricConfigOptimize::Max => Self::Max,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -696,6 +737,15 @@ impl std::fmt::Display for MetricConfigLevel {
         let serialized = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
         // Remove the quotes around the string
         write!(f, "{}", serialized.trim_matches('"'))
+    }
+}
+
+impl From<&MetricConfigLevel> for StoredMetricLevel {
+    fn from(value: &MetricConfigLevel) -> Self {
+        match value {
+            MetricConfigLevel::Inference => Self::Inference,
+            MetricConfigLevel::Episode => Self::Episode,
+        }
     }
 }
 
@@ -1004,12 +1054,17 @@ struct ProcessedConfigInput {
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
     autopilot: AutopilotConfig,
-
     snapshot: ConfigSnapshot,
+
     /// All functions (user-defined + built-in), loaded but with evaluator artifacts not yet extracted
     loaded_functions: HashMap<String, LoadedFunctionConfig>,
     gateway_config: GatewayConfig,
     object_store_info: Option<ObjectStoreInfo>,
+
+    /// The original UninitializedConfig (with built-in functions injected), preserved for
+    /// validation during config-in-db writes.
+    uninitialized_config: UninitializedConfig,
+
     /// Runtime overlay captured from the UninitializedConfig before defaults are resolved.
     runtime_overlay: RuntimeOverlay,
 }
@@ -1115,6 +1170,7 @@ async fn process_config_input(
                 .await?;
 
             // Create snapshot from the config (which now includes built-in functions)
+            let uninitialized_config = config.clone();
             let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
 
             Ok(ProcessedConfigInput {
@@ -1133,6 +1189,7 @@ async fn process_config_input(
                 loaded_functions,
                 gateway_config,
                 object_store_info,
+                uninitialized_config,
                 runtime_overlay,
             })
         }
@@ -1210,6 +1267,7 @@ async fn process_config_input(
             };
 
             let extra_templates = original_snapshot.extra_templates.clone();
+            let uninitialized_config = overlaid_config.clone();
             let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
 
             // Load all functions from the snapshot (built-in functions are already included)
@@ -1246,6 +1304,7 @@ async fn process_config_input(
                 autopilot,
                 // unused
                 snapshot,
+                uninitialized_config,
                 loaded_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
@@ -1434,6 +1493,7 @@ impl Config {
             rate_limiting,
             autopilot,
             snapshot,
+            uninitialized_config,
             loaded_functions,
             gateway_config,
             object_store_info,
@@ -1655,7 +1715,12 @@ impl Config {
         }
         config.evaluations = evaluations;
 
-        Ok(UnwrittenConfig::new(config, snapshot, runtime_overlay))
+        Ok(UnwrittenConfig::new(
+            config,
+            uninitialized_config,
+            snapshot,
+            runtime_overlay,
+        ))
     }
 
     /// Validate the config
@@ -1971,7 +2036,7 @@ pub trait LoadableConfig<T> {
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
 #[serde_with::skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     pub gateway: Option<UninitializedGatewayConfig>,
@@ -2018,6 +2083,7 @@ impl UninitializedConfig {
         self.resolve_clickhouse_config_deprecation()?;
         self.warn_variant_weight_deprecation();
         self.warn_evaluation_evaluators_deprecation();
+        self.warn_gepa_evaluation_name_deprecation()?;
         Ok(())
     }
 
@@ -2080,6 +2146,54 @@ impl UninitializedConfig {
             "Top-level evaluations are deprecated — please migrate them to \
              `[functions.function_name.evaluators]` instead.",
         );
+    }
+
+    fn warn_gepa_evaluation_name_deprecation(&self) -> Result<(), Error> {
+        let mut legacy_gepa_optimizers = Vec::new();
+
+        for (optimizer_name, optimizer) in self.optimizers.iter().flat_map(|m| m.iter()) {
+            let UninitializedOptimizerConfig::GEPA(gepa_config) = &optimizer.inner else {
+                continue;
+            };
+
+            match (
+                gepa_config.evaluation_name.as_ref(),
+                gepa_config.evaluator_names.as_ref(),
+            ) {
+                (Some(_), Some(_)) => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` cannot specify both `evaluation_name` and `evaluator_names`"
+                        ),
+                    }));
+                }
+                (None, None) => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` must specify exactly one of `evaluation_name` or `evaluator_names`"
+                        ),
+                    }));
+                }
+                (None, Some(evaluator_names)) if evaluator_names.is_empty() => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "GEPA optimizer `{optimizer_name}` must specify at least one evaluator name"
+                        ),
+                    }));
+                }
+                (Some(_), None) => legacy_gepa_optimizers.push(optimizer_name.as_str()),
+                (None, Some(_)) => {}
+            }
+        }
+
+        if !legacy_gepa_optimizers.is_empty() {
+            deprecation_warning(&format!(
+                "The `evaluation_name` field on GEPA optimizers is deprecated. Use `evaluator_names` instead. Affected optimizers: {}",
+                legacy_gepa_optimizers.join(", ")
+            ));
+        }
+
+        Ok(())
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
@@ -2204,6 +2318,14 @@ impl UninitializedSchemas {
                 .map(|(k, path)| (k, UninitializedSchema { path }))
                 .collect(),
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &ResolvedTomlPathData)> {
+        self.inner.iter().map(|(name, schema)| (name, &schema.path))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 
@@ -2756,6 +2878,36 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
+    #[expect(dead_code)]
+    pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
+        [&self.parameters]
+    }
+
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn convert_for_db(
+        &self,
+        prompt_template_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredToolConfig, Error> {
+        let template_key = self.parameters.get_template_key();
+        let Some(prompt_template_version_id) = prompt_template_version_ids.get(&template_key)
+        else {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Missing prompt template version ID for template key `{template_key}`."
+                ),
+            }));
+        };
+        Ok(StoredToolConfig {
+            description: self.description.clone(),
+            parameters: StoredPromptRef {
+                prompt_template_version_id: *prompt_template_version_id,
+                template_key,
+            },
+            name: self.name.clone(),
+            strict: self.strict,
+        })
+    }
+
     pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
         let parameters = JSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
@@ -2837,5 +2989,146 @@ impl From<tensorzero_stored_config::StoredPostgresConfig> for PostgresConfig {
             inference_metadata_retention_days: stored.inference_metadata_retention_days,
             inference_data_retention_days: stored.inference_data_retention_days,
         }
+    }
+}
+
+#[cfg(test)]
+mod round_trip_tests {
+    use std::path::PathBuf;
+
+    use googletest::prelude::*;
+
+    use super::*;
+    use crate::config::path::ResolvedTomlPathData;
+
+    // ── TimeoutsConfig ─────────────────────────────────────────────────
+
+    #[gtest]
+    fn test_timeouts_config_round_trip_full() {
+        let original = TimeoutsConfig {
+            non_streaming: Some(NonStreamingTimeouts {
+                total_ms: Some(5000),
+            }),
+            streaming: Some(StreamingTimeouts {
+                ttft_ms: Some(1000),
+                total_ms: Some(30000),
+            }),
+        };
+        let stored = StoredTimeoutsConfig::from(&original);
+        let restored: TimeoutsConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_timeouts_config_round_trip_empty() {
+        let original = TimeoutsConfig::default();
+        let stored = StoredTimeoutsConfig::from(&original);
+        let restored: TimeoutsConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    // ── MetricConfig ───────────────────────────────────────────────────
+
+    #[gtest]
+    fn test_metric_config_type_round_trip() {
+        for variant in [MetricConfigType::Boolean, MetricConfigType::Float] {
+            let stored: StoredMetricType = variant.into();
+            let restored: MetricConfigType = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_optimize_round_trip() {
+        for variant in [MetricConfigOptimize::Min, MetricConfigOptimize::Max] {
+            let stored: StoredMetricOptimize = variant.into();
+            let restored: MetricConfigOptimize = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_level_round_trip() {
+        for variant in &[MetricConfigLevel::Inference, MetricConfigLevel::Episode] {
+            let stored = StoredMetricLevel::from(variant);
+            let restored: MetricConfigLevel = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_round_trip() {
+        let original = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: Some("test metric".to_string()),
+        };
+        let stored = tensorzero_stored_config::StoredMetricConfig {
+            r#type: original.r#type.into(),
+            optimize: original.optimize.into(),
+            level: (&original.level).into(),
+            description: original.description.clone(),
+        };
+        let restored: MetricConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    // ── UninitializedToolConfig ────────────────────────────────────────
+    //
+    // `UninitializedToolConfig` only has a forward conversion to
+    // `StoredToolConfig` (the reverse requires looking up a prompt template
+    // by ID), so this verifies the forward conversion preserves all fields
+    // and resolves the prompt template version ID correctly.
+
+    #[gtest]
+    fn test_uninitialized_tool_config_convert_for_db() {
+        let parameters_json = r#"{"type":"object","properties":{}}"#.to_string();
+        let parameters = ResolvedTomlPathData::new_for_tests(
+            PathBuf::from("tools/my_tool.json"),
+            Some(parameters_json),
+        );
+        let template_key = parameters.get_template_key();
+
+        let original = UninitializedToolConfig {
+            description: "Tool description".to_string(),
+            parameters,
+            name: Some("my_tool".to_string()),
+            strict: true,
+        };
+
+        let template_id = Uuid::now_v7();
+        let mut prompt_template_version_ids = HashMap::new();
+        prompt_template_version_ids.insert(template_key.clone(), template_id);
+
+        let stored = original
+            .convert_for_db(&prompt_template_version_ids)
+            .expect("conversion should succeed when template id is present");
+
+        expect_that!(stored.description, eq(&original.description));
+        expect_that!(stored.name.as_deref(), some(eq("my_tool")));
+        expect_that!(stored.strict, eq(true));
+        expect_that!(stored.parameters.template_key, eq(&template_key));
+        expect_that!(
+            stored.parameters.prompt_template_version_id,
+            eq(template_id)
+        );
+    }
+
+    #[gtest]
+    fn test_uninitialized_tool_config_convert_for_db_missing_template() {
+        let parameters = ResolvedTomlPathData::new_for_tests(
+            PathBuf::from("tools/missing.json"),
+            Some(r#"{"type":"object"}"#.to_string()),
+        );
+        let original = UninitializedToolConfig {
+            description: "x".to_string(),
+            parameters,
+            name: None,
+            strict: false,
+        };
+
+        let result = original.convert_for_db(&HashMap::new());
+        expect_that!(result.is_err(), eq(true));
     }
 }

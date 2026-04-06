@@ -14,7 +14,7 @@ use axum::{Extension, debug_handler};
 
 use crate::endpoints::inference::{InferenceOutput, Params, inference};
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, AppStateData, SwappableAppStateData};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
@@ -22,7 +22,7 @@ use super::types::streaming::prepare_serialized_openai_compatible_events;
 use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
 /// A handler for the OpenAI-compatible inference endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn chat_completions_handler(
     State(AppStateData {
         config,

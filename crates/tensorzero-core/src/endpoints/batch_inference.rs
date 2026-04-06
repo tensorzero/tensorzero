@@ -58,7 +58,9 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{
+    AppState, AppStateData, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
@@ -121,9 +123,9 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
         variant_name = ?params.variant_name,
     )
 )]
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 pub async fn start_batch_inference_handler(
-    State(app_state): State<AppStateData>,
+    State(app_state): State<ResolvedAppStateData>,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
@@ -141,7 +143,7 @@ pub async fn start_batch_inference(
         rate_limiting_manager,
         primary_datastore,
         ..
-    }: AppStateData,
+    }: ResolvedAppStateData,
     params: StartBatchInferenceParams,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<PrepareBatchInferenceOutput, Error> {
@@ -510,8 +512,8 @@ pub struct PollPathParams {
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
 /// If the batch is completed, it will return the appropriate response immediately from the database
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
-#[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
     State(AppStateData {
         config,
@@ -1417,7 +1419,7 @@ mod tests {
                 postgres_healthy: false,
             },
         );
-        let app_state = gateway_handle.app_state.clone();
+        let app_state = gateway_handle.app_state.load_latest();
         let params = StartBatchInferenceParams::default();
         let error = start_batch_inference(app_state, params, None)
             .await

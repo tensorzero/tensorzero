@@ -17,7 +17,7 @@ use rmcp::{
     model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo, Tool},
     tool_handler,
 };
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::SwappableAppStateData;
 use uuid::Uuid;
 
 /// TODO - refactor the way we wrap client-side tool so that we can avoid
@@ -34,12 +34,12 @@ fn dummy_side_info(config_snapshot_hash: String) -> AutopilotSideInfo {
 #[derive(Clone)]
 pub(crate) struct TensorZeroMcpServer {
     #[expect(dead_code, reason = "retained for future tool implementations")]
-    app_state: Arc<AppStateData>,
+    app_state: Arc<SwappableAppStateData>,
     tool_router: ToolRouter<Self>,
 }
 
 impl TensorZeroMcpServer {
-    pub fn new(app_state: Arc<AppStateData>, tool_router: ToolRouter<Self>) -> Self {
+    pub fn new(app_state: Arc<SwappableAppStateData>, tool_router: ToolRouter<Self>) -> Self {
         Self {
             app_state,
             tool_router,
@@ -73,13 +73,13 @@ struct McpToolVisitor {
 }
 
 impl McpToolVisitor {
-    fn new(app_state: &AppStateData) -> Self {
+    fn new(app_state: &SwappableAppStateData) -> Self {
         Self {
             router: ToolRouter::new(),
-            client: Arc::new(EmbeddedClient::new(app_state.clone())),
+            client: Arc::new(EmbeddedClient::new(app_state.load_latest())),
             heartbeater: Arc::new(NoopHeartbeater),
             registry: Arc::new(ToolRegistry::new()),
-            config_snapshot_hash: app_state.config.hash.to_string(),
+            config_snapshot_hash: app_state.config.load().hash.to_string(),
         }
     }
 
@@ -186,7 +186,7 @@ impl ToolVisitor for McpToolVisitor {
 
 /// Build the MCP tool router by visiting all autopilot tools.
 pub(crate) async fn build_tool_router(
-    app_state: &AppStateData,
+    app_state: &SwappableAppStateData,
 ) -> Result<ToolRouter<TensorZeroMcpServer>, String> {
     let mut visitor = McpToolVisitor::new(app_state);
     autopilot_tools::for_each_tool(&mut visitor).await?;

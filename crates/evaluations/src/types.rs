@@ -18,7 +18,7 @@ use tensorzero_core::{
     evaluations::{EvaluationFunctionConfig, EvaluatorConfig},
     inference::types::storage::StoragePath,
     inference::types::stored_input::StoragePathResolver,
-    utils::gateway::AppStateData,
+    utils::gateway::ResolvedAppStateData,
 };
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -78,11 +78,11 @@ impl EvaluationsInferenceExecutor for ClientInferenceExecutor {
 /// Executor that calls gateway handlers directly without HTTP overhead.
 /// This is used when running evaluations from within the gateway or embedded mode.
 pub struct AppStateInferenceExecutor {
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
 }
 
 impl AppStateInferenceExecutor {
-    pub fn new(app_state: AppStateData) -> Self {
+    pub fn new(app_state: ResolvedAppStateData) -> Self {
         Self { app_state }
     }
 }

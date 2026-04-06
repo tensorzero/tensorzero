@@ -6,6 +6,7 @@ mod stored_embedding_model_config;
 mod stored_evaluation_config;
 mod stored_extra_body;
 mod stored_extra_headers;
+mod stored_function_config;
 mod stored_gateway_config;
 mod stored_metric_config;
 pub mod stored_model_config;
@@ -16,6 +17,9 @@ mod stored_provider_types_config;
 mod stored_rate_limiting_config;
 mod stored_storage_kind;
 mod stored_tool_config;
+pub mod stored_variant_config;
+
+pub mod postgres;
 
 pub use stored_autopilot_config::StoredAutopilotConfig;
 pub use stored_clickhouse_config::StoredClickHouseConfig;
@@ -45,6 +49,12 @@ pub use stored_extra_body::{
 pub use stored_extra_headers::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
 };
+pub use stored_function_config::{
+    STORED_FUNCTION_CONFIG_SCHEMA_REVISION, StoredAdaptiveExperimentationAlgorithm,
+    StoredAdaptiveExperimentationConfig, StoredChatFunctionConfig, StoredExperimentationConfig,
+    StoredExperimentationConfigWithNamespaces, StoredFunctionConfig, StoredJsonFunctionConfig,
+    StoredStaticExperimentationConfig, StoredToolChoice,
+};
 pub use stored_gateway_config::{
     StoredAuthConfig, StoredBatchWritesConfig, StoredExportConfig, StoredGatewayAuthCacheConfig,
     StoredGatewayConfig, StoredGatewayMetricsConfig, StoredInferenceCacheBackend,
@@ -69,7 +79,7 @@ pub use stored_optimizer_info::{
     StoredTogetherTrainingMethod, StoredTogetherTrainingType,
 };
 pub use stored_postgres_config::StoredPostgresConfig;
-pub use stored_prompt_template::StoredPromptRef;
+pub use stored_prompt_template::{StoredPromptRef, StoredPromptTemplate};
 pub use stored_provider_types_config::{
     StoredApiKeyDefaults, StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,
     StoredGCPBatchConfigCloudStorage, StoredGCPBatchConfigType, StoredGCPCredentialDefaults,
@@ -79,8 +89,14 @@ pub use stored_provider_types_config::{
     StoredTogetherProviderTypeConfig,
 };
 pub use stored_rate_limiting_config::{
-    StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
-    StoredRateLimitingConfig,
+    StoredRateLimit, StoredRateLimitInterval, StoredRateLimitResource, StoredRateLimitingBackend,
+    StoredRateLimitingConfig, StoredRateLimitingRule,
 };
 pub use stored_storage_kind::StoredStorageKind;
 pub use stored_tool_config::StoredToolConfig;
+pub use stored_variant_config::{
+    STORED_VARIANT_CONFIG_SCHEMA_REVISION, StoredBestOfNVariantConfig,
+    StoredChatCompletionVariantConfig, StoredDiclVariantConfig, StoredInputWrappers,
+    StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
+    StoredVariantVersionConfig,
+};

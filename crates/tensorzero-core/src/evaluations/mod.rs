@@ -373,6 +373,18 @@ impl From<StoredToolUseConfig> for ToolUseConfig {
     }
 }
 
+impl From<ToolUseConfig> for StoredToolUseConfig {
+    fn from(stored: ToolUseConfig) -> Self {
+        match stored {
+            ToolUseConfig::None => StoredToolUseConfig::None,
+            ToolUseConfig::NoneOf { tools } => StoredToolUseConfig::NoneOf { tools },
+            ToolUseConfig::Any => StoredToolUseConfig::Any,
+            ToolUseConfig::AnyOf { tools } => StoredToolUseConfig::AnyOf { tools },
+            ToolUseConfig::AllOf { tools } => StoredToolUseConfig::AllOf { tools },
+        }
+    }
+}
+
 pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
     format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
 }

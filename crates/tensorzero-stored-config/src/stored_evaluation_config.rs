@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub enum StoredEvaluationConfig {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredInferenceEvaluationConfig {
-    pub evaluators: Option<HashMap<String, StoredEvaluatorConfig>>,
+    pub evaluators: Option<BTreeMap<String, StoredEvaluatorConfig>>,
     pub function_name: String,
     pub description: Option<String>,
 }
@@ -68,7 +68,7 @@ pub struct StoredRegexConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredLLMJudgeConfig {
     pub input_format: Option<StoredLLMJudgeInputFormat>,
-    pub variants: Option<HashMap<String, StoredLLMJudgeVariantInfo>>,
+    pub variants: Option<BTreeMap<String, StoredLLMJudgeVariantInfo>>,
     pub output_type: StoredLLMJudgeOutputType,
     pub optimize: StoredLLMJudgeOptimize,
     pub cutoff: Option<f32>,

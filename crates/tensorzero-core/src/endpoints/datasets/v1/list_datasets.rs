@@ -4,13 +4,13 @@ use tracing::instrument;
 
 use crate::db::datasets::{DatasetQueries, GetDatasetMetadataParams};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 use super::types::{DatasetMetadata, ListDatasetsRequest, ListDatasetsResponse};
 
 /// Handler for the GET `/internal/datasets` endpoint.
 /// Returns metadata for all datasets with optional filtering and pagination.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.list_datasets", skip(app_state, params))]
 pub async fn list_datasets_handler(
     State(app_state): AppState,

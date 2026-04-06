@@ -10,7 +10,7 @@ use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferen
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
 
 use super::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
@@ -19,7 +19,7 @@ use super::types::{
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
 /// Creates datapoints from inferences based on either specific inference IDs or an inference query.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.create_from_inferences", skip(app_state, request))]
 pub async fn create_from_inferences_handler(
     State(app_state): AppState,

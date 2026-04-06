@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::clickhouse::get_clean_clickhouse;
 use crate::utils::skip_for_postgres;
+use arc_swap::ArcSwap;
 use googletest::prelude::*;
 use serde_json::json;
 use tensorzero::ClientBuilder;
@@ -12,7 +13,7 @@ use tensorzero::InputMessage;
 use tensorzero::InputMessageContent;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, Input};
-use tensorzero_core::config::{Config, ConfigFileGlob, RuntimeOverlay};
+use tensorzero_core::config::{Config, ConfigFileGlob, RuntimeOverlay, UninitializedConfig};
 use tensorzero_core::db::HowdyQueries;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::clickhouse::migration_manager;
@@ -57,6 +58,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
     .unwrap();
     let handle = GatewayHandle::new_with_database_and_http_client(
         config,
+        Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
         Arc::new(RuntimeOverlay::default()),
         clickhouse,
         PostgresConnectionInfo::Disabled,

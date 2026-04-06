@@ -177,7 +177,7 @@ async fn validate_postgres_extensions_for_postgres_primary(
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run().await {
+    match Box::pin(run()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(code) => code,
     }
@@ -383,7 +383,7 @@ async fn run() -> Result<(), ExitCode> {
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
 
-    let config = gateway_handle.app_state.config.clone();
+    let config = gateway_handle.app_state.config.load();
 
     // Set debug mode
     error::set_debug(config.gateway.debug).log_err_pretty("Failed to set debug mode")?;
@@ -731,7 +731,8 @@ async fn spawn_autopilot_worker_if_configured(
     };
 
     // Create an embedded TensorZero client using the gateway's state
-    let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
+    let t0_client =
+        std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.load_latest()));
 
     // TODO: decide how we want to do autopilot config.
     let default_max_attempts = 5;

@@ -4,7 +4,7 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use tokio_util::sync::CancellationToken;
 
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 mod handler;
 
@@ -15,7 +15,7 @@ use handler::TensorZeroMcpServer;
 /// The returned `Router<()>` is intended to be nested on the gateway router
 /// (e.g. via `nest_service("/mcp", ...)`) so MCP is served on the same port.
 pub async fn build_mcp_router(
-    app_state: Arc<AppStateData>,
+    app_state: Arc<SwappableAppStateData>,
     shutdown_token: CancellationToken,
 ) -> Result<axum::Router, String> {
     let tool_router = handler::build_tool_router(&app_state).await?;
