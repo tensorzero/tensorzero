@@ -288,6 +288,8 @@ async fn test_insert_and_read_model_inference_zero_cache_tokens(conn: impl Model
     let model_inference = StoredModelInference {
         id: model_inference_id,
         inference_id,
+        function_name: "test_function".to_string(),
+        variant_name: "test_variant".to_string(),
         raw_request: Some(r#"{"model": "test-model"}"#.to_string()),
         raw_response: Some(r#"{"choices": []}"#.to_string()),
         system: None,
