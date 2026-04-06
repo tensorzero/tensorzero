@@ -511,6 +511,142 @@ async fn test_dropped_stream_body() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_read_only_require_hit() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Phase 1: Populate the cache using a ReadWrite proxy
+    let (server_started_tx, server_started_rx) = oneshot::channel();
+    // We don't care about shutdown handling in this test
+    #[expect(clippy::disallowed_methods)]
+    let _proxy_handle = tokio::spawn(run_server(
+        Args {
+            cache_path: temp_dir.path().to_path_buf(),
+            port: 0,
+            sanitize_traceparent: true,
+            sanitize_bearer_auth: true,
+            sanitize_aws_sigv4: true,
+            health_port: 0,
+            sanitize_model_headers: true,
+            remove_user_agent_non_amazon: false,
+            mode: CacheMode::ReadWrite,
+            save_request_body: true,
+        },
+        server_started_tx,
+    ));
+
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let shutdown_fut = async {
+        shutdown_rx.await.unwrap();
+    };
+
+    let (target_server_addr, target_server_handle) = start_target_server(shutdown_fut).await;
+
+    let proxy_addr = server_started_rx.await.unwrap();
+
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://{proxy_addr}")).unwrap())
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    let request_body = r#"{"test": "read_only_require_hit"}"#;
+    let first_response = client
+        .post(format!("http://{target_server_addr}/timestamp-good"))
+        .body(request_body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first_response.status(), 200);
+    let cached = first_response
+        .headers()
+        .get("x-tensorzero-provider-proxy-cache")
+        .unwrap();
+    assert_eq!(cached, "false");
+    let first_response_body = first_response.text().await.unwrap();
+
+    // Wait for the cache file to be written to disk
+    loop {
+        let temp_path = temp_dir.path().to_path_buf();
+        let found = tokio::task::spawn_blocking(move || {
+            std::fs::read_dir(temp_path)
+                .unwrap()
+                .any(|f| f.unwrap().path().to_string_lossy().contains("127.0.0.1"))
+        })
+        .await
+        .unwrap();
+        if found {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    // Phase 2: Start a ReadOnlyRequireHit proxy with the same cache directory
+    let (server_started_tx, server_started_rx) = oneshot::channel();
+    // We don't care about shutdown handling in this test
+    #[expect(clippy::disallowed_methods)]
+    let _proxy_handle2 = tokio::spawn(run_server(
+        Args {
+            cache_path: temp_dir.path().to_path_buf(),
+            port: 0,
+            sanitize_traceparent: true,
+            sanitize_bearer_auth: true,
+            sanitize_aws_sigv4: true,
+            health_port: 0,
+            sanitize_model_headers: true,
+            remove_user_agent_non_amazon: false,
+            mode: CacheMode::ReadOnlyRequireHit,
+            save_request_body: true,
+        },
+        server_started_tx,
+    ));
+
+    let proxy_addr2 = server_started_rx.await.unwrap();
+
+    let client2 = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://{proxy_addr2}")).unwrap())
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    // A request that hits the cache should succeed
+    let hit_response = client2
+        .post(format!("http://{target_server_addr}/timestamp-good"))
+        .body(request_body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hit_response.status(), 200);
+    let cached = hit_response
+        .headers()
+        .get("x-tensorzero-provider-proxy-cache")
+        .unwrap();
+    assert_eq!(cached, "true");
+    let hit_response_body = hit_response.text().await.unwrap();
+    assert_eq!(first_response_body, hit_response_body);
+
+    // A request to a fixed dummy address that misses the cache should return a 502.
+    // We use a fixed address so the hash (and thus the error message) is deterministic.
+    let miss_response = client2
+        .post("http://127.0.0.1:99/timestamp-good")
+        .body(r#"{"test": "different body causes cache miss"}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(miss_response.status(), 502);
+    let miss_body = miss_response.text().await.unwrap();
+    let temp_dir_str = temp_dir.path().to_string_lossy();
+    assert_eq!(
+        miss_body,
+        format!(
+            "provider-proxy: Cache miss in ReadOnlyRequireHit mode: {temp_dir_str}/127.0.0.1-956f127f4ff98a5480c095dba545cef89dda20a6a3f4b9fd147abdee5d7db4ff"
+        )
+    );
+
+    shutdown_tx.send(()).unwrap();
+    target_server_handle.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_stream_body() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
