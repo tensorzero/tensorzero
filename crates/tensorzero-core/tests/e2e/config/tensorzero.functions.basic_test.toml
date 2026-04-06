@@ -587,20 +587,20 @@ extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
 
 [functions.basic_test.variants.together]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.together-extra-body]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.together-extra-headers]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [
@@ -609,13 +609,13 @@ extra_headers = [
 
 [functions.basic_test.variants.together-dynamic]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together-dynamic"
+model = "glm-5-together-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.together-shorthand]
 type = "chat_completion"
-model = "together::Qwen/Qwen3-Next-80B-A3B-Instruct"
+model = "together::zai-org/GLM-5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
