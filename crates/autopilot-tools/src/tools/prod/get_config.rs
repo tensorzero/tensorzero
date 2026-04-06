@@ -80,8 +80,16 @@ impl SimpleTool for GetConfigTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
+        // Use None to get the current live config when no specific snapshot is requested
+        let hash = if side_info.config_snapshot_hash.is_empty()
+            || side_info.config_snapshot_hash == "latest"
+        {
+            None
+        } else {
+            Some(side_info.config_snapshot_hash.clone())
+        };
         ctx.client()
-            .get_config_snapshot(Some(side_info.config_snapshot_hash))
+            .get_config_snapshot(hash)
             .await
             .map_err(|e| AutopilotToolError::client_error("get_config", e).into())
     }
