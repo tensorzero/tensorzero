@@ -83,11 +83,48 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // Note: we do NOT backfill existing ModelInference rows with function_name/variant_name
-        // via ALTER TABLE UPDATE, because ClickHouse does not support correlated subqueries
-        // referencing the mutation target table. Instead, new rows written by the application
-        // will have these columns populated, and the VariantStatistics backfill (Phase 3)
-        // JOINs against ChatInference/JsonInference for historical data.
+        if !clean_start {
+            for inference_table in ["ChatInference", "JsonInference"] {
+                tracing::info!(
+                    "Backfilling `ModelInference.function_name`/`variant_name` from `{inference_table}`"
+                );
+                // In ClickHouse mutations, bare column names (e.g. `inference_id`)
+                // refer to the row being mutated — do NOT qualify with `ModelInference.`.
+                self.clickhouse
+                    .run_query_synchronous_no_params(format!(
+                        r"ALTER TABLE ModelInference UPDATE
+                        function_name = (SELECT {inference_table}.function_name FROM {inference_table} WHERE {inference_table}.id = inference_id LIMIT 1),
+                        variant_name = (SELECT {inference_table}.variant_name FROM {inference_table} WHERE {inference_table}.id = inference_id LIMIT 1)
+                    WHERE function_name = '' AND inference_id IN (SELECT id FROM {inference_table})"
+                    ))
+                    .await?;
+            }
+
+            // Wait for all mutations to finish before proceeding.
+            tracing::info!("Waiting for `ModelInference` mutations to complete");
+            self.clickhouse
+                .run_query_synchronous_no_params(
+                    "SELECT 1 FROM system.mutations WHERE table = 'ModelInference' AND is_done = 0 AND database = currentDatabase() LIMIT 1"
+                        .to_string(),
+                )
+                .await?;
+            // Poll until no pending mutations remain
+            loop {
+                let result = self
+                    .clickhouse
+                    .run_query_synchronous_no_params(
+                        "SELECT count() FROM system.mutations WHERE table = 'ModelInference' AND is_done = 0 AND database = currentDatabase()"
+                            .to_string(),
+                    )
+                    .await?;
+                let count: u64 = result.response.trim().parse().unwrap_or(0);
+                if count == 0 {
+                    break;
+                }
+                tracing::info!("Waiting for {count} ModelInference mutation(s) to complete...");
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        }
 
         // ── Phase 2: Create VariantStatistics table and materialized views ──
 
@@ -240,37 +277,34 @@ impl Migration for Migration0053<'_> {
             }
 
             // Backfill from ModelInference (token/cost metrics)
-            // JOINs against ChatInference/JsonInference for historical rows that
-            // predate the denormalization and don't have function_name populated.
+            // Reads denormalized function_name/variant_name directly — no JOIN needed
+            // since Phase 1 backfilled these columns on all existing rows.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
-            for inference_table in ["ChatInference", "JsonInference"] {
-                tracing::info!("Backfilling model inference metrics via `{inference_table}`");
-                self.clickhouse
-                    .run_query_synchronous_no_params(format!(
-                        r"
-                        INSERT INTO VariantStatistics
-                            (function_name, variant_name, minute,
-                             total_input_tokens, total_output_tokens, total_cost,
-                             total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
-                             count_with_cost)
-                        SELECT
-                            {inference_table}.function_name AS function_name,
-                            {inference_table}.variant_name AS variant_name,
-                            toStartOfMinute(mi.timestamp) AS minute,
-                            sumState(mi.input_tokens) AS total_input_tokens,
-                            sumState(mi.output_tokens) AS total_output_tokens,
-                            sumState(mi.cost) AS total_cost,
-                            sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
-                            sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
-                            countState(mi.cost) AS count_with_cost
-                        FROM ModelInference mi
-                        INNER JOIN {inference_table} ON mi.inference_id = {inference_table}.id
-                        WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                        GROUP BY {inference_table}.function_name, {inference_table}.variant_name, minute
-                        "
-                    ))
-                    .await?;
-            }
+            self.clickhouse
+                .run_query_synchronous_no_params(format!(
+                    r"
+                    INSERT INTO VariantStatistics
+                        (function_name, variant_name, minute,
+                         total_input_tokens, total_output_tokens, total_cost,
+                         total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
+                         count_with_cost)
+                    SELECT
+                        mi.function_name AS function_name,
+                        mi.variant_name AS variant_name,
+                        toStartOfMinute(mi.timestamp) AS minute,
+                        sumState(mi.input_tokens) AS total_input_tokens,
+                        sumState(mi.output_tokens) AS total_output_tokens,
+                        sumState(mi.cost) AS total_cost,
+                        sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
+                        sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
+                        countState(mi.cost) AS count_with_cost
+                    FROM ModelInference mi
+                    WHERE mi.function_name != ''
+                        AND UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
+                    GROUP BY mi.function_name, mi.variant_name, minute
+                    "
+                ))
+                .await?;
 
             // Backfill from ChatInference (latency/count metrics)
             tracing::info!("Running backfill of `VariantStatistics` from `ChatInference`");
