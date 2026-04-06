@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -15,7 +15,6 @@ use tensorzero_stored_config::{
     StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
     StoredOpenAIAPIType, StoredProviderConfig,
 };
-#[cfg(test)]
 use tensorzero_stored_config::{
     StoredCostConfig, StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredTimeoutsConfig,
     StoredUnifiedCostConfig,
@@ -268,7 +267,6 @@ impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
     }
 }
 
-#[cfg(test)]
 impl TryFrom<&UninitializedModelConfig> for StoredModelConfig {
     type Error = Error;
 
@@ -282,7 +280,7 @@ impl TryFrom<&UninitializedModelConfig> for StoredModelConfig {
                     StoredModelProvider::from(provider),
                 ))
             })
-            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         Ok(StoredModelConfig {
             routing: config.routing.iter().map(ToString::to_string).collect(),
@@ -1404,7 +1402,6 @@ pub struct UninitializedModelProvider {
     pub batch_cost: Option<UninitializedUnifiedCostConfig>,
 }
 
-#[cfg(test)]
 impl From<&UninitializedModelProvider> for StoredModelProvider {
     fn from(provider: &UninitializedModelProvider) -> Self {
         StoredModelProvider {
