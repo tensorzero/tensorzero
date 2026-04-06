@@ -24,9 +24,10 @@ use crate::types::{
     CreateEventPayloadToolCallAuthorization, CreateEventRequest, CreateEventResponse,
     ErrorResponse, Event, EventPayload, EventPayloadToolCall, GatewayEvent, GatewayEventPayload,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
+    GatewayToolCallAuthorizationStatus, ListConfigWritesParams, ListConfigWritesResponse,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    S3UploadRequest, S3UploadResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -1193,9 +1194,6 @@ impl AutopilotClient {
         &self,
         shutdown_token: tokio_util::sync::CancellationToken,
     ) {
-        if self.tool_whitelist.is_empty() {
-            return;
-        }
         loop {
             match self.run_approval_loop(&shutdown_token).await {
                 Ok(()) => break, // Graceful shutdown
@@ -1224,17 +1222,35 @@ impl AutopilotClient {
 
         while let Some(item) = stream.next().with_cancellation_token(shutdown_token).await {
             match item {
-                Some(Ok(update)) => {
-                    if let GatewayEventPayload::ToolCall(tc) = &update.event.payload
-                        && self.tool_whitelist.contains(&tc.name)
-                    {
+                Some(Ok(update)) => match &update.event.payload {
+                    GatewayEventPayload::ToolCall(tc) if self.tool_whitelist.contains(&tc.name) => {
                         self.approve_whitelisted_tool_call(
                             update.event.session_id,
                             update.event.id,
                         )
                         .await;
                     }
-                }
+                    GatewayEventPayload::ToolCallAuthorization(auth)
+                        if matches!(auth.status, GatewayToolCallAuthorizationStatus::Approved)
+                            && !matches!(auth.source, ToolCallDecisionSource::Whitelist) =>
+                    {
+                        if let Err(e) = self
+                            .handle_tool_call_authorization(
+                                update.event.session_id,
+                                auth.tool_call_event_id,
+                            )
+                            .await
+                        {
+                            tracing::warn!(
+                                session_id = %update.event.session_id,
+                                tool_call_event_id = %auth.tool_call_event_id,
+                                error = %e,
+                                "Failed to spawn tool from external approval"
+                            );
+                        }
+                    }
+                    _ => {}
+                },
                 Some(Err(e)) => return Err(e),
                 None => {
                     return Err(AutopilotError::Sse(
