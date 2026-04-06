@@ -1103,7 +1103,7 @@ pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result
         if name.starts_with("tensorzero::") {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "User-defined function name cannot start with 'tensorzero::': {name}"
+                    "User-defined function name cannot start with `tensorzero::`: {name}"
                 ),
             }));
         }

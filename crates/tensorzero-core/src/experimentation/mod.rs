@@ -8,6 +8,7 @@ use std::{
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
     StoredAdaptiveExperimentationAlgorithm, StoredExperimentationConfig,
+    StoredExperimentationConfigWithNamespaces,
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -615,10 +616,10 @@ impl From<StoredExperimentationConfig> for UninitializedExperimentationConfig {
     }
 }
 
-impl From<tensorzero_stored_config::StoredExperimentationConfigWithNamespaces>
+impl From<StoredExperimentationConfigWithNamespaces>
     for UninitializedExperimentationConfigWithNamespaces
 {
-    fn from(stored: tensorzero_stored_config::StoredExperimentationConfigWithNamespaces) -> Self {
+    fn from(stored: StoredExperimentationConfigWithNamespaces) -> Self {
         let base = stored.base.into();
         let namespaces = stored
             .namespaces

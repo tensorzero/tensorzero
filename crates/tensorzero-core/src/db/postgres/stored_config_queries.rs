@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
-use sqlx::{FromRow, PgPool, Postgres, QueryBuilder};
+use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Transaction};
 use tensorzero_stored_config::schema_dispatch::{
     deserialize_autopilot_config, deserialize_clickhouse_config,
     deserialize_embedding_model_config, deserialize_evaluation_config, deserialize_function_config,
