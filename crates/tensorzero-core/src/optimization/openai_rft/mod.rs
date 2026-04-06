@@ -1,5 +1,8 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+use crate::providers::openai::grader::{
+    OpenAIModelGraderInput, OpenAIRFTRole, OpenAISimilarityMetric, OpenAIStringCheckOp,
+};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use schemars::JsonSchema;
@@ -257,6 +260,152 @@ impl From<StoredOpenAIRFTResponseFormat> for OpenAIRFTResponseFormat {
     }
 }
 
+// --- Reverse conversions: core -> stored ---
+
+impl From<OpenAIStringCheckOp> for StoredOpenAIStringCheckOp {
+    fn from(op: OpenAIStringCheckOp) -> Self {
+        match op {
+            OpenAIStringCheckOp::Eq => Self::Eq,
+            OpenAIStringCheckOp::Ne => Self::Ne,
+            OpenAIStringCheckOp::Like => Self::Like,
+            OpenAIStringCheckOp::Ilike => Self::Ilike,
+        }
+    }
+}
+
+impl From<OpenAISimilarityMetric> for StoredOpenAISimilarityMetric {
+    fn from(metric: OpenAISimilarityMetric) -> Self {
+        match metric {
+            OpenAISimilarityMetric::FuzzyMatch => Self::FuzzyMatch,
+            OpenAISimilarityMetric::Bleu => Self::Bleu,
+            OpenAISimilarityMetric::Gleu => Self::Gleu,
+            OpenAISimilarityMetric::Meteor => Self::Meteor,
+            OpenAISimilarityMetric::Rouge1 => Self::Rouge1,
+            OpenAISimilarityMetric::Rouge2 => Self::Rouge2,
+            OpenAISimilarityMetric::Rouge3 => Self::Rouge3,
+            OpenAISimilarityMetric::Rouge4 => Self::Rouge4,
+            OpenAISimilarityMetric::Rouge5 => Self::Rouge5,
+            OpenAISimilarityMetric::RougeL => Self::RougeL,
+        }
+    }
+}
+
+impl From<OpenAIRFTRole> for StoredOpenAIRFTRole {
+    fn from(role: OpenAIRFTRole) -> Self {
+        match role {
+            OpenAIRFTRole::Developer => Self::Developer,
+            OpenAIRFTRole::User => Self::User,
+        }
+    }
+}
+
+impl From<OpenAIModelGraderInput> for StoredOpenAIModelGraderInput {
+    fn from(input: OpenAIModelGraderInput) -> Self {
+        Self {
+            role: input.role.into(),
+            content: input.content,
+        }
+    }
+}
+
+impl From<OpenAIGrader> for StoredOpenAIGrader {
+    fn from(grader: OpenAIGrader) -> Self {
+        match grader {
+            OpenAIGrader::StringCheck {
+                name,
+                operation,
+                input,
+                reference,
+            } => Self::StringCheck {
+                name,
+                operation: operation.into(),
+                input,
+                reference,
+            },
+            OpenAIGrader::TextSimilarity {
+                name,
+                evaluation_metric,
+                input,
+                reference,
+            } => Self::TextSimilarity {
+                name,
+                evaluation_metric: evaluation_metric.into(),
+                input,
+                reference,
+            },
+            OpenAIGrader::ScoreModel {
+                name,
+                model,
+                input,
+                range,
+            } => Self::ScoreModel {
+                name,
+                model,
+                input: input.into_iter().map(Into::into).collect(),
+                range,
+            },
+            OpenAIGrader::LabelModel {
+                name,
+                model,
+                labels,
+                passing_labels,
+                input,
+            } => Self::LabelModel {
+                name,
+                model,
+                labels,
+                passing_labels,
+                input: input.into_iter().map(Into::into).collect(),
+            },
+            OpenAIGrader::Python {
+                name,
+                source,
+                image_tag,
+            } => Self::Python {
+                name,
+                source,
+                image_tag,
+            },
+            OpenAIGrader::Multi {
+                calculate_output,
+                graders,
+                name,
+            } => Self::Multi {
+                calculate_output,
+                graders: graders
+                    .into_iter()
+                    .map(|(k, v)| (k, Box::new((*v).into())))
+                    .collect(),
+                name,
+            },
+        }
+    }
+}
+
+impl From<JsonSchemaInfo> for StoredRFTJsonSchemaInfo {
+    fn from(info: JsonSchemaInfo) -> Self {
+        Self {
+            name: info.name,
+            description: info.description,
+            schema: info.schema,
+            strict: Some(info.strict),
+        }
+    }
+}
+
+impl From<OpenAIRFTResponseFormat> for StoredOpenAIRFTResponseFormat {
+    fn from(format: OpenAIRFTResponseFormat) -> Self {
+        match format {
+            OpenAIRFTResponseFormat::JsonSchema { json_schema } => {
+                let RFTJsonSchemaInfoOption::JsonSchema(info) = json_schema;
+                Self::JsonSchema {
+                    json_schema: info.into(),
+                }
+            }
+        }
+    }
+}
+
 impl From<StoredOpenAIRFTConfig> for UninitializedOpenAIRFTConfig {
     fn from(stored: StoredOpenAIRFTConfig) -> Self {
         UninitializedOpenAIRFTConfig {
@@ -272,6 +421,25 @@ impl From<StoredOpenAIRFTConfig> for UninitializedOpenAIRFTConfig {
             reasoning_effort: stored.reasoning_effort,
             seed: stored.seed,
             suffix: stored.suffix,
+        }
+    }
+}
+
+impl From<UninitializedOpenAIRFTConfig> for StoredOpenAIRFTConfig {
+    fn from(config: UninitializedOpenAIRFTConfig) -> Self {
+        StoredOpenAIRFTConfig {
+            model: config.model,
+            grader: config.grader.into(),
+            response_format: config.response_format.map(Into::into),
+            batch_size: config.batch_size,
+            compute_multiplier: config.compute_multiplier,
+            eval_interval: config.eval_interval,
+            eval_samples: config.eval_samples,
+            learning_rate_multiplier: config.learning_rate_multiplier,
+            n_epochs: config.n_epochs,
+            reasoning_effort: config.reasoning_effort,
+            seed: config.seed,
+            suffix: config.suffix,
         }
     }
 }
@@ -409,5 +577,213 @@ impl std::fmt::Display for OpenAIRFTJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use std::collections::HashMap;
+
+    fn sample_string_check_grader() -> OpenAIGrader {
+        OpenAIGrader::StringCheck {
+            name: "exact-match".to_string(),
+            operation: OpenAIStringCheckOp::Eq,
+            input: "{{output}}".to_string(),
+            reference: "{{reference}}".to_string(),
+        }
+    }
+
+    fn sample_score_model_grader() -> OpenAIGrader {
+        OpenAIGrader::ScoreModel {
+            name: "score-model".to_string(),
+            model: "gpt-4o".to_string(),
+            input: vec![OpenAIModelGraderInput {
+                role: OpenAIRFTRole::Developer,
+                content: "rate this".to_string(),
+            }],
+            range: Some([0.0, 1.0]),
+        }
+    }
+
+    #[gtest]
+    fn test_openai_string_check_op_round_trip() {
+        for original in [
+            OpenAIStringCheckOp::Eq,
+            OpenAIStringCheckOp::Ne,
+            OpenAIStringCheckOp::Like,
+            OpenAIStringCheckOp::Ilike,
+        ] {
+            let stored: StoredOpenAIStringCheckOp = original.clone().into();
+            let restored: OpenAIStringCheckOp = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_openai_similarity_metric_round_trip() {
+        for original in [
+            OpenAISimilarityMetric::FuzzyMatch,
+            OpenAISimilarityMetric::Bleu,
+            OpenAISimilarityMetric::Gleu,
+            OpenAISimilarityMetric::Meteor,
+            OpenAISimilarityMetric::Rouge1,
+            OpenAISimilarityMetric::Rouge2,
+            OpenAISimilarityMetric::Rouge3,
+            OpenAISimilarityMetric::Rouge4,
+            OpenAISimilarityMetric::Rouge5,
+            OpenAISimilarityMetric::RougeL,
+        ] {
+            let stored: StoredOpenAISimilarityMetric = original.clone().into();
+            let restored: OpenAISimilarityMetric = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_openai_rft_role_round_trip() {
+        for original in [OpenAIRFTRole::Developer, OpenAIRFTRole::User] {
+            let stored: StoredOpenAIRFTRole = original.into();
+            let restored: OpenAIRFTRole = stored.into();
+            expect_that!(restored, eq(original));
+        }
+    }
+
+    #[gtest]
+    fn test_openai_grader_string_check_round_trip() {
+        let original = sample_string_check_grader();
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_grader_text_similarity_round_trip() {
+        let original = OpenAIGrader::TextSimilarity {
+            name: "text-sim".to_string(),
+            evaluation_metric: OpenAISimilarityMetric::Bleu,
+            input: "{{output}}".to_string(),
+            reference: "{{reference}}".to_string(),
+        };
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_grader_score_model_round_trip() {
+        let original = sample_score_model_grader();
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_grader_label_model_round_trip() {
+        let original = OpenAIGrader::LabelModel {
+            name: "label-model".to_string(),
+            model: "gpt-4o".to_string(),
+            labels: vec!["good".to_string(), "bad".to_string()],
+            passing_labels: vec!["good".to_string()],
+            input: vec![OpenAIModelGraderInput {
+                role: OpenAIRFTRole::User,
+                content: "label this".to_string(),
+            }],
+        };
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_grader_python_round_trip() {
+        let original = OpenAIGrader::Python {
+            name: "py-grader".to_string(),
+            source: "def grade(): return 1.0".to_string(),
+            image_tag: Some("latest".to_string()),
+        };
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_grader_multi_round_trip() {
+        let mut graders = HashMap::new();
+        graders.insert("a".to_string(), Box::new(sample_string_check_grader()));
+        graders.insert("b".to_string(), Box::new(sample_score_model_grader()));
+        let original = OpenAIGrader::Multi {
+            calculate_output: "a + b".to_string(),
+            graders,
+            name: "combined".to_string(),
+        };
+        let stored: StoredOpenAIGrader = original.clone().into();
+        let restored: OpenAIGrader = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_rft_response_format_round_trip() {
+        let original = OpenAIRFTResponseFormat::JsonSchema {
+            json_schema: RFTJsonSchemaInfoOption::JsonSchema(JsonSchemaInfo {
+                name: "schema".to_string(),
+                description: Some("desc".to_string()),
+                schema: Some(serde_json::json!({"type": "object"})),
+                strict: true,
+            }),
+        };
+        let stored: StoredOpenAIRFTResponseFormat = original.clone().into();
+        let restored: OpenAIRFTResponseFormat = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_rft_config_round_trip_full() {
+        let original = UninitializedOpenAIRFTConfig {
+            model: "gpt-4o-mini".to_string(),
+            grader: sample_string_check_grader(),
+            response_format: Some(OpenAIRFTResponseFormat::JsonSchema {
+                json_schema: RFTJsonSchemaInfoOption::JsonSchema(JsonSchemaInfo {
+                    name: "schema".to_string(),
+                    description: None,
+                    schema: Some(serde_json::json!({"type": "object"})),
+                    strict: true,
+                }),
+            }),
+            batch_size: Some(8),
+            compute_multiplier: Some(1.5),
+            eval_interval: Some(10),
+            eval_samples: Some(100),
+            learning_rate_multiplier: Some(0.5),
+            n_epochs: Some(3),
+            reasoning_effort: Some("low".to_string()),
+            seed: Some(42),
+            suffix: Some("rft-tune".to_string()),
+        };
+        let stored: StoredOpenAIRFTConfig = original.clone().into();
+        let restored: UninitializedOpenAIRFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_openai_rft_config_round_trip_minimal() {
+        let original = UninitializedOpenAIRFTConfig {
+            model: "gpt-4o-mini".to_string(),
+            grader: sample_string_check_grader(),
+            response_format: None,
+            batch_size: None,
+            compute_multiplier: None,
+            eval_interval: None,
+            eval_samples: None,
+            learning_rate_multiplier: None,
+            n_epochs: None,
+            reasoning_effort: None,
+            seed: None,
+            suffix: None,
+        };
+        let stored: StoredOpenAIRFTConfig = original.clone().into();
+        let restored: UninitializedOpenAIRFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

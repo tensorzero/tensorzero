@@ -212,7 +212,8 @@ pub struct StoredGCPVertexGeminiOptimizerSFTConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredGEPAConfig {
     pub function_name: String,
-    pub evaluation_name: String,
+    pub evaluation_name: Option<String>,
+    pub evaluator_names: Option<Vec<String>>,
     pub initial_variants: Option<Vec<String>>,
     pub variant_prefix: Option<String>,
     pub batch_size: Option<usize>,

@@ -31,13 +31,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredNonStreamingTimeouts, StoredStreamingTimeouts, StoredTimeoutsConfig,
+    StoredMetricLevel, StoredMetricOptimize, StoredMetricType, StoredNonStreamingTimeouts,
+    StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
 };
 use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use unwritten::UnwrittenConfig;
 use url::Url;
+use uuid::Uuid;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -187,6 +189,23 @@ pub struct TimeoutsConfig {
     pub streaming: Option<StreamingTimeouts>,
 }
 
+impl From<&TimeoutsConfig> for StoredTimeoutsConfig {
+    fn from(config: &TimeoutsConfig) -> Self {
+        StoredTimeoutsConfig {
+            non_streaming: config
+                .non_streaming
+                .as_ref()
+                .map(|ns| StoredNonStreamingTimeouts {
+                    total_ms: ns.total_ms,
+                }),
+            streaming: config.streaming.as_ref().map(|s| StoredStreamingTimeouts {
+                ttft_ms: s.ttft_ms,
+                total_ms: s.total_ms,
+            }),
+        }
+    }
+}
+
 impl TimeoutsConfig {
     pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
         let total_ms = self.non_streaming.as_ref().and_then(|ns| ns.total_ms);
@@ -232,23 +251,6 @@ impl TimeoutsConfig {
         }
 
         Ok(())
-    }
-}
-
-impl From<&TimeoutsConfig> for StoredTimeoutsConfig {
-    fn from(config: &TimeoutsConfig) -> Self {
-        StoredTimeoutsConfig {
-            non_streaming: config
-                .non_streaming
-                .as_ref()
-                .map(|ns| StoredNonStreamingTimeouts {
-                    total_ms: ns.total_ms,
-                }),
-            streaming: config.streaming.as_ref().map(|s| StoredStreamingTimeouts {
-                ttft_ms: s.ttft_ms,
-                total_ms: s.total_ms,
-            }),
-        }
     }
 }
 
@@ -675,6 +677,15 @@ pub enum MetricConfigType {
     Float,
 }
 
+impl From<MetricConfigType> for StoredMetricType {
+    fn from(value: MetricConfigType) -> Self {
+        match value {
+            MetricConfigType::Boolean => Self::Boolean,
+            MetricConfigType::Float => Self::Float,
+        }
+    }
+}
+
 impl MetricConfigType {
     pub fn to_clickhouse_table_name(&self) -> &'static str {
         match self {
@@ -702,6 +713,15 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
+impl From<MetricConfigOptimize> for StoredMetricOptimize {
+    fn from(value: MetricConfigOptimize) -> Self {
+        match value {
+            MetricConfigOptimize::Min => Self::Min,
+            MetricConfigOptimize::Max => Self::Max,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -717,6 +737,15 @@ impl std::fmt::Display for MetricConfigLevel {
         let serialized = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
         // Remove the quotes around the string
         write!(f, "{}", serialized.trim_matches('"'))
+    }
+}
+
+impl From<&MetricConfigLevel> for StoredMetricLevel {
+    fn from(value: &MetricConfigLevel) -> Self {
+        match value {
+            MetricConfigLevel::Inference => Self::Inference,
+            MetricConfigLevel::Episode => Self::Episode,
+        }
     }
 }
 
@@ -2849,6 +2878,36 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
+    #[expect(dead_code)]
+    pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
+        [&self.parameters]
+    }
+
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn convert_for_db(
+        &self,
+        prompt_template_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredToolConfig, Error> {
+        let template_key = self.parameters.get_template_key();
+        let Some(prompt_template_version_id) = prompt_template_version_ids.get(&template_key)
+        else {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Missing prompt template version ID for template key `{template_key}`."
+                ),
+            }));
+        };
+        Ok(StoredToolConfig {
+            description: self.description.clone(),
+            parameters: StoredPromptRef {
+                prompt_template_version_id: *prompt_template_version_id,
+                template_key,
+            },
+            name: self.name.clone(),
+            strict: self.strict,
+        })
+    }
+
     pub fn load(self, key: String) -> Result<StaticToolConfig, Error> {
         let parameters = JSONSchema::from_path(self.parameters)?;
         Ok(StaticToolConfig {
@@ -2930,5 +2989,146 @@ impl From<tensorzero_stored_config::StoredPostgresConfig> for PostgresConfig {
             inference_metadata_retention_days: stored.inference_metadata_retention_days,
             inference_data_retention_days: stored.inference_data_retention_days,
         }
+    }
+}
+
+#[cfg(test)]
+mod round_trip_tests {
+    use std::path::PathBuf;
+
+    use googletest::prelude::*;
+
+    use super::*;
+    use crate::config::path::ResolvedTomlPathData;
+
+    // ── TimeoutsConfig ─────────────────────────────────────────────────
+
+    #[gtest]
+    fn test_timeouts_config_round_trip_full() {
+        let original = TimeoutsConfig {
+            non_streaming: Some(NonStreamingTimeouts {
+                total_ms: Some(5000),
+            }),
+            streaming: Some(StreamingTimeouts {
+                ttft_ms: Some(1000),
+                total_ms: Some(30000),
+            }),
+        };
+        let stored = StoredTimeoutsConfig::from(&original);
+        let restored: TimeoutsConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_timeouts_config_round_trip_empty() {
+        let original = TimeoutsConfig::default();
+        let stored = StoredTimeoutsConfig::from(&original);
+        let restored: TimeoutsConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    // ── MetricConfig ───────────────────────────────────────────────────
+
+    #[gtest]
+    fn test_metric_config_type_round_trip() {
+        for variant in [MetricConfigType::Boolean, MetricConfigType::Float] {
+            let stored: StoredMetricType = variant.into();
+            let restored: MetricConfigType = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_optimize_round_trip() {
+        for variant in [MetricConfigOptimize::Min, MetricConfigOptimize::Max] {
+            let stored: StoredMetricOptimize = variant.into();
+            let restored: MetricConfigOptimize = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_level_round_trip() {
+        for variant in &[MetricConfigLevel::Inference, MetricConfigLevel::Episode] {
+            let stored = StoredMetricLevel::from(variant);
+            let restored: MetricConfigLevel = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_metric_config_round_trip() {
+        let original = MetricConfig {
+            r#type: MetricConfigType::Float,
+            optimize: MetricConfigOptimize::Max,
+            level: MetricConfigLevel::Inference,
+            description: Some("test metric".to_string()),
+        };
+        let stored = tensorzero_stored_config::StoredMetricConfig {
+            r#type: original.r#type.into(),
+            optimize: original.optimize.into(),
+            level: (&original.level).into(),
+            description: original.description.clone(),
+        };
+        let restored: MetricConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    // ── UninitializedToolConfig ────────────────────────────────────────
+    //
+    // `UninitializedToolConfig` only has a forward conversion to
+    // `StoredToolConfig` (the reverse requires looking up a prompt template
+    // by ID), so this verifies the forward conversion preserves all fields
+    // and resolves the prompt template version ID correctly.
+
+    #[gtest]
+    fn test_uninitialized_tool_config_convert_for_db() {
+        let parameters_json = r#"{"type":"object","properties":{}}"#.to_string();
+        let parameters = ResolvedTomlPathData::new_for_tests(
+            PathBuf::from("tools/my_tool.json"),
+            Some(parameters_json),
+        );
+        let template_key = parameters.get_template_key();
+
+        let original = UninitializedToolConfig {
+            description: "Tool description".to_string(),
+            parameters,
+            name: Some("my_tool".to_string()),
+            strict: true,
+        };
+
+        let template_id = Uuid::now_v7();
+        let mut prompt_template_version_ids = HashMap::new();
+        prompt_template_version_ids.insert(template_key.clone(), template_id);
+
+        let stored = original
+            .convert_for_db(&prompt_template_version_ids)
+            .expect("conversion should succeed when template id is present");
+
+        expect_that!(stored.description, eq(&original.description));
+        expect_that!(stored.name.as_deref(), some(eq("my_tool")));
+        expect_that!(stored.strict, eq(true));
+        expect_that!(stored.parameters.template_key, eq(&template_key));
+        expect_that!(
+            stored.parameters.prompt_template_version_id,
+            eq(template_id)
+        );
+    }
+
+    #[gtest]
+    fn test_uninitialized_tool_config_convert_for_db_missing_template() {
+        let parameters = ResolvedTomlPathData::new_for_tests(
+            PathBuf::from("tools/missing.json"),
+            Some(r#"{"type":"object"}"#.to_string()),
+        );
+        let original = UninitializedToolConfig {
+            description: "x".to_string(),
+            parameters,
+            name: None,
+            strict: false,
+        };
+
+        let result = original.convert_for_db(&HashMap::new());
+        expect_that!(result.is_err(), eq(true));
     }
 }

@@ -159,6 +159,11 @@ pub enum StoredProviderConfig {
         model_name: String,
         api_key_location: Option<StoredCredentialLocationWithFallback>,
     },
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Dummy {
+        model_name: String,
+        api_key_location: Option<Value>,
+    },
 }
 
 // --- Stored versions of core-private types ---

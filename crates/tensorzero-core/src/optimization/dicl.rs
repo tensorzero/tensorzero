@@ -112,6 +112,24 @@ impl From<tensorzero_stored_config::StoredDiclOptimizationConfig>
     }
 }
 
+impl From<UninitializedDiclOptimizationConfig>
+    for tensorzero_stored_config::StoredDiclOptimizationConfig
+{
+    fn from(config: UninitializedDiclOptimizationConfig) -> Self {
+        tensorzero_stored_config::StoredDiclOptimizationConfig {
+            embedding_model: config.embedding_model,
+            variant_name: config.variant_name,
+            function_name: config.function_name,
+            dimensions: config.dimensions,
+            batch_size: Some(config.batch_size),
+            max_concurrency: Some(config.max_concurrency),
+            k: Some(config.k),
+            model: config.model,
+            append_to_existing_variants: Some(config.append_to_existing_variants),
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedDiclOptimizationConfig {
@@ -217,5 +235,46 @@ impl std::fmt::Display for DiclOptimizationJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use tensorzero_stored_config::StoredDiclOptimizationConfig;
+
+    #[gtest]
+    fn test_dicl_optimization_config_round_trip_full() {
+        let original = UninitializedDiclOptimizationConfig {
+            embedding_model: "openai::text-embedding-3-small".to_string(),
+            variant_name: "my_variant".to_string(),
+            function_name: "my_function".to_string(),
+            dimensions: Some(512),
+            batch_size: 64,
+            max_concurrency: 5,
+            k: 8,
+            model: Some("openai::gpt-4o-mini".to_string()),
+            append_to_existing_variants: true,
+        };
+        let stored: StoredDiclOptimizationConfig = original.clone().into();
+        let restored: UninitializedDiclOptimizationConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_dicl_optimization_config_round_trip_minimal() {
+        // Note: defaults from `Default` are preserved through the round trip
+        // because the From<Uninitialized> for Stored writes them explicitly
+        // and the reverse direction reads them back.
+        let original = UninitializedDiclOptimizationConfig {
+            embedding_model: "openai::text-embedding-3-small".to_string(),
+            variant_name: "v".to_string(),
+            function_name: "f".to_string(),
+            ..Default::default()
+        };
+        let stored: StoredDiclOptimizationConfig = original.clone().into();
+        let restored: UninitializedDiclOptimizationConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }
