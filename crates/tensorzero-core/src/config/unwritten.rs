@@ -24,12 +24,32 @@ use crate::db::ConfigQueries;
 #[derive(Debug)]
 pub struct UnwrittenConfig {
     config: Config,
+    uninitialized_config: UninitializedConfig,
     snapshot: ConfigSnapshot,
+    runtime_overlay: RuntimeOverlay,
 }
 
 impl UnwrittenConfig {
-    pub fn new(config: Config, snapshot: ConfigSnapshot) -> Self {
-        Self { config, snapshot }
+    pub fn new(
+        config: Config,
+        uninitialized_config: UninitializedConfig,
+        snapshot: ConfigSnapshot,
+        runtime_overlay: RuntimeOverlay,
+    ) -> Self {
+        Self {
+            config,
+            uninitialized_config,
+            snapshot,
+            runtime_overlay,
+        }
+    }
+
+    pub fn runtime_overlay(&self) -> &RuntimeOverlay {
+        &self.runtime_overlay
+    }
+
+    pub fn uninitialized_config(&self) -> &UninitializedConfig {
+        &self.uninitialized_config
     }
 
     /// Writes the config snapshot to the database and returns the config with its hash.
@@ -40,7 +60,12 @@ impl UnwrittenConfig {
     ///
     /// The hash is used to track which config version was used for each inference request.
     pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, Error> {
-        let UnwrittenConfig { config, snapshot } = self;
+        let UnwrittenConfig {
+            config,
+            uninitialized_config: _,
+            snapshot,
+            runtime_overlay: _,
+        } = self;
         #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(&snapshot).await?;
         Ok(config)

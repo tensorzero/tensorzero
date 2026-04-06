@@ -55,9 +55,10 @@ use crate::db::workflow_evaluation_queries::{
     WorkflowEvaluationRunWithEpisodeCountRow,
 };
 use crate::db::{
-    ConfigQueries, DICLExampleWithDistance, DICLQueries, DeploymentIdQueries, EpisodeByIdRow,
-    EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts, HowdyQueries, HowdyTokenUsage,
-    ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample, TableBoundsWithCount,
+    CacheStatisticsTimePoint, ConfigQueries, DICLExampleWithDistance, DICLQueries,
+    DeploymentIdQueries, EpisodeByIdRow, EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts,
+    HowdyQueries, HowdyTokenUsage, ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample,
+    TableBoundsWithCount,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
@@ -93,7 +94,7 @@ impl PrimaryDatastore {
         postgres: &PostgresConnectionInfo,
     ) -> Result<Self, Error> {
         let resolved = match observability_config.backend {
-            ObservabilityBackend::Auto => {
+            None | Some(ObservabilityBackend::Auto) => {
                 if clickhouse.client_type() != ClickHouseClientType::Disabled {
                     Self::ClickHouse
                 } else if !matches!(postgres, PostgresConnectionInfo::Disabled) {
@@ -102,8 +103,8 @@ impl PrimaryDatastore {
                     Self::Disabled
                 }
             }
-            ObservabilityBackend::ClickHouse => Self::ClickHouse,
-            ObservabilityBackend::Postgres => Self::Postgres,
+            Some(ObservabilityBackend::ClickHouse) => Self::ClickHouse,
+            Some(ObservabilityBackend::Postgres) => Self::Postgres,
         };
 
         match observability_config.enabled {
@@ -706,6 +707,23 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         self.get_database()
             .get_model_latency_quantile_function_inputs()
+    }
+
+    async fn get_cache_statistics_timeseries(
+        &self,
+        time_window: TimeWindow,
+        max_periods: u32,
+        model_name: Option<&str>,
+        model_provider_name: Option<&str>,
+    ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
+        self.get_database()
+            .get_cache_statistics_timeseries(
+                time_window,
+                max_periods,
+                model_name,
+                model_provider_name,
+            )
+            .await
     }
 
     async fn insert_model_inferences(&self, rows: &[StoredModelInference]) -> Result<(), Error> {

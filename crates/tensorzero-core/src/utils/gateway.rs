@@ -4,8 +4,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use arc_swap::ArcSwap;
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, FromRequest, Json, Request, rejection::JsonRejection};
+use axum::extract::{
+    DefaultBodyLimit, FromRef, FromRequest, Json, Request, rejection::JsonRejection,
+};
 use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use sqlx::ConnectOptions;
@@ -18,9 +21,13 @@ use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::cache::CacheManager;
+use crate::config::gateway::{
+    default_gateway_auth_cache_enabled, default_gateway_auth_cache_ttl_ms,
+};
 use crate::config::{
-    BatchWritesConfig, Config, ConfigFileGlob, RuntimeOverlay, snapshot::ConfigSnapshot,
-    snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+    BatchWritesConfig, Config, ConfigFileGlob, DEFAULT_POSTGRES_CONNECTION_POOL_SIZE,
+    RuntimeOverlay, UninitializedConfig, snapshot::ConfigSnapshot, snapshot::SnapshotHash,
+    unwritten::UnwrittenConfig,
 };
 use crate::db::ConfigQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -68,7 +75,7 @@ pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 /// `GatewayHandle` should *not* be wrapped in an `Arc` (or given a `Clone` impl),
 /// so that it's easy for us to tell where it gets dropped.
 pub struct GatewayHandle {
-    pub app_state: AppStateData,
+    pub app_state: AppStateData<SwappableConfig>,
     drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
@@ -161,12 +168,45 @@ impl Drop for GatewayHandle {
     }
 }
 
-/// State for the API
+/// A wrapper around `Arc<ArcSwap<Config>>` that enables hot-swapping the config at runtime.
+#[derive(Clone)]
+pub struct SwappableConfig(Arc<ArcSwap<Config>>);
+
+impl SwappableConfig {
+    pub fn new(config: Arc<Config>) -> Self {
+        Self(Arc::new(ArcSwap::from(config)))
+    }
+
+    pub fn load(&self) -> Arc<Config> {
+        self.0.load_full()
+    }
+
+    pub fn store(&self, config: Arc<Config>) {
+        self.0.store(config);
+    }
+}
+
+/// State for the API, generic over the config type `C`.
+///
+/// When `C = Arc<Config>`, this holds a concrete config snapshot (used in route handlers).
+/// When `C = SwappableConfig`, this holds a hot-swappable config (used as the axum router state).
 #[derive(Clone)]
 // `#[non_exhaustive]` only affects downstream crates, so we can't use it here
 #[expect(clippy::manual_non_exhaustive)]
-pub struct AppStateData {
-    pub config: Arc<Config>,
+pub struct AppStateData<C> {
+    pub config: C,
+    /// The original `UninitializedConfig`, preserved for validation during config-in-db writes.
+    /// When a new function is written via the API, we load the current value, patch in the
+    /// new function, and run the full init+validate pipeline to ensure the config remains
+    /// valid. On success, the patched config is swapped in so subsequent writes validate
+    /// against the latest state.
+    ///
+    /// Uses `ArcSwap` so the write path can atomically update the config without blocking
+    /// concurrent readers. Wrapped in `Arc` so `AppStateData` remains `Clone`.
+    pub uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
+    /// Runtime overlay captured from the original UninitializedConfig at startup.
+    /// Used for snapshot rehydration without the lossy Config → UninitializedConfig round-trip.
+    pub runtime_overlay: Arc<RuntimeOverlay>,
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
@@ -200,7 +240,50 @@ pub struct AppStateData {
     // which can ensure that we update global state.
     _private: (),
 }
-pub type AppState = axum::extract::State<AppStateData>;
+
+/// `AppStateData` with a concrete config snapshot, used by route handlers and business logic.
+pub type ResolvedAppStateData = AppStateData<Arc<Config>>;
+
+/// The axum router state type, holding a hot-swappable config.
+pub type SwappableAppStateData = AppStateData<SwappableConfig>;
+
+/// Axum extractor that loads the latest config from the `SwappableConfig`
+/// and produces a `ResolvedAppStateData`.
+pub type LatestAppStateData = axum::extract::State<ResolvedAppStateData>;
+pub type AppState = LatestAppStateData;
+
+impl AppStateData<SwappableConfig> {
+    /// Load the latest config snapshot, producing a concrete `AppStateData<Arc<Config>>`.
+    pub fn load_latest(&self) -> AppStateData<Arc<Config>> {
+        AppStateData {
+            config: self.config.load(),
+            uninitialized_config: self.uninitialized_config.clone(),
+            runtime_overlay: self.runtime_overlay.clone(),
+            http_client: self.http_client.clone(),
+            clickhouse_connection_info: self.clickhouse_connection_info.clone(),
+            postgres_connection_info: self.postgres_connection_info.clone(),
+            valkey_connection_info: self.valkey_connection_info.clone(),
+            valkey_cache_connection_info: self.valkey_cache_connection_info.clone(),
+            cache_manager: self.cache_manager.clone(),
+            deferred_tasks: self.deferred_tasks.clone(),
+            auth_cache: self.auth_cache.clone(),
+            config_snapshot_cache: self.config_snapshot_cache.clone(),
+            autopilot_client: self.autopilot_client.clone(),
+            spawn_client: self.spawn_client.clone(),
+            deployment_id: self.deployment_id.clone(),
+            rate_limiting_manager: self.rate_limiting_manager.clone(),
+            shutdown_token: self.shutdown_token.clone(),
+            primary_datastore: self.primary_datastore,
+            _private: (),
+        }
+    }
+}
+
+impl FromRef<AppStateData<SwappableConfig>> for AppStateData<Arc<Config>> {
+    fn from_ref(state: &AppStateData<SwappableConfig>) -> Self {
+        state.load_latest()
+    }
+}
 
 /// Creates an auth cache based on the configuration.
 /// Returns None if auth is disabled or cache is disabled.
@@ -217,13 +300,20 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
         .as_ref()
         .unwrap_or(&default_cache_config);
 
-    if !cache_config.enabled {
+    if !cache_config
+        .enabled
+        .unwrap_or_else(default_gateway_auth_cache_enabled)
+    {
         return None;
     }
 
     Some(
         Cache::builder()
-            .time_to_live(Duration::from_millis(cache_config.ttl_ms))
+            .time_to_live(Duration::from_millis(
+                cache_config
+                    .ttl_ms
+                    .unwrap_or_else(default_gateway_auth_cache_ttl_ms),
+            ))
             .build(),
     )
 }
@@ -272,6 +362,9 @@ impl GatewayHandle {
             postgres_connection_info.clone(),
             primary_datastore,
         );
+        let runtime_overlay = Arc::new(config.runtime_overlay().clone());
+        let uninitialized_config =
+            Arc::new(ArcSwap::from_pointee(config.uninitialized_config().clone()));
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let valkey_cache_connection_info =
@@ -279,6 +372,8 @@ impl GatewayHandle {
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
+            uninitialized_config,
+            runtime_overlay,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
@@ -318,9 +413,14 @@ impl GatewayHandle {
             PrimaryDatastore::ClickHouse,
         )
         .expect("Should be able to construct CacheManager");
+        let runtime_overlay = Arc::new(RuntimeOverlay::default());
         Self {
             app_state: AppStateData {
-                config,
+                config: SwappableConfig::new(config),
+                uninitialized_config: Arc::new(ArcSwap::from_pointee(
+                    UninitializedConfig::default(),
+                )),
+                runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -347,6 +447,8 @@ impl GatewayHandle {
     #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
+        uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
+        runtime_overlay: Arc<RuntimeOverlay>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
@@ -492,7 +594,9 @@ impl GatewayHandle {
         )?;
         Ok(Self {
             app_state: AppStateData {
-                config,
+                config: SwappableConfig::new(config),
+                uninitialized_config,
+                runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -516,13 +620,15 @@ impl GatewayHandle {
     }
 }
 
-impl AppStateData {
+impl<C: Clone> AppStateData<C> {
     /// Returns a new AppStateData with all connections disabled. This is only used in
     /// `GatewayHandle::drop` so we can wait for batch writer handles without worrying
     /// about anything else in AppStateData holding a database connection.
     fn disabled_for_shutdown_placeholder(&self) -> Self {
         Self {
             config: self.config.clone(),
+            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            runtime_overlay: self.runtime_overlay.clone(),
             http_client: self.http_client.clone(),
             clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
             postgres_connection_info: PostgresConnectionInfo::new_disabled(),
@@ -545,6 +651,16 @@ impl AppStateData {
         }
     }
 
+    pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
+        DelegatingDatabaseConnection::new(
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
+            self.primary_datastore,
+        )
+    }
+}
+
+impl AppStateData<Arc<Config>> {
     /// Validate a config snapshot and write it to the database.
     ///
     /// This is the single entry point for writing config snapshots. It validates
@@ -555,20 +671,12 @@ impl AppStateData {
         &self,
         snapshot: &ConfigSnapshot,
     ) -> Result<(), crate::error::Error> {
-        let runtime_overlay = RuntimeOverlay::from_config(&self.config);
-        Config::load_from_snapshot(snapshot.clone(), runtime_overlay, false).await?;
+        Config::load_from_snapshot(snapshot.clone(), (*self.runtime_overlay).clone(), false)
+            .await?;
 
         let db = self.get_delegating_database();
         #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(snapshot).await
-    }
-
-    pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
-        DelegatingDatabaseConnection::new(
-            self.clickhouse_connection_info.clone(),
-            self.postgres_connection_info.clone(),
-            self.primary_datastore,
-        )
     }
 
     /// Create an AppStateData for use with a historical config snapshot.
@@ -577,6 +685,7 @@ impl AppStateData {
     #[expect(clippy::too_many_arguments)]
     pub fn new_for_snapshot(
         config: Arc<Config>,
+        runtime_overlay: Arc<RuntimeOverlay>,
         http_client: TensorzeroHttpClient,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
@@ -599,6 +708,8 @@ impl AppStateData {
         )?;
         Ok(Self {
             config,
+            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            runtime_overlay,
             http_client,
             clickhouse_connection_info,
             postgres_connection_info,
@@ -616,6 +727,21 @@ impl AppStateData {
             primary_datastore,
             _private: (),
         })
+    }
+}
+
+impl AppStateData<SwappableConfig> {
+    /// Validate a config snapshot and write it to the database.
+    ///
+    /// Delegates to the `AppStateData<Arc<Config>>` implementation after loading
+    /// the latest config snapshot.
+    pub async fn validate_and_write_config_snapshot(
+        &self,
+        snapshot: &ConfigSnapshot,
+    ) -> Result<(), crate::error::Error> {
+        self.load_latest()
+            .validate_and_write_config_snapshot(snapshot)
+            .await
     }
 }
 
@@ -649,7 +775,12 @@ pub async fn setup_clickhouse(
         (Some(true), Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -662,7 +793,12 @@ pub async fn setup_clickhouse(
         (None, Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -673,7 +809,10 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.clickhouse.disable_automatic_migrations,
+            disable_automatic_migrations: config
+                .clickhouse
+                .disable_automatic_migrations
+                .unwrap_or(false),
         })
         .await?;
     }
@@ -754,8 +893,16 @@ pub async fn setup_postgres(
         (Some(true), Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size,
-                &config.gateway.observability.batch_writes,
+                config
+                    .postgres
+                    .connection_pool_size
+                    .unwrap_or(DEFAULT_POSTGRES_CONNECTION_POOL_SIZE),
+                &config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -768,8 +915,16 @@ pub async fn setup_postgres(
         (None, Some(postgres_url)) => {
             create_postgres_connection(
                 postgres_url,
-                config.postgres.connection_pool_size,
-                &config.gateway.observability.batch_writes,
+                config
+                    .postgres
+                    .connection_pool_size
+                    .unwrap_or(DEFAULT_POSTGRES_CONNECTION_POOL_SIZE),
+                &config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
             )
             .await?
         }
@@ -1065,8 +1220,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(false),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1090,7 +1245,12 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let config = UnwrittenConfig::new(
+            config,
+            UninitializedConfig::default(),
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
 
         let clickhouse_connection_info = setup_clickhouse(&config, None).await.unwrap();
         assert_eq!(
@@ -1105,8 +1265,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: None,
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1118,7 +1278,12 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            UninitializedConfig::default(),
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
@@ -1137,8 +1302,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1162,7 +1327,12 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            UninitializedConfig::default(),
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
 
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None).await.unwrap();
         assert_eq!(
@@ -1175,8 +1345,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1199,7 +1369,12 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            UninitializedConfig::default(),
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         setup_clickhouse(&unwritten_config, Some("bad_url".to_string()))
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
@@ -1213,8 +1388,8 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                backend: ObservabilityBackend::Auto,
-                async_writes: false,
+                backend: Some(ObservabilityBackend::Auto),
+                async_writes: Some(false),
                 batch_writes: Default::default(),
                 ..Default::default()
             },
@@ -1237,7 +1412,12 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let unwritten_config = UnwrittenConfig::new(
+            config,
+            UninitializedConfig::default(),
+            ConfigSnapshot::new_empty_for_test(),
+            RuntimeOverlay::default(),
+        );
         setup_clickhouse(
             &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
@@ -1354,7 +1534,7 @@ mod tests {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
-                    backend: ObservabilityBackend::ClickHouse,
+                    backend: Some(ObservabilityBackend::ClickHouse),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1364,6 +1544,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1390,7 +1572,7 @@ mod tests {
             gateway: GatewayConfig {
                 observability: ObservabilityConfig {
                     enabled: Some(true),
-                    backend: ObservabilityBackend::Postgres,
+                    backend: Some(ObservabilityBackend::Postgres),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1400,6 +1582,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1434,6 +1618,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1462,6 +1648,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1493,6 +1681,8 @@ mod tests {
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1521,6 +1711,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1555,6 +1747,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1583,6 +1777,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1678,6 +1874,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,
@@ -1710,6 +1908,8 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+            Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
             ValkeyConnectionInfo::Disabled,

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct CountFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for counting feedback by target ID
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "count_feedback_by_target_id_handler",
     skip_all,

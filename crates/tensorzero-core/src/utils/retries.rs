@@ -3,6 +3,7 @@ use backon::{BackoffBuilder, ExponentialBuilder, Retryable};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{future::Future, time::Duration};
+use tensorzero_stored_config::StoredRetryConfig;
 
 use crate::error::Error;
 
@@ -103,5 +104,31 @@ impl RetryConfig {
             .with_jitter()
             .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
             .with_max_times(self.num_retries)
+    }
+}
+
+impl From<StoredRetryConfig> for RetryConfig {
+    fn from(stored: StoredRetryConfig) -> Self {
+        RetryConfig {
+            num_retries: stored.num_retries as usize,
+            max_delay_s: stored.max_delay_s,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_retry_config_round_trip() {
+        let original = RetryConfig {
+            num_retries: 3,
+            max_delay_s: 10.0,
+        };
+        let stored: StoredRetryConfig = original.into();
+        let restored: RetryConfig = stored.into();
+        expect_that!(restored, eq(original));
     }
 }

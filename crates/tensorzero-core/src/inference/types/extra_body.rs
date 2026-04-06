@@ -1,6 +1,9 @@
 use crate::inference::types::extra_headers::{
     DynamicExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
+use tensorzero_stored_config::{
+    StoredExtraBodyConfig, StoredExtraBodyReplacement, StoredExtraBodyReplacementKind,
+};
 
 use super::{deserialize_delete, serialize_delete};
 use crate::inference::types::extra_body::dynamic::ExtraBody;
@@ -14,6 +17,26 @@ use tensorzero_derive::export_schema;
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
+}
+
+impl From<&ExtraBodyConfig> for StoredExtraBodyConfig {
+    fn from(config: &ExtraBodyConfig) -> Self {
+        StoredExtraBodyConfig {
+            data: config
+                .data
+                .iter()
+                .map(|replacement| StoredExtraBodyReplacement {
+                    pointer: replacement.pointer.clone(),
+                    kind: match &replacement.kind {
+                        ExtraBodyReplacementKind::Value(value) => {
+                            StoredExtraBodyReplacementKind::Value(value.clone())
+                        }
+                        ExtraBodyReplacementKind::Delete => StoredExtraBodyReplacementKind::Delete,
+                    },
+                })
+                .collect(),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -395,14 +418,44 @@ pub mod dynamic {
 
 pub use dynamic::ExtraBody as DynamicExtraBody;
 
+// ─── Stored → Uninitialized conversions ──────────────────────────────────────
+
+impl From<StoredExtraBodyReplacementKind> for ExtraBodyReplacementKind {
+    fn from(stored: StoredExtraBodyReplacementKind) -> Self {
+        match stored {
+            StoredExtraBodyReplacementKind::Value(v) => ExtraBodyReplacementKind::Value(v),
+            StoredExtraBodyReplacementKind::Delete => ExtraBodyReplacementKind::Delete,
+        }
+    }
+}
+
+impl From<StoredExtraBodyReplacement> for ExtraBodyReplacement {
+    fn from(stored: StoredExtraBodyReplacement) -> Self {
+        ExtraBodyReplacement {
+            pointer: stored.pointer,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraBodyConfig> for ExtraBodyConfig {
+    fn from(stored: StoredExtraBodyConfig) -> Self {
+        ExtraBodyConfig {
+            data: stored.data.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use googletest::{expect_that, matchers::eq};
+    use serde_json::json;
+    use tensorzero_stored_config::StoredExtraBodyConfig;
+
+    use super::*;
     use crate::inference::types::extra_headers::{
         ExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders,
     };
-
-    use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_inference_extra_body_all_deserialize() {
@@ -937,5 +990,24 @@ mod tests {
         let json = r"[]";
         let result: UnfilteredInferenceExtraBody = serde_json::from_str(json).unwrap();
         assert!(result.extra_body.is_empty());
+    }
+
+    #[googletest::gtest]
+    fn test_extra_body_config_round_trip() {
+        let original = ExtraBodyConfig {
+            data: vec![
+                ExtraBodyReplacement {
+                    pointer: "/temperature".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(serde_json::json!(0.7)),
+                },
+                ExtraBodyReplacement {
+                    pointer: "/stop".to_string(),
+                    kind: ExtraBodyReplacementKind::Delete,
+                },
+            ],
+        };
+        let stored = StoredExtraBodyConfig::from(&original);
+        let restored: ExtraBodyConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

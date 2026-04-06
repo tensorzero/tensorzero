@@ -1,3 +1,4 @@
+use crate::providers::openai::ContentBlockType;
 use futures::StreamExt;
 use futures::future::try_join_all;
 use indexmap::IndexMap;
@@ -6,9 +7,19 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
+    StoredOpenAIAPIType, StoredProviderConfig,
+};
+#[cfg(test)]
+use tensorzero_stored_config::{
+    StoredCostConfig, StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredTimeoutsConfig,
+    StoredUnifiedCostConfig,
+};
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{Level, Span, span};
@@ -33,6 +44,9 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::observability::internal_metrics::{
+    TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
+};
 use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
 use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -74,6 +88,7 @@ use crate::{
         types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
+use metrics::counter;
 use serde::{Deserialize, Serialize};
 
 use crate::providers::{
@@ -84,6 +99,17 @@ use crate::providers::{
     openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
     xai::XAIProvider,
 };
+
+pub(crate) fn record_usage_metrics(usage: &Usage) {
+    if let Some(input_tokens) = usage.input_tokens {
+        counter!("tensorzero_input_tokens_total").increment(input_tokens as u64);
+        TENSORZERO_INPUT_TOKENS_TOTAL.fetch_add(input_tokens as u64, Ordering::Relaxed);
+    }
+    if let Some(output_tokens) = usage.output_tokens {
+        counter!("tensorzero_output_tokens_total").increment(output_tokens as u64);
+        TENSORZERO_OUTPUT_TOKENS_TOTAL.fetch_add(output_tokens as u64, Ordering::Relaxed);
+    }
+}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
@@ -99,7 +125,7 @@ pub struct ModelConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
@@ -192,6 +218,365 @@ impl UninitializedModelConfig {
             skip_relay,
             namespace: self.namespace,
         })
+    }
+}
+
+impl TryFrom<StoredModelConfig> for UninitializedModelConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredModelConfig) -> Result<Self, Error> {
+        let providers = stored
+            .providers
+            .into_iter()
+            .map(|(name, provider)| {
+                let provider: UninitializedModelProvider = provider.try_into()?;
+                Ok((Arc::<str>::from(name), provider))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(UninitializedModelConfig {
+            routing: stored.routing.into_iter().map(Arc::<str>::from).collect(),
+            providers,
+            timeouts: stored
+                .timeouts
+                .map(TimeoutsConfig::from)
+                .unwrap_or_default(),
+            skip_relay: stored.skip_relay,
+            namespace: stored.namespace.map(Namespace::new).transpose()?,
+        })
+    }
+}
+
+impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
+    type Error = Error;
+
+    fn try_from(stored: StoredModelProvider) -> Result<Self, Error> {
+        let config: UninitializedProviderConfig = stored.provider.try_into()?;
+        let cost = stored.cost.map(UninitializedCostConfig::from);
+        let batch_cost = stored.batch_cost.map(UninitializedUnifiedCostConfig::from);
+        Ok(UninitializedModelProvider {
+            config,
+            extra_body: stored.extra_body.map(ExtraBodyConfig::from),
+            extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
+            timeouts: stored
+                .timeouts
+                .map(TimeoutsConfig::from)
+                .unwrap_or_default(),
+            discard_unknown_chunks: stored.discard_unknown_chunks.unwrap_or_default(),
+            cost,
+            batch_cost,
+        })
+    }
+}
+
+#[cfg(test)]
+impl TryFrom<&UninitializedModelConfig> for StoredModelConfig {
+    type Error = Error;
+
+    fn try_from(config: &UninitializedModelConfig) -> Result<Self, Error> {
+        let providers = config
+            .providers
+            .iter()
+            .map(|(provider_name, provider)| {
+                Ok::<_, Error>((
+                    provider_name.to_string(),
+                    StoredModelProvider::from(provider),
+                ))
+            })
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+
+        Ok(StoredModelConfig {
+            routing: config.routing.iter().map(ToString::to_string).collect(),
+            providers,
+            timeouts: Some(StoredTimeoutsConfig::from(&config.timeouts)),
+            skip_relay: config.skip_relay,
+            namespace: config.namespace.as_ref().map(ToString::to_string),
+        })
+    }
+}
+
+impl From<StoredHostedProviderKind> for HostedProviderKind {
+    fn from(stored: StoredHostedProviderKind) -> Self {
+        match stored {
+            StoredHostedProviderKind::OpenAI => Self::OpenAI,
+            StoredHostedProviderKind::TGI => Self::TGI,
+        }
+    }
+}
+
+impl From<StoredOpenAIAPIType> for OpenAIAPIType {
+    fn from(stored: StoredOpenAIAPIType) -> Self {
+        match stored {
+            StoredOpenAIAPIType::ChatCompletions => Self::ChatCompletions,
+            StoredOpenAIAPIType::Responses => Self::Responses,
+        }
+    }
+}
+
+impl From<StoredContentBlockType> for ContentBlockType {
+    fn from(stored: StoredContentBlockType) -> Self {
+        match stored {
+            StoredContentBlockType::ImageUrl => Self::ImageUrl,
+            StoredContentBlockType::File => Self::File,
+            StoredContentBlockType::InputAudio => Self::InputAudio,
+        }
+    }
+}
+
+impl From<&ContentBlockType> for StoredContentBlockType {
+    fn from(value: &ContentBlockType) -> Self {
+        match value {
+            ContentBlockType::ImageUrl => StoredContentBlockType::ImageUrl,
+            ContentBlockType::File => StoredContentBlockType::File,
+            ContentBlockType::InputAudio => StoredContentBlockType::InputAudio,
+        }
+    }
+}
+
+fn parse_optional_url(url: Option<String>, field_name: &str) -> Result<Option<Url>, Error> {
+    url.map(|u| {
+        u.parse::<Url>().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to parse `{field_name}` URL: {e}"),
+            })
+        })
+    })
+    .transpose()
+}
+
+fn parse_url(url: String, field_name: &str) -> Result<Url, Error> {
+    url.parse::<Url>().map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!("Failed to parse `{field_name}` URL: {e}"),
+        })
+    })
+}
+
+impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredProviderConfig) -> Result<Self, Error> {
+        match stored {
+            StoredProviderConfig::Anthropic {
+                model_name,
+                api_base,
+                api_key_location,
+                beta_structured_outputs,
+                provider_tools,
+            } => Ok(Self::Anthropic {
+                model_name,
+                api_base: parse_optional_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+                beta_structured_outputs,
+                provider_tools: provider_tools.unwrap_or_default(),
+            }),
+            StoredProviderConfig::AWSBedrock {
+                model_id,
+                region,
+                allow_auto_detect_region,
+                endpoint_url,
+                api_key,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Ok(Self::AWSBedrock {
+                model_id,
+                region: region.map(Into::into),
+                allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
+                endpoint_url: endpoint_url.map(Into::into),
+                api_key: api_key.map(Into::into),
+                access_key_id: access_key_id.map(Into::into),
+                secret_access_key: secret_access_key.map(Into::into),
+                session_token: session_token.map(Into::into),
+            }),
+            StoredProviderConfig::AWSSagemaker {
+                endpoint_name,
+                model_name,
+                region,
+                allow_auto_detect_region,
+                hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => Ok(Self::AWSSagemaker {
+                endpoint_name,
+                model_name,
+                region: region.map(Into::into),
+                allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
+                hosted_provider: hosted_provider.into(),
+                endpoint_url: endpoint_url.map(Into::into),
+                access_key_id: access_key_id.map(Into::into),
+                secret_access_key: secret_access_key.map(Into::into),
+                session_token: session_token.map(Into::into),
+            }),
+            StoredProviderConfig::Azure {
+                deployment_id,
+                endpoint,
+                api_key_location,
+            } => Ok(Self::Azure {
+                deployment_id,
+                endpoint: endpoint.into(),
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+                credential_location,
+                provider_tools,
+            } => Ok(Self::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+                credential_location: credential_location.map(Into::into),
+                provider_tools: provider_tools.unwrap_or_default(),
+            }),
+            StoredProviderConfig::GCPVertexGemini {
+                model_id,
+                endpoint_id,
+                location,
+                project_id,
+                credential_location,
+            } => Ok(Self::GCPVertexGemini {
+                model_id,
+                endpoint_id,
+                location,
+                project_id,
+                credential_location: credential_location.map(Into::into),
+            }),
+            StoredProviderConfig::GoogleAIStudioGemini {
+                model_name,
+                api_key_location,
+            } => Ok(Self::GoogleAIStudioGemini {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Groq {
+                model_name,
+                api_key_location,
+                reasoning_format,
+            } => Ok(Self::Groq {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                reasoning_format,
+            }),
+            StoredProviderConfig::Hyperbolic {
+                model_name,
+                api_key_location,
+            } => Ok(Self::Hyperbolic {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Fireworks {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => Ok(Self::Fireworks {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                parse_think_blocks,
+            }),
+            StoredProviderConfig::Mistral {
+                model_name,
+                api_key_location,
+                prompt_mode,
+            } => Ok(Self::Mistral {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                prompt_mode,
+            }),
+            StoredProviderConfig::OpenAI {
+                model_name,
+                api_base,
+                api_key_location,
+                api_type,
+                include_encrypted_reasoning,
+                provider_tools,
+                content_type_overrides,
+            } => Ok(Self::OpenAI {
+                model_name,
+                api_base: parse_optional_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+                api_type: api_type.map(OpenAIAPIType::from).unwrap_or_default(),
+                include_encrypted_reasoning: include_encrypted_reasoning.unwrap_or_default(),
+                provider_tools: provider_tools.unwrap_or_default(),
+                content_type_overrides: content_type_overrides
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(k, v)| (k, ContentBlockType::from(v)))
+                    .collect(),
+            }),
+            StoredProviderConfig::OpenRouter {
+                model_name,
+                api_key_location,
+            } => Ok(Self::OpenRouter {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::Together {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => Ok(Self::Together {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+                parse_think_blocks,
+            }),
+            StoredProviderConfig::VLLM {
+                model_name,
+                api_base,
+                api_key_location,
+            } => Ok(Self::VLLM {
+                model_name,
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::XAI {
+                model_name,
+                api_key_location,
+            } => Ok(Self::XAI {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::TGI {
+                api_base,
+                api_key_location,
+            } => Ok(Self::TGI {
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => Ok(Self::SGLang {
+                model_name,
+                api_base: parse_url(api_base, "api_base")?,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            StoredProviderConfig::DeepSeek {
+                model_name,
+                api_key_location,
+            } => Ok(Self::DeepSeek {
+                model_name,
+                api_key_location: api_key_location.map(Into::into),
+            }),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            StoredProviderConfig::Dummy {
+                model_name,
+                api_key_location,
+            } => Ok(Self::Dummy {
+                model_name,
+                api_key_location: api_key_location
+                    .map(serde_json::from_value)
+                    .transpose()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("invalid Dummy api_key_location: {e}"),
+                        })
+                    })?,
+            }),
+        }
     }
 }
 
@@ -615,7 +1000,12 @@ impl ModelConfig {
         // Some of the providers may themselves have timeouts, which is fine. Provider timeouts
         // are treated as just another kind of provider error - a timeout of N ms is equivalent
         // to a provider taking N ms, and then producing a normal HTTP error.
-        if let Some(timeout) = self.timeouts.non_streaming.total_ms {
+        if let Some(timeout) = self
+            .timeouts
+            .non_streaming
+            .as_ref()
+            .and_then(|ns| ns.total_ms)
+        {
             let timeout = Duration::from_millis(timeout);
             tokio::time::timeout(timeout, run_all_models)
                 .await
@@ -762,8 +1152,13 @@ impl ModelConfig {
         let start = tokio::time::Instant::now();
 
         // Compute the effective pre-TTFT deadline from both ttft_ms and total_ms.
-        let ttft_timeout = self.timeouts.streaming.ttft_ms.map(Duration::from_millis);
-        let streaming_total_ms = self.timeouts.streaming.total_ms;
+        let ttft_timeout = self
+            .timeouts
+            .streaming
+            .as_ref()
+            .and_then(|s| s.ttft_ms)
+            .map(Duration::from_millis);
+        let streaming_total_ms = self.timeouts.streaming.as_ref().and_then(|s| s.total_ms);
         let total_timeout = streaming_total_ms.map(Duration::from_millis);
         let pre_ttft_timeout = match (ttft_timeout, total_timeout) {
             (Some(ttft), Some(total)) => {
@@ -946,6 +1341,8 @@ fn wrap_provider_stream(
                 }
             };
 
+            record_usage_metrics(&aggregated_usage);
+
             if let Err(e) = ticket_borrow.return_tickets(usage).await {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
@@ -983,7 +1380,7 @@ fn wrap_provider_stream(
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
@@ -1005,6 +1402,30 @@ pub struct UninitializedModelProvider {
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(skip))]
     pub batch_cost: Option<UninitializedUnifiedCostConfig>,
+}
+
+#[cfg(test)]
+impl From<&UninitializedModelProvider> for StoredModelProvider {
+    fn from(provider: &UninitializedModelProvider) -> Self {
+        StoredModelProvider {
+            provider: StoredProviderConfig::from(&provider.config),
+            extra_body: provider
+                .extra_body
+                .as_ref()
+                .map(StoredExtraBodyConfig::from),
+            extra_headers: provider
+                .extra_headers
+                .as_ref()
+                .map(StoredExtraHeadersConfig::from),
+            timeouts: Some(StoredTimeoutsConfig::from(&provider.timeouts)),
+            discard_unknown_chunks: Some(provider.discard_unknown_chunks),
+            cost: provider.cost.as_ref().map(StoredCostConfig::from),
+            batch_cost: provider
+                .batch_cost
+                .as_ref()
+                .map(StoredUnifiedCostConfig::from),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -1040,15 +1461,21 @@ impl ModelProvider {
         Ok(())
     }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.non_streaming.total_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.non_streaming.as_ref()?.total_ms?,
+        ))
     }
 
     fn streaming_ttft_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.streaming.ttft_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.streaming.as_ref()?.ttft_ms?,
+        ))
     }
 
     fn streaming_total_timeout(&self) -> Option<Duration> {
-        Some(Duration::from_millis(self.timeouts.streaming.total_ms?))
+        Some(Duration::from_millis(
+            self.timeouts.streaming.as_ref()?.total_ms?,
+        ))
     }
 
     /// The name to report in the OTEL `gen_ai.system` attribute
@@ -1278,7 +1705,7 @@ impl ProviderConfig {
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -1289,7 +1716,7 @@ pub enum HostedProviderKind {
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[derive(Clone, Debug, TensorZeroDeserialize, VariantNames, Serialize)]
+#[derive(Clone, Debug, PartialEq, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -1421,6 +1848,9 @@ pub enum UninitializedProviderConfig {
         include_encrypted_reasoning: bool,
         #[serde(default)]
         provider_tools: Vec<Value>,
+        #[serde(default)]
+        content_type_overrides:
+            std::collections::HashMap<String, crate::providers::openai::ContentBlockType>,
     },
     OpenRouter {
         model_name: String,
@@ -1467,6 +1897,229 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
+}
+
+impl From<&UninitializedProviderConfig> for StoredProviderConfig {
+    fn from(config: &UninitializedProviderConfig) -> Self {
+        match config {
+            UninitializedProviderConfig::Anthropic {
+                model_name,
+                api_base,
+                api_key_location,
+                beta_structured_outputs,
+                provider_tools,
+            } => StoredProviderConfig::Anthropic {
+                model_name: model_name.clone(),
+                api_base: api_base.as_ref().map(ToString::to_string),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                beta_structured_outputs: *beta_structured_outputs,
+                provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
+            },
+            UninitializedProviderConfig::AWSBedrock {
+                model_id,
+                region,
+                allow_auto_detect_region,
+                endpoint_url,
+                api_key,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => StoredProviderConfig::AWSBedrock {
+                model_id: model_id.clone(),
+                region: region.as_ref().map(Into::into),
+                allow_auto_detect_region: Some(*allow_auto_detect_region),
+                endpoint_url: endpoint_url.as_ref().map(Into::into),
+                api_key: api_key.as_ref().map(Into::into),
+                access_key_id: access_key_id.as_ref().map(Into::into),
+                secret_access_key: secret_access_key.as_ref().map(Into::into),
+                session_token: session_token.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::AWSSagemaker {
+                endpoint_name,
+                model_name,
+                region,
+                allow_auto_detect_region,
+                hosted_provider,
+                endpoint_url,
+                access_key_id,
+                secret_access_key,
+                session_token,
+            } => StoredProviderConfig::AWSSagemaker {
+                endpoint_name: endpoint_name.clone(),
+                model_name: model_name.clone(),
+                region: region.as_ref().map(Into::into),
+                allow_auto_detect_region: Some(*allow_auto_detect_region),
+                hosted_provider: hosted_provider.clone().into(),
+                endpoint_url: endpoint_url.as_ref().map(Into::into),
+                access_key_id: access_key_id.as_ref().map(Into::into),
+                secret_access_key: secret_access_key.as_ref().map(Into::into),
+                session_token: session_token.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::Azure {
+                deployment_id,
+                endpoint,
+                api_key_location,
+            } => StoredProviderConfig::Azure {
+                deployment_id: deployment_id.clone(),
+                endpoint: endpoint.into(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+                credential_location,
+                provider_tools,
+            } => StoredProviderConfig::GCPVertexAnthropic {
+                model_id: model_id.clone(),
+                location: location.clone(),
+                project_id: project_id.clone(),
+                credential_location: credential_location.as_ref().map(Into::into),
+                provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
+            },
+            UninitializedProviderConfig::GCPVertexGemini {
+                model_id,
+                endpoint_id,
+                location,
+                project_id,
+                credential_location,
+            } => StoredProviderConfig::GCPVertexGemini {
+                model_id: model_id.clone(),
+                endpoint_id: endpoint_id.clone(),
+                location: location.clone(),
+                project_id: project_id.clone(),
+                credential_location: credential_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::GoogleAIStudioGemini {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::GoogleAIStudioGemini {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::Groq {
+                model_name,
+                api_key_location,
+                reasoning_format,
+            } => StoredProviderConfig::Groq {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                reasoning_format: reasoning_format.clone(),
+            },
+            UninitializedProviderConfig::Hyperbolic {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::Hyperbolic {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::Fireworks {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => StoredProviderConfig::Fireworks {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                parse_think_blocks: *parse_think_blocks,
+            },
+            UninitializedProviderConfig::Mistral {
+                model_name,
+                api_key_location,
+                prompt_mode,
+            } => StoredProviderConfig::Mistral {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                prompt_mode: prompt_mode.clone(),
+            },
+            UninitializedProviderConfig::OpenAI {
+                model_name,
+                api_base,
+                api_key_location,
+                api_type,
+                include_encrypted_reasoning,
+                provider_tools,
+                content_type_overrides,
+            } => StoredProviderConfig::OpenAI {
+                model_name: model_name.clone(),
+                api_base: api_base.as_ref().map(ToString::to_string),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                api_type: Some((*api_type).into()),
+                include_encrypted_reasoning: Some(*include_encrypted_reasoning),
+                provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
+                content_type_overrides: (!content_type_overrides.is_empty()).then(|| {
+                    content_type_overrides
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.into()))
+                        .collect()
+                }),
+            },
+            UninitializedProviderConfig::OpenRouter {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::OpenRouter {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::Together {
+                model_name,
+                api_key_location,
+                parse_think_blocks,
+            } => StoredProviderConfig::Together {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+                parse_think_blocks: *parse_think_blocks,
+            },
+            UninitializedProviderConfig::VLLM {
+                model_name,
+                api_base,
+                api_key_location,
+            } => StoredProviderConfig::VLLM {
+                model_name: model_name.clone(),
+                api_base: api_base.to_string(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::XAI {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::XAI {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::TGI {
+                api_base,
+                api_key_location,
+            } => StoredProviderConfig::TGI {
+                api_base: api_base.to_string(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => StoredProviderConfig::SGLang {
+                model_name: model_name.clone(),
+                api_base: api_base.to_string(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            UninitializedProviderConfig::DeepSeek {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::DeepSeek {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location.as_ref().map(Into::into),
+            },
+            #[cfg(any(test, feature = "e2e_tests"))]
+            UninitializedProviderConfig::Dummy {
+                model_name,
+                api_key_location,
+            } => StoredProviderConfig::Dummy {
+                model_name: model_name.clone(),
+                api_key_location: api_key_location
+                    .as_ref()
+                    .and_then(|value| serde_json::to_value(value).ok()),
+            },
+        }
+    }
 }
 
 impl UninitializedProviderConfig {
@@ -1566,6 +2219,7 @@ impl UninitializedProviderConfig {
                             OpenAIAPIType::ChatCompletions,
                             false,
                             Vec::new(),
+                            std::collections::HashMap::new(),
                             )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1721,6 +2375,7 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
+                content_type_overrides,
             } => {
                 // Use mock API base for testing if set, otherwise defer to the API base set
                 let api_base = get_mock_provider_api_base("openai").or(api_base);
@@ -1737,6 +2392,7 @@ impl UninitializedProviderConfig {
                     api_type,
                     include_encrypted_reasoning,
                     provider_tools,
+                    content_type_overrides,
                 )?)
             }
             UninitializedProviderConfig::OpenRouter {
@@ -1845,6 +2501,24 @@ impl UninitializedProviderConfig {
     }
 }
 
+impl From<HostedProviderKind> for StoredHostedProviderKind {
+    fn from(kind: HostedProviderKind) -> Self {
+        match kind {
+            HostedProviderKind::OpenAI => StoredHostedProviderKind::OpenAI,
+            HostedProviderKind::TGI => StoredHostedProviderKind::TGI,
+        }
+    }
+}
+
+impl From<OpenAIAPIType> for StoredOpenAIAPIType {
+    fn from(api_type: OpenAIAPIType) -> Self {
+        match api_type {
+            OpenAIAPIType::ChatCompletions => StoredOpenAIAPIType::ChatCompletions,
+            OpenAIAPIType::Responses => StoredOpenAIAPIType::Responses,
+        }
+    }
+}
+
 struct StreamAndRawRequest {
     stream: tracing_futures::Instrumented<PeekableProviderInferenceResponseStream>,
     raw_request: String,
@@ -1858,9 +2532,13 @@ pub struct StreamResponseAndMessages {
 
 impl ModelProvider {
     fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
-        if otlp_config.traces.enabled {
-            match otlp_config.traces.format {
-                OtlpTracesFormat::OpenTelemetry => {
+        let traces = match &otlp_config.traces {
+            Some(t) => t,
+            None => return,
+        };
+        if traces.enabled.unwrap_or(false) {
+            match &traces.format {
+                None | Some(OtlpTracesFormat::OpenTelemetry) => {
                     span.set_attribute("gen_ai.operation.name", "chat");
                     span.set_attribute("gen_ai.system", self.genai_system_name());
 
@@ -1868,7 +2546,7 @@ impl ModelProvider {
                         span.set_attribute("gen_ai.request.model", model_name.to_string());
                     }
                 }
-                OtlpTracesFormat::OpenInference => {
+                Some(OtlpTracesFormat::OpenInference) => {
                     span.set_attribute("openinference.span.kind", "LLM");
                     span.set_attribute("llm.system", self.genai_system_name());
 
@@ -1887,12 +2565,13 @@ impl ModelProvider {
         span: &Span,
         resp: &Result<ProviderInferenceResponse, Error>,
     ) {
+        let traces_format = otlp_config.traces.as_ref().and_then(|t| t.format.clone());
         match resp {
             Ok(response) => {
                 otlp_config.apply_usage_to_model_provider_span(span, &response.usage);
-                match otlp_config.traces.format {
-                    OtlpTracesFormat::OpenTelemetry => {}
-                    OtlpTracesFormat::OpenInference => {
+                match traces_format {
+                    None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                    Some(OtlpTracesFormat::OpenInference) => {
                         // If we ever add providers that don't use JSON, we'll need to update this.
                         span.set_attribute("input.mime_type", "application/json");
                         span.set_attribute("input.value", response.raw_request.clone());
@@ -1914,9 +2593,9 @@ impl ModelProvider {
                         raw_response,
                         ..
                     } => {
-                        match otlp_config.traces.format {
-                            OtlpTracesFormat::OpenTelemetry => {}
-                            OtlpTracesFormat::OpenInference => {
+                        match traces_format {
+                            None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                            Some(OtlpTracesFormat::OpenInference) => {
                                 // If we ever add providers that don't use JSON, we'll need to update this.
                                 if let Some(raw_request) = raw_request {
                                     span.set_attribute("input.mime_type", "application/json");
@@ -2088,6 +2767,7 @@ impl ModelProvider {
         };
         self.apply_otlp_span_fields_output(request.otlp_config, &span, &res);
         let provider_inference_response = res?;
+        record_usage_metrics(&provider_inference_response.usage);
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
             clients.deferred_tasks.spawn(
@@ -2846,6 +3526,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::Responses,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 } else {
                     ProviderConfig::OpenAI(OpenAIProvider::new(
@@ -2857,6 +3538,7 @@ impl ShorthandModelConfig for ModelConfig {
                         OpenAIAPIType::ChatCompletions,
                         false,
                         Vec::new(),
+                        std::collections::HashMap::new(),
                     )?)
                 }
             }
@@ -4443,5 +5125,249 @@ mod tests {
             provider.effective_batch_cost_config().is_none(),
             "should return None when both cost and batch_cost are absent"
         );
+    }
+
+    // ─── Round-trip tests: Uninitialized → Stored → Uninitialized ───────────
+
+    mod stored_round_trip {
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        use googletest::prelude::*;
+        use rust_decimal::Decimal;
+        use tensorzero_stored_config::{
+            StoredCostConfig, StoredModelConfig, StoredModelProvider, StoredProviderConfig,
+            StoredUnifiedCostConfig,
+        };
+        use tensorzero_types::{
+            CostPointerConfig, UnifiedCostPointerConfig, UninitializedCostConfig,
+            UninitializedCostConfigEntry, UninitializedCostRate, UninitializedUnifiedCostConfig,
+        };
+
+        use crate::config::{Namespace, NonStreamingTimeouts, TimeoutsConfig};
+        use crate::inference::types::extra_body::{
+            ExtraBodyConfig, ExtraBodyReplacement, ExtraBodyReplacementKind,
+        };
+        use crate::model::{
+            CredentialLocation, CredentialLocationWithFallback, UninitializedModelConfig,
+            UninitializedModelProvider, UninitializedProviderConfig,
+        };
+        use crate::providers::openai::OpenAIAPIType;
+
+        #[gtest]
+        fn test_credential_location_round_trip() {
+            let variants = vec![
+                CredentialLocation::Env("MY_API_KEY".to_string()),
+                CredentialLocation::Dynamic("x-custom-key".to_string()),
+                CredentialLocation::Sdk,
+                CredentialLocation::None,
+            ];
+            for original in &variants {
+                let stored: tensorzero_stored_config::StoredCredentialLocation = original.into();
+                let restored: CredentialLocation = stored.into();
+                expect_that!(restored, eq(original));
+            }
+        }
+
+        #[gtest]
+        fn test_credential_location_with_fallback_round_trip() {
+            let variants = vec![
+                CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                    "MY_KEY".to_string(),
+                )),
+                CredentialLocationWithFallback::WithFallback {
+                    default: CredentialLocation::Dynamic("x-key".to_string()),
+                    fallback: CredentialLocation::Env("FALLBACK_KEY".to_string()),
+                },
+            ];
+            for original in &variants {
+                let stored: tensorzero_stored_config::StoredCredentialLocationWithFallback =
+                    original.into();
+                let restored: CredentialLocationWithFallback = stored.into();
+                expect_that!(restored, eq(original));
+            }
+        }
+
+        #[gtest]
+        fn test_provider_config_openai_round_trip() {
+            let original = UninitializedProviderConfig::OpenAI {
+                model_name: "gpt-4o".to_string(),
+                api_base: None,
+                api_key_location: Some(CredentialLocationWithFallback::Single(
+                    CredentialLocation::Env("OPENAI_API_KEY".to_string()),
+                )),
+                api_type: OpenAIAPIType::ChatCompletions,
+                include_encrypted_reasoning: false,
+                provider_tools: vec![],
+                content_type_overrides: HashMap::new(),
+            };
+            let stored = StoredProviderConfig::from(&original);
+            let restored: UninitializedProviderConfig =
+                stored.try_into().expect("should convert back");
+            expect_that!(restored, eq(&original));
+        }
+
+        #[gtest]
+        fn test_provider_config_anthropic_round_trip() {
+            let original = UninitializedProviderConfig::Anthropic {
+                model_name: "claude-sonnet-4-20250514".to_string(),
+                api_base: None,
+                api_key_location: Some(CredentialLocationWithFallback::Single(
+                    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string()),
+                )),
+                beta_structured_outputs: Some(true),
+                provider_tools: vec![],
+            };
+            let stored = StoredProviderConfig::from(&original);
+            let restored: UninitializedProviderConfig =
+                stored.try_into().expect("should convert back");
+            expect_that!(restored, eq(&original));
+        }
+
+        #[gtest]
+        fn test_model_provider_round_trip() {
+            let original = UninitializedModelProvider {
+                config: UninitializedProviderConfig::OpenAI {
+                    model_name: "gpt-4o".to_string(),
+                    api_base: None,
+                    api_key_location: Some(CredentialLocationWithFallback::Single(
+                        CredentialLocation::Env("OPENAI_API_KEY".to_string()),
+                    )),
+                    api_type: OpenAIAPIType::ChatCompletions,
+                    include_encrypted_reasoning: false,
+                    provider_tools: vec![],
+                    content_type_overrides: HashMap::new(),
+                },
+                extra_body: Some(ExtraBodyConfig {
+                    data: vec![ExtraBodyReplacement {
+                        pointer: "/temperature".to_string(),
+                        kind: ExtraBodyReplacementKind::Value(serde_json::json!(0.5)),
+                    }],
+                }),
+                extra_headers: None,
+                timeouts: TimeoutsConfig {
+                    non_streaming: Some(NonStreamingTimeouts {
+                        total_ms: Some(30000),
+                    }),
+                    streaming: None,
+                },
+                discard_unknown_chunks: true,
+                cost: Some(vec![UninitializedCostConfigEntry {
+                    pointer: CostPointerConfig {
+                        pointer: Some("/usage/input_tokens".to_string()),
+                        pointer_nonstreaming: None,
+                        pointer_streaming: None,
+                    },
+                    rate: UninitializedCostRate {
+                        cost_per_million: Some(Decimal::new(3, 0)),
+                        cost_per_unit: None,
+                    },
+                    required: false,
+                }]),
+                batch_cost: None,
+            };
+            let stored = StoredModelProvider::from(&original);
+            let restored: UninitializedModelProvider =
+                stored.try_into().expect("should convert back");
+            expect_that!(restored, eq(&original));
+        }
+
+        #[gtest]
+        fn test_model_config_round_trip() {
+            let original = UninitializedModelConfig {
+                routing: vec![Arc::from("provider_a")],
+                providers: HashMap::from([(
+                    Arc::from("provider_a"),
+                    UninitializedModelProvider {
+                        config: UninitializedProviderConfig::Anthropic {
+                            model_name: "claude-sonnet-4-20250514".to_string(),
+                            api_base: None,
+                            api_key_location: Some(CredentialLocationWithFallback::Single(
+                                CredentialLocation::Env("ANTHROPIC_API_KEY".to_string()),
+                            )),
+                            beta_structured_outputs: None,
+                            provider_tools: vec![],
+                        },
+                        extra_body: None,
+                        extra_headers: None,
+                        timeouts: TimeoutsConfig::default(),
+                        discard_unknown_chunks: false,
+                        cost: None,
+                        batch_cost: None,
+                    },
+                )]),
+                timeouts: TimeoutsConfig::default(),
+                skip_relay: Some(true),
+                namespace: Some(
+                    Namespace::new("my_namespace".to_string()).expect("valid namespace"),
+                ),
+            };
+            let stored = StoredModelConfig::try_from(&original).expect("should serialize");
+            let restored: UninitializedModelConfig =
+                stored.try_into().expect("should convert back");
+            expect_that!(restored, eq(&original));
+        }
+
+        #[gtest]
+        fn test_cost_config_round_trip() {
+            let original: UninitializedCostConfig = vec![
+                UninitializedCostConfigEntry {
+                    pointer: CostPointerConfig {
+                        pointer: Some("/usage/input_tokens".to_string()),
+                        pointer_nonstreaming: None,
+                        pointer_streaming: Some("/usage/streaming_tokens".to_string()),
+                    },
+                    rate: UninitializedCostRate {
+                        cost_per_million: Some(Decimal::new(150, 2)),
+                        cost_per_unit: None,
+                    },
+                    required: false,
+                },
+                UninitializedCostConfigEntry {
+                    pointer: CostPointerConfig {
+                        pointer: None,
+                        pointer_nonstreaming: Some("/usage/nonstream".to_string()),
+                        pointer_streaming: None,
+                    },
+                    rate: UninitializedCostRate {
+                        cost_per_million: None,
+                        cost_per_unit: Some(Decimal::new(1, 6)),
+                    },
+                    required: true,
+                },
+            ];
+            let stored = StoredCostConfig::from(&original);
+            let restored: UninitializedCostConfig = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+
+        #[gtest]
+        fn test_unified_cost_config_round_trip() {
+            let original: UninitializedUnifiedCostConfig = vec![
+                UninitializedCostConfigEntry {
+                    pointer: UnifiedCostPointerConfig {
+                        pointer: "/usage/input_tokens".to_string(),
+                    },
+                    rate: UninitializedCostRate {
+                        cost_per_million: Some(Decimal::new(150, 2)),
+                        cost_per_unit: None,
+                    },
+                    required: true,
+                },
+                UninitializedCostConfigEntry {
+                    pointer: UnifiedCostPointerConfig {
+                        pointer: "/usage/output_tokens".to_string(),
+                    },
+                    rate: UninitializedCostRate {
+                        cost_per_million: None,
+                        cost_per_unit: Some(Decimal::new(6, 6)),
+                    },
+                    required: false,
+                },
+            ];
+            let stored = StoredUnifiedCostConfig::from(&original);
+            let restored: UninitializedUnifiedCostConfig = stored.into();
+            expect_that!(restored, eq(&original));
+        }
     }
 }

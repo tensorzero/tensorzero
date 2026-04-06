@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
+use tensorzero_core::config::{default_flush_interval_ms, default_max_rows};
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
 use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
@@ -176,7 +177,7 @@ async fn validate_postgres_extensions_for_postgres_primary(
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run().await {
+    match Box::pin(run()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(code) => code,
     }
@@ -289,7 +290,14 @@ async fn run() -> Result<(), ExitCode> {
     // If we ever want to emit earlier OTLP spans, we'll need to come up with a different way
     // of doing OTLP initialization (e.g. buffer spans, and submit them once we know if OTLP should be enabled).
     // See `build_opentelemetry_layer` for the details of exactly what spans we export.
-    if unwritten_config.gateway.export.otlp.traces.enabled {
+    let export_config = &unwritten_config.gateway.export;
+    let otlp_traces_enabled = export_config
+        .otlp
+        .as_ref()
+        .and_then(|o| o.traces.as_ref())
+        .and_then(|t| t.enabled)
+        .unwrap_or(false);
+    if otlp_traces_enabled {
         if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").is_err() {
             // This makes it easier to run the gateway in local development and CI
             if cfg!(feature = "e2e_tests") {
@@ -305,20 +313,19 @@ async fn run() -> Result<(), ExitCode> {
         }
 
         // Set config-level OTLP headers if we have a tracer wrapper
-        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer
-            && !unwritten_config
-                .gateway
-                .export
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            let extra_headers = export_config
                 .otlp
-                .traces
-                .extra_headers
-                .is_empty()
-        {
-            tracer_wrapper
-                .set_static_otlp_traces_extra_headers(
-                    &unwritten_config.gateway.export.otlp.traces.extra_headers,
-                )
-                .log_err_pretty("Failed to set OTLP config headers")?;
+                .as_ref()
+                .and_then(|o| o.traces.as_ref())
+                .and_then(|t| t.extra_headers.as_ref());
+            if let Some(headers) = extra_headers
+                && !headers.is_empty()
+            {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(headers)
+                    .log_err_pretty("Failed to set OTLP config headers")?;
+            }
         }
 
         match delayed_log_config.delayed_otel {
@@ -376,7 +383,7 @@ async fn run() -> Result<(), ExitCode> {
     let postgres_enabled_pretty =
         get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
 
-    let config = gateway_handle.app_state.config.clone();
+    let config = gateway_handle.app_state.config.load();
 
     // Set debug mode
     error::set_debug(config.gateway.debug).log_err_pretty("Failed to set debug mode")?;
@@ -461,16 +468,24 @@ async fn run() -> Result<(), ExitCode> {
         "├ ClickHouse: {}",
         gateway_handle.app_state.clickhouse_connection_info
     );
-    if config.gateway.observability.batch_writes.enabled {
+    let batch_writes = config
+        .gateway
+        .observability
+        .batch_writes
+        .clone()
+        .unwrap_or_default();
+    if batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
-            config.gateway.observability.batch_writes.flush_interval_ms,
-            config.gateway.observability.batch_writes.max_rows
+            batch_writes
+                .flush_interval_ms
+                .unwrap_or_else(default_flush_interval_ms),
+            batch_writes.max_rows.unwrap_or_else(default_max_rows)
         );
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
-    if config.gateway.observability.async_writes {
+    if config.gateway.observability.async_writes.unwrap_or(false) {
         tracing::info!("├ Async Writes: enabled");
     } else {
         tracing::info!("├ Async Writes: disabled");
@@ -520,7 +535,15 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print whether OpenTelemetry is enabled
-    if config.gateway.export.otlp.traces.enabled {
+    let otlp_traces_enabled = config
+        .gateway
+        .export
+        .otlp
+        .as_ref()
+        .and_then(|o| o.traces.as_ref())
+        .and_then(|t| t.enabled)
+        .unwrap_or(false);
+    if otlp_traces_enabled {
         tracing::info!("└ OpenTelemetry: enabled");
     } else {
         tracing::info!("└ OpenTelemetry: disabled");
@@ -708,7 +731,8 @@ async fn spawn_autopilot_worker_if_configured(
     };
 
     // Create an embedded TensorZero client using the gateway's state
-    let t0_client = std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.clone()));
+    let t0_client =
+        std::sync::Arc::new(EmbeddedClient::new(gateway_handle.app_state.load_latest()));
 
     // TODO: decide how we want to do autopilot config.
     let default_max_attempts = 5;

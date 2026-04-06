@@ -1,12 +1,35 @@
 use super::{deserialize_delete, serialize_delete};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
+};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
+}
+
+impl From<&ExtraHeadersConfig> for StoredExtraHeadersConfig {
+    fn from(config: &ExtraHeadersConfig) -> Self {
+        StoredExtraHeadersConfig {
+            data: config
+                .data
+                .iter()
+                .map(|header| StoredExtraHeader {
+                    name: header.name.clone(),
+                    kind: match &header.kind {
+                        ExtraHeaderKind::Value(value) => {
+                            StoredExtraHeaderKind::Value(value.clone())
+                        }
+                        ExtraHeaderKind::Delete => StoredExtraHeaderKind::Delete,
+                    },
+                })
+                .collect(),
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -179,8 +202,39 @@ pub mod dynamic {
 
 pub use dynamic::ExtraHeader as DynamicExtraHeader;
 
+// ─── Stored → Uninitialized conversions ──────────────────────────────────────
+
+impl From<StoredExtraHeaderKind> for ExtraHeaderKind {
+    fn from(stored: StoredExtraHeaderKind) -> Self {
+        match stored {
+            StoredExtraHeaderKind::Value(v) => ExtraHeaderKind::Value(v),
+            StoredExtraHeaderKind::Delete => ExtraHeaderKind::Delete,
+        }
+    }
+}
+
+impl From<StoredExtraHeader> for ExtraHeader {
+    fn from(stored: StoredExtraHeader) -> Self {
+        ExtraHeader {
+            name: stored.name,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraHeadersConfig> for ExtraHeadersConfig {
+    fn from(stored: StoredExtraHeadersConfig) -> Self {
+        ExtraHeadersConfig {
+            data: stored.data.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use googletest::{expect_that, matchers::eq};
+    use tensorzero_stored_config::StoredExtraHeadersConfig;
+
     use super::*;
 
     #[test]
@@ -461,5 +515,24 @@ mod tests {
             result.is_err(),
             "Expected error when unknown fields are present"
         );
+    }
+
+    #[googletest::gtest]
+    fn test_extra_headers_config_round_trip() {
+        let original = ExtraHeadersConfig {
+            data: vec![
+                ExtraHeader {
+                    name: "x-custom-header".to_string(),
+                    kind: ExtraHeaderKind::Value("some-value".to_string()),
+                },
+                ExtraHeader {
+                    name: "x-remove-me".to_string(),
+                    kind: ExtraHeaderKind::Delete,
+                },
+            ],
+        };
+        let stored = StoredExtraHeadersConfig::from(&original);
+        let restored: ExtraHeadersConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

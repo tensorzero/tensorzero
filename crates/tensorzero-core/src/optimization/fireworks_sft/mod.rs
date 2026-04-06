@@ -2,6 +2,7 @@
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::StoredFireworksOptimizerSFTConfig;
 use url::Url;
 
 fn default_deploy_after_training() -> bool {
@@ -39,7 +40,7 @@ pub struct FireworksSFTConfig {
 /// Provider-level settings (account_id, credentials) come from
 /// `provider_types.fireworks.sft` in the gateway config.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
@@ -67,6 +68,54 @@ impl std::fmt::Display for UninitializedFireworksSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredFireworksOptimizerSFTConfig> for UninitializedFireworksSFTConfig {
+    fn from(stored: StoredFireworksOptimizerSFTConfig) -> Self {
+        UninitializedFireworksSFTConfig {
+            model: stored.model,
+            early_stop: stored.early_stop,
+            epochs: stored.epochs,
+            learning_rate: stored.learning_rate,
+            max_context_length: stored.max_context_length,
+            lora_rank: stored.lora_rank,
+            batch_size: stored.batch_size,
+            display_name: stored.display_name,
+            output_model: stored.output_model,
+            warm_start_from: stored.warm_start_from,
+            is_turbo: stored.is_turbo,
+            eval_auto_carveout: stored.eval_auto_carveout,
+            nodes: stored.nodes,
+            mtp_enabled: stored.mtp_enabled,
+            mtp_num_draft_tokens: stored.mtp_num_draft_tokens,
+            mtp_freeze_base_model: stored.mtp_freeze_base_model,
+            deploy_after_training: stored.deploy_after_training,
+        }
+    }
+}
+
+impl From<UninitializedFireworksSFTConfig> for StoredFireworksOptimizerSFTConfig {
+    fn from(config: UninitializedFireworksSFTConfig) -> Self {
+        StoredFireworksOptimizerSFTConfig {
+            model: config.model,
+            early_stop: config.early_stop,
+            epochs: config.epochs,
+            learning_rate: config.learning_rate,
+            max_context_length: config.max_context_length,
+            lora_rank: config.lora_rank,
+            batch_size: config.batch_size,
+            display_name: config.display_name,
+            output_model: config.output_model,
+            warm_start_from: config.warm_start_from,
+            is_turbo: config.is_turbo,
+            eval_auto_carveout: config.eval_auto_carveout,
+            nodes: config.nodes,
+            mtp_enabled: config.mtp_enabled,
+            mtp_num_draft_tokens: config.mtp_num_draft_tokens,
+            mtp_freeze_base_model: config.mtp_freeze_base_model,
+            deploy_after_training: config.deploy_after_training,
+        }
     }
 }
 
@@ -206,5 +255,48 @@ impl std::fmt::Display for FireworksSFTJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_fireworks_sft_config_round_trip_full() {
+        let original = UninitializedFireworksSFTConfig {
+            model: "accounts/fireworks/models/llama".to_string(),
+            early_stop: Some(true),
+            epochs: Some(2),
+            learning_rate: Some(1e-5),
+            max_context_length: Some(8192),
+            lora_rank: Some(16),
+            batch_size: Some(4096),
+            display_name: Some("display".to_string()),
+            output_model: Some("out-model".to_string()),
+            warm_start_from: Some("warm".to_string()),
+            is_turbo: Some(false),
+            eval_auto_carveout: Some(true),
+            nodes: Some(2),
+            mtp_enabled: Some(true),
+            mtp_num_draft_tokens: Some(8),
+            mtp_freeze_base_model: Some(false),
+            deploy_after_training: Some(true),
+        };
+        let stored: StoredFireworksOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedFireworksSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_fireworks_sft_config_round_trip_minimal() {
+        let original = UninitializedFireworksSFTConfig {
+            model: "accounts/fireworks/models/llama".to_string(),
+            ..Default::default()
+        };
+        let stored: StoredFireworksOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedFireworksSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

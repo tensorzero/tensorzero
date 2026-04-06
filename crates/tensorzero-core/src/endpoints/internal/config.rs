@@ -15,7 +15,7 @@ use crate::config::UninitializedConfig;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::ConfigQueries;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
 
 /// Response containing a config snapshot.
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ impl GetConfigResponse {
 /// Handler for `GET /internal/config`
 ///
 /// Returns the live config snapshot.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "config.get_live", skip_all)]
 pub async fn get_live_config_handler(
     State(app_state): AppState,
@@ -72,7 +72,7 @@ pub async fn get_live_config_handler(
 /// Handler for `GET /internal/config/{hash}`
 ///
 /// Returns a config snapshot by hash.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "config.get_by_hash", skip_all, fields(hash = %hash))]
 pub async fn get_config_by_hash_handler(
     State(app_state): AppState,
@@ -123,7 +123,7 @@ pub struct WriteConfigResponse {
 /// (with credential validation disabled) before writing. This catches
 /// issues like invalid model references, missing templates, and
 /// cross-reference errors that serde deserialization alone would miss.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "config.write", skip_all)]
 pub async fn write_config_handler(
     State(app_state): AppState,

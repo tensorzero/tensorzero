@@ -28,4 +28,7 @@ macro_rules! define_flags {
 define_flags! {
     /// A dummy test flag for unit tests.
     pub TEST_FLAG: bool = ("test_flag", false);
+
+    /// Enables reading configuration from the database instead of (only) from the config file.
+    pub ENABLE_CONFIG_IN_DATABASE: bool = ("enable_config_in_database", false);
 }

@@ -1,6 +1,5 @@
-use object_store::path::Path;
-
 use crate::error::{Error, ErrorDetails};
+use object_store::path::Path;
 
 use super::{Base64File, file::mime_type_to_ext};
 

@@ -797,7 +797,7 @@ struct ResolvedEvaluationConfig {
 #[expect(clippy::too_many_arguments)]
 fn build_embedded_evaluation_args(
     client: &Client,
-    app_state: &tensorzero_core::utils::gateway::AppStateData,
+    app_state: &tensorzero_core::utils::gateway::ResolvedAppStateData,
     resolved: ResolvedEvaluationConfig,
     dataset_name: Option<String>,
     datapoint_ids: Option<Vec<Uuid>>,
@@ -911,7 +911,7 @@ fn build_http_evaluation_params(
 /// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
 /// Resolves evaluation configuration from either `evaluation_name` or `function_name` + `evaluator_names`.
 fn resolve_evaluation_config(
-    app_state: &tensorzero_core::utils::gateway::AppStateData,
+    app_state: &tensorzero_core::utils::gateway::ResolvedAppStateData,
     evaluation_name: Option<String>,
     function_name: Option<String>,
     evaluator_names: Option<Vec<String>>,
@@ -1655,8 +1655,9 @@ impl TensorZeroGateway {
         // Parse datapoint_ids from strings to UUIDs (keeping as Option)
         let datapoint_ids: Option<Vec<Uuid>> = parse_datapoint_ids(datapoint_ids)?;
 
-        let result = if let Some(app_state) = client.get_app_state_data() {
+        let result = if let Some(swappable_state) = client.get_app_state_data() {
             // Embedded mode: run evaluation directly
+            let app_state = swappable_state.load_latest();
             let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
                 deserialize_from_pyobj(
                     this.py(),
@@ -1664,7 +1665,7 @@ impl TensorZeroGateway {
                 )?;
 
             let resolved = resolve_evaluation_config(
-                app_state,
+                &app_state,
                 evaluation_name,
                 function_name,
                 evaluator_names,
@@ -1672,7 +1673,7 @@ impl TensorZeroGateway {
 
             let core_args = build_embedded_evaluation_args(
                 &client,
-                app_state,
+                &app_state,
                 resolved,
                 dataset_name,
                 datapoint_ids,
@@ -1825,7 +1826,7 @@ impl TensorZeroGateway {
             .map(|x| {
                 // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
                 // We may need to rearchitect the optimization pipeline to support this.
-                deserialize_from_stored_sample(this.py(), x, config)
+                deserialize_from_stored_sample(this.py(), x, &config)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants, concurrency);
@@ -2702,11 +2703,12 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let result = if is_embedded {
                 // Embedded mode: run evaluation directly
-                let app_state = client.get_app_state_data().ok_or_else(|| {
+                let swappable_state = client.get_app_state_data().ok_or_else(|| {
                     pyo3::exceptions::PyRuntimeError::new_err(
                         "Client is not in EmbeddedGateway mode",
                     )
                 })?;
+                let app_state = swappable_state.load_latest();
 
                 let inference_cache_enum = inference_cache_enum.ok_or_else(|| {
                     pyo3::exceptions::PyRuntimeError::new_err(
@@ -2715,7 +2717,7 @@ impl AsyncTensorZeroGateway {
                 })?;
 
                 let resolved = resolve_evaluation_config(
-                    app_state,
+                    &app_state,
                     evaluation_name,
                     function_name,
                     evaluator_names,
@@ -2723,7 +2725,7 @@ impl AsyncTensorZeroGateway {
 
                 let core_args = build_embedded_evaluation_args(
                     &client,
-                    app_state,
+                    &app_state,
                     resolved,
                     dataset_name,
                     datapoint_ids,
@@ -2918,7 +2920,7 @@ impl AsyncTensorZeroGateway {
             .map(|x| {
                 // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
                 // We may need to rearchitect the optimization pipeline to support this.
-                deserialize_from_stored_sample(this.py(), x, config)
+                deserialize_from_stored_sample(this.py(), x, &config)
             })
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {

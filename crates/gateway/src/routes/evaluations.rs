@@ -15,6 +15,7 @@ use uuid::Uuid;
 use evaluations::sse_events::{
     EvaluationRunCompleteEvent, EvaluationRunErrorEvent, EvaluationRunEvent,
     EvaluationRunFatalErrorEvent, EvaluationRunStartEvent, EvaluationRunSuccessEvent,
+    EvaluationRunUsageSummary,
 };
 use evaluations::stats::{EvaluationError, EvaluationInfo, EvaluationUpdate};
 use evaluations::{
@@ -25,7 +26,9 @@ use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
-use tensorzero_core::utils::gateway::{AppState, AppStateData, StructuredJson};
+use tensorzero_core::utils::gateway::{
+    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+};
 
 // =============================================================================
 // Request/Response Types
@@ -116,6 +119,7 @@ fn success_event_from_info(
         response,
         evaluations: info.evaluations,
         evaluator_errors: info.evaluator_errors,
+        processing_time_ms: info.processing_time_ms,
     })
 }
 
@@ -173,11 +177,15 @@ fn create_evaluation_stream(
             }
         }
 
+        // Accumulate usage statistics across all successful inferences
+        let mut usage_summary = EvaluationRunUsageSummary::default();
+
         // Stream evaluation updates
         while let Some(update) = receiver.recv().await {
             let event = match update {
                 EvaluationUpdate::RunInfo(_) => continue, // Already sent start event
                 EvaluationUpdate::Success(info) => {
+                    usage_summary.record_success(&info);
                     match success_event_from_info(evaluation_run_id, info) {
                         Ok(success_event) => EvaluationRunEvent::Success(success_event),
                         Err(e) => EvaluationRunEvent::Error(EvaluationRunErrorEvent {
@@ -188,6 +196,7 @@ fn create_evaluation_stream(
                     }
                 }
                 EvaluationUpdate::Error(EvaluationError { datapoint_id, message }) => {
+                    usage_summary.record_error();
                     EvaluationRunEvent::Error(EvaluationRunErrorEvent {
                         evaluation_run_id,
                         datapoint_id,
@@ -225,9 +234,10 @@ fn create_evaluation_stream(
             }
         }
 
-        // Send complete event
+        // Send complete event with aggregated usage
         let complete_event = EvaluationRunEvent::Complete(EvaluationRunCompleteEvent {
             evaluation_run_id,
+            usage: usage_summary,
         });
         if let Ok(data) = serde_json::to_string(&complete_event) {
             yield Ok(Event::default().event("event").data(data));
@@ -251,7 +261,7 @@ struct ResolvedEvaluationConfig {
 /// Resolves evaluation and function configs from the request.
 fn resolve_evaluation_config(
     request: &RunEvaluationRequest,
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
 ) -> Result<ResolvedEvaluationConfig, Error> {
     match &request.source {
         EvaluationIdentifier::LegacyNamedEvaluation {
@@ -330,7 +340,7 @@ fn resolve_evaluation_config(
 fn resolve_evaluators(
     function_name: &str,
     evaluator_names: &[String],
-    app_state: &AppStateData,
+    app_state: &ResolvedAppStateData,
 ) -> Result<HashMap<String, EvaluatorConfig>, Error> {
     let function_config = app_state
         .config
@@ -357,7 +367,7 @@ fn resolve_evaluators(
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 pub async fn run_evaluation_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<RunEvaluationRequest>,

@@ -2,6 +2,7 @@
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::StoredGCPVertexGeminiOptimizerSFTConfig;
 use url::Url;
 
 /// Initialized GCP Vertex Gemini SFT Config (per-job settings only).
@@ -24,7 +25,7 @@ pub struct GCPVertexGeminiSFTConfig {
 /// Provider-level settings (project_id, region, bucket_name, credentials, etc.)
 /// come from `provider_types.gcp_vertex_gemini.sft` in the gateway config.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
@@ -41,6 +42,34 @@ impl std::fmt::Display for UninitializedGCPVertexGeminiSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl From<StoredGCPVertexGeminiOptimizerSFTConfig> for UninitializedGCPVertexGeminiSFTConfig {
+    fn from(stored: StoredGCPVertexGeminiOptimizerSFTConfig) -> Self {
+        UninitializedGCPVertexGeminiSFTConfig {
+            model: stored.model,
+            learning_rate_multiplier: stored.learning_rate_multiplier,
+            adapter_size: stored.adapter_size,
+            n_epochs: stored.n_epochs,
+            export_last_checkpoint_only: stored.export_last_checkpoint_only,
+            seed: stored.seed,
+            tuned_model_display_name: stored.tuned_model_display_name,
+        }
+    }
+}
+
+impl From<UninitializedGCPVertexGeminiSFTConfig> for StoredGCPVertexGeminiOptimizerSFTConfig {
+    fn from(config: UninitializedGCPVertexGeminiSFTConfig) -> Self {
+        StoredGCPVertexGeminiOptimizerSFTConfig {
+            model: config.model,
+            learning_rate_multiplier: config.learning_rate_multiplier,
+            adapter_size: config.adapter_size,
+            n_epochs: config.n_epochs,
+            export_last_checkpoint_only: config.export_last_checkpoint_only,
+            seed: config.seed,
+            tuned_model_display_name: config.tuned_model_display_name,
+        }
     }
 }
 
@@ -131,5 +160,38 @@ impl std::fmt::Display for GCPVertexGeminiSFTJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_sft_config_round_trip_full() {
+        let original = UninitializedGCPVertexGeminiSFTConfig {
+            model: "gemini-1.5-pro".to_string(),
+            learning_rate_multiplier: Some(0.7),
+            adapter_size: Some(16),
+            n_epochs: Some(5),
+            export_last_checkpoint_only: Some(true),
+            seed: Some(123),
+            tuned_model_display_name: Some("my-tuned-gemini".to_string()),
+        };
+        let stored: StoredGCPVertexGeminiOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedGCPVertexGeminiSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_sft_config_round_trip_minimal() {
+        let original = UninitializedGCPVertexGeminiSFTConfig {
+            model: "gemini-1.5-pro".to_string(),
+            ..Default::default()
+        };
+        let stored: StoredGCPVertexGeminiOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedGCPVertexGeminiSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }

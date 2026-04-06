@@ -9,12 +9,12 @@ use axum::Router;
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use tensorzero_core::observability::{RouterExt as _, TracerWrapper};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 pub fn build_api_routes(
     otel_tracer: Option<Arc<TracerWrapper>>,
     metrics_handle: PrometheusHandle,
-) -> Router<AppStateData> {
+) -> Router<SwappableAppStateData> {
     let (otel_enabled_routes, otel_enabled_router) = external::build_otel_enabled_routes();
     Router::new()
         .merge(otel_enabled_router)

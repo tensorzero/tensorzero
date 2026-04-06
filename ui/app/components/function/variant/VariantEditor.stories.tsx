@@ -114,7 +114,7 @@ export const FullyPopulated: Story = {
           },
           streaming: {
             ttft_ms: 5000n,
-            total_ms: null,
+            total_ms: undefined,
           },
         },
       }}
@@ -153,11 +153,11 @@ export const MinimalConfig: Story = {
         },
         timeouts: {
           non_streaming: {
-            total_ms: null,
+            total_ms: undefined,
           },
           streaming: {
-            ttft_ms: null,
-            total_ms: null,
+            ttft_ms: undefined,
+            total_ms: undefined,
           },
         },
       }}
@@ -219,7 +219,7 @@ export const WithJsonMode: Story = {
           },
           streaming: {
             ttft_ms: 3000n,
-            total_ms: null,
+            total_ms: undefined,
           },
         },
       }}
@@ -297,7 +297,7 @@ export const WithTemplatesOnly: Story = {
           },
           streaming: {
             ttft_ms: 10000n,
-            total_ms: null,
+            total_ms: undefined,
           },
         },
       }}
@@ -372,7 +372,7 @@ Focus on:
           },
           streaming: {
             ttft_ms: 5000n,
-            total_ms: null,
+            total_ms: undefined,
           },
         },
       }}
@@ -443,11 +443,11 @@ export const UnsupportedVariantType: Story = {
         } as unknown as VariantInfo["inner"],
         timeouts: {
           non_streaming: {
-            total_ms: null,
+            total_ms: undefined,
           },
           streaming: {
-            ttft_ms: null,
-            total_ms: null,
+            ttft_ms: undefined,
+            total_ms: undefined,
           },
         },
       }}

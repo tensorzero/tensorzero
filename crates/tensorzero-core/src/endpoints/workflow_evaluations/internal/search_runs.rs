@@ -8,7 +8,7 @@ use tracing::instrument;
 use super::types::{SearchWorkflowEvaluationRunsResponse, WorkflowEvaluationRun};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for searching workflow evaluation runs.
 #[derive(Debug, Deserialize)]
@@ -26,7 +26,7 @@ const DEFAULT_SEARCH_WORKFLOW_EVALUATION_RUNS_OFFSET: u32 = 0;
 /// Handler for `GET /internal/workflow_evaluations/runs/search`
 ///
 /// Searches workflow evaluation runs by project_name and/or search_query.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.search_runs", skip_all)]
 pub async fn search_workflow_evaluation_runs_handler(
     State(app_state): AppState,

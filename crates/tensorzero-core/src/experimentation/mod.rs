@@ -136,7 +136,7 @@ impl ExperimentationConfigWithNamespaces {
 /// Uninitialized experimentation config — 5 variants for backward compatibility.
 /// The 3 legacy variants (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted
 /// to the 2 new variants (`Static`, `Adaptive`) during `load()`.
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -153,7 +153,7 @@ pub enum UninitializedExperimentationConfig {
 
 /// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
 /// This is the type used in the TOML config to allow both a default config and per-namespace overrides.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedExperimentationConfigWithNamespaces {
@@ -258,7 +258,7 @@ impl UninitializedExperimentationConfig {
                     );
                 }
                 let adaptive = UninitializedAdaptiveExperimentationConfig {
-                    algorithm: AdaptiveExperimentationAlgorithm::TrackAndStop,
+                    algorithm: Some(AdaptiveExperimentationAlgorithm::TrackAndStop),
                     inner: config,
                 };
                 Ok(ExperimentationConfig::Adaptive(

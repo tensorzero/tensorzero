@@ -39,6 +39,11 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
+#[cfg(test)]
+use tensorzero_stored_config::{
+    StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredProviderConfig, StoredUnifiedCostConfig,
+};
 use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
 use tracing::{Span, instrument};
@@ -70,6 +75,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIAPIType::ChatCompletions,
                 false,
                 Vec::new(),
+                std::collections::HashMap::new(),
             )?),
             "openrouter" => EmbeddingProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
@@ -121,7 +127,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedEmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -157,6 +163,85 @@ impl UninitializedEmbeddingModelConfig {
             providers,
             timeout_ms,
         })
+    }
+}
+
+impl TryFrom<StoredEmbeddingModelConfig> for UninitializedEmbeddingModelConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredEmbeddingModelConfig) -> Result<Self, Error> {
+        let providers = stored
+            .providers
+            .into_iter()
+            .map(|(name, provider)| {
+                let provider: UninitializedEmbeddingProviderConfig = provider.try_into()?;
+                Ok((Arc::<str>::from(name), provider))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+        Ok(UninitializedEmbeddingModelConfig {
+            routing: stored.routing.into_iter().map(Arc::<str>::from).collect(),
+            providers,
+            timeout_ms: stored.timeout_ms,
+        })
+    }
+}
+
+impl TryFrom<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredEmbeddingProviderConfig) -> Result<Self, Error> {
+        let config: UninitializedProviderConfig = stored.provider.try_into()?;
+        let cost: Option<UninitializedUnifiedCostConfig> = stored.cost.map(Into::into);
+        Ok(UninitializedEmbeddingProviderConfig {
+            config,
+            timeout_ms: stored.timeout_ms,
+            extra_body: stored.extra_body.map(ExtraBodyConfig::from),
+            extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
+            cost,
+        })
+    }
+}
+
+#[cfg(test)]
+impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
+    type Error = Error;
+
+    fn try_from(config: &UninitializedEmbeddingModelConfig) -> Result<Self, Error> {
+        let providers = config
+            .providers
+            .iter()
+            .map(|(provider_name, provider)| {
+                Ok::<_, Error>((
+                    provider_name.to_string(),
+                    StoredEmbeddingProviderConfig::from(provider),
+                ))
+            })
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+
+        Ok(StoredEmbeddingModelConfig {
+            routing: config.routing.iter().map(ToString::to_string).collect(),
+            providers,
+            timeout_ms: config.timeout_ms,
+        })
+    }
+}
+
+#[cfg(test)]
+impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfig {
+    fn from(provider: &UninitializedEmbeddingProviderConfig) -> Self {
+        StoredEmbeddingProviderConfig {
+            provider: StoredProviderConfig::from(&provider.config),
+            timeout_ms: provider.timeout_ms,
+            extra_body: provider
+                .extra_body
+                .as_ref()
+                .map(StoredExtraBodyConfig::from),
+            extra_headers: provider
+                .extra_headers
+                .as_ref()
+                .map(StoredExtraHeadersConfig::from),
+            cost: provider.cost.as_ref().map(StoredUnifiedCostConfig::from),
+        }
     }
 }
 
@@ -708,6 +793,7 @@ impl EmbeddingProviderInfo {
         } else {
             response_fut.await?
         };
+        crate::model::record_usage_metrics(&response.usage);
         let resource_usage = response.resource_usage();
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         clients.deferred_tasks.spawn(
@@ -722,7 +808,7 @@ impl EmbeddingProviderInfo {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct UninitializedEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -894,14 +980,16 @@ impl<'a> Embedding {
 
 #[cfg(test)]
 mod tests {
+    use googletest::{expect_that, matchers::eq};
+
+    use super::*;
     use crate::{
         cache::{CacheEnabledMode, CacheManager, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model::{CredentialLocation, CredentialLocationWithFallback},
         model_table::ProviderTypeDefaultCredentials,
         rate_limiting::{RateLimitingManager, ScopeInfo},
     };
-
-    use super::*;
     #[tokio::test]
     async fn test_embedding_fallbacks() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -1003,6 +1091,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: Some(extra_body_config.clone()),
@@ -1050,6 +1139,7 @@ mod tests {
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
+                content_type_overrides: std::collections::HashMap::new(),
             },
             timeout_ms: None,
             extra_body: None,
@@ -1071,5 +1161,37 @@ mod tests {
         let loaded_extra_headers = provider_info.extra_headers.unwrap();
         assert_eq!(loaded_extra_headers.data.len(), 1);
         assert_eq!(loaded_extra_headers.data[0], replacement);
+    }
+
+    #[googletest::gtest]
+    fn test_embedding_model_config_round_trip() {
+        let original = UninitializedEmbeddingModelConfig {
+            routing: vec![Arc::from("emb_provider")],
+            providers: HashMap::from([(
+                Arc::from("emb_provider"),
+                UninitializedEmbeddingProviderConfig {
+                    config: UninitializedProviderConfig::OpenAI {
+                        model_name: "text-embedding-3-small".to_string(),
+                        api_base: None,
+                        api_key_location: Some(CredentialLocationWithFallback::Single(
+                            CredentialLocation::Env("OPENAI_API_KEY".to_string()),
+                        )),
+                        api_type: OpenAIAPIType::ChatCompletions,
+                        include_encrypted_reasoning: false,
+                        provider_tools: vec![],
+                        content_type_overrides: HashMap::new(),
+                    },
+                    extra_body: None,
+                    extra_headers: None,
+                    timeout_ms: None,
+                    cost: None,
+                },
+            )]),
+            timeout_ms: Some(5000),
+        };
+        let stored = StoredEmbeddingModelConfig::try_from(&original).expect("should serialize");
+        let restored: UninitializedEmbeddingModelConfig =
+            stored.try_into().expect("should convert back");
+        expect_that!(restored, eq(&original));
     }
 }

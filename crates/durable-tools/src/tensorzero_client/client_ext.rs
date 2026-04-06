@@ -116,21 +116,24 @@ impl TensorZeroClient for Client {
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => tensorzero_core::endpoints::embeddings::embeddings(
-                gateway.handle.app_state.config.clone(),
-                &gateway.handle.app_state.http_client,
-                gateway.handle.app_state.clickhouse_connection_info.clone(),
-                gateway.handle.app_state.postgres_connection_info.clone(),
-                gateway.handle.app_state.cache_manager.clone(),
-                gateway.handle.app_state.deferred_tasks.clone(),
-                gateway.handle.app_state.rate_limiting_manager.clone(),
-                params,
-                None,
-            )
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            }),
+            } => {
+                let app_state = gateway.handle.app_state.load_latest();
+                tensorzero_core::endpoints::embeddings::embeddings(
+                    app_state.config.clone(),
+                    &app_state.http_client,
+                    app_state.clickhouse_connection_info.clone(),
+                    app_state.postgres_connection_info.clone(),
+                    app_state.cache_manager.clone(),
+                    app_state.deferred_tasks.clone(),
+                    app_state.rate_limiting_manager.clone(),
+                    params,
+                    None,
+                )
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
         }
     }
 
@@ -206,7 +209,7 @@ impl TensorZeroClient for Client {
                 // Construct the full request with deployment_id from app state
                 // If starting a new session (nil session_id), include the current config hash
                 let config_snapshot_hash = if session_id.is_nil() {
-                    Some(gateway.handle.app_state.config.hash.to_string())
+                    Some(gateway.handle.app_state.config.load().hash.to_string())
                 } else {
                     None
                 };
@@ -642,7 +645,7 @@ impl TensorZeroClient for Client {
                     Arc::new(gateway.handle.app_state.get_delegating_database());
                 launch_optimization_workflow(
                     &gateway.handle.app_state.http_client,
-                    gateway.handle.app_state.config.clone(),
+                    gateway.handle.app_state.config.load(),
                     &db,
                     params,
                 )
@@ -678,16 +681,19 @@ impl TensorZeroClient for Client {
             ClientMode::EmbeddedGateway {
                 gateway,
                 timeout: _,
-            } => poll_optimization(
-                &gateway.handle.app_state.http_client,
-                job_handle,
-                &gateway.handle.app_state.config.models.default_credentials,
-                &gateway.handle.app_state.config.provider_types,
-            )
-            .await
-            .map_err(|e| {
-                TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
-            }),
+            } => {
+                let config = gateway.handle.app_state.config.load();
+                poll_optimization(
+                    &gateway.handle.app_state.http_client,
+                    job_handle,
+                    &config.models.default_credentials,
+                    &config.provider_types,
+                )
+                .await
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })
+            }
         }
     }
 
@@ -848,7 +854,7 @@ impl TensorZeroClient for Client {
                 gateway,
                 timeout: _,
             } => crate::run_evaluation::run_evaluation(
-                gateway.handle.app_state.clone(),
+                gateway.handle.app_state.load_latest(),
                 &params,
                 heartbeater,
             )

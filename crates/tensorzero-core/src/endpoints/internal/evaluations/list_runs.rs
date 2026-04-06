@@ -8,12 +8,12 @@ use super::types::{ListEvaluationRunsParams, ListEvaluationRunsResponse};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::endpoints::internal::evaluations::types::EvaluationRunInfo;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Handler for `GET /internal/evaluations/runs`
 ///
 /// Returns a paginated list of evaluation runs across all functions.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.list_runs", skip_all)]
 pub async fn list_evaluation_runs_handler(
     State(app_state): AppState,

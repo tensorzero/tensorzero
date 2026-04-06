@@ -1,52 +1,55 @@
-use chrono::Duration;
-use serde::{Deserialize, Serialize};
-
-use crate::model::{CredentialLocation, CredentialLocationWithFallback};
+use crate::model::{
+    CredentialLocation, CredentialLocationOrHardcoded, CredentialLocationWithFallback,
+    EndpointLocation,
+};
 use crate::model_table::load_tensorzero_relay_credential;
 use crate::relay::RelayCredentials;
 use crate::{
     config::{
-        ExportConfig, ObservabilityConfig, TemplateFilesystemAccess, UninitializedRelayConfig,
+        BatchWritesConfig, ExportConfig, ObservabilityBackend, ObservabilityConfig, OtlpConfig,
+        OtlpTracesConfig, OtlpTracesFormat, TemplateFilesystemAccess, UninitializedRelayConfig,
     },
-    error::Error,
+    error::{Error, ErrorDetails},
     http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
     relay::TensorzeroRelay,
 };
+use chrono::Duration;
+use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredAuthConfig, StoredBatchWritesConfig, StoredCredentialLocation,
+    StoredCredentialLocationOrHardcoded, StoredCredentialLocationWithFallback,
+    StoredEndpointLocation, StoredExportConfig, StoredGatewayAuthCacheConfig, StoredGatewayConfig,
+    StoredGatewayMetricsConfig, StoredInferenceCacheBackend, StoredModelInferenceCacheConfig,
+    StoredObservabilityBackend, StoredObservabilityConfig, StoredOtlpConfig,
+    StoredOtlpTracesConfig, StoredOtlpTracesFormat, StoredRelayConfig,
+    StoredValkeyModelInferenceCacheConfig,
+};
+use url::Url;
 
 use super::ObjectStoreInfo;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
-    #[serde(default = "default_gateway_auth_cache_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_gateway_auth_cache_ttl_ms")]
-    pub ttl_ms: u64,
+    pub enabled: Option<bool>,
+    pub ttl_ms: Option<u64>,
 }
 
-impl Default for GatewayAuthCacheConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_gateway_auth_cache_enabled(),
-            ttl_ms: default_gateway_auth_cache_ttl_ms(),
-        }
-    }
-}
-
-fn default_gateway_auth_cache_enabled() -> bool {
+pub fn default_gateway_auth_cache_enabled() -> bool {
     true
 }
 
-fn default_gateway_auth_cache_ttl_ms() -> u64 {
+pub fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
-    #[serde(default)]
     pub cache: Option<GatewayAuthCacheConfig>,
 }
 
@@ -54,12 +57,12 @@ fn default_tensorzero_inference_latency_overhead_seconds_buckets() -> Vec<f64> {
     vec![0.001, 0.01, 0.1]
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricsConfig {
     /// Histogram buckets for the `tensorzero_inference_latency_overhead_seconds` metric.
     /// Defaults to `[0.001, 0.01, 0.1]`. Set to empty to disable the metric.
-    #[serde(default)]
     pub tensorzero_inference_latency_overhead_seconds_buckets: Option<Vec<f64>>,
 }
 
@@ -111,38 +114,35 @@ impl MetricsConfig {
 }
 
 /// Which backend to use for model inference caching.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InferenceCacheBackend {
     /// Automatically select based on primary datastore:
     /// - ClickHouse primary → ClickHouse cache
     /// - Postgres primary → Valkey if available, else ClickHouse
-    #[default]
     Auto,
     ClickHouse,
     Valkey,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelInferenceCacheConfig {
     /// Whether caching is enabled.
     /// - `true`: require a cache backend (fail startup if unavailable)
     /// - `null` (default): use cache if available, warn and continue if not
     /// - `false`: disable caching entirely
-    #[serde(default)]
     pub enabled: Option<bool>,
     /// Which cache backend to use.
-    #[serde(default)]
-    pub backend: InferenceCacheBackend,
-    #[serde(default)]
-    pub valkey: ValkeyModelInferenceCacheConfig,
+    pub backend: Option<InferenceCacheBackend>,
+    pub valkey: Option<ValkeyModelInferenceCacheConfig>,
 }
 
 // By default, cache entries in Valkey are retained for 24 hours.
 const DEFAULT_VALKEY_CACHE_TTL_S: u64 = 86400; // 24 hours
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValkeyModelInferenceCacheConfig {
     #[serde(default = "default_valkey_cache_ttl_s")]
@@ -161,49 +161,40 @@ impl Default for ValkeyModelInferenceCacheConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
-    #[serde(default)]
-    pub debug: bool,
-    #[serde(default)]
+    pub observability: Option<ObservabilityConfig>,
+    pub debug: Option<bool>,
     pub template_filesystem_access: Option<TemplateFilesystemAccess>,
-    #[serde(default)]
-    pub export: ExportConfig,
+    pub export: Option<ExportConfig>,
     // If set, all of the HTTP endpoints will have this path prepended.
     // E.g. a base path of `/custom/prefix` will cause the inference endpoint to become `/custom/prefix/inference`.
     pub base_path: Option<String>,
     // If set to `true`, disables validation on feedback queries (read from ClickHouse to check that the target is valid)
-    #[serde(default)]
-    pub unstable_disable_feedback_target_validation: bool,
+    pub unstable_disable_feedback_target_validation: Option<bool>,
     /// If enabled, adds an `error_json` field alongside the human-readable `error` field
     /// in HTTP error responses. This contains a JSON-serialized version of the error.
     /// While `error_json` will always be valid JSON when present, the exact contents is unstable,
     /// and may change at any time without warning.
     /// For now, this is only supported in the standalone gateway, and not in the embedded gateway.
-    #[serde(default)]
-    pub unstable_error_json: bool,
-    #[serde(default)]
-    pub disable_pseudonymous_usage_analytics: bool,
+    pub unstable_error_json: Option<bool>,
+    pub disable_pseudonymous_usage_analytics: Option<bool>,
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
-    #[serde(default)]
-    pub auth: AuthConfig,
+    pub auth: Option<AuthConfig>,
     pub global_outbound_http_timeout_ms: Option<u64>,
-    #[serde(default)]
     pub relay: Option<UninitializedRelayConfig>,
-    #[serde(default)]
-    pub metrics: MetricsConfig,
-    #[serde(default)]
-    pub cache: ModelInferenceCacheConfig,
+    pub metrics: Option<MetricsConfig>,
+    pub cache: Option<ModelInferenceCacheConfig>,
 }
 
 impl UninitializedGatewayConfig {
     pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
-        self.metrics.validate()?;
+        let metrics = self.metrics.unwrap_or_default();
+        metrics.validate()?;
         let fetch_and_encode_input_files_before_inference = if let Some(value) =
             self.fetch_and_encode_input_files_before_inference
         {
@@ -240,25 +231,362 @@ impl UninitializedGatewayConfig {
 
         Ok(GatewayConfig {
             bind_address: self.bind_address,
-            observability: self.observability,
-            debug: self.debug,
+            observability: self.observability.unwrap_or_default(),
+            debug: self.debug.unwrap_or_default(),
             template_filesystem_access: self.template_filesystem_access.unwrap_or_default(),
-            export: self.export,
+            export: self.export.unwrap_or_default(),
             base_path: self.base_path,
-            unstable_error_json: self.unstable_error_json,
+            unstable_error_json: self.unstable_error_json.unwrap_or_default(),
             unstable_disable_feedback_target_validation: self
-                .unstable_disable_feedback_target_validation,
-            disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
+                .unstable_disable_feedback_target_validation
+                .unwrap_or_default(),
+            disable_pseudonymous_usage_analytics: self
+                .disable_pseudonymous_usage_analytics
+                .unwrap_or_default(),
             fetch_and_encode_input_files_before_inference,
-            auth: self.auth,
+            auth: self.auth.unwrap_or_default(),
             global_outbound_http_timeout: self
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
             relay,
-            metrics: self.metrics,
-            cache: self.cache,
+            metrics,
+            cache: self.cache.unwrap_or_default(),
         })
+    }
+}
+
+// --- From impls: StoredGatewayConfig -> core types ---
+
+impl From<StoredObservabilityBackend> for ObservabilityBackend {
+    fn from(stored: StoredObservabilityBackend) -> Self {
+        match stored {
+            StoredObservabilityBackend::Auto => Self::Auto,
+            StoredObservabilityBackend::ClickHouse => Self::ClickHouse,
+            StoredObservabilityBackend::Postgres => Self::Postgres,
+        }
+    }
+}
+
+impl From<StoredBatchWritesConfig> for BatchWritesConfig {
+    fn from(stored: StoredBatchWritesConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            __force_allow_embedded_batch_writes: None,
+            flush_interval_ms: stored.flush_interval_ms,
+            max_rows: stored.max_rows,
+            max_rows_postgres: stored.max_rows_postgres,
+            write_queue_capacity: stored.write_queue_capacity,
+        }
+    }
+}
+
+impl From<StoredObservabilityConfig> for ObservabilityConfig {
+    #[expect(deprecated)]
+    fn from(stored: StoredObservabilityConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            backend: stored.backend.map(Into::into),
+            async_writes: stored.async_writes,
+            batch_writes: stored.batch_writes.map(Into::into),
+            disable_automatic_migrations: None,
+        }
+    }
+}
+
+impl From<StoredOtlpTracesFormat> for OtlpTracesFormat {
+    fn from(stored: StoredOtlpTracesFormat) -> Self {
+        match stored {
+            StoredOtlpTracesFormat::OpenTelemetry => Self::OpenTelemetry,
+            StoredOtlpTracesFormat::OpenInference => Self::OpenInference,
+        }
+    }
+}
+
+impl From<StoredOtlpTracesConfig> for OtlpTracesConfig {
+    fn from(stored: StoredOtlpTracesConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            format: stored.format.map(Into::into),
+            extra_headers: stored.extra_headers.map(|h| h.into_iter().collect()),
+        }
+    }
+}
+
+impl From<StoredOtlpConfig> for OtlpConfig {
+    fn from(stored: StoredOtlpConfig) -> Self {
+        Self {
+            traces: stored.traces.map(Into::into),
+        }
+    }
+}
+
+impl From<StoredExportConfig> for ExportConfig {
+    fn from(stored: StoredExportConfig) -> Self {
+        Self {
+            otlp: stored.otlp.map(Into::into),
+        }
+    }
+}
+
+impl From<StoredGatewayAuthCacheConfig> for GatewayAuthCacheConfig {
+    fn from(stored: StoredGatewayAuthCacheConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            ttl_ms: stored.ttl_ms,
+        }
+    }
+}
+
+impl From<StoredAuthConfig> for AuthConfig {
+    fn from(stored: StoredAuthConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            cache: stored.cache.map(Into::into),
+        }
+    }
+}
+
+impl From<StoredGatewayMetricsConfig> for MetricsConfig {
+    fn from(stored: StoredGatewayMetricsConfig) -> Self {
+        Self {
+            tensorzero_inference_latency_overhead_seconds_buckets: stored
+                .tensorzero_inference_latency_overhead_seconds_buckets,
+        }
+    }
+}
+
+impl From<StoredInferenceCacheBackend> for InferenceCacheBackend {
+    fn from(stored: StoredInferenceCacheBackend) -> Self {
+        match stored {
+            StoredInferenceCacheBackend::Auto => Self::Auto,
+            StoredInferenceCacheBackend::ClickHouse => Self::ClickHouse,
+            StoredInferenceCacheBackend::Valkey => Self::Valkey,
+        }
+    }
+}
+
+impl From<StoredValkeyModelInferenceCacheConfig> for ValkeyModelInferenceCacheConfig {
+    fn from(stored: StoredValkeyModelInferenceCacheConfig) -> Self {
+        Self {
+            ttl_s: stored.ttl_s.unwrap_or(DEFAULT_VALKEY_CACHE_TTL_S),
+        }
+    }
+}
+
+impl From<StoredModelInferenceCacheConfig> for ModelInferenceCacheConfig {
+    fn from(stored: StoredModelInferenceCacheConfig) -> Self {
+        Self {
+            enabled: stored.enabled,
+            backend: stored.backend.map(Into::into),
+            valkey: stored.valkey.map(Into::into),
+        }
+    }
+}
+
+impl From<StoredCredentialLocation> for CredentialLocation {
+    fn from(stored: StoredCredentialLocation) -> Self {
+        match stored {
+            StoredCredentialLocation::Env { value } => Self::Env(value),
+            StoredCredentialLocation::PathFromEnv { value } => Self::PathFromEnv(value),
+            StoredCredentialLocation::Dynamic { value } => Self::Dynamic(value),
+            StoredCredentialLocation::Path { value } => Self::Path(value),
+            StoredCredentialLocation::Sdk => Self::Sdk,
+            StoredCredentialLocation::None => Self::None,
+        }
+    }
+}
+
+impl From<StoredCredentialLocationWithFallback> for CredentialLocationWithFallback {
+    fn from(stored: StoredCredentialLocationWithFallback) -> Self {
+        match stored {
+            StoredCredentialLocationWithFallback::Single { location } => {
+                Self::Single(location.into())
+            }
+            StoredCredentialLocationWithFallback::WithFallback { default, fallback } => {
+                Self::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<StoredCredentialLocationOrHardcoded> for CredentialLocationOrHardcoded {
+    fn from(stored: StoredCredentialLocationOrHardcoded) -> Self {
+        match stored {
+            StoredCredentialLocationOrHardcoded::Hardcoded { value } => Self::Hardcoded(value),
+            StoredCredentialLocationOrHardcoded::Location { location } => {
+                Self::Location(location.into())
+            }
+        }
+    }
+}
+
+impl From<StoredEndpointLocation> for EndpointLocation {
+    fn from(stored: StoredEndpointLocation) -> Self {
+        match stored {
+            StoredEndpointLocation::Env { value } => Self::Env(value),
+            StoredEndpointLocation::Dynamic { value } => Self::Dynamic(value),
+            StoredEndpointLocation::Static { value } => Self::Static(value),
+        }
+    }
+}
+
+impl From<&CredentialLocation> for StoredCredentialLocation {
+    fn from(loc: &CredentialLocation) -> Self {
+        match loc {
+            CredentialLocation::Env(inner) => Self::Env {
+                value: inner.clone(),
+            },
+            CredentialLocation::PathFromEnv(inner) => Self::PathFromEnv {
+                value: inner.clone(),
+            },
+            CredentialLocation::Dynamic(inner) => Self::Dynamic {
+                value: inner.clone(),
+            },
+            CredentialLocation::Path(inner) => Self::Path {
+                value: inner.clone(),
+            },
+            CredentialLocation::Sdk => Self::Sdk,
+            CredentialLocation::None => Self::None,
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback> for StoredCredentialLocationWithFallback {
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        match loc {
+            CredentialLocationWithFallback::Single(inner) => Self::Single {
+                location: inner.into(),
+            },
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                Self::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<&CredentialLocationOrHardcoded> for StoredCredentialLocationOrHardcoded {
+    fn from(loc: &CredentialLocationOrHardcoded) -> Self {
+        match loc {
+            CredentialLocationOrHardcoded::Hardcoded(value) => Self::Hardcoded {
+                value: value.clone(),
+            },
+            CredentialLocationOrHardcoded::Location(inner) => Self::Location {
+                location: inner.into(),
+            },
+        }
+    }
+}
+
+impl From<&EndpointLocation> for StoredEndpointLocation {
+    fn from(loc: &EndpointLocation) -> Self {
+        match loc {
+            EndpointLocation::Env(value) => Self::Env {
+                value: value.clone(),
+            },
+            EndpointLocation::Dynamic(value) => Self::Dynamic {
+                value: value.clone(),
+            },
+            EndpointLocation::Static(value) => Self::Static {
+                value: value.clone(),
+            },
+        }
+    }
+}
+
+impl TryFrom<StoredRelayConfig> for UninitializedRelayConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredRelayConfig) -> Result<Self, Error> {
+        let gateway_url = stored
+            .gateway_url
+            .map(|u| {
+                Url::parse(&u).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to parse relay `gateway_url` `{u}`: {e}"),
+                    })
+                })
+            })
+            .transpose()?;
+        Ok(Self {
+            gateway_url,
+            api_key_location: stored.api_key_location.map(Into::into),
+        })
+    }
+}
+
+impl TryFrom<StoredGatewayConfig> for UninitializedGatewayConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredGatewayConfig) -> Result<Self, Error> {
+        let bind_address = stored
+            .bind_address
+            .map(|addr| {
+                addr.parse().map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to parse gateway `bind_address` `{addr}`: {e}"),
+                    })
+                })
+            })
+            .transpose()?;
+
+        let relay = stored.relay.map(TryInto::try_into).transpose()?;
+
+        Ok(UninitializedGatewayConfig {
+            bind_address,
+            observability: stored.observability.map(Into::into),
+            debug: stored.debug,
+            // Config-in-DB users are banned from using template_filesystem_access.
+            template_filesystem_access: None,
+            export: stored.export.map(Into::into),
+            base_path: stored.base_path,
+            unstable_disable_feedback_target_validation: stored
+                .unstable_disable_feedback_target_validation,
+            unstable_error_json: stored.unstable_error_json,
+            disable_pseudonymous_usage_analytics: stored.disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference: stored
+                .fetch_and_encode_input_files_before_inference,
+            auth: stored.auth.map(Into::into),
+            global_outbound_http_timeout_ms: stored.global_outbound_http_timeout_ms,
+            relay,
+            metrics: stored.metrics.map(Into::into),
+            cache: stored.cache.map(Into::into),
+        })
+    }
+}
+
+impl From<ObservabilityBackend> for StoredObservabilityBackend {
+    fn from(backend: ObservabilityBackend) -> Self {
+        match backend {
+            ObservabilityBackend::Auto => StoredObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse => StoredObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres => StoredObservabilityBackend::Postgres,
+        }
+    }
+}
+
+impl From<OtlpTracesFormat> for StoredOtlpTracesFormat {
+    fn from(format: OtlpTracesFormat) -> Self {
+        match format {
+            OtlpTracesFormat::OpenTelemetry => StoredOtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference => StoredOtlpTracesFormat::OpenInference,
+        }
+    }
+}
+
+impl From<InferenceCacheBackend> for StoredInferenceCacheBackend {
+    fn from(backend: InferenceCacheBackend) -> Self {
+        match backend {
+            InferenceCacheBackend::Auto => StoredInferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse => StoredInferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey => StoredInferenceCacheBackend::Valkey,
+        }
     }
 }
 
@@ -320,5 +648,115 @@ where
     match addr {
         Some(addr) => serializer.serialize_str(&addr.to_string()),
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_observability_backend_round_trip() {
+        for variant in [
+            ObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres,
+        ] {
+            let stored: StoredObservabilityBackend = variant.into();
+            let restored: ObservabilityBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_otlp_traces_format_round_trip() {
+        for variant in &[
+            OtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference,
+        ] {
+            let stored: StoredOtlpTracesFormat = variant.clone().into();
+            let restored: OtlpTracesFormat = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_inference_cache_backend_round_trip() {
+        for variant in [
+            InferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey,
+        ] {
+            let stored: StoredInferenceCacheBackend = variant.into();
+            let restored: InferenceCacheBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    // ── CredentialLocationWithFallback ─────────────────────────────────
+
+    fn credential_location_variants() -> Vec<CredentialLocation> {
+        vec![
+            CredentialLocation::Env("MY_KEY".to_string()),
+            CredentialLocation::PathFromEnv("MY_KEY_PATH".to_string()),
+            CredentialLocation::Dynamic("dyn_key".to_string()),
+            CredentialLocation::Path("/etc/keys/key.pem".to_string()),
+            CredentialLocation::Sdk,
+            CredentialLocation::None,
+        ]
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_single_round_trip() {
+        for loc in credential_location_variants() {
+            let original = CredentialLocationWithFallback::Single(loc);
+            let stored: StoredCredentialLocationWithFallback = (&original).into();
+            let restored: CredentialLocationWithFallback = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_with_fallback_round_trip() {
+        let original = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Env("PRIMARY".to_string()),
+            fallback: CredentialLocation::PathFromEnv("BACKUP_PATH".to_string()),
+        };
+        let stored: StoredCredentialLocationWithFallback = (&original).into();
+        let restored: CredentialLocationWithFallback = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_all_fallback_combos_round_trip() {
+        // Cover the full cross-product of default × fallback to make sure each
+        // variant survives the encode/decode through stored form.
+        for default in credential_location_variants() {
+            for fallback in credential_location_variants() {
+                let original = CredentialLocationWithFallback::WithFallback {
+                    default: default.clone(),
+                    fallback: fallback.clone(),
+                };
+                let stored: StoredCredentialLocationWithFallback = (&original).into();
+                let restored: CredentialLocationWithFallback = stored.into();
+                expect_that!(restored, eq(&original));
+            }
+        }
+    }
+
+    // ── EndpointLocation ───────────────────────────────────────────────
+
+    #[gtest]
+    fn test_endpoint_location_round_trip() {
+        for variant in [
+            EndpointLocation::Env("MY_ENDPOINT".to_string()),
+            EndpointLocation::Dynamic("dyn_endpoint".to_string()),
+            EndpointLocation::Static("https://api.example.com".to_string()),
+        ] {
+            let stored: StoredEndpointLocation = (&variant).into();
+            let restored: EndpointLocation = stored.into();
+            expect_that!(restored, eq(&variant));
+        }
     }
 }

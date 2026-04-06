@@ -106,7 +106,8 @@ pub struct SetupResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedGEPAConfig {
     pub function_name: String,
-    pub evaluation_name: String,
+    pub evaluation_name: Option<String>,
+    pub evaluator_names: Option<Vec<String>>,
     pub initial_variants: Option<Vec<String>>,
     pub variant_prefix: Option<String>,
     pub batch_size: usize,
@@ -127,7 +128,11 @@ pub struct ResolvedGEPAConfig {
 /// for sampled minibatch evaluation (avoids creating temporary datasets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalStepParams {
-    pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation_name: Option<String>,
+    pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_names: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dataset_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -140,7 +145,11 @@ pub struct EvalStepParams {
 /// Params for the initial evaluation step (multiple variants).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InitEvalStepParams {
-    pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation_name: Option<String>,
+    pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_names: Option<Vec<String>>,
     pub datapoint_ids: Vec<Uuid>,
     pub variants: HashMap<String, UninitializedChatCompletionConfig>,
     pub max_concurrency: u32,
@@ -153,7 +162,11 @@ pub struct InitEvalStepParams {
 /// This avoids checkpointing large `EvaluationInfo` data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalAnalyzeMutateStepParams {
-    pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation_name: Option<String>,
+    pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluator_names: Option<Vec<String>>,
     pub datapoint_ids: Vec<Uuid>,
     pub variant_name: VariantName,
     pub variant_config: UninitializedChatCompletionConfig,

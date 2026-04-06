@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockOutput, StoredRequestMessage};
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, ResolvedAppStateData, SwappableAppStateData};
 
 /// Response containing model inferences
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -101,7 +101,7 @@ pub struct ModelInference {
 }
 
 /// HTTP handler for getting model inferences by inference ID
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_model_inferences_handler",
     skip_all,
@@ -119,7 +119,7 @@ pub async fn get_model_inferences_handler(
 
 /// Core business logic for getting model inferences
 async fn get_model_inferences(
-    app_state_data: AppStateData,
+    app_state_data: ResolvedAppStateData,
     inference_id: Uuid,
 ) -> Result<Vec<ModelInference>, Error> {
     let db = app_state_data.get_delegating_database();

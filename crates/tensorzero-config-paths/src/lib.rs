@@ -215,6 +215,7 @@ pub static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
         PathComponent::Literal("fuser"),
         PathComponent::Literal("assistant_template"),
     ],
+    // Function-scoped evaluators
     &[
         PathComponent::Literal("functions"),
         PathComponent::Wildcard,
@@ -328,6 +329,7 @@ pub static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
         PathComponent::Literal("fuser"),
         PathComponent::Literal("assistant_template"),
     ],
+    // Top-level evaluations
     &[
         PathComponent::Literal("evaluations"),
         PathComponent::Wildcard,

@@ -16,6 +16,8 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
+    let input_tokens_before = get_metric_u64(&client, "tensorzero_input_tokens_total").await;
+    let output_tokens_before = get_metric_u64(&client, "tensorzero_output_tokens_total").await;
 
     // Run inference (standard)
     let inference_payload = serde_json::json!({
@@ -44,6 +46,18 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
         request_count_after,
         request_count_before + 1,
         "Inference request count should have increased by 1"
+    );
+
+    let input_tokens_after = get_metric_u64(&client, "tensorzero_input_tokens_total").await;
+    let output_tokens_after = get_metric_u64(&client, "tensorzero_output_tokens_total").await;
+
+    assert!(
+        input_tokens_after > input_tokens_before,
+        "Input tokens should have increased after inference"
+    );
+    assert!(
+        output_tokens_after > output_tokens_before,
+        "Output tokens should have increased after inference"
     );
 }
 
@@ -93,6 +107,8 @@ async fn test_prometheus_metrics_inference_streaming() {
     let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
+    let input_tokens_before = get_metric_u64(&client, "tensorzero_input_tokens_total").await;
+    let output_tokens_before = get_metric_u64(&client, "tensorzero_output_tokens_total").await;
 
     // Run inference (streaming)
     let inference_payload = serde_json::json!({
@@ -122,6 +138,18 @@ async fn test_prometheus_metrics_inference_streaming() {
         request_count_after,
         request_count_before + 1,
         "Inference request count should have increased by 1"
+    );
+
+    let input_tokens_after = get_metric_u64(&client, "tensorzero_input_tokens_total").await;
+    let output_tokens_after = get_metric_u64(&client, "tensorzero_output_tokens_total").await;
+
+    assert!(
+        input_tokens_after > input_tokens_before,
+        "Input tokens should have increased after streaming inference"
+    );
+    assert!(
+        output_tokens_after > output_tokens_before,
+        "Output tokens should have increased after streaming inference"
     );
 }
 
@@ -670,8 +698,9 @@ async fn test_prometheus_metrics_embeddings_batch() {
 
 #[tokio::test]
 async fn test_prometheus_metrics_embeddings_dryrun() {
-    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
-    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model\"}";
+    // Use a dedicated model so concurrent embedding tests don't interfere with counter reads
+    let requests_metric = "tensorzero_requests_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model-dryrun\"}";
+    let inferences_metric = "tensorzero_inferences_total{endpoint=\"embeddings\",model_name=\"prometheus-test-embedding-model-dryrun\"}";
     let client = Client::new();
 
     let requests_before = get_metric_u32(&client, requests_metric).await;
@@ -679,7 +708,7 @@ async fn test_prometheus_metrics_embeddings_dryrun() {
 
     // Run embeddings with dryrun
     let embeddings_payload = serde_json::json!({
-        "model": "prometheus-test-embedding-model",
+        "model": "prometheus-test-embedding-model-dryrun",
         "input": "Hello, world!",
         "tensorzero::dryrun": true,
     });
@@ -716,6 +745,16 @@ async fn get_metric_u32(client: &Client, metric_name: &str) -> u32 {
         .map(std::string::String::as_str)
         .unwrap_or("0")
         .parse::<u32>()
+        .unwrap()
+}
+
+async fn get_metric_u64(client: &Client, metric_name: &str) -> u64 {
+    let metrics = get_metrics(client).await;
+    metrics
+        .get(metric_name)
+        .map(std::string::String::as_str)
+        .unwrap_or("0")
+        .parse::<u64>()
         .unwrap()
 }
 

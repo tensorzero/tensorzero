@@ -10,7 +10,7 @@ use crate::config::{BatchWritesConfig, ObservabilityBackend, ObservabilityConfig
 pub struct StoredObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
-    pub backend: ObservabilityBackend,
+    pub backend: Option<ObservabilityBackend>,
     #[serde(default)]
     pub async_writes: bool,
     #[serde(default)]
@@ -67,9 +67,11 @@ impl From<BatchWritesConfig> for StoredBatchWritesConfig {
         } = config;
         Self {
             enabled,
-            __force_allow_embedded_batch_writes,
-            flush_interval_ms,
-            max_rows,
+            __force_allow_embedded_batch_writes: __force_allow_embedded_batch_writes
+                .unwrap_or_default(),
+            flush_interval_ms: flush_interval_ms
+                .unwrap_or_else(crate::config::default_flush_interval_ms),
+            max_rows: max_rows.unwrap_or_else(crate::config::default_max_rows),
             max_rows_postgres,
             write_queue_capacity,
         }
@@ -88,9 +90,9 @@ impl From<StoredBatchWritesConfig> for BatchWritesConfig {
         } = stored;
         Self {
             enabled,
-            __force_allow_embedded_batch_writes,
-            flush_interval_ms,
-            max_rows,
+            __force_allow_embedded_batch_writes: Some(__force_allow_embedded_batch_writes),
+            flush_interval_ms: Some(flush_interval_ms),
+            max_rows: Some(max_rows),
             max_rows_postgres,
             write_queue_capacity,
         }
@@ -110,9 +112,9 @@ impl From<ObservabilityConfig> for StoredObservabilityConfig {
         Self {
             enabled,
             backend,
-            async_writes,
-            batch_writes: batch_writes.into(),
-            disable_automatic_migrations,
+            async_writes: async_writes.unwrap_or_default(),
+            batch_writes: batch_writes.unwrap_or_default().into(),
+            disable_automatic_migrations: disable_automatic_migrations.unwrap_or_default(),
         }
     }
 }
@@ -129,10 +131,10 @@ impl From<StoredObservabilityConfig> for ObservabilityConfig {
         Self {
             enabled,
             backend,
-            async_writes,
-            batch_writes: batch_writes.into(),
+            async_writes: Some(async_writes),
+            batch_writes: Some(batch_writes.into()),
             #[expect(deprecated)]
-            disable_automatic_migrations,
+            disable_automatic_migrations: Some(disable_automatic_migrations),
         }
     }
 }
@@ -177,8 +179,9 @@ mod tests {
         let stored: StoredObservabilityConfig =
             toml::from_str(toml_str).expect("should parse without write_queue_capacity");
         let config: ObservabilityConfig = stored.into();
+        let batch_writes = config.batch_writes.expect("batch_writes should be Some");
         assert_eq!(
-            config.batch_writes.write_queue_capacity, None,
+            batch_writes.write_queue_capacity, None,
             "should default to None (unbounded) when not set"
         );
     }
@@ -199,8 +202,9 @@ mod tests {
         let stored: StoredObservabilityConfig =
             toml::from_str(toml_str).expect("should parse with explicit write_queue_capacity");
         let config: ObservabilityConfig = stored.into();
+        let batch_writes = config.batch_writes.expect("batch_writes should be Some");
         assert_eq!(
-            config.batch_writes.write_queue_capacity,
+            batch_writes.write_queue_capacity,
             Some(5000),
             "should preserve explicit write_queue_capacity"
         );

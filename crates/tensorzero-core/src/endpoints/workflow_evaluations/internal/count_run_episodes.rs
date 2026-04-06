@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::types::CountWorkflowEvaluationRunEpisodesResponse;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for counting workflow evaluation run episodes.
 #[derive(Debug, Deserialize)]
@@ -21,7 +21,7 @@ pub struct CountWorkflowEvaluationRunEpisodesParams {
 /// Handler for `GET /internal/workflow_evaluations/run_episodes/count`
 ///
 /// Returns the total count of episodes for a given workflow evaluation run.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.count_run_episodes", skip_all)]
 pub async fn count_workflow_evaluation_run_episodes_total_handler(
     State(app_state): AppState,

@@ -20,7 +20,7 @@ use evaluations::types::{EvaluationVariant, RunEvaluationWithAppStateParams};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::ResolvedAppStateData;
 
 pub use evaluations::stats::EvaluatorStats;
 
@@ -172,7 +172,7 @@ pub struct RunEvaluationResponse {
 
 /// Runs an evaluation: looks up configs, executes inference + evaluators, collects results.
 pub async fn run_evaluation(
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
     params: &RunEvaluationParams,
     heartbeater: Arc<dyn Heartbeater>,
 ) -> Result<RunEvaluationResponse, RunEvaluationError> {

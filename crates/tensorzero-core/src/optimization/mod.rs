@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::StoredOptimizerConfig;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -248,7 +249,7 @@ impl OptimizationJobInfoPyClass {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
@@ -263,8 +264,50 @@ impl UninitializedOptimizerInfo {
     }
 }
 
+impl From<UninitializedOptimizerInfo> for StoredOptimizerConfig {
+    fn from(info: UninitializedOptimizerInfo) -> Self {
+        info.inner.into()
+    }
+}
+
+impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerInfo {
+    type Error = Error;
+
+    fn try_from(stored: StoredOptimizerConfig) -> Result<Self, Error> {
+        Ok(UninitializedOptimizerInfo {
+            inner: stored.try_into()?,
+        })
+    }
+}
+
+impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerConfig {
+    type Error = Error;
+
+    fn try_from(stored: StoredOptimizerConfig) -> Result<Self, Error> {
+        match stored {
+            StoredOptimizerConfig::Dicl(c) => Ok(UninitializedOptimizerConfig::Dicl(c.into())),
+            StoredOptimizerConfig::OpenAISFT(c) => {
+                Ok(UninitializedOptimizerConfig::OpenAISFT(c.into()))
+            }
+            StoredOptimizerConfig::OpenAIRFT(c) => Ok(UninitializedOptimizerConfig::OpenAIRFT(
+                Box::new((*c).into()),
+            )),
+            StoredOptimizerConfig::FireworksSFT(c) => {
+                Ok(UninitializedOptimizerConfig::FireworksSFT(c.into()))
+            }
+            StoredOptimizerConfig::GCPVertexGeminiSFT(c) => {
+                Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(c.into()))
+            }
+            StoredOptimizerConfig::GEPA(c) => Ok(UninitializedOptimizerConfig::GEPA(c.into())),
+            StoredOptimizerConfig::TogetherSFT(c) => Ok(UninitializedOptimizerConfig::TogetherSFT(
+                Box::new((*c).into()),
+            )),
+        }
+    }
+}
+
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -283,6 +326,30 @@ pub enum UninitializedOptimizerConfig {
     GEPA(UninitializedGEPAConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
+}
+
+impl From<UninitializedOptimizerConfig> for StoredOptimizerConfig {
+    fn from(config: UninitializedOptimizerConfig) -> Self {
+        match config {
+            UninitializedOptimizerConfig::Dicl(c) => StoredOptimizerConfig::Dicl(c.into()),
+            UninitializedOptimizerConfig::OpenAISFT(c) => {
+                StoredOptimizerConfig::OpenAISFT(c.into())
+            }
+            UninitializedOptimizerConfig::OpenAIRFT(c) => {
+                StoredOptimizerConfig::OpenAIRFT(Box::new((*c).into()))
+            }
+            UninitializedOptimizerConfig::FireworksSFT(c) => {
+                StoredOptimizerConfig::FireworksSFT(c.into())
+            }
+            UninitializedOptimizerConfig::GCPVertexGeminiSFT(c) => {
+                StoredOptimizerConfig::GCPVertexGeminiSFT(c.into())
+            }
+            UninitializedOptimizerConfig::GEPA(c) => StoredOptimizerConfig::GEPA(c.into()),
+            UninitializedOptimizerConfig::TogetherSFT(c) => {
+                StoredOptimizerConfig::TogetherSFT(Box::new((*c).into()))
+            }
+        }
+    }
 }
 
 impl UninitializedOptimizerConfig {

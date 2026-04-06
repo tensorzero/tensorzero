@@ -10,10 +10,10 @@ use tensorzero_core::{
         UninitializedToolConfig,
     },
     error::{Error, ErrorDetails},
-    evaluations::EvaluationConfig,
+    evaluations::{EvaluationConfig, EvaluatorConfig, InferenceEvaluationConfig},
     function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
-    optimization::gepa::GEPAConfig,
+    optimization::gepa::{GEPAConfig, GepaEvaluationSource},
     stored_inference::{RenderedSample, StoredOutput},
     tool::StaticToolConfig,
     variant::{VariantConfig, VariantInfo, chat_completion::UninitializedChatCompletionConfig},
@@ -84,6 +84,55 @@ impl SerializableFunctionContext {
     }
 }
 
+fn get_function_evaluators(
+    function_config: &Arc<FunctionConfig>,
+    function_name: &str,
+    evaluator_names: &[String],
+) -> Result<HashMap<String, EvaluatorConfig>, Error> {
+    if evaluator_names.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "GEPA config for function `{function_name}` must specify at least one evaluator name"
+            ),
+        }));
+    }
+
+    let function_evaluators = function_config.evaluators();
+    let mut evaluators = HashMap::new();
+    for evaluator_name in evaluator_names {
+        let evaluator_config = function_evaluators.get(evaluator_name).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Evaluator `{evaluator_name}` not found on function `{function_name}`"
+                ),
+            })
+        })?;
+        if evaluators
+            .insert(evaluator_name.clone(), evaluator_config.clone())
+            .is_some()
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "GEPA config for function `{function_name}` contains duplicate evaluator `{evaluator_name}`"
+                ),
+            }));
+        }
+    }
+
+    Ok(evaluators)
+}
+
+fn build_inline_evaluation_config(
+    function_name: &str,
+    evaluators: HashMap<String, EvaluatorConfig>,
+) -> Arc<EvaluationConfig> {
+    Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
+        function_name: function_name.to_string(),
+        evaluators,
+        description: None,
+    }))
+}
+
 /// Validates the GEPA configuration and checks that required resources exist
 /// Returns the FunctionContext containing the function config, associated static tools, and evaluation config for the function being optimized
 pub fn validate_gepa_config(
@@ -104,15 +153,25 @@ pub fn validate_gepa_config(
         })?;
 
     // Extract the evaluation config from the TensorZero config
-    let evaluation_name = &config.evaluation_name;
-    let evaluation_config = tensorzero_config
-        .evaluations
-        .get(evaluation_name)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Evaluation '{evaluation_name}' not found in config"),
-            })
-        })?;
+    let evaluation_config = match config.evaluation_source().map_err(|message| {
+        Error::new(ErrorDetails::Config {
+            message: message.to_string(),
+        })
+    })? {
+        GepaEvaluationSource::Named { evaluation_name } => tensorzero_config
+            .evaluations
+            .get(evaluation_name)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Evaluation `{evaluation_name}` not found in config"),
+                })
+            })?
+            .clone(),
+        GepaEvaluationSource::EvaluatorNames { evaluator_names } => build_inline_evaluation_config(
+            &config.function_name,
+            get_function_evaluators(function_config, &config.function_name, evaluator_names)?,
+        ),
+    };
 
     // Validate initial_variants if specified
     if let Some(initial_variants) = &config.initial_variants {
@@ -571,7 +630,8 @@ pub fn validate_gepa_config_uninitialized(
     // Load the target function
     let uninitialized_fn = uninitialized_config
         .functions
-        .get(&config.function_name)
+        .as_ref()
+        .and_then(|m| m.get(&config.function_name))
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
@@ -581,33 +641,44 @@ pub fn validate_gepa_config_uninitialized(
             })
         })?;
 
-    let loaded_fn = uninitialized_fn
-        .clone()
-        .load(&config.function_name, &uninitialized_config.metrics)?;
+    let loaded_fn = uninitialized_fn.clone().load(&config.function_name, {
+        static EMPTY: std::sync::LazyLock<HashMap<String, tensorzero_core::config::MetricConfig>> =
+            std::sync::LazyLock::new(HashMap::new);
+        uninitialized_config.metrics.as_ref().unwrap_or(&EMPTY)
+    })?;
     let function_config = Arc::new(loaded_fn.function_config);
 
-    // Load the evaluation
-    let uninitialized_eval = uninitialized_config
-        .evaluations
-        .get(&config.evaluation_name)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Evaluation `{}` not found in config",
-                    config.evaluation_name
-                ),
-            })
-        })?;
+    let evaluation_config = match config.evaluation_source().map_err(|message| {
+        Error::new(ErrorDetails::Config {
+            message: message.to_string(),
+        })
+    })? {
+        GepaEvaluationSource::Named { evaluation_name } => {
+            let uninitialized_eval = uninitialized_config
+                .evaluations
+                .as_ref()
+                .and_then(|m| m.get(evaluation_name))
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Evaluation `{evaluation_name}` not found in config"),
+                    })
+                })?;
 
-    // Build a minimal functions map for evaluation loading
-    let mut functions_for_eval: HashMap<String, Arc<FunctionConfig>> = HashMap::new();
-    functions_for_eval.insert(config.function_name.clone(), function_config.clone());
+            // Build a minimal functions map for evaluation loading
+            let mut functions_for_eval: HashMap<String, Arc<FunctionConfig>> = HashMap::new();
+            functions_for_eval.insert(config.function_name.clone(), function_config.clone());
 
-    let (eval_config, _extra_functions, _metrics) = uninitialized_eval
-        .clone()
-        .load(&functions_for_eval, &config.evaluation_name)?;
+            let (eval_config, _extra_functions, _metrics) = uninitialized_eval
+                .clone()
+                .load(&functions_for_eval, evaluation_name)?;
 
-    let evaluation_config = Arc::new(EvaluationConfig::Inference(eval_config));
+            Arc::new(EvaluationConfig::Inference(eval_config))
+        }
+        GepaEvaluationSource::EvaluatorNames { evaluator_names } => build_inline_evaluation_config(
+            &config.function_name,
+            get_function_evaluators(&function_config, &config.function_name, evaluator_names)?,
+        ),
+    };
 
     // Validate initial_variants if specified
     if let Some(initial_variants) = &config.initial_variants {
@@ -706,8 +777,11 @@ pub fn validate_gepa_config_uninitialized(
     } else {
         let mut tools = HashMap::new();
         for tool_name in &function_tool_names {
-            let uninitialized_tool =
-                uninitialized_config.tools.get(tool_name).ok_or_else(|| {
+            let uninitialized_tool = uninitialized_config
+                .tools
+                .as_ref()
+                .and_then(|m| m.get(tool_name))
+                .ok_or_else(|| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
                             "Tool `{}` referenced by Function `{}` not found in configuration",
@@ -948,7 +1022,8 @@ mod tests {
     fn test_validate_gepa_config_initial_variants_empty() {
         let _config = GEPAConfig {
             function_name: "test_function".to_string(),
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: Some("test_evaluation".to_string()),
+            evaluator_names: None,
             initial_variants: Some(vec![]), // Empty list
             variant_prefix: None,
             batch_size: 5,
@@ -1061,6 +1136,53 @@ mod tests {
             !filtered_variants.contains_key("v2"),
             "Should NOT contain variant v2"
         );
+    }
+
+    #[test]
+    fn test_validate_gepa_config_with_function_evaluator_names() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_variant_info("openai::gpt-4", Some("Prompt 1")),
+        );
+
+        let function_name = "test_function";
+        let evaluator_name = "exact_match";
+        let mut tensorzero_config = Config::default();
+        tensorzero_config.functions.insert(
+            function_name.to_string(),
+            create_function_config_with_evaluators(
+                variants,
+                HashMap::from([(
+                    evaluator_name.to_string(),
+                    EvaluatorConfig::ExactMatch(Default::default()),
+                )]),
+            ),
+        );
+
+        let gepa_config = GEPAConfig {
+            function_name: function_name.to_string(),
+            evaluation_name: None,
+            evaluator_names: Some(vec![evaluator_name.to_string()]),
+            initial_variants: None,
+            variant_prefix: Some("gepa_".to_string()),
+            batch_size: 5,
+            max_iterations: 1,
+            max_concurrency: 10,
+            analysis_model: "openai::gpt-4".to_string(),
+            mutation_model: "openai::gpt-4".to_string(),
+            seed: Some(42),
+            timeout: 300,
+            include_inference_for_mutation: true,
+            retries: RetryConfig::default(),
+            max_tokens: Some(16_384),
+        };
+
+        let result = validate_gepa_config(&gepa_config, &tensorzero_config)
+            .expect("function-scoped evaluator names should validate");
+        let EvaluationConfig::Inference(eval) = result.evaluation_config.as_ref();
+        assert_eq!(eval.function_name, function_name);
+        assert!(eval.evaluators.contains_key(evaluator_name));
     }
 
     #[test]
@@ -1490,6 +1612,13 @@ mod tests {
 
     /// Creates a minimal FunctionConfig for testing
     fn create_function_config(variants: HashMap<String, Arc<VariantInfo>>) -> Arc<FunctionConfig> {
+        create_function_config_with_evaluators(variants, HashMap::new())
+    }
+
+    fn create_function_config_with_evaluators(
+        variants: HashMap<String, Arc<VariantInfo>>,
+        evaluators: HashMap<String, EvaluatorConfig>,
+    ) -> Arc<FunctionConfig> {
         Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants,
             schemas: SchemaData::default(),
@@ -1499,7 +1628,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfigWithNamespaces::default(),
-            evaluators: HashMap::new(),
+            evaluators,
         }))
     }
 
@@ -1529,7 +1658,8 @@ mod tests {
     ) -> GEPAConfig {
         GEPAConfig {
             function_name: function_name.to_string(),
-            evaluation_name: "test_evaluation".to_string(),
+            evaluation_name: Some("test_evaluation".to_string()),
+            evaluator_names: None,
             initial_variants,
             variant_prefix: Some("gepa_".to_string()),
             batch_size: 5,
@@ -1714,7 +1844,7 @@ mod tests {
 
         let mut config = empty_uninitialized_config();
 
-        config.functions.insert(
+        config.functions.get_or_insert_with(HashMap::new).insert(
             function_name.to_string(),
             UninitializedFunctionConfig::Chat(UninitializedFunctionConfigChat {
                 variants,
@@ -1731,7 +1861,7 @@ mod tests {
             }),
         );
 
-        config.evaluations.insert(
+        config.evaluations.get_or_insert_with(HashMap::new).insert(
             evaluation_name.to_string(),
             tensorzero_core::evaluations::UninitializedEvaluationConfig::Inference(
                 UninitializedInferenceEvaluationConfig {
@@ -1786,24 +1916,27 @@ mod tests {
 
         // Create config with function but no matching evaluation
         let mut uninitialized = empty_uninitialized_config();
-        uninitialized.functions.insert(
-            "test_function".to_string(),
-            tensorzero_core::config::UninitializedFunctionConfig::Chat(
-                tensorzero_core::config::UninitializedFunctionConfigChat {
-                    variants,
-                    system_schema: None,
-                    user_schema: None,
-                    assistant_schema: None,
-                    schemas: tensorzero_core::config::UninitializedSchemas::default(),
-                    tools: vec![],
-                    tool_choice: tensorzero_core::tool::ToolChoice::None,
-                    parallel_tool_calls: None,
-                    description: None,
-                    experimentation: None,
-                    evaluators: HashMap::new(),
-                },
-            ),
-        );
+        uninitialized
+            .functions
+            .get_or_insert_with(HashMap::new)
+            .insert(
+                "test_function".to_string(),
+                tensorzero_core::config::UninitializedFunctionConfig::Chat(
+                    tensorzero_core::config::UninitializedFunctionConfigChat {
+                        variants,
+                        system_schema: None,
+                        user_schema: None,
+                        assistant_schema: None,
+                        schemas: tensorzero_core::config::UninitializedSchemas::default(),
+                        tools: vec![],
+                        tool_choice: tensorzero_core::tool::ToolChoice::None,
+                        parallel_tool_calls: None,
+                        description: None,
+                        experimentation: None,
+                        evaluators: HashMap::new(),
+                    },
+                ),
+            );
 
         let gepa_config = create_gepa_config("test_function", None, None);
         let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized);
@@ -1815,6 +1948,55 @@ mod tests {
                 .to_string()
                 .contains("Evaluation `test_evaluation` not found")
         );
+    }
+
+    #[test]
+    fn test_validate_uninitialized_with_function_evaluator_names() {
+        let mut variants = HashMap::new();
+        variants.insert(
+            "v1".to_string(),
+            create_uninitialized_variant_info("openai::gpt-4"),
+        );
+
+        let mut uninitialized =
+            create_uninitialized_config_with_variants("test_function", "test_evaluation", variants);
+        let tensorzero_core::config::UninitializedFunctionConfig::Chat(function) = uninitialized
+            .functions
+            .as_mut()
+            .and_then(|m| m.get_mut("test_function"))
+            .expect("function should exist")
+        else {
+            panic!("Expected chat function config")
+        };
+        function.evaluators.insert(
+            "exact_match".to_string(),
+            tensorzero_core::evaluations::UninitializedEvaluatorConfig::ExactMatch(
+                Default::default(),
+            ),
+        );
+
+        let gepa_config = GEPAConfig {
+            function_name: "test_function".to_string(),
+            evaluation_name: None,
+            evaluator_names: Some(vec!["exact_match".to_string()]),
+            initial_variants: None,
+            variant_prefix: Some("gepa_".to_string()),
+            batch_size: 5,
+            max_iterations: 1,
+            max_concurrency: 10,
+            analysis_model: "openai::gpt-4".to_string(),
+            mutation_model: "openai::gpt-4".to_string(),
+            seed: Some(42),
+            timeout: 300,
+            include_inference_for_mutation: true,
+            retries: RetryConfig::default(),
+            max_tokens: Some(16_384),
+        };
+
+        let result = validate_gepa_config_uninitialized(&gepa_config, &uninitialized)
+            .expect("function-scoped evaluator names should validate");
+        let EvaluationConfig::Inference(eval) = result.evaluation_config.as_ref();
+        assert!(eval.evaluators.contains_key("exact_match"));
     }
 
     #[test]

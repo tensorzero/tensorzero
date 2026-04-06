@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl From<FeedbackBounds> for GetFeedbackBoundsResponse {
 }
 
 /// HTTP handler for getting feedback bounds by target ID
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_feedback_bounds_by_target_id_handler",
     skip_all,

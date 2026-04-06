@@ -5,7 +5,7 @@ use tracing::instrument;
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
+use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
 
 use super::types::{GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest};
 
@@ -15,7 +15,7 @@ const DEFAULT_ALLOW_STALE: bool = false;
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/list_datapoints` endpoint.
 /// Lists datapoints from a dataset with optional filtering and pagination.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.list_datapoints", skip(app_state, request))]
 pub async fn list_datapoints_handler(
     State(app_state): AppState,
@@ -30,7 +30,7 @@ pub async fn list_datapoints_handler(
 
 /// Handler for the POST `/v1/datasets/get_datapoints` endpoint.
 /// Retrieves specific datapoints by their IDs.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.get_datapoints", skip(app_state, request))]
 pub async fn get_datapoints_handler(
     State(app_state): AppState,
@@ -47,7 +47,7 @@ pub async fn get_datapoints_handler(
 
 /// Handler for the POST `/v1/datasets/{dataset_name}/get_datapoints` endpoint.
 /// Retrieves datapoints scoped to a dataset by their IDs.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "datasets.v1.get_datapoints_by_dataset",
     skip(app_state, request)

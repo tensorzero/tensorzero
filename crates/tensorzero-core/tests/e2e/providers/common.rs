@@ -41,7 +41,7 @@ use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHe
 use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{Arguments, FinishReason, System, Text, Thought};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::ResolvedAppStateData;
 use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -1417,13 +1417,17 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
     assert_eq!(result, FERRIS_PNG);
 }
 
-async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath, expected_data: &[u8]) {
+async fn check_object_fetch(
+    data: ResolvedAppStateData,
+    storage_path: &StoragePath,
+    expected_data: &[u8],
+) {
     check_object_fetch_via_embedded(data.clone(), storage_path, expected_data).await;
     check_object_fetch_via_gateway(storage_path, expected_data).await;
 }
 
 async fn check_object_fetch_via_embedded(
-    data: AppStateData,
+    data: ResolvedAppStateData,
     storage_path: &StoragePath,
     expected_data: &[u8],
 ) {
@@ -1504,7 +1508,7 @@ pub async fn test_pdf_inference_with_provider_filesystem(provider: E2ETestProvid
         "PDF in object store does not match expect pdf"
     );
     check_object_fetch(
-        client.get_app_state_data().unwrap().clone(),
+        client.get_app_state_data().unwrap().load_latest(),
         &storage_path,
         DEEPSEEK_PAPER_PDF,
     )
@@ -1541,7 +1545,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
     check_object_fetch(
-        client.get_app_state_data().unwrap().clone(),
+        client.get_app_state_data().unwrap().load_latest(),
         &storage_path,
         FERRIS_PNG,
     )
@@ -1620,7 +1624,10 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
         .await;
 
     check_object_fetch(
-        tensorzero_client.get_app_state_data().unwrap().clone(),
+        tensorzero_client
+            .get_app_state_data()
+            .unwrap()
+            .load_latest(),
         &storage_path,
         FERRIS_PNG,
     )
@@ -10410,16 +10417,18 @@ pub async fn check_parallel_tool_use_inference_response(
 
     let is_openrouter = provider.model_provider_name == "openrouter";
     let is_groq = provider.model_provider_name == "groq";
-    if is_openrouter || is_groq {
-        // For Groq and OpenRouter, check that there are at least 2 tool calls
-        // (these providers may include an empty text block)
+    let is_together = provider.model_provider_name == "together";
+    if is_openrouter || is_groq || is_together {
+        let provider_name = &provider.model_provider_name;
+        // For Groq, OpenRouter, and Together, check that there are at least 2 tool calls
+        // (these providers may include an empty text block or thought block)
         let tool_calls = output
             .iter()
             .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
             .count();
         assert_eq!(
             tool_calls, 2,
-            "Expected 2 tool calls for OpenRouter, got {tool_calls}"
+            "Expected 2 tool calls for {provider_name}, got {tool_calls}"
         );
     } else {
         // For other providers, expect exactly 2 blocks total
@@ -10444,6 +10453,10 @@ pub async fn check_parallel_tool_use_inference_response(
             }
             StoredContentBlock::Text(text) if text.text.trim().is_empty() && is_groq => {
                 // Skip empty text blocks for Groq
+                continue;
+            }
+            StoredContentBlock::Thought(_thought) => {
+                // Skip thought blocks
                 continue;
             }
             _ => {

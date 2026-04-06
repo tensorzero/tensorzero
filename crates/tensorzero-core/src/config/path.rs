@@ -301,8 +301,17 @@ pub(super) fn resolve_toml_relative_paths(
                                 let target_path = Path::new(&**target_string);
                                 let mut inner_table = DeTable::new();
 
-                                // Resolve the absolute path
-                                let resolved_path = base_path.join(target_path);
+                                // Resolve the path and normalize `.` / `..` components
+                                let resolved_path = base_path.join(target_path).canonicalize().map_err(|e| {
+                                    Error::new(ErrorDetails::Config {
+                                        message: format!(
+                                            "`{}`: Failed to resolve path `{}` (base: `{}`): {e}",
+                                            error_path.join("."),
+                                            target_path.display(),
+                                            base_path.display(),
+                                        ),
+                                    })
+                                })?;
                                 let resolved_path_str = resolved_path
                                     .to_str()
                                     .ok_or_else(|| {

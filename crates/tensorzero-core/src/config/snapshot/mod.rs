@@ -9,14 +9,19 @@
 //! when fields are added or removed from either the stored or uninitialized types.
 
 mod cache_config;
+pub(crate) mod config_snapshot;
+pub use config_snapshot::ConfigSnapshot;
 mod embedding_model_config;
 mod gateway_config;
 mod observability_config;
+mod optimizer_info;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 pub use gateway_config::StoredGatewayConfig;
 pub use observability_config::StoredObservabilityConfig;
+pub use optimizer_info::{StoredGEPAConfig, StoredOptimizerConfig, StoredOptimizerInfo};
+pub use tensorzero_types::SnapshotHash;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -31,7 +36,6 @@ use crate::config::{
 use crate::evaluations::UninitializedEvaluationConfig;
 use crate::inference::types::storage::StorageKind;
 use crate::model::UninitializedModelConfig;
-use crate::optimization::UninitializedOptimizerInfo;
 use crate::rate_limiting::UninitializedRateLimitingConfig;
 
 /// Top-level stored config type.
@@ -64,7 +68,7 @@ pub struct StoredConfig {
     #[serde(default)]
     pub provider_types: ProviderTypesConfig,
     #[serde(default)]
-    pub optimizers: HashMap<String, UninitializedOptimizerInfo>,
+    pub optimizers: HashMap<String, StoredOptimizerInfo>,
 
     // Fields WITH deprecations or custom serde - use Stored* types
     #[serde(default)]
@@ -98,23 +102,28 @@ impl From<UninitializedConfig> for StoredConfig {
         } = config;
 
         Self {
-            gateway: gateway.into(),
-            clickhouse,
-            postgres,
+            gateway: gateway.unwrap_or_default().into(),
+            clickhouse: clickhouse.unwrap_or_default(),
+            postgres: postgres.unwrap_or_default(),
             object_storage,
-            models,
-            functions,
-            metrics,
-            tools,
-            evaluations,
-            provider_types,
-            optimizers,
-            rate_limiting,
-            embedding_models: embedding_models
+            models: models.unwrap_or_default(),
+            functions: functions.unwrap_or_default(),
+            metrics: metrics.unwrap_or_default(),
+            tools: tools.unwrap_or_default(),
+            evaluations: evaluations.unwrap_or_default(),
+            provider_types: provider_types.unwrap_or_default(),
+            optimizers: optimizers
+                .unwrap_or_default()
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
-            autopilot,
+            rate_limiting: rate_limiting.unwrap_or_default(),
+            embedding_models: embedding_models
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            autopilot: autopilot.unwrap_or_default(),
         }
     }
 }
@@ -144,30 +153,34 @@ impl TryFrom<StoredConfig> for UninitializedConfig {
         // Migrate deprecated `gateway.observability.disable_automatic_migrations`
         // to `clickhouse.disable_automatic_migrations`.
         let clickhouse = ClickHouseConfig {
-            disable_automatic_migrations: clickhouse.disable_automatic_migrations
-                || gateway.observability.disable_automatic_migrations,
+            disable_automatic_migrations: Some(
+                clickhouse.disable_automatic_migrations.unwrap_or(false)
+                    || gateway.observability.disable_automatic_migrations,
+            ),
         };
 
         let gateway_config: UninitializedGatewayConfig = gateway.into();
 
         Ok(Self {
-            gateway: gateway_config,
-            clickhouse,
-            postgres,
+            gateway: Some(gateway_config),
+            clickhouse: Some(clickhouse),
+            postgres: Some(postgres),
             object_storage,
-            models,
-            functions,
-            metrics,
-            tools,
-            evaluations,
-            provider_types,
-            optimizers,
-            rate_limiting,
-            embedding_models: embedding_models
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            autopilot,
+            models: Some(models),
+            functions: Some(functions),
+            metrics: Some(metrics),
+            tools: Some(tools),
+            evaluations: Some(evaluations),
+            provider_types: Some(provider_types),
+            optimizers: Some(optimizers.into_iter().map(|(k, v)| (k, v.into())).collect()),
+            rate_limiting: Some(rate_limiting),
+            embedding_models: Some(
+                embedding_models
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            ),
+            autopilot: Some(autopilot),
         })
     }
 }
@@ -195,8 +208,12 @@ mod tests {
         );
 
         let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
-        assert!(
-            uninit.clickhouse.disable_automatic_migrations,
+        assert_eq!(
+            uninit
+                .clickhouse
+                .expect("clickhouse should be Some")
+                .disable_automatic_migrations,
+            Some(true),
             "deprecated field should be migrated to clickhouse config"
         );
     }
@@ -211,10 +228,16 @@ mod tests {
 
         let stored: StoredConfig =
             toml::from_str(toml_str).expect("should parse new clickhouse section");
-        assert!(stored.clickhouse.disable_automatic_migrations);
+        assert_eq!(stored.clickhouse.disable_automatic_migrations, Some(true));
 
         let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
-        assert!(uninit.clickhouse.disable_automatic_migrations);
+        assert_eq!(
+            uninit
+                .clickhouse
+                .expect("clickhouse should be Some")
+                .disable_automatic_migrations,
+            Some(true)
+        );
     }
 
     /// Old snapshot with deprecated `timeouts` on embedding model should parse
@@ -238,7 +261,14 @@ mod tests {
             stored.timeout_ms.is_none(),
             "new field should not be set when only deprecated field is present"
         );
-        assert_eq!(stored.timeouts.non_streaming.total_ms, Some(5000));
+        assert_eq!(
+            stored
+                .timeouts
+                .non_streaming
+                .as_ref()
+                .and_then(|ns| ns.total_ms),
+            Some(5000)
+        );
 
         let uninit: UninitializedEmbeddingModelConfig = stored.into();
         assert_eq!(
@@ -266,7 +296,14 @@ mod tests {
         let stored: StoredEmbeddingModelConfig =
             toml::from_str(toml_str).expect("should parse deprecated provider timeouts");
         let provider = stored.providers.get("provider1").unwrap();
-        assert_eq!(provider.timeouts.non_streaming.total_ms, Some(7000));
+        assert_eq!(
+            provider
+                .timeouts
+                .non_streaming
+                .as_ref()
+                .and_then(|ns| ns.total_ms),
+            Some(7000)
+        );
 
         let uninit: UninitializedEmbeddingModelConfig = stored.into();
         let provider = uninit.providers.get("provider1").unwrap();
@@ -340,7 +377,7 @@ mod tests {
             toml::from_str(toml_str).expect("should ignore unknown fields");
         assert_eq!(stored.enabled, Some(true));
         assert!(stored.async_writes);
-        assert_eq!(stored.backend, ObservabilityBackend::Postgres);
+        assert_eq!(stored.backend, Some(ObservabilityBackend::Postgres));
     }
 
     /// Forward-compatibility: `StoredCacheConfig` should accept unknown fields
@@ -411,10 +448,18 @@ mod tests {
             toml::from_str(&serialized).expect("should deserialize back from TOML");
         let uninit: UninitializedConfig = stored2.try_into().expect("should convert to uninit");
 
-        assert!(uninit.clickhouse.disable_automatic_migrations);
-        assert_eq!(uninit.gateway.observability.enabled, Some(true));
-        assert!(uninit.gateway.observability.async_writes);
-        assert!(uninit.gateway.debug);
+        assert_eq!(
+            uninit
+                .clickhouse
+                .expect("clickhouse should be Some")
+                .disable_automatic_migrations,
+            Some(true)
+        );
+        let gateway = uninit.gateway.expect("gateway should be Some");
+        let observability = gateway.observability.expect("observability should be Some");
+        assert_eq!(observability.enabled, Some(true));
+        assert_eq!(observability.async_writes, Some(true));
+        assert_eq!(gateway.debug, Some(true));
     }
 
     /// Old snapshots with deprecated `postgres.enabled` should still parse correctly.
@@ -430,11 +475,12 @@ mod tests {
         let stored: StoredConfig =
             toml::from_str(toml_str).expect("should parse deprecated postgres.enabled");
         assert_eq!(stored.postgres.enabled, Some(true));
-        assert_eq!(stored.postgres.connection_pool_size, 10);
+        assert_eq!(stored.postgres.connection_pool_size, Some(10));
 
         let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+        let postgres = uninit.postgres.expect("postgres should be Some");
         assert_eq!(
-            uninit.postgres.enabled,
+            postgres.enabled,
             Some(true),
             "deprecated field should be preserved during conversion"
         );
@@ -446,7 +492,7 @@ mod tests {
     fn test_serialized_config_omits_deprecated_postgres_enabled() {
         let config = PostgresConfig {
             enabled: Some(true),
-            connection_pool_size: 10,
+            connection_pool_size: Some(10),
             ..Default::default()
         };
         let serialized = toml::to_string(&config).expect("should serialize");
@@ -469,5 +515,33 @@ type = "exact_match"
         let _uninit: UninitializedConfig = stored
             .try_into()
             .expect("should convert to UninitializedConfig");
+    }
+
+    /// Historical GEPA snapshots with legacy `evaluation_name` should still parse.
+    #[test]
+    fn test_historical_stored_gepa_optimizer_with_evaluation_name() {
+        let toml_str = r#"
+            [optimizers.test_gepa]
+            type = "gepa"
+            function_name = "basic_test"
+            evaluation_name = "test_evaluation"
+            analysis_model = "openai::gpt-4.1-mini"
+            mutation_model = "openai::gpt-4.1-mini"
+        "#;
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("legacy GEPA optimizer should parse from snapshot");
+        let uninit: UninitializedConfig = stored.try_into().expect("should convert to uninit");
+
+        let optimizer = uninit
+            .optimizers
+            .as_ref()
+            .and_then(|m| m.get("test_gepa"))
+            .expect("GEPA optimizer should exist after conversion");
+        let crate::optimization::UninitializedOptimizerConfig::GEPA(gepa) = &optimizer.inner else {
+            panic!("Expected GEPA optimizer config")
+        };
+        assert_eq!(gepa.evaluation_name.as_deref(), Some("test_evaluation"));
+        assert!(gepa.evaluator_names.is_none());
     }
 }

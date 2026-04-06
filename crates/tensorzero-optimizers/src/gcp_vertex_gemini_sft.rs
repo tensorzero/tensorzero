@@ -41,8 +41,8 @@ pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url,
 fn get_sft_config(provider_types: &ProviderTypesConfig) -> Result<&GCPSFTConfig, Error> {
     provider_types
         .gcp_vertex_gemini
-        .sft
         .as_ref()
+        .and_then(|g| g.sft.as_ref())
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini SFT requires `[provider_types.gcp_vertex_gemini.sft]` configuration section".to_string(),

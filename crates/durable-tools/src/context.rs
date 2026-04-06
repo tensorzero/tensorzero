@@ -582,7 +582,7 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
 /// A heartbeater is available for long-running operations (e.g., evaluations)
 /// that need to extend the task lease to prevent timeout.
 pub struct SimpleToolContext<'a> {
-    pool: &'a PgPool,
+    pool: Option<&'a PgPool>,
     t0_client: &'a Arc<dyn TensorZeroClient>,
     heartbeater: &'a Arc<dyn Heartbeater>,
     tool_registry: &'a ToolRegistry,
@@ -597,15 +597,29 @@ impl<'a> SimpleToolContext<'a> {
         tool_registry: &'a ToolRegistry,
     ) -> Self {
         Self {
-            pool,
+            pool: Some(pool),
             t0_client,
             heartbeater,
             tool_registry,
         }
     }
 
-    /// Get a reference to the database pool.
-    pub fn pool(&self) -> &PgPool {
+    /// Create a new simple tool context without a database pool.
+    pub fn new_without_pool(
+        t0_client: &'a Arc<dyn TensorZeroClient>,
+        heartbeater: &'a Arc<dyn Heartbeater>,
+        tool_registry: &'a ToolRegistry,
+    ) -> Self {
+        Self {
+            pool: None,
+            t0_client,
+            heartbeater,
+            tool_registry,
+        }
+    }
+
+    /// Get a reference to the database pool, if available.
+    pub fn pool(&self) -> Option<&PgPool> {
         self.pool
     }
 

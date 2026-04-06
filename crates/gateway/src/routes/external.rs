@@ -11,12 +11,12 @@ use axum::{
 use metrics_exporter_prometheus::PrometheusHandle;
 use tensorzero_core::endpoints::openai_compatible::build_openai_compatible_routes;
 use tensorzero_core::observability::OtelEnabledRoutes;
-use tensorzero_core::{endpoints, utils::gateway::AppStateData};
+use tensorzero_core::{endpoints, utils::gateway::SwappableAppStateData};
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
 /// All of these routes will have a span named `METHOD <ROUTE>` (e.g. `POST /batch_inference/{batch_id}`)
 /// sent to OpenTelemetry
-pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
+pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<SwappableAppStateData>) {
     let mut routes = vec![
         ("/inference", post(endpoints::inference::inference_handler)),
         (
@@ -49,7 +49,9 @@ pub fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) 
 }
 
 /// Builds external routes that don't have OpenTelemetry tracing.
-pub fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
+pub fn build_non_otel_enabled_routes(
+    metrics_handle: PrometheusHandle,
+) -> Router<SwappableAppStateData> {
     Router::new()
         .merge(build_observability_routes())
         .merge(build_datasets_routes())
@@ -62,7 +64,7 @@ pub fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router
 /// This function builds the public routes for observability.
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_observability_routes() -> Router<AppStateData> {
+fn build_observability_routes() -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/v1/inferences/list_inferences",
@@ -77,7 +79,7 @@ fn build_observability_routes() -> Router<AppStateData> {
 /// This function builds the public routes for datasets.
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_datasets_routes() -> Router<AppStateData> {
+fn build_datasets_routes() -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
@@ -115,7 +117,7 @@ fn build_datasets_routes() -> Router<AppStateData> {
 /// This function builds the public routes for optimization.
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_optimization_routes() -> Router<AppStateData> {
+fn build_optimization_routes() -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/experimental_optimization_workflow",
@@ -130,7 +132,7 @@ fn build_optimization_routes() -> Router<AppStateData> {
 /// This function builds the public routes for GEPA optimization.
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_gepa_routes() -> Router<AppStateData> {
+fn build_gepa_routes() -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/v1/optimization/gepa",
@@ -145,7 +147,7 @@ fn build_gepa_routes() -> Router<AppStateData> {
 /// This function builds the public routes for evaluations.
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_evaluations_routes() -> Router<AppStateData> {
+fn build_evaluations_routes() -> Router<SwappableAppStateData> {
     Router::new()
         // Workflow evaluation endpoints (new)
         .route(
@@ -161,7 +163,9 @@ fn build_evaluations_routes() -> Router<AppStateData> {
 /// This function builds the public routes for meta-observability (e.g. gateway health).
 ///
 /// IMPORTANT: Add internal routes to `internal.rs` instead.
-fn build_meta_observability_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
+fn build_meta_observability_routes(
+    metrics_handle: PrometheusHandle,
+) -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/metrics",

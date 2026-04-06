@@ -87,15 +87,14 @@ impl MixtureOfNConfig {
     }
 }
 
+#[serde_with::skip_serializing_none]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedMixtureOfNConfig {
-    #[serde(default)]
     pub weight: Option<f64>,
     #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_s: Option<f64>,
     pub candidates: Vec<String>,
     pub fuser: UninitializedFuserConfig,
@@ -110,7 +109,7 @@ pub struct FuserConfig {
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedFuserConfig {

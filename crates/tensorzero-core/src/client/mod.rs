@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::ConfigFileGlob;
-use crate::config::RuntimeOverlay;
+use arc_swap::ArcSwap;
+
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
+use crate::config::{ConfigFileGlob, RuntimeOverlay, UninitializedConfig};
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
 use crate::http::TensorzeroResponseWrapper;
@@ -471,6 +472,8 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
+        /// Runtime overlay captured when the live config was originally parsed.
+        runtime_overlay: Arc<RuntimeOverlay>,
         /// Use the settings from this `ClickHouseConnectionInfo` to create a *new* ClickHouseConnectionInfo
         /// We do *not* re-use this directly,since we block when an embedded client `GatewayHandle` is dropped,
         /// waiting on all outstanding `ClickHouseConnectionInfo` to get dropped.
@@ -601,6 +604,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
+                let runtime_overlay = Arc::new(unwritten_config.runtime_overlay().clone());
                 let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
                     .await
                     .map_err(|e| {
@@ -647,6 +651,8 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config,
+                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+                                runtime_overlay,
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 valkey_connection_info,
@@ -670,6 +676,7 @@ impl ClientBuilder {
             }).await,
             ClientBuilderMode::FromComponents {
                 config,
+                runtime_overlay,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 valkey_connection_info,
@@ -689,6 +696,8 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
+                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
+                                runtime_overlay.clone(),
                                 // We create a new independent `ClickHouseConnectionInfo` here,
                                 // and do *not* directly use the existing `clickhouse_connection_info`
                                 // See `ClientBuilderMode::FromComponents` for more details
@@ -740,10 +749,9 @@ impl ClientBuilder {
     ///
     /// # Parameters
     /// - `snapshot`: The ConfigSnapshot to load from (historical semantic config)
-    /// - `live_config`: Reference to the current live gateway config. Runtime fields
-    ///   (`gateway`, `object_store_info`, `postgres`, `rate_limiting`, `http_client`)
-    ///   are copied from this config to override the snapshot's values, since these
-    ///   represent current infrastructure rather than historical behavior.
+    /// - `runtime_overlay`: Runtime fields captured from the live gateway's original
+    ///   `UninitializedConfig`. These override the snapshot's infrastructure settings
+    ///   without reintroducing defaulted values that were omitted in the source config.
     /// - `clickhouse_url`: Current ClickHouse connection (not from snapshot)
     /// - `postgres_url`: Current Postgres connection (not from snapshot)
     /// - `verify_credentials`: Whether to validate model provider credentials
@@ -753,22 +761,17 @@ impl ClientBuilder {
     /// A Client configured with historical semantic settings but current runtime parameters
     pub async fn from_config_snapshot(
         snapshot: ConfigSnapshot,
-        live_config: &Config,
+        runtime_overlay: RuntimeOverlay,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
         valkey_url: Option<String>,
         verify_credentials: bool,
         timeout: Option<Duration>,
     ) -> Result<Client, ClientBuilderError> {
-        // Create runtime overlay from live config.
-        // This ensures infrastructure settings (gateway, postgres, rate limiting, etc.)
-        // reflect the current environment rather than historical snapshot values.
-        let runtime_overlay = RuntimeOverlay::from_config(live_config);
-
         // Load config from snapshot with runtime overlay applied
         let unwritten_config = Box::pin(Config::load_from_snapshot(
             snapshot,
-            runtime_overlay,
+            runtime_overlay.clone(),
             verify_credentials,
         ))
         .await
@@ -810,12 +813,13 @@ impl ClientBuilder {
         })?;
         let valkey_cache_connection_info = valkey_connection_info.clone();
 
-        // Use HTTP client from config (now overlaid from live_config)
+        // Use HTTP client from config (now overlaid from the provided runtime overlay)
         let http_client = config.http_client.clone();
 
         // Build client using FromComponents pattern
         let builder = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
+            runtime_overlay: Arc::new(runtime_overlay),
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
@@ -834,13 +838,11 @@ impl ClientBuilder {
         allow_batch_writes: bool,
     ) -> Result<(), ClientBuilderError> {
         // Validate batch writes configuration
+        let batch_writes = config.gateway.observability.batch_writes.as_ref();
         if !allow_batch_writes
-            && config.gateway.observability.batch_writes.enabled
-            && !config
-                .gateway
-                .observability
-                .batch_writes
-                .__force_allow_embedded_batch_writes
+            && batch_writes.is_some_and(|bw| bw.enabled)
+            && !batch_writes
+                .is_some_and(|bw| bw.__force_allow_embedded_batch_writes.unwrap_or(false))
         {
             return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::Config {
@@ -997,7 +999,7 @@ impl Client {
                 // so we don't have an API key here
                 Ok(with_embedded_timeout(*timeout, async {
                     crate::endpoints::feedback::feedback(
-                        gateway.handle.app_state.clone(),
+                        gateway.handle.app_state.load_latest(),
                         params,
                         None,
                     )
@@ -1167,15 +1169,16 @@ impl Client {
             ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
+                    let app_state = gateway.handle.app_state.load_latest();
                     let res = Box::pin(crate::endpoints::inference::inference(
-                        gateway.handle.app_state.config.clone(),
-                        &gateway.handle.app_state.http_client,
-                        gateway.handle.app_state.clickhouse_connection_info.clone(),
-                        gateway.handle.app_state.postgres_connection_info.clone(),
-                        gateway.handle.app_state.cache_manager.clone(),
-                        gateway.handle.app_state.deferred_tasks.clone(),
-                        gateway.handle.app_state.rate_limiting_manager.clone(),
-                        gateway.handle.app_state.primary_datastore,
+                        app_state.config.clone(),
+                        &app_state.http_client,
+                        app_state.clickhouse_connection_info.clone(),
+                        app_state.postgres_connection_info.clone(),
+                        app_state.cache_manager.clone(),
+                        app_state.deferred_tasks.clone(),
+                        app_state.rate_limiting_manager.clone(),
+                        app_state.primary_datastore,
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
@@ -1232,8 +1235,9 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
+                    let config = gateway.handle.app_state.config.load();
                     crate::endpoints::object_storage::get_object(
-                        gateway.handle.app_state.config.object_store_info.as_ref(),
+                        config.object_store_info.as_ref(),
                         storage_path,
                     )
                     .await
@@ -1429,6 +1433,7 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
+            runtime_overlay: Arc::new(RuntimeOverlay::default()),
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
@@ -1482,6 +1487,7 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
+            runtime_overlay: Arc::new(RuntimeOverlay::default()),
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info: ValkeyConnectionInfo::Disabled,

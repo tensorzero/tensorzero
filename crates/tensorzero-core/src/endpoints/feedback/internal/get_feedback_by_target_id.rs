@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::feedback::{FeedbackQueries, FeedbackRow};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 #[derive(Debug, Deserialize)]
 pub struct GetFeedbackByTargetIdParams {
@@ -25,7 +25,7 @@ pub struct GetFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for getting feedback by target ID
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_feedback_by_target_id_handler",
     skip_all,

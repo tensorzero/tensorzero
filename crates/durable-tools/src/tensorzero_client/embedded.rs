@@ -37,7 +37,7 @@ use tensorzero_core::endpoints::internal::autopilot::{
     create_event, list_events, list_sessions, s3_initiate_upload,
 };
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::ResolvedAppStateData;
 use uuid::Uuid;
 
 use crate::action::{ActionInput, ActionInputInfo, ActionResponse};
@@ -53,12 +53,12 @@ use super::{
 /// This is used when the worker runs inside the gateway process and wants to
 /// call inference and autopilot endpoints without HTTP overhead.
 pub struct EmbeddedClient {
-    app_state: AppStateData,
+    app_state: ResolvedAppStateData,
 }
 
 impl EmbeddedClient {
     /// Create a new embedded client from gateway state.
-    pub fn new(app_state: AppStateData) -> Self {
+    pub fn new(app_state: ResolvedAppStateData) -> Self {
         Self { app_state }
     }
 }

@@ -8,9 +8,9 @@ use axum::{
     routing::{get, post},
 };
 use tensorzero_core::endpoints;
-use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::gateway::SwappableAppStateData;
 
-pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
+pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData> {
     Router::new()
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
@@ -217,6 +217,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<AppStateData> {
         .route(
             "/internal/models/latency",
             get(endpoints::internal::models::get_model_latency_handler),
+        )
+        .route(
+            "/internal/models/cache_statistics",
+            get(endpoints::internal::models::get_cache_statistics_handler),
         )
         // Config snapshot endpoints
         .route(

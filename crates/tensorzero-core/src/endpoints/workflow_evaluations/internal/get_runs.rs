@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::types::{GetWorkflowEvaluationRunsResponse, WorkflowEvaluationRun};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for getting workflow evaluation runs by IDs.
 #[derive(Debug, Deserialize)]
@@ -22,7 +22,7 @@ pub struct GetWorkflowEvaluationRunsParams {
 /// Handler for `GET /internal/workflow_evaluations/get_runs`
 ///
 /// Gets workflow evaluation runs by their IDs.
-#[axum::debug_handler(state = AppStateData)]
+#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.get_runs", skip_all)]
 pub async fn get_workflow_evaluation_runs_handler(
     State(app_state): AppState,

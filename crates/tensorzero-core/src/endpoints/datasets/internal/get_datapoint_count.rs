@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, AppStateData};
+use crate::utils::gateway::{AppState, SwappableAppStateData};
 
 /// Query parameters for the datapoint count endpoint
 #[derive(Debug, Deserialize)]
@@ -39,7 +39,7 @@ pub async fn get_datapoint_count(
 }
 
 /// HTTP handler for the datapoint count endpoint
-#[debug_handler(state = AppStateData)]
+#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_datapoint_count_handler",
     skip_all,

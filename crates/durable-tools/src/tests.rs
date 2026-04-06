@@ -662,7 +662,7 @@ mod builder_tests {
 
 mod error_tests {
     use super::*;
-    use durable::{ControlFlow, TaskError};
+    use durable::{ControlFlow, NonControlTaskError, TaskError};
 
     // TODO - re-enable this after adding test helpers to `durable`
     // around `ControlFlow::Suspend`
@@ -697,7 +697,7 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::User { message, .. } => {
+            TaskError::NonControl(NonControlTaskError::User { message, .. }) => {
                 assert_eq!(message, "test error");
             }
             _ => panic!("Expected User"),
@@ -725,7 +725,7 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::User { message, .. } => {
+            TaskError::NonControl(NonControlTaskError::User { message, .. }) => {
                 assert!(message.contains("missing_tool"));
             }
             _ => panic!("Expected User"),
@@ -740,7 +740,7 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::User { message, .. } => {
+            TaskError::NonControl(NonControlTaskError::User { message, .. }) => {
                 assert!(message.contains("bad params"));
             }
             _ => panic!("Expected User"),
@@ -756,23 +756,13 @@ mod error_tests {
         let task_err: TaskError = tool_err.into();
 
         match task_err {
-            TaskError::User {
-                message,
-                error_data,
-            } => {
-                assert_eq!(
-                    message,
-                    "Serialization error: expected ident at line 1 column 2"
-                );
-                assert_eq!(
-                    error_data,
-                    serde_json::json!({
-                        "kind": "serialization",
-                        "message": "expected ident at line 1 column 2",
-                    })
+            TaskError::NonControl(NonControlTaskError::Serialization(e)) => {
+                assert!(
+                    e.to_string().contains("expected ident at line 1 column 2"),
+                    "unexpected error message: {e}"
                 );
             }
-            _ => panic!("Expected User"),
+            other => panic!("Expected Serialization, got: {other}"),
         }
     }
 }

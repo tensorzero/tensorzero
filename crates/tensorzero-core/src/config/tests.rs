@@ -90,8 +90,8 @@ async fn test_config_from_toml_table_valid() {
         }
         FunctionConfig::Json(_) => panic!("Expected a chat function"),
     }
-    // Check that the async flag is set to false by default
-    assert!(!config.gateway.observability.async_writes);
+    // Check that the async flag is not set by default
+    assert_eq!(config.gateway.observability.async_writes, None);
 
     // To test that variant default weights work correctly,
     // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
@@ -269,7 +269,7 @@ async fn test_config_from_toml_table_valid() {
         "get_temperature"
     );
 
-    assert_eq!(config.postgres.connection_pool_size, 10);
+    assert_eq!(config.postgres.connection_pool_size, Some(10));
 }
 
 /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -3017,6 +3017,7 @@ async fn test_glob_relative_path() {
     let VariantConfig::ChatCompletion(variant) = &function.variants["my_variant"].inner else {
         panic!("Variant should be a chat completion variant");
     };
+    let canonical_temp_dir = temp_dir.path().canonicalize().unwrap();
     assert_eq!(
         variant
             .templates()
@@ -3027,7 +3028,7 @@ async fn test_glob_relative_path() {
             .get_template_key(),
         format!(
             "{}/second/second_template.minijinja",
-            temp_dir.path().display()
+            canonical_temp_dir.display()
         )
     );
     assert_eq!(
@@ -3049,8 +3050,8 @@ async fn test_glob_relative_path() {
             .path
             .get_template_key(),
         format!(
-            "{}/./first/first_template.minijinja",
-            temp_dir.path().display()
+            "{}/first/first_template.minijinja",
+            canonical_temp_dir.display()
         )
     );
 
@@ -3509,6 +3510,37 @@ async fn test_deprecated_template_filesystem_access_enabled() {
     // Should emit deprecation warning
     assert!(logs_contain(
         "The `gateway.template_filesystem_access.enabled` flag is deprecated"
+    ));
+}
+
+/// Test that the deprecated GEPA `evaluation_name` option is still accepted
+/// and emits a deprecation warning.
+#[tokio::test]
+async fn test_deprecated_gepa_evaluation_name_warns() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let tempfile = NamedTempFile::new().unwrap();
+    write!(
+        &tempfile,
+        r#"
+            [optimizers.test_gepa]
+            type = "gepa"
+            function_name = "basic_test"
+            evaluation_name = "test_evaluation"
+            analysis_model = "openai::gpt-4.1-mini"
+            mutation_model = "openai::gpt-4.1-mini"
+        "#
+    )
+    .unwrap();
+
+    let _config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    assert!(logs_contain(
+        "The `evaluation_name` field on GEPA optimizers is deprecated"
     ));
 }
 
