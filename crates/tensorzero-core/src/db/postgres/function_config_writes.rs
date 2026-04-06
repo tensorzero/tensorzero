@@ -176,13 +176,20 @@ async fn acquire_function_advisory_lock(
     function_name: &str,
 ) -> Result<(), Error> {
     let lock_key = function_advisory_lock_key(function_name);
-    sqlx::query("SELECT pg_try_advisory_xact_lock($1)")
+    let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
         .bind(lock_key)
-        .execute(&mut **tx)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| {
-            postgres_query_error("Failed to lock function config for update; another client is updating this function. Please reload the function config", e)
+            postgres_query_error("Failed to acquire advisory lock for function config", e)
         })?;
+    if !acquired {
+        return Err(Error::new(ErrorDetails::PostgresQuery {
+            message: format!(
+                "Failed to lock function `{function_name}` for update; another client is updating this function. Please reload the function config and retry."
+            ),
+        }));
+    }
     Ok(())
 }
 
