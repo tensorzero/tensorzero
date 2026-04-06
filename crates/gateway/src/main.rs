@@ -177,7 +177,7 @@ async fn validate_postgres_extensions_for_postgres_primary(
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run().await {
+    match Box::pin(run()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(code) => code,
     }

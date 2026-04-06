@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,9 @@ use crate::{
     StoredTimeoutsConfig,
 };
 
-/// Reference to a `variant_versions_config` row.
+pub const STORED_VARIANT_CONFIG_SCHEMA_REVISION: i32 = 1;
+
+/// Reference to a `variant_configs` row.
 /// Replaces inline variant configs in stored function config.
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -18,7 +20,7 @@ pub struct StoredVariantRef {
     pub variant_version_id: Uuid,
 }
 
-/// Wrapper stored in `variant_versions_config.config`.
+/// Wrapper stored in `variant_configs.config`.
 /// Uses an explicit `variant` field instead of `#[serde(flatten)]`.
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -52,7 +54,7 @@ pub struct StoredChatCompletionVariantConfig {
     pub user_template: Option<StoredPromptRef>,
     pub assistant_template: Option<StoredPromptRef>,
     pub input_wrappers: Option<StoredInputWrappers>,
-    pub templates: Option<HashMap<String, StoredPromptRef>>,
+    pub templates: Option<BTreeMap<String, StoredPromptRef>>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,

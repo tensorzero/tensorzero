@@ -30,7 +30,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_stored_config::StoredTimeoutsConfig;
+use tensorzero_stored_config::{
+    StoredNonStreamingTimeouts, StoredStreamingTimeouts, StoredTimeoutsConfig,
+};
 use tracing::Span;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -230,6 +232,23 @@ impl TimeoutsConfig {
         }
 
         Ok(())
+    }
+}
+
+impl From<&TimeoutsConfig> for StoredTimeoutsConfig {
+    fn from(config: &TimeoutsConfig) -> Self {
+        StoredTimeoutsConfig {
+            non_streaming: config
+                .non_streaming
+                .as_ref()
+                .map(|ns| StoredNonStreamingTimeouts {
+                    total_ms: ns.total_ms,
+                }),
+            streaming: config.streaming.as_ref().map(|s| StoredStreamingTimeouts {
+                ttft_ms: s.ttft_ms,
+                total_ms: s.total_ms,
+            }),
+        }
     }
 }
 
@@ -1006,12 +1025,17 @@ struct ProcessedConfigInput {
     postgres: PostgresConfig,
     rate_limiting: UninitializedRateLimitingConfig,
     autopilot: AutopilotConfig,
-
     snapshot: ConfigSnapshot,
+
     /// All functions (user-defined + built-in), loaded but with evaluator artifacts not yet extracted
     loaded_functions: HashMap<String, LoadedFunctionConfig>,
     gateway_config: GatewayConfig,
     object_store_info: Option<ObjectStoreInfo>,
+
+    /// The original UninitializedConfig (with built-in functions injected), preserved for
+    /// validation during config-in-db writes.
+    uninitialized_config: UninitializedConfig,
+
     /// Runtime overlay captured from the UninitializedConfig before defaults are resolved.
     runtime_overlay: RuntimeOverlay,
 }
@@ -1117,6 +1141,7 @@ async fn process_config_input(
                 .await?;
 
             // Create snapshot from the config (which now includes built-in functions)
+            let uninitialized_config = config.clone();
             let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
 
             Ok(ProcessedConfigInput {
@@ -1135,6 +1160,7 @@ async fn process_config_input(
                 loaded_functions,
                 gateway_config,
                 object_store_info,
+                uninitialized_config,
                 runtime_overlay,
             })
         }
@@ -1212,6 +1238,7 @@ async fn process_config_input(
             };
 
             let extra_templates = original_snapshot.extra_templates.clone();
+            let uninitialized_config = overlaid_config.clone();
             let snapshot = ConfigSnapshot::new(overlaid_config, extra_templates.clone())?;
 
             // Load all functions from the snapshot (built-in functions are already included)
@@ -1248,6 +1275,7 @@ async fn process_config_input(
                 autopilot,
                 // unused
                 snapshot,
+                uninitialized_config,
                 loaded_functions,
                 gateway_config,
                 object_store_info: overlay_object_store_info,
@@ -1436,6 +1464,7 @@ impl Config {
             rate_limiting,
             autopilot,
             snapshot,
+            uninitialized_config,
             loaded_functions,
             gateway_config,
             object_store_info,
@@ -1657,7 +1686,12 @@ impl Config {
         }
         config.evaluations = evaluations;
 
-        Ok(UnwrittenConfig::new(config, snapshot, runtime_overlay))
+        Ok(UnwrittenConfig::new(
+            config,
+            uninitialized_config,
+            snapshot,
+            runtime_overlay,
+        ))
     }
 
     /// Validate the config
@@ -1973,7 +2007,7 @@ pub trait LoadableConfig<T> {
 /// This allows us to avoid using Option types to represent variables that are initialized after the
 /// config is initially parsed.
 #[serde_with::skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedConfig {
     pub gateway: Option<UninitializedGatewayConfig>,
@@ -2255,6 +2289,14 @@ impl UninitializedSchemas {
                 .map(|(k, path)| (k, UninitializedSchema { path }))
                 .collect(),
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &ResolvedTomlPathData)> {
+        self.inner.iter().map(|(name, schema)| (name, &schema.path))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 

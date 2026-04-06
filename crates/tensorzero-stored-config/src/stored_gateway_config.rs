@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +75,7 @@ pub struct StoredOtlpConfig {
 pub struct StoredOtlpTracesConfig {
     pub enabled: Option<bool>,
     pub format: Option<StoredOtlpTracesFormat>,
-    pub extra_headers: Option<HashMap<String, String>>,
+    pub extra_headers: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -26,7 +26,8 @@ use crate::config::gateway::{
 };
 use crate::config::{
     BatchWritesConfig, Config, ConfigFileGlob, DEFAULT_POSTGRES_CONNECTION_POOL_SIZE,
-    RuntimeOverlay, snapshot::ConfigSnapshot, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
+    RuntimeOverlay, UninitializedConfig, snapshot::ConfigSnapshot, snapshot::SnapshotHash,
+    unwritten::UnwrittenConfig,
 };
 use crate::db::ConfigQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -194,6 +195,15 @@ impl SwappableConfig {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData<C> {
     pub config: C,
+    /// The original `UninitializedConfig`, preserved for validation during config-in-db writes.
+    /// When a new function is written via the API, we load the current value, patch in the
+    /// new function, and run the full init+validate pipeline to ensure the config remains
+    /// valid. On success, the patched config is swapped in so subsequent writes validate
+    /// against the latest state.
+    ///
+    /// Uses `ArcSwap` so the write path can atomically update the config without blocking
+    /// concurrent readers. Wrapped in `Arc` so `AppStateData` remains `Clone`.
+    pub uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
     /// Runtime overlay captured from the original UninitializedConfig at startup.
     /// Used for snapshot rehydration without the lossy Config → UninitializedConfig round-trip.
     pub runtime_overlay: Arc<RuntimeOverlay>,
@@ -247,6 +257,7 @@ impl AppStateData<SwappableConfig> {
     pub fn load_latest(&self) -> AppStateData<Arc<Config>> {
         AppStateData {
             config: self.config.load(),
+            uninitialized_config: self.uninitialized_config.clone(),
             runtime_overlay: self.runtime_overlay.clone(),
             http_client: self.http_client.clone(),
             clickhouse_connection_info: self.clickhouse_connection_info.clone(),
@@ -352,6 +363,8 @@ impl GatewayHandle {
             primary_datastore,
         );
         let runtime_overlay = Arc::new(config.runtime_overlay().clone());
+        let uninitialized_config =
+            Arc::new(ArcSwap::from_pointee(config.uninitialized_config().clone()));
         let config = Arc::new(Box::pin(config.into_config(&db)).await?);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let valkey_cache_connection_info =
@@ -359,6 +372,7 @@ impl GatewayHandle {
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
+            uninitialized_config,
             runtime_overlay,
             clickhouse_connection_info,
             postgres_connection_info,
@@ -403,6 +417,9 @@ impl GatewayHandle {
         Self {
             app_state: AppStateData {
                 config: SwappableConfig::new(config),
+                uninitialized_config: Arc::new(ArcSwap::from_pointee(
+                    UninitializedConfig::default(),
+                )),
                 runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
@@ -430,6 +447,7 @@ impl GatewayHandle {
     #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
+        uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
         runtime_overlay: Arc<RuntimeOverlay>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
@@ -577,6 +595,7 @@ impl GatewayHandle {
         Ok(Self {
             app_state: AppStateData {
                 config: SwappableConfig::new(config),
+                uninitialized_config,
                 runtime_overlay,
                 http_client,
                 clickhouse_connection_info,
@@ -608,6 +627,7 @@ impl<C: Clone> AppStateData<C> {
     fn disabled_for_shutdown_placeholder(&self) -> Self {
         Self {
             config: self.config.clone(),
+            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             runtime_overlay: self.runtime_overlay.clone(),
             http_client: self.http_client.clone(),
             clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
@@ -688,6 +708,7 @@ impl AppStateData<Arc<Config>> {
         )?;
         Ok(Self {
             config,
+            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             runtime_overlay,
             http_client,
             clickhouse_connection_info,
@@ -1226,6 +1247,7 @@ mod tests {
         };
         let config = UnwrittenConfig::new(
             config,
+            UninitializedConfig::default(),
             ConfigSnapshot::new_empty_for_test(),
             RuntimeOverlay::default(),
         );
@@ -1258,6 +1280,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(
             config,
+            UninitializedConfig::default(),
             ConfigSnapshot::new_empty_for_test(),
             RuntimeOverlay::default(),
         );
@@ -1306,6 +1329,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(
             config,
+            UninitializedConfig::default(),
             ConfigSnapshot::new_empty_for_test(),
             RuntimeOverlay::default(),
         );
@@ -1347,6 +1371,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(
             config,
+            UninitializedConfig::default(),
             ConfigSnapshot::new_empty_for_test(),
             RuntimeOverlay::default(),
         );
@@ -1389,6 +1414,7 @@ mod tests {
         };
         let unwritten_config = UnwrittenConfig::new(
             config,
+            UninitializedConfig::default(),
             ConfigSnapshot::new_empty_for_test(),
             RuntimeOverlay::default(),
         );
@@ -1518,6 +1544,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1555,6 +1582,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1590,6 +1618,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1619,6 +1648,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1651,6 +1681,7 @@ mod tests {
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1680,6 +1711,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1715,6 +1747,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1744,6 +1777,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1840,6 +1874,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1873,6 +1908,7 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
+            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,

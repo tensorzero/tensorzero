@@ -90,11 +90,11 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
 tensorzero-provider-types = { path = "../tensorzero-provider-types" }
+tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
-tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 minijinja-utils = { path = "../minijinja-utils" }
 clap = { workspace = true }
 opentelemetry_sdk = "0.31.0"

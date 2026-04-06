@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,7 @@ use crate::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredEmbeddingModelConfig {
     pub routing: Vec<String>,
-    pub providers: HashMap<String, StoredEmbeddingProviderConfig>,
+    pub providers: BTreeMap<String, StoredEmbeddingProviderConfig>,
     pub timeout_ms: Option<u64>,
 }
 

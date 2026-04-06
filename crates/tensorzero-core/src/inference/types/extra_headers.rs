@@ -184,6 +184,26 @@ pub use dynamic::ExtraHeader as DynamicExtraHeader;
 
 // ─── Stored → Uninitialized conversions ──────────────────────────────────────
 
+impl From<&ExtraHeadersConfig> for StoredExtraHeadersConfig {
+    fn from(config: &ExtraHeadersConfig) -> Self {
+        StoredExtraHeadersConfig {
+            data: config
+                .data
+                .iter()
+                .map(|header| StoredExtraHeader {
+                    name: header.name.clone(),
+                    kind: match &header.kind {
+                        ExtraHeaderKind::Value(value) => {
+                            StoredExtraHeaderKind::Value(value.clone())
+                        }
+                        ExtraHeaderKind::Delete => StoredExtraHeaderKind::Delete,
+                    },
+                })
+                .collect(),
+        }
+    }
+}
+
 impl From<StoredExtraHeaderKind> for ExtraHeaderKind {
     fn from(stored: StoredExtraHeaderKind) -> Self {
         match stored {

@@ -308,7 +308,7 @@ impl From<StoredOtlpTracesConfig> for OtlpTracesConfig {
         Self {
             enabled: stored.enabled,
             format: stored.format.map(Into::into),
-            extra_headers: stored.extra_headers,
+            extra_headers: stored.extra_headers.map(|h| h.into_iter().collect()),
         }
     }
 }

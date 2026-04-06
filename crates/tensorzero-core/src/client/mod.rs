@@ -1,9 +1,11 @@
 use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use arc_swap::ArcSwap;
+
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
-use crate::config::{ConfigFileGlob, RuntimeOverlay};
+use crate::config::{ConfigFileGlob, RuntimeOverlay, UninitializedConfig};
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
 use crate::http::TensorzeroResponseWrapper;
@@ -649,6 +651,7 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config,
+                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay,
                                 clickhouse_connection_info,
                                 postgres_connection_info,
@@ -693,6 +696,7 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
+                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay.clone(),
                                 // We create a new independent `ClickHouseConnectionInfo` here,
                                 // and do *not* directly use the existing `clickhouse_connection_info`

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -109,7 +109,7 @@ pub enum StoredOpenAIGrader {
     },
     Multi {
         calculate_output: String,
-        graders: HashMap<String, Box<StoredOpenAIGrader>>,
+        graders: BTreeMap<String, Box<StoredOpenAIGrader>>,
         name: String,
     },
 }

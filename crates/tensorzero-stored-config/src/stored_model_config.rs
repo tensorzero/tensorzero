@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -16,7 +16,7 @@ use crate::{StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredTimeoutsConfi
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredModelConfig {
     pub routing: Vec<String>,
-    pub providers: HashMap<String, StoredModelProvider>,
+    pub providers: BTreeMap<String, StoredModelProvider>,
     pub timeouts: Option<StoredTimeoutsConfig>,
     pub skip_relay: Option<bool>,
     pub namespace: Option<String>,
@@ -126,7 +126,7 @@ pub enum StoredProviderConfig {
         api_type: Option<StoredOpenAIAPIType>,
         include_encrypted_reasoning: Option<bool>,
         provider_tools: Option<Vec<Value>>,
-        content_type_overrides: Option<HashMap<String, StoredContentBlockType>>,
+        content_type_overrides: Option<BTreeMap<String, StoredContentBlockType>>,
     },
     OpenRouter {
         model_name: String,

@@ -268,25 +268,25 @@ impl Nursery {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UninitializedTrackAndStopExperimentationConfig {
-    metric: String,
-    candidate_variants: Vec<String>,
+    pub(crate) metric: String,
+    pub(crate) candidate_variants: Vec<String>,
     #[serde(default)]
-    fallback_variants: Vec<String>,
+    pub(crate) fallback_variants: Vec<String>,
     #[serde(default = "default_min_samples_per_variant")]
-    min_samples_per_variant: u64,
+    pub(crate) min_samples_per_variant: u64,
     #[serde(default = "default_delta")]
-    delta: f64,
+    pub(crate) delta: f64,
     #[serde(default)]
-    epsilon: f64,
+    pub(crate) epsilon: f64,
     #[serde(default = "default_update_period_s")]
-    update_period_s: u64,
+    pub(crate) update_period_s: u64,
     #[serde(default = "default_min_prob", skip_serializing_if = "Option::is_none")]
-    min_prob: Option<f64>,
+    pub(crate) min_prob: Option<f64>,
     #[serde(
         default = "default_max_samples_per_variant",
         skip_serializing_if = "Option::is_none"
     )]
-    max_samples_per_variant: Option<u64>,
+    pub(crate) max_samples_per_variant: Option<u64>,
 }
 
 fn default_min_samples_per_variant() -> u64 {

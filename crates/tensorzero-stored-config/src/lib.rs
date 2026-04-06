@@ -19,6 +19,8 @@ mod stored_storage_kind;
 mod stored_tool_config;
 pub mod stored_variant_config;
 
+pub mod postgres;
+
 pub use stored_autopilot_config::StoredAutopilotConfig;
 pub use stored_clickhouse_config::StoredClickHouseConfig;
 pub use stored_cost::{
@@ -48,8 +50,8 @@ pub use stored_extra_headers::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
 };
 pub use stored_function_config::{
-    StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
-    StoredChatFunctionConfig, StoredExperimentationConfig,
+    STORED_FUNCTION_CONFIG_SCHEMA_REVISION, StoredAdaptiveExperimentationAlgorithm,
+    StoredAdaptiveExperimentationConfig, StoredChatFunctionConfig, StoredExperimentationConfig,
     StoredExperimentationConfigWithNamespaces, StoredFunctionConfig, StoredJsonFunctionConfig,
     StoredStaticExperimentationConfig, StoredToolChoice,
 };
@@ -77,9 +79,7 @@ pub use stored_optimizer_info::{
     StoredTogetherTrainingMethod, StoredTogetherTrainingType,
 };
 pub use stored_postgres_config::StoredPostgresConfig;
-pub use stored_prompt_template::{
-    StoredPromptRef, StoredPromptTemplate, StoredPromptTemplateDependency,
-};
+pub use stored_prompt_template::{StoredPromptRef, StoredPromptTemplate};
 pub use stored_provider_types_config::{
     StoredApiKeyDefaults, StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,
     StoredGCPBatchConfigCloudStorage, StoredGCPBatchConfigType, StoredGCPCredentialDefaults,
@@ -95,7 +95,8 @@ pub use stored_rate_limiting_config::{
 pub use stored_storage_kind::StoredStorageKind;
 pub use stored_tool_config::StoredToolConfig;
 pub use stored_variant_config::{
-    StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredDiclVariantConfig,
-    StoredInputWrappers, StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
+    STORED_VARIANT_CONFIG_SCHEMA_REVISION, StoredBestOfNVariantConfig,
+    StoredChatCompletionVariantConfig, StoredDiclVariantConfig, StoredInputWrappers,
+    StoredMixtureOfNVariantConfig, StoredVariantConfig, StoredVariantRef,
     StoredVariantVersionConfig,
 };

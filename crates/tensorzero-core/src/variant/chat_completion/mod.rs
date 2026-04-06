@@ -212,9 +212,9 @@ impl ChatCompletionConfig {
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
-    user: Option<ResolvedTomlPathData>,
-    assistant: Option<ResolvedTomlPathData>,
-    system: Option<ResolvedTomlPathData>,
+    pub user: Option<ResolvedTomlPathData>,
+    pub assistant: Option<ResolvedTomlPathData>,
+    pub system: Option<ResolvedTomlPathData>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

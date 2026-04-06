@@ -22,6 +22,7 @@ pub mod dicl_queries;
 pub mod evaluation_queries;
 pub mod experimentation;
 pub mod feedback;
+pub mod function_config_writes;
 mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;
@@ -149,6 +150,8 @@ impl PostgresConnectionInfo {
 
     /// If the connection is active, check that the set of migrations that have succeeded matches the expected set of migrations.
     /// If the connection is not active, return Ok(()).
+    ///
+    /// TODO(#7127): Relax this check so blue/green deployments work.
     pub async fn check_migrations(&self) -> Result<(), Error> {
         if let Some(pool) = self.get_pool() {
             let migrator = make_migrator();
@@ -182,6 +185,22 @@ impl PostgresConnectionInfo {
                 "tensorzero-auth",
                 &tensorzero_auth_migrations_data.applied,
                 &tensorzero_auth_migrations_data.expected,
+            )?;
+
+            let stored_config_migrations_data =
+                tensorzero_stored_config::postgres::get_migrations_data(pool)
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::PostgresConnectionInitialization {
+                            message: format!(
+                                "Failed to retrieve applied `tensorzero-stored-config` migrations: {e}. {RUN_MIGRATIONS_COMMAND}"
+                            ),
+                        })
+                    })?;
+            Self::check_applied_expected(
+                "tensorzero-stored-config",
+                &stored_config_migrations_data.applied,
+                &stored_config_migrations_data.expected,
             )?;
         }
 
@@ -385,6 +404,14 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
             message: e.to_string(),
         })
     })?;
+    tensorzero_stored_config::postgres::make_migrator()
+        .run(&pool)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::PostgresMigration {
+                message: format!("Failed to run tensorzero-stored-config migrations: {e}"),
+            })
+        })?;
 
     // Try to set up pg_cron extension and schedule partition management jobs.
     // This is idempotent and runs every time.

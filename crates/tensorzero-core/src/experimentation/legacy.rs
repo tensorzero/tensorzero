@@ -20,8 +20,8 @@ use crate::variant::VariantInfo;
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct LegacyUniformExperimentationConfig {
-    candidate_variants: Option<Vec<String>>,
-    fallback_variants: Option<Vec<String>>,
+    pub(crate) candidate_variants: Option<Vec<String>>,
+    pub(crate) fallback_variants: Option<Vec<String>>,
 }
 
 impl LegacyUniformExperimentationConfig {
@@ -47,9 +47,9 @@ impl LegacyUniformExperimentationConfig {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct LegacyStaticWeightsExperimentationConfig {
-    candidate_variants: BTreeMap<String, f64>,
+    pub(crate) candidate_variants: BTreeMap<String, f64>,
     #[serde(default)]
-    fallback_variants: Vec<String>,
+    pub(crate) fallback_variants: Vec<String>,
 }
 
 impl LegacyStaticWeightsExperimentationConfig {
