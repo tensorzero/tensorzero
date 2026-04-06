@@ -747,3 +747,57 @@ async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
         some(eq(&tool))
     );
 }
+
+// ── Tests: advisory lock ──────────────────────────────────────────────────────
+
+/// `write_stored_config` should fail with a clear error if another client is
+/// holding the global stored-config advisory lock. This verifies that the
+/// lock acquisition path in `write_stored_config_in_tx` actually serializes
+/// concurrent writers via `pg_try_advisory_xact_lock`.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn write_stored_config_fails_when_advisory_lock_held(pool: PgPool) {
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+
+    // Reproduce the lock key: BLAKE3 hash of `tensorzero::stored_config::global`,
+    // first 8 bytes as little-endian i64.
+    let hash = blake3::hash(b"tensorzero::stored_config::global");
+    let lock_key_bytes: [u8; 8] = hash.as_bytes()[..8]
+        .try_into()
+        .expect("BLAKE3 output is always 32 bytes");
+    let lock_key = i64::from_le_bytes(lock_key_bytes);
+
+    // Hold the lock from a separate transaction on a separate connection.
+    let mut blocking_tx = pool
+        .begin()
+        .await
+        .expect("blocking transaction should start");
+    let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(lock_key)
+        .fetch_one(&mut *blocking_tx)
+        .await
+        .expect("blocking lock acquisition should succeed");
+    assert_that!(acquired, eq(true));
+
+    // While the lock is held elsewhere, the writer should fail fast rather
+    // than block (we use `pg_try_advisory_xact_lock`).
+    let config = UninitializedConfig::default();
+    let err = postgres
+        .write_stored_config(default_write_params(&config))
+        .await
+        .expect_err("write should fail while another client holds the lock");
+    assert_that!(
+        format!("{err}"),
+        contains_substring("another client is writing the config")
+    );
+
+    // Releasing the lock (by ending the blocking transaction) should let a
+    // subsequent write succeed.
+    blocking_tx
+        .rollback()
+        .await
+        .expect("rollback should release the advisory lock");
+    postgres
+        .write_stored_config(default_write_params(&config))
+        .await
+        .expect("write should succeed once the lock is released");
+}
