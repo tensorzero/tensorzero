@@ -6,6 +6,8 @@ use tensorzero_types::inference_params::{JsonMode, ServiceTier};
 
 use crate::StoredPromptRef;
 
+pub const STORED_EVALUATION_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 // --- Top-level evaluation config ---
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

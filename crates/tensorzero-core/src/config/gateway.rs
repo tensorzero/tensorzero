@@ -590,6 +590,69 @@ impl From<InferenceCacheBackend> for StoredInferenceCacheBackend {
     }
 }
 
+impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
+    fn from(config: UninitializedGatewayConfig) -> Self {
+        StoredGatewayConfig {
+            bind_address: config.bind_address.map(|a| a.to_string()),
+            observability: config.observability.map(|obs| StoredObservabilityConfig {
+                enabled: obs.enabled,
+                backend: obs.backend.map(StoredObservabilityBackend::from),
+                async_writes: obs.async_writes,
+                batch_writes: obs.batch_writes.map(|bw| StoredBatchWritesConfig {
+                    enabled: bw.enabled,
+                    flush_interval_ms: bw.flush_interval_ms,
+                    max_rows: bw.max_rows,
+                    max_rows_postgres: bw.max_rows_postgres,
+                    write_queue_capacity: bw.write_queue_capacity,
+                }),
+            }),
+            debug: config.debug,
+            export: config.export.map(|exp| StoredExportConfig {
+                otlp: exp.otlp.map(|otlp| StoredOtlpConfig {
+                    traces: otlp.traces.map(|traces| StoredOtlpTracesConfig {
+                        enabled: traces.enabled,
+                        format: traces.format.map(StoredOtlpTracesFormat::from),
+                        extra_headers: traces.extra_headers.map(|h| h.into_iter().collect()),
+                    }),
+                }),
+            }),
+            base_path: config.base_path,
+            unstable_disable_feedback_target_validation: config
+                .unstable_disable_feedback_target_validation,
+            unstable_error_json: config.unstable_error_json,
+            disable_pseudonymous_usage_analytics: config.disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference: config
+                .fetch_and_encode_input_files_before_inference,
+            auth: config.auth.map(|auth| StoredAuthConfig {
+                enabled: auth.enabled,
+                cache: auth.cache.map(|c| StoredGatewayAuthCacheConfig {
+                    enabled: c.enabled,
+                    ttl_ms: c.ttl_ms,
+                }),
+            }),
+            global_outbound_http_timeout_ms: config.global_outbound_http_timeout_ms,
+            relay: config.relay.map(|r| StoredRelayConfig {
+                gateway_url: r.gateway_url.map(|u| u.to_string()),
+                api_key_location: r
+                    .api_key_location
+                    .as_ref()
+                    .map(StoredCredentialLocationWithFallback::from),
+            }),
+            metrics: config.metrics.map(|m| StoredGatewayMetricsConfig {
+                tensorzero_inference_latency_overhead_seconds_buckets: m
+                    .tensorzero_inference_latency_overhead_seconds_buckets,
+            }),
+            cache: config.cache.map(|c| StoredModelInferenceCacheConfig {
+                enabled: c.enabled,
+                backend: c.backend.map(StoredInferenceCacheBackend::from),
+                valkey: c.valkey.map(|v| StoredValkeyModelInferenceCacheConfig {
+                    ttl_s: Some(v.ttl_s),
+                }),
+            }),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
@@ -653,6 +716,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use googletest::prelude::*;
 
@@ -758,5 +823,89 @@ mod tests {
             let restored: EndpointLocation = stored.into();
             expect_that!(restored, eq(&variant));
         }
+    }
+
+    // ── UninitializedGatewayConfig full round trip ─────────────────────
+
+    /// Populate every field of `UninitializedGatewayConfig` with a non-default
+    /// value and verify that converting to `StoredGatewayConfig` and back is
+    /// lossless.
+    ///
+    /// Fields that are intentionally dropped on the way through storage
+    /// (`template_filesystem_access`, `observability.disable_automatic_migrations`,
+    /// `batch_writes.__force_allow_embedded_batch_writes`) are set to their
+    /// "absent" value so round-tripping still produces an equal struct.
+    #[gtest]
+    #[expect(deprecated)]
+    fn test_uninitialized_gateway_config_round_trip() {
+        let original = UninitializedGatewayConfig {
+            bind_address: Some("127.0.0.1:8080".parse().unwrap()),
+            observability: Some(ObservabilityConfig {
+                enabled: Some(true),
+                backend: Some(ObservabilityBackend::Postgres),
+                async_writes: Some(true),
+                batch_writes: Some(BatchWritesConfig {
+                    enabled: true,
+                    __force_allow_embedded_batch_writes: None,
+                    flush_interval_ms: Some(500),
+                    max_rows: Some(1000),
+                    max_rows_postgres: Some(2000),
+                    write_queue_capacity: Some(4096),
+                }),
+                disable_automatic_migrations: None,
+            }),
+            debug: Some(true),
+            // Not persisted to the stored config — config-in-DB users are banned
+            // from setting this field.
+            template_filesystem_access: None,
+            export: Some(ExportConfig {
+                otlp: Some(OtlpConfig {
+                    traces: Some(OtlpTracesConfig {
+                        enabled: Some(true),
+                        format: Some(OtlpTracesFormat::OpenInference),
+                        extra_headers: Some(HashMap::from([
+                            ("x-trace-header".to_string(), "value-1".to_string()),
+                            ("x-other".to_string(), "value-2".to_string()),
+                        ])),
+                    }),
+                }),
+            }),
+            base_path: Some("/custom/prefix".to_string()),
+            unstable_disable_feedback_target_validation: Some(true),
+            unstable_error_json: Some(true),
+            disable_pseudonymous_usage_analytics: Some(true),
+            fetch_and_encode_input_files_before_inference: Some(true),
+            auth: Some(AuthConfig {
+                enabled: true,
+                cache: Some(GatewayAuthCacheConfig {
+                    enabled: Some(true),
+                    ttl_ms: Some(12_345),
+                }),
+            }),
+            global_outbound_http_timeout_ms: Some(9_876),
+            relay: Some(UninitializedRelayConfig {
+                gateway_url: Some(Url::parse("https://relay.example.com/").unwrap()),
+                api_key_location: Some(CredentialLocationWithFallback::WithFallback {
+                    default: CredentialLocation::Env("RELAY_KEY".to_string()),
+                    fallback: CredentialLocation::Sdk,
+                }),
+            }),
+            metrics: Some(MetricsConfig {
+                tensorzero_inference_latency_overhead_seconds_buckets: Some(vec![
+                    0.005, 0.05, 0.5, 5.0,
+                ]),
+            }),
+            cache: Some(ModelInferenceCacheConfig {
+                enabled: Some(true),
+                backend: Some(InferenceCacheBackend::Valkey),
+                valkey: Some(ValkeyModelInferenceCacheConfig { ttl_s: 7_200 }),
+            }),
+        };
+
+        let stored: StoredGatewayConfig = original.clone().into();
+        let round_tripped: UninitializedGatewayConfig = stored
+            .try_into()
+            .expect("StoredGatewayConfig should convert back to UninitializedGatewayConfig");
+        expect_that!(round_tripped, eq(&original));
     }
 }

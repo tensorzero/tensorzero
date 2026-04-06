@@ -120,6 +120,14 @@ impl Serialize for FailedRateLimit {
     }
 }
 
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum RateLimitingConfigPriority {
+    Priority(usize),
+    Always,
+}
+
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -15,7 +15,6 @@ use tensorzero_stored_config::{
     StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
     StoredOpenAIAPIType, StoredProviderConfig,
 };
-#[cfg(test)]
 use tensorzero_stored_config::{StoredCostConfig, StoredTimeoutsConfig, StoredUnifiedCostConfig};
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -57,13 +56,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-#[cfg(test)]
-use crate::inference::types::extra_body::extra_body_config_to_stored;
-use crate::inference::types::extra_body::{ExtraBodyConfig, extra_body_config_from_stored};
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
-use crate::inference::types::extra_headers::extra_headers_config_from_stored;
-#[cfg(test)]
-use crate::inference::types::extra_headers::extra_headers_config_to_stored;
+use crate::inference::types::extra_body::{
+    ExtraBodyConfig, extra_body_config_from_stored, extra_body_config_to_stored,
+};
+use crate::inference::types::extra_headers::{
+    ExtraHeadersConfig, extra_headers_config_from_stored, extra_headers_config_to_stored,
+};
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RawResponseEntry, RequestMessage, Thought, Unknown,
@@ -270,7 +268,6 @@ impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
     }
 }
 
-#[cfg(test)]
 impl TryFrom<&UninitializedModelConfig> for StoredModelConfig {
     type Error = Error;
 
@@ -284,7 +281,7 @@ impl TryFrom<&UninitializedModelConfig> for StoredModelConfig {
                     StoredModelProvider::from(provider),
                 ))
             })
-            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         Ok(StoredModelConfig {
             routing: config.routing.iter().map(ToString::to_string).collect(),
@@ -1406,7 +1403,6 @@ pub struct UninitializedModelProvider {
     pub batch_cost: Option<UninitializedUnifiedCostConfig>,
 }
 
-#[cfg(test)]
 impl From<&UninitializedModelProvider> for StoredModelProvider {
     fn from(provider: &UninitializedModelProvider) -> Self {
         StoredModelProvider {

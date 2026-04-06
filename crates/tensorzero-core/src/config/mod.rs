@@ -31,8 +31,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredMetricLevel, StoredMetricOptimize, StoredMetricType, StoredNonStreamingTimeouts,
-    StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
+    StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
+    StoredNonStreamingTimeouts, StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig,
+    StoredToolConfig,
 };
 use tracing::Span;
 use tracing::instrument;
@@ -126,6 +127,14 @@ impl From<tensorzero_stored_config::StoredAutopilotConfig> for AutopilotConfig {
     fn from(stored: tensorzero_stored_config::StoredAutopilotConfig) -> Self {
         AutopilotConfig {
             tool_whitelist: stored.tool_whitelist,
+        }
+    }
+}
+
+impl From<&AutopilotConfig> for tensorzero_stored_config::StoredAutopilotConfig {
+    fn from(config: &AutopilotConfig) -> Self {
+        tensorzero_stored_config::StoredAutopilotConfig {
+            tool_whitelist: config.tool_whitelist.clone(),
         }
     }
 }
@@ -516,6 +525,14 @@ impl From<tensorzero_stored_config::StoredClickHouseConfig> for ClickHouseConfig
     }
 }
 
+impl From<&ClickHouseConfig> for tensorzero_stored_config::StoredClickHouseConfig {
+    fn from(config: &ClickHouseConfig) -> Self {
+        tensorzero_stored_config::StoredClickHouseConfig {
+            disable_automatic_migrations: config.disable_automatic_migrations,
+        }
+    }
+}
+
 impl ObservabilityConfig {
     /// Returns true when observability writes (inferences, feedback) should be persisted.
     /// Defaults to true when `enabled` is not explicitly set.
@@ -745,6 +762,17 @@ impl From<&MetricConfigLevel> for StoredMetricLevel {
         match value {
             MetricConfigLevel::Inference => Self::Inference,
             MetricConfigLevel::Episode => Self::Episode,
+        }
+    }
+}
+
+impl From<&MetricConfig> for StoredMetricConfig {
+    fn from(config: &MetricConfig) -> Self {
+        StoredMetricConfig {
+            r#type: config.r#type.into(),
+            optimize: config.optimize.into(),
+            level: StoredMetricLevel::from(&config.level),
+            description: config.description.clone(),
         }
     }
 }
@@ -2878,12 +2906,10 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    #[expect(dead_code)]
     pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
         [&self.parameters]
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn convert_for_db(
         &self,
         prompt_template_version_ids: &HashMap<String, Uuid>,
@@ -2988,6 +3014,16 @@ impl From<tensorzero_stored_config::StoredPostgresConfig> for PostgresConfig {
             connection_pool_size: stored.connection_pool_size,
             inference_metadata_retention_days: stored.inference_metadata_retention_days,
             inference_data_retention_days: stored.inference_data_retention_days,
+        }
+    }
+}
+
+impl From<&PostgresConfig> for tensorzero_stored_config::StoredPostgresConfig {
+    fn from(config: &PostgresConfig) -> Self {
+        tensorzero_stored_config::StoredPostgresConfig {
+            connection_pool_size: config.connection_pool_size,
+            inference_metadata_retention_days: config.inference_metadata_retention_days,
+            inference_data_retention_days: config.inference_data_retention_days,
         }
     }
 }
