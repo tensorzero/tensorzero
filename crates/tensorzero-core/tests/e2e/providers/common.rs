@@ -65,6 +65,29 @@ use tensorzero_core::model::CredentialLocation;
 
 use super::helpers::{get_modal_extra_headers, get_test_model_extra_headers};
 
+async fn select_json_inference_clickhouse_with_retry(
+    clickhouse: &tensorzero_core::db::clickhouse::ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Value {
+    const MAX_ATTEMPTS: usize = 10;
+    const RETRY_DELAY_MS: u64 = 200;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        if let Some(result) = select_json_inference_clickhouse(clickhouse, inference_id).await {
+            return result;
+        }
+
+        if attempt < MAX_ATTEMPTS {
+            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+        }
+    }
+
+    panic!(
+        "JsonInference row for inference_id {inference_id} was not visible in ClickHouse after {} attempts",
+        MAX_ATTEMPTS
+    );
+}
+
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
     pub variant_name: String,
@@ -10977,9 +11000,7 @@ pub async fn check_json_mode_inference_response(
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = select_json_inference_clickhouse_with_retry(&clickhouse, inference_id).await;
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -11246,14 +11267,9 @@ pub async fn check_dynamic_json_mode_inference_response(
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = select_json_inference_clickhouse_with_retry(&clickhouse, inference_id).await;
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -11514,14 +11530,9 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(input_tokens > 0);
     assert!(output_tokens > 0);
 
-    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
     // Check ClickHouse - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = select_json_inference_clickhouse_with_retry(&clickhouse, inference_id).await;
 
     println!("ClickHouse - JsonInference: {result:#?}");
 
@@ -12654,16 +12665,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
+    let result = select_json_inference_clickhouse_with_retry(&clickhouse, inference_id).await;
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
