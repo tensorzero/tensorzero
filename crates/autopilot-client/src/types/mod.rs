@@ -3,8 +3,10 @@
 //! These types are shared between the client and server.
 
 mod autoevals;
+pub mod deployment_context;
 
 pub use autoevals::*;
+pub use deployment_context::*;
 
 use std::collections::HashMap;
 
@@ -844,7 +846,7 @@ pub struct CreateEventRequest {
     /// Contains a structured markdown summary of functions, variants, metrics, feedback, and datasets.
     /// Injected into the first user message's inference context so the agent starts with rich knowledge.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub deployment_context: Option<String>,
+    pub deployment_context: Option<DeploymentContext>,
 }
 
 /// Query parameters for listing events.
