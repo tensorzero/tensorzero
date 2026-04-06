@@ -10,7 +10,7 @@ use tensorzero_stored_config::{
     STORED_RATE_LIMITING_CONFIG_SCHEMA_REVISION, STORED_STORAGE_KIND_SCHEMA_REVISION,
     STORED_TOOL_CONFIG_SCHEMA_REVISION, StoredAutopilotConfig, StoredClickHouseConfig,
     StoredEmbeddingModelConfig, StoredGatewayConfig, StoredMetricConfig, StoredModelConfig,
-    StoredOptimizerConfig, StoredPostgresConfig, StoredPromptTemplate, StoredProviderTypesConfig,
+    StoredOptimizerConfig, StoredPostgresConfig, StoredProviderTypesConfig,
     StoredRateLimitingConfig, StoredStorageKind,
 };
 use uuid::Uuid;
@@ -21,6 +21,9 @@ use crate::error::{Error, ErrorDetails};
 
 use super::PostgresConnectionInfo;
 use super::function_config_writes::{WriteFunctionConfigParams, write_function_config_in_tx};
+use super::prompt_template_writes::{
+    CollectedPromptTemplate, add_prompt_template, write_collected_prompt_templates,
+};
 
 #[derive(Debug)]
 pub struct WriteStoredConfigParams<'a> {
@@ -338,64 +341,21 @@ async fn upsert_named_config_row(
 
 // ── Prompt-template handling for standalone tools/evaluations ─────────────────
 
+/// Collect prompt templates for a standalone tool/evaluation config and
+/// persist them via the shared writer, reusing existing rows that already
+/// match `(template_key, content_hash)`.
 async fn write_prompt_templates_in_tx<'a>(
     tx: &mut Transaction<'_, Postgres>,
     templates: impl Iterator<Item = &'a ResolvedTomlPathData>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
-    let mut collected = BTreeMap::new();
+    let mut collected: BTreeMap<String, CollectedPromptTemplate> = BTreeMap::new();
     for template in templates {
-        let template_key = template.get_template_key();
-        let source_body = template.data().to_string();
-        match collected.get(&template_key) {
-            Some((existing_body, _)) if existing_body != &source_body => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Template key `{template_key}` was provided with conflicting source bodies."
-                    ),
-                }));
-            }
-            Some(_) => {}
-            None => {
-                collected.insert(template_key, (source_body, Uuid::now_v7()));
-            }
-        }
+        add_prompt_template(&mut collected, template)?;
     }
-
-    // Insert template rows
-    for (template_key, (source_body, id)) in &collected {
-        let content_hash = blake3::hash(source_body.as_bytes()).as_bytes().to_vec();
-        let stored_template = StoredPromptTemplate {
-            id: *id,
-            template_key: template_key.clone(),
-            source_body: source_body.clone(),
-            content_hash,
-            creation_source: creation_source.to_string(),
-            source_autopilot_session_id,
-        };
-        sqlx::query(
-            "INSERT INTO tensorzero.prompt_template_configs \
-             (id, template_key, source_body, content_hash, creation_source, source_autopilot_session_id) \
-             VALUES ($1, $2, $3, $4, $5, $6)",
-        )
-        .bind(stored_template.id)
-        .bind(&stored_template.template_key)
-        .bind(&stored_template.source_body)
-        .bind(&stored_template.content_hash)
-        .bind(&stored_template.creation_source)
-        .bind(stored_template.source_autopilot_session_id)
-        .execute(&mut **tx)
+    write_collected_prompt_templates(tx, &collected, creation_source, source_autopilot_session_id)
         .await
-        .map_err(|e| postgres_query_error("Failed to insert prompt template version", e))?;
-    }
-
-    // Build result map: template_key -> version_id
-    let result = collected
-        .into_iter()
-        .map(|(key, (_, id))| (key, id))
-        .collect();
-    Ok(result)
 }
 
 fn postgres_query_error(context: &str, e: sqlx::Error) -> Error {
