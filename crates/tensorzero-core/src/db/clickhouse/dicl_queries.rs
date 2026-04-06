@@ -231,7 +231,8 @@ async fn insert_dicl_batch(
 
     let result = clickhouse
         .run_query_with_external_data(external_data, query.to_string())
-        .await?;
+        .await
+        .map_err(|e| e.log())?;
 
     Ok(result.metadata.written_rows)
 }

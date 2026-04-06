@@ -2,7 +2,7 @@ use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use crate::utils::uuid::get_workflow_evaluation_cutoff_uuid;
 use async_trait::async_trait;
 
@@ -22,15 +22,15 @@ const MIGRATION_ID: &str = "0038";
 
 #[async_trait]
 impl Migration for Migration0038<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ChatInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ChatInference table does not exist".to_string(),
             }));
         }
         if !check_table_exists(self.clickhouse, "JsonInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "JsonInference table does not exist".to_string(),
             }));
@@ -38,7 +38,7 @@ impl Migration for Migration0038<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if !check_table_exists(self.clickhouse, "EpisodeById", MIGRATION_ID).await? {
             return Ok(true);
         }
@@ -51,12 +51,12 @@ impl Migration for Migration0038<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -74,7 +74,7 @@ impl Migration for Migration0038<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS EpisodeById{on_cluster_name} (
                         episode_id_uint UInt128,
                         count SimpleAggregateFunction(sum, UInt64),
@@ -114,7 +114,7 @@ impl Migration for Migration0038<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
         // Build MV for JsonInference table
         let query = format!(
@@ -134,7 +134,7 @@ impl Migration for Migration0038<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Backfill if needed
@@ -143,7 +143,7 @@ impl Migration for Migration0038<'_> {
 
             let create_chat_table = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE EpisodeByIdChatView".to_string(),
                 )
                 .await?
@@ -168,7 +168,7 @@ impl Migration for Migration0038<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -178,7 +178,7 @@ impl Migration for Migration0038<'_> {
 
             let create_json_table = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE EpisodeByIdJsonView".to_string(),
                 )
                 .await?
@@ -202,7 +202,7 @@ impl Migration for Migration0038<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -224,7 +224,7 @@ impl Migration for Migration0038<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

@@ -2,7 +2,7 @@ use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 pub struct Migration0037<'a> {
@@ -33,9 +33,9 @@ pub fn quantiles_sql_args() -> String {
 
 #[async_trait]
 impl Migration for Migration0037<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelInference table does not exist".to_string(),
             }));
@@ -43,7 +43,7 @@ impl Migration for Migration0037<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelProviderStatistics", MIGRATION_ID).await? {
             return Ok(true);
         }
@@ -54,14 +54,14 @@ impl Migration for Migration0037<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let qs = quantiles_sql_args();
 
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -80,7 +80,7 @@ impl Migration for Migration0037<'_> {
 
         // Note: use `qs` inside the AggregateFunction type parameters
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS ModelProviderStatistics{on_cluster_name} (
                         model_name LowCardinality(String),
                         model_provider_name LowCardinality(String),
@@ -126,7 +126,7 @@ impl Migration for Migration0037<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Backfill if needed
@@ -135,7 +135,7 @@ impl Migration for Migration0037<'_> {
 
             let create_table = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE ModelProviderStatisticsView".to_string(),
                 )
                 .await?
@@ -169,7 +169,7 @@ impl Migration for Migration0037<'_> {
                 "
             );
             self.clickhouse
-                .run_query_synchronous_no_params(query)
+                .run_query_synchronous_no_params_delayed_err(query)
                 .await?;
         }
 
@@ -187,7 +187,7 @@ impl Migration for Migration0037<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

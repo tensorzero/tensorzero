@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 use super::{check_column_exists, check_table_exists, get_column_type};
 use async_trait::async_trait;
@@ -20,7 +20,7 @@ pub struct Migration0008<'a> {
 #[async_trait]
 impl Migration for Migration0008<'_> {
     /// Ccheck that the tables that need altering already exist
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables = [
             "ModelInference",
             "ChatInference",
@@ -29,11 +29,10 @@ impl Migration for Migration0008<'_> {
         ];
         for table in tables {
             if !check_table_exists(self.clickhouse, table, "0006").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0008".to_string(),
                     message: format!("{table} table does not exist"),
-                }
-                .into());
+                }));
             }
         }
         Ok(())
@@ -42,7 +41,7 @@ impl Migration for Migration0008<'_> {
     /// Check if the migration has already been applied by checking if the `raw_request`, `raw_response`, `function_name` or and `variant_name`
     /// columns exist in BatchRequest
     /// and if the `processing_time_ms` columns in ChatInference and JsonInference and `response_time_ms` column in ModelInference is Nullable
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if !check_column_exists(self.clickhouse, "BatchRequest", "raw_request", "0008").await? {
             return Ok(true);
         }
@@ -98,7 +97,7 @@ impl Migration for Migration0008<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
         // to the `BatchRequest` table
         let query = r"
@@ -113,7 +112,7 @@ impl Migration for Migration0008<'_> {
         // so this is safe to do.
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
@@ -123,7 +122,7 @@ impl Migration for Migration0008<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
@@ -133,7 +132,7 @@ impl Migration for Migration0008<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
@@ -143,14 +142,14 @@ impl Migration for Migration0008<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

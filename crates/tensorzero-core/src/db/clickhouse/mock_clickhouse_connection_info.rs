@@ -29,7 +29,7 @@ use crate::db::{
     CacheStatisticsTimePoint, ConfigQueries, MockConfigQueries, ModelLatencyDatapoint,
     ModelUsageTimePoint, TimeWindow,
 };
-use crate::error::Error;
+use crate::error::{DelayedError, Error};
 use crate::function::FunctionConfig;
 use crate::inference::types::StoredModelInference;
 use crate::inference::types::{ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert};
@@ -251,7 +251,7 @@ impl ConfigQueries for MockClickHouseConnectionInfo {
         self.config_queries.get_config_snapshot(snapshot_hash).await
     }
 
-    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError> {
         #[expect(clippy::disallowed_methods)]
         self.config_queries.write_config_snapshot(snapshot).await
     }

@@ -45,7 +45,8 @@ use tensorzero_core::db::clickhouse::migration_manager::{
 use tensorzero_core::db::clickhouse::test_helpers::{CLICKHOUSE_URL, get_clickhouse};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::error::ErrorDetails;
+use tensorzero_core::error::delayed_error::DelayedError;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -1672,16 +1673,16 @@ async fn test_run_migrations_fake_row() {
         fn name(&self) -> String {
             "Migration99999".to_string()
         }
-        async fn can_apply(&self) -> Result<(), Error> {
+        async fn can_apply(&self) -> Result<(), DelayedError> {
             Ok(())
         }
-        async fn should_apply(&self) -> Result<bool, Error> {
+        async fn should_apply(&self) -> Result<bool, DelayedError> {
             Ok(true)
         }
-        async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
             Ok(())
         }
-        async fn has_succeeded(&self) -> Result<bool, Error> {
+        async fn has_succeeded(&self) -> Result<bool, DelayedError> {
             Ok(true)
         }
         fn rollback_instructions(&self) -> String {
@@ -1791,7 +1792,10 @@ async fn test_migration_logic_with_flags() {
     })
     .await
     .unwrap_err();
-    assert_eq!(err, Error::new(ErrorDetails::ClickHouseMigrationsDisabled));
+    assert_eq!(
+        err,
+        DelayedError::new(ErrorDetails::ClickHouseMigrationsDisabled)
+    );
     // Create database to avoid panicking when the database is dropped via DeleteDbOnDrop.drop(),
     // because it won't be created otherwise when migration_manager::run() throws an error.
     clickhouse

@@ -1,5 +1,6 @@
 use super::*;
 use crate::db::ConfigQueries;
+use crate::error::DelayedError;
 
 /// A wrapper around `Config` that indicates the config has been loaded and validated,
 /// but has **not yet been written to the database**.
@@ -59,7 +60,7 @@ impl UnwrittenConfig {
     /// 2. Returns the `Config`
     ///
     /// The hash is used to track which config version was used for each inference request.
-    pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, Error> {
+    pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, DelayedError> {
         let UnwrittenConfig {
             config,
             uninitialized_config: _,

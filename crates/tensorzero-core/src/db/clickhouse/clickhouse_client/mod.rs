@@ -47,21 +47,21 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
 
     /// Creates a new, independent ClickHouse client with the same settings
     /// In batch mode, this will create a separate batch sender
-    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, DelayedError>;
 
     /// Writes rows to ClickHouse using batched writes (if enabled)
     async fn write_batched_internal(
         &self,
         rows: Vec<String>,
         table: TableName,
-    ) -> Result<(), Error>;
+    ) -> Result<(), DelayedError>;
 
     /// Writes rows to ClickHouse without batching
     async fn write_non_batched_internal(
         &self,
         rows: Vec<String>,
         table: TableName,
-    ) -> Result<(), Error>;
+    ) -> Result<(), DelayedError>;
 
     /// Runs a query with parameters, waiting for mutations to complete
     async fn run_query_synchronous(
@@ -82,13 +82,13 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
         &self,
         external_data: ExternalDataInfo,
         query: String,
-    ) -> Result<ClickHouseResponse, Error>;
+    ) -> Result<ClickHouseResponse, DelayedError>;
 
     /// Checks if the database and migrations table exist
-    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, DelayedError>;
 
     /// Creates the database and migrations table
-    async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
+    async fn create_database_and_migrations_table(&self) -> Result<(), DelayedError>;
 
     /// Returns whether a cluster is configured
     fn is_cluster_configured(&self) -> bool;
@@ -114,7 +114,7 @@ mock! {
 
     #[async_trait]
     impl ClickHouseClient for ClickHouseClient {
-        async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error>;
+        async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, DelayedError>;
         fn database_url(&self) -> &SecretString;
         fn cluster_name(&self) -> &Option<String>;
         fn database(&self) -> &str;
@@ -124,12 +124,12 @@ mock! {
             &self,
             rows: Vec<String>,
             table: TableName,
-        ) -> Result<(), Error>;
+        ) -> Result<(), DelayedError>;
         async fn write_non_batched_internal(
             &self,
             rows: Vec<String>,
             table: TableName,
-        ) -> Result<(), Error>;
+        ) -> Result<(), DelayedError>;
         async fn run_query_synchronous<'a, 'b, 'c, 'd>(
             &'a self,
             query: String,
@@ -144,9 +144,9 @@ mock! {
             &self,
             external_data: ExternalDataInfo,
             query: String,
-        ) -> Result<ClickHouseResponse, Error>;
-        async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
-        async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
+        ) -> Result<ClickHouseResponse, DelayedError>;
+        async fn check_database_and_migrations_table_exists(&self) -> Result<bool, DelayedError>;
+        async fn create_database_and_migrations_table(&self) -> Result<(), DelayedError>;
         fn is_cluster_configured(&self) -> bool;
         fn get_on_cluster_name(&self) -> String;
         fn get_maybe_replicated_table_engine_name<'a, 'b>(
@@ -158,6 +158,6 @@ mock! {
 
     #[async_trait]
     impl HealthCheckable for ClickHouseClient {
-        async fn health(&self) -> Result<(), Error>;
+        async fn health(&self) -> Result<(), DelayedError>;
     }
 }

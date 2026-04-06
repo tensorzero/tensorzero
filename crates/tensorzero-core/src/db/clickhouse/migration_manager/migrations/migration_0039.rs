@@ -2,7 +2,7 @@ use super::ViewOffsetDeadline;
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 /*
@@ -34,7 +34,7 @@ const MIGRATION_ID: &str = "0039";
 
 #[async_trait]
 impl Migration for Migration0039<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables_to_check = [
             "InferenceById",
             "InferenceByEpisodeId",
@@ -44,7 +44,7 @@ impl Migration for Migration0039<'_> {
 
         for table_name in tables_to_check {
             if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: format!("{table_name} table does not exist"),
                 }));
@@ -53,7 +53,7 @@ impl Migration for Migration0039<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let tables_to_check = [
             "FeedbackByVariantStatistics",
             "FloatMetricFeedbackByVariant",
@@ -75,12 +75,12 @@ impl Migration for Migration0039<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -102,7 +102,7 @@ impl Migration for Migration0039<'_> {
         // than to do metrics for a given variant and function
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS FloatMetricFeedbackByVariant{on_cluster_name} (
                         function_name LowCardinality(String),
                         variant_name LowCardinality(String),
@@ -127,7 +127,7 @@ impl Migration for Migration0039<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS BooleanMetricFeedbackByVariant{on_cluster_name} (
                         function_name LowCardinality(String),
                         variant_name LowCardinality(String),
@@ -152,7 +152,7 @@ impl Migration for Migration0039<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS FeedbackByVariantStatistics{on_cluster_name} (
                     function_name LowCardinality(String),
                     variant_name LowCardinality(String),
@@ -240,7 +240,7 @@ impl Migration for Migration0039<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Build MV for BooleanMetricFeedbackByVariant table
@@ -301,7 +301,7 @@ impl Migration for Migration0039<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Build MV for FloatMetricFeedbackByVariantStatistics to FeedbackByVariantStatistics table
@@ -323,7 +323,7 @@ impl Migration for Migration0039<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Build MV for BooleanMetricFeedbackByVariantStatistics to FeedbackByVariantStatistics table
@@ -345,7 +345,7 @@ impl Migration for Migration0039<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Backfill if needed
@@ -354,7 +354,7 @@ impl Migration for Migration0039<'_> {
 
             let create_float_feedback_by_variant_view = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE FloatMetricFeedbackByVariantView".to_string(),
                 )
                 .await?
@@ -416,7 +416,7 @@ impl Migration for Migration0039<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -426,7 +426,7 @@ impl Migration for Migration0039<'_> {
 
             let create_boolean_feedback_by_variant_view = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE BooleanMetricFeedbackByVariantView".to_string(),
                 )
                 .await?
@@ -486,7 +486,7 @@ impl Migration for Migration0039<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -495,7 +495,7 @@ impl Migration for Migration0039<'_> {
             }
             let create_float_feedback_by_variant_statistics_view = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE FloatMetricFeedbackByVariantStatisticsView".to_string(),
                 )
                 .await?
@@ -521,7 +521,7 @@ impl Migration for Migration0039<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -530,7 +530,7 @@ impl Migration for Migration0039<'_> {
             }
             let create_boolean_feedback_by_variant_statistics_view = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE BooleanMetricFeedbackByVariantStatisticsView".to_string(),
                 )
                 .await?
@@ -556,7 +556,7 @@ impl Migration for Migration0039<'_> {
                     "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query)
+                    .run_query_synchronous_no_params_delayed_err(query)
                     .await?;
             } else {
                 tracing::warn!(
@@ -583,7 +583,7 @@ impl Migration for Migration0039<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

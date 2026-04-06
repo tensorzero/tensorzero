@@ -218,13 +218,18 @@ pub async fn run_evaluation(
     )
     .await?;
 
-    let clickhouse_client = setup_clickhouse(&unwritten_config, clickhouse_url.clone()).await?;
-    let postgres_connection = setup_postgres(&unwritten_config, postgres_url.as_deref()).await?;
+    let clickhouse_client = setup_clickhouse(&unwritten_config, clickhouse_url.clone())
+        .await
+        .map_err(|e| e.log())?;
+    let postgres_connection = setup_postgres(&unwritten_config, postgres_url.as_deref())
+        .await
+        .map_err(|e| e.log())?;
     let primary_datastore = PrimaryDatastore::resolve(
         &unwritten_config.gateway.observability,
         &clickhouse_client,
         &postgres_connection,
-    )?;
+    )
+    .map_err(|e| e.log())?;
     if primary_datastore == PrimaryDatastore::Disabled {
         bail!(
             "Evaluations require an observability database but none is available. Set \
@@ -236,7 +241,9 @@ pub async fn run_evaluation(
         postgres_connection.clone(),
         primary_datastore,
     );
-    let config = Box::pin(unwritten_config.into_config(&database)).await?;
+    let config = Box::pin(unwritten_config.into_config(&database))
+        .await
+        .map_err(|e| e.log())?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
 

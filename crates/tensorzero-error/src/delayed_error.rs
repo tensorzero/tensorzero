@@ -27,6 +27,19 @@ impl Debug for DelayedError {
     }
 }
 
+impl fmt::Display for DelayedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl PartialEq for DelayedError {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
 impl DelayedError {
     pub fn new(details: ErrorDetails) -> Self {
         Self {

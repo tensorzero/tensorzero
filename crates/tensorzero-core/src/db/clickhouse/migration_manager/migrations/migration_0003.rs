@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::{check_column_exists, check_table_exists};
@@ -25,7 +25,7 @@ const MIGRATION_ID: &str = "0003";
 impl Migration for Migration0003<'_> {
     /// Check if the four feedback tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables = vec![
             "BooleanMetricFeedback",
             "CommentFeedback",
@@ -35,11 +35,10 @@ impl Migration for Migration0003<'_> {
 
         for table in tables {
             if !check_table_exists(self.clickhouse, table, "0003").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0003".to_string(),
                     message: format!("Table {table} does not exist"),
-                }
-                .into());
+                }));
             }
         }
 
@@ -48,7 +47,7 @@ impl Migration for Migration0003<'_> {
 
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `FeedbackTag` exists
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Check if FeedbackTag table exists
         if !check_table_exists(self.clickhouse, "FeedbackTag", "0003").await? {
             return Ok(true);
@@ -83,7 +82,7 @@ impl Migration for Migration0003<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Create the `FeedbackTag` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -107,7 +106,7 @@ impl Migration for Migration0003<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
@@ -116,7 +115,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add a column `tags` to the `CommentFeedback` table
@@ -125,7 +124,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
@@ -134,7 +133,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
@@ -143,7 +142,7 @@ impl Migration for Migration0003<'_> {
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTag` table
@@ -166,7 +165,7 @@ impl Migration for Migration0003<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from CommentFeedback
@@ -186,7 +185,7 @@ impl Migration for Migration0003<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
@@ -206,7 +205,7 @@ impl Migration for Migration0003<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
@@ -226,7 +225,7 @@ impl Migration for Migration0003<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
@@ -251,7 +250,7 @@ impl Migration for Migration0003<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

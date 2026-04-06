@@ -2,7 +2,7 @@ use super::check_column_exists;
 use super::check_table_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::ViewOffsetDeadline;
@@ -16,9 +16,9 @@ const MIGRATION_ID: &str = "0048";
 
 #[async_trait]
 impl Migration for Migration0048<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelProviderStatistics", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelProviderStatistics table does not exist".to_string(),
             }));
@@ -26,7 +26,7 @@ impl Migration for Migration0048<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         Ok(!check_column_exists(
             self.clickhouse,
             "ModelProviderStatistics",
@@ -36,13 +36,13 @@ impl Migration for Migration0048<'_> {
         .await?)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let qs = quantiles_sql_args();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
         // 1. Add the total_cost column
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_cost AggregateFunction(sum, Nullable(Decimal(18, 9)))"
             ))
             .await?;
@@ -52,7 +52,7 @@ impl Migration for Migration0048<'_> {
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -62,7 +62,7 @@ impl Migration for Migration0048<'_> {
 
         // 3. Drop the existing MV
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC"
             ))
             .await?;
@@ -95,7 +95,7 @@ impl Migration for Migration0048<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // 5. Backfill if needed
@@ -104,7 +104,7 @@ impl Migration for Migration0048<'_> {
 
             let create_table = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE ModelProviderStatisticsView".to_string(),
                 )
                 .await?
@@ -138,7 +138,7 @@ impl Migration for Migration0048<'_> {
                 "
             );
             self.clickhouse
-                .run_query_synchronous_no_params(query)
+                .run_query_synchronous_no_params_delayed_err(query)
                 .await?;
         }
 
@@ -156,7 +156,7 @@ impl Migration for Migration0048<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         Ok(check_column_exists(
             self.clickhouse,
             "ModelProviderStatistics",

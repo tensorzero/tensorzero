@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::config::Namespace;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::error::{DelayedError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 pub use adaptive_experimentation::{
     AdaptiveExperimentationAlgorithm, AdaptiveExperimentationConfig,
@@ -276,7 +276,7 @@ pub trait VariantSampler {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error>;
+    ) -> Result<(), DelayedError>;
     async fn sample(
         &self,
         function_name: &str,
@@ -322,7 +322,7 @@ impl ExperimentationConfig {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         match self {
             Self::Default => Ok(()),
             Self::Static(config) => {
@@ -533,7 +533,7 @@ impl VariantSampler for AlwaysFailsConfig {
         _function_name: &str,
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         Ok(())
     }
 

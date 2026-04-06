@@ -8,7 +8,7 @@ use crate::error::Error;
 #[async_trait]
 impl HowdyQueries for PostgresConnectionInfo {
     async fn count_inferences_for_howdy(&self) -> Result<HowdyInferenceCounts, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         // Use pg_class.reltuples for fast approximate counts (sufficient for telemetry).
         // For partitioned tables, sum across child partitions.
         let row = sqlx::query(
@@ -43,7 +43,7 @@ impl HowdyQueries for PostgresConnectionInfo {
     }
 
     async fn count_feedbacks_for_howdy(&self) -> Result<HowdyFeedbackCounts, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         // Use pg_class.reltuples for fast approximate counts (sufficient for telemetry).
         // Feedback tables are non-partitioned, so read reltuples directly.
         let row = sqlx::query(
@@ -89,7 +89,7 @@ impl HowdyQueries for PostgresConnectionInfo {
     }
 
     async fn get_token_totals_for_howdy(&self) -> Result<HowdyTokenUsage, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let row = sqlx::query(
             r"
             SELECT

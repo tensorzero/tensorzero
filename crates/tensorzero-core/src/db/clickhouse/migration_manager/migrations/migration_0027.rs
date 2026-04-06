@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use super::{check_index_exists, check_table_exists, materialize_index};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 /// This migration adds an index by `inference_id` to the `TagInference`,
 /// `ChatInference`, and `JsonInference` tables.
@@ -15,46 +15,41 @@ pub struct Migration0027<'a> {
 
 #[async_trait]
 impl Migration for Migration0027<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "TagInference", "0027").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "TagInference table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         if !check_table_exists(self.clickhouse, "ChatInference", "0027").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "ChatInference table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         if !check_table_exists(self.clickhouse, "JsonInference", "0027").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "JsonInference table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         if !check_table_exists(self.clickhouse, "ChatInferenceDatapoint", "0027").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "ChatInferenceDatapoint table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         if !check_table_exists(self.clickhouse, "JsonInferenceDatapoint", "0027").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "JsonInferenceDatapoint table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let index_exists =
             check_index_exists(self.clickhouse, "TagInference", "inference_id_index").await?;
         let chat_index_exists =
@@ -72,12 +67,12 @@ impl Migration for Migration0027<'_> {
             || !json_datapoint_index_exists)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let create_index_query = r"
             ALTER TABLE TagInference ADD INDEX IF NOT EXISTS inference_id_index inference_id TYPE bloom_filter GRANULARITY 1;
         ";
         self.clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+            .run_query_synchronous_no_params_delayed_err(create_index_query.to_string())
             .await?;
         materialize_index(self.clickhouse, "TagInference", "inference_id_index").await?;
 
@@ -85,7 +80,7 @@ impl Migration for Migration0027<'_> {
             ALTER TABLE ChatInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
         ";
         self.clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+            .run_query_synchronous_no_params_delayed_err(create_index_query.to_string())
             .await?;
         materialize_index(self.clickhouse, "ChatInference", "inference_id_index").await?;
 
@@ -93,7 +88,7 @@ impl Migration for Migration0027<'_> {
             ALTER TABLE JsonInference ADD INDEX IF NOT EXISTS inference_id_index id TYPE bloom_filter GRANULARITY 1;
         ";
         self.clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+            .run_query_synchronous_no_params_delayed_err(create_index_query.to_string())
             .await?;
         materialize_index(self.clickhouse, "JsonInference", "inference_id_index").await?;
 
@@ -101,7 +96,7 @@ impl Migration for Migration0027<'_> {
             ALTER TABLE ChatInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
         ";
         self.clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+            .run_query_synchronous_no_params_delayed_err(create_index_query.to_string())
             .await?;
         materialize_index(self.clickhouse, "ChatInferenceDatapoint", "id_index").await?;
 
@@ -109,7 +104,7 @@ impl Migration for Migration0027<'_> {
             ALTER TABLE JsonInferenceDatapoint ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;
         ";
         self.clickhouse
-            .run_query_synchronous_no_params(create_index_query.to_string())
+            .run_query_synchronous_no_params_delayed_err(create_index_query.to_string())
             .await?;
         materialize_index(self.clickhouse, "JsonInferenceDatapoint", "id_index").await?;
 
@@ -127,7 +122,7 @@ impl Migration for Migration0027<'_> {
         .to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

@@ -2,7 +2,7 @@ use super::check_column_exists;
 use super::check_table_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::ViewOffsetDeadline;
@@ -20,15 +20,15 @@ const MIGRATION_ID: &str = "0051";
 
 #[async_trait]
 impl Migration for Migration0051<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelInference table does not exist".to_string(),
             }));
         }
         if !check_table_exists(self.clickhouse, "ModelProviderStatistics", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelProviderStatistics table does not exist".to_string(),
             }));
@@ -36,7 +36,7 @@ impl Migration for Migration0051<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Check all four columns so a partially applied migration is re-attempted.
         let mi_read = check_column_exists(
             self.clickhouse,
@@ -69,30 +69,30 @@ impl Migration for Migration0051<'_> {
         Ok(!(mi_read && mi_write && stats_read && stats_write))
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let qs = quantiles_sql_args();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
         // 1. Add columns to ModelInference
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS provider_cache_read_input_tokens Nullable(UInt32)"
             ))
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS provider_cache_write_input_tokens Nullable(UInt32)"
             ))
             .await?;
 
         // 2. Add aggregate columns to ModelProviderStatistics
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_provider_cache_read_input_tokens AggregateFunction(sum, Nullable(UInt32))"
             ))
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelProviderStatistics{on_cluster_name} ADD COLUMN IF NOT EXISTS total_provider_cache_write_input_tokens AggregateFunction(sum, Nullable(UInt32))"
             ))
             .await?;
@@ -101,7 +101,7 @@ impl Migration for Migration0051<'_> {
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -111,7 +111,7 @@ impl Migration for Migration0051<'_> {
 
         // 4. Drop the existing MV
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "DROP TABLE IF EXISTS ModelProviderStatisticsView{on_cluster_name} SYNC"
             ))
             .await?;
@@ -146,7 +146,7 @@ impl Migration for Migration0051<'_> {
             "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // No backfill needed: the cache token columns are new, so all
@@ -169,7 +169,7 @@ impl Migration for Migration0051<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         Ok(check_column_exists(
             self.clickhouse,
             "ModelInference",

@@ -11,7 +11,7 @@ use sqlx::QueryBuilder;
 use crate::config::BatchWritesConfig;
 use crate::db::BatchWriterHandle;
 use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceDatabaseInsert, JsonInferenceDatabaseInsert, StoredModelInference,
 };
@@ -93,14 +93,14 @@ fn create_channel_pair<T>(capacity: Option<usize>) -> (ChannelSender<T>, Channel
 }
 
 impl PostgresBatchSender {
-    pub fn new(pool: PgPool, config: BatchWritesConfig) -> Result<Self, Error> {
+    pub fn new(pool: PgPool, config: BatchWritesConfig) -> Result<Self, DelayedError> {
         // We call `tokio::task::block_in_place` during shutdown to wait for outstanding
         // batch writes to finish. This does not work on the CurrentThread runtime,
         // so we fail here rather than panicking at shutdown.
         if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread
             && !config.__force_allow_embedded_batch_writes.unwrap_or(false)
         {
-            return Err(Error::new(ErrorDetails::InternalError {
+            return Err(DelayedError::new(ErrorDetails::InternalError {
                 message: "Cannot use Postgres batching with the CurrentThread Tokio runtime"
                     .to_string(),
             }));

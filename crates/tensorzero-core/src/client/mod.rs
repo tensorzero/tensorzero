@@ -601,26 +601,26 @@ impl ClientBuilder {
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                                source: e.into(),
+                                source: e.log().into(),
                             })
                         })?;
                 let runtime_overlay = Arc::new(unwritten_config.runtime_overlay().clone());
                 let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
                     .await
                     .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.log().into() })
                     })?;
                 let config = Arc::new(config);
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
                         setup_postgres(&config, Some(url)).await.map_err(|e| {
-                            ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                            ClientBuilderError::Postgres(TensorZeroError::Other { source: e.log().into() })
                         })?
                     }
                     Some(PostgresConfig::ExistingConnectionInfo(connection_info)) => connection_info.clone(),
                     None => setup_postgres(&config, None).await.map_err(|e| {
-                        ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                        ClientBuilderError::Postgres(TensorZeroError::Other { source: e.log().into() })
                     })?
                 };
 
@@ -629,7 +629,7 @@ impl ClientBuilder {
                 // TODO: support a dedicated cache Valkey URL for embedded gateways.
                 let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
                     ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                        source: e.into(),
+                        source: e.log().into(),
                     })
                 })?;
                 let valkey_cache_connection_info = valkey_connection_info.clone();
@@ -665,7 +665,7 @@ impl ClientBuilder {
                             .await
                             .map_err(|e| {
                                 ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                                    source: e.into(),
+                                    source: e.log().into(),
                                 })
                             })?,
                         },
@@ -717,7 +717,7 @@ impl ClientBuilder {
                             .await
                             .map_err(|e| {
                                 ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
-                                    source: e.into(),
+                                    source: e.log().into(),
                                 })
                             })?,
                         },
@@ -784,14 +784,18 @@ impl ClientBuilder {
         let clickhouse_connection_info = setup_clickhouse(&unwritten_config, clickhouse_url)
             .await
             .map_err(|e| {
-                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                    source: e.log().into(),
+                })
             })?;
 
         // Convert config_load_info into Config with hash
         let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
             .await
             .map_err(|e| {
-                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                    source: e.log().into(),
+                })
             })?;
 
         let config = Arc::new(config);
@@ -803,13 +807,17 @@ impl ClientBuilder {
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref())
             .await
             .map_err(|e| {
-                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+                ClientBuilderError::Postgres(TensorZeroError::Other {
+                    source: e.log().into(),
+                })
             })?;
 
         // Setup Valkey with runtime URL.
         // Config snapshot clients use the same Valkey instance for both rate limiting and caching.
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await.map_err(|e| {
-            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other { source: e.into() })
+            ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                source: e.log().into(),
+            })
         })?;
         let valkey_cache_connection_info = valkey_connection_info.clone();
 
