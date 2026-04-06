@@ -3,9 +3,10 @@ name: deploy
 description: Deploy TensorZero
 ---
 
-TensorZero is an open-source stack of tooling for executing, observing, and improving LLM applications.
+TensorZero (T0) is an open-source stack of tooling for executing, observing, and improving LLM applications.
+For full documentation, see <https://www.tensorzero.com/docs>.
 The key insertion point is an LLM gateway that proxies requests to all major inference providers.
-Notably, T0 represents an LLM call as an abstract interface "function" and 1 or more implementations "variants".
+Notably, TensorZero represents an LLM call as an abstract interface "function" and 1 or more implementations "variants".
 Variants specify a choice of prompt templates, the model used, hyperparameters at generation time, etc.
 Data is stored by TensorZero in the "function's" format, meaning we can counterfactually try another variant easily later on for any particular inference.
 
