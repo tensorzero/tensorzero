@@ -211,7 +211,7 @@ curl -X POST http://localhost:3000/v1/optimization/gepa \
   -d '{
     "function_name": "extract_entities",
     "dataset_name": "extract_entities_dataset",
-    "evaluation_name": "extract_entities_eval",
+    "evaluators": ["judge_improvement"],
     "analysis_model": "openai::gpt-5.2",
     "mutation_model": "openai::gpt-5.2",
     "initial_variants": ["baseline"],
@@ -410,11 +410,6 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 
 {/* Required Parameters */}
 
-<ParamField body="evaluators" type="list[str]" required>
-  List of evaluator names (defined under the function's configuration) used to
-  score candidate variants.
-</ParamField>
-
 <ParamField body="function_name" type="string" required>
   Name of the TensorZero function to optimize.
 </ParamField>
@@ -451,8 +446,15 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 
 {/* Evaluation Parameters */}
 
-<ParamField body="evaluation_name" type="string" required>
-  Name of a configured evaluation to use for scoring.
+<ParamField body="evaluators" type="list[string]">
+  List of evaluator names (defined under the function's configuration) used to
+  score candidate variants. Mutually exclusive with `evaluation_name`; exactly
+  one must be provided.
+</ParamField>
+
+<ParamField body="evaluation_name" type="string">
+  Name of a configured evaluation to use for scoring. Mutually exclusive with
+  `evaluators`; exactly one must be provided.
 </ParamField>
 
 {/* Optional Parameters */}
