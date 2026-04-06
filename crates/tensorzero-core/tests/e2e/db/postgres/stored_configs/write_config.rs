@@ -221,10 +221,16 @@ async fn write_stored_config_persists_singleton_configs(pool: PgPool) {
                             "refill_rate": 10
                         }
                     ],
-                    "scope": [
-                        { "tag_key": "user_id", "tag_value": "tensorzero::each" }
-                    ],
-                    "priority": { "Priority": 3 }
+                    "scope": {
+                        "scopes": [
+                            {
+                                "type": "tag",
+                                "tag_key": "user_id",
+                                "tag_value": { "type": "each" }
+                            }
+                        ]
+                    },
+                    "priority": { "type": "priority", "value": 3 }
                 }
             ]
         })

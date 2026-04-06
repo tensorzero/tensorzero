@@ -1153,10 +1153,15 @@ impl UninitializedInferenceEvaluationConfig {
 
 impl UninitializedEvaluatorConfig {
     fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
-        if let UninitializedEvaluatorConfig::LLMJudge(config) = self {
-            for variant in config.variants.values() {
-                variant.inner.collect_prompt_templates(templates);
+        match self {
+            UninitializedEvaluatorConfig::LLMJudge(config) => {
+                for variant in config.variants.values() {
+                    variant.inner.collect_prompt_templates(templates);
+                }
             }
+            UninitializedEvaluatorConfig::ExactMatch(_)
+            | UninitializedEvaluatorConfig::ToolUse(_)
+            | UninitializedEvaluatorConfig::Regex(_) => {}
         }
     }
 }
