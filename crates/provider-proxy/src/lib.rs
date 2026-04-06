@@ -246,7 +246,7 @@ async fn check_cache<
     let mut file_mtime = None;
 
     let mut use_cache = || match args.mode {
-        CacheMode::ReadOnly => Ok::<_, anyhow::Error>(true),
+        CacheMode::ReadOnly | CacheMode::ReadOnlyRequireHit => Ok::<_, anyhow::Error>(true),
         CacheMode::ReadWrite => Ok(true),
         CacheMode::ReadOldWriteNew => {
             let current_file_mtime = std::fs::metadata(&path)
@@ -306,6 +306,18 @@ async fn check_cache<
             "Cache miss: {}",
             path_str,
         );
+        if matches!(args.mode, CacheMode::ReadOnlyRequireHit) {
+            tracing::error!("Cache miss in ReadOnlyRequireHit mode: {path_str}");
+            let body = Full::new(Bytes::from(format!(
+                "provider-proxy: Cache miss in ReadOnlyRequireHit mode: {path_str}"
+            )));
+            let mut resp = http::Response::builder()
+                .status(http::StatusCode::BAD_GATEWAY)
+                .body(BoxBody::new(body.map_err(|e| match e {})))
+                .with_context(|| "Failed to build response")?;
+            resp.headers_mut().insert(CACHE_HEADER_NAME, HEADER_FALSE);
+            return Ok(resp);
+        }
         let response = match missing().await {
             Ok(response) => response,
             Err(e) => {
@@ -327,7 +339,7 @@ async fn check_cache<
             hyper_response.extensions_mut().clear();
 
             let write = match args.mode {
-                CacheMode::ReadOnly => false,
+                CacheMode::ReadOnly | CacheMode::ReadOnlyRequireHit => false,
                 CacheMode::ReadWrite => true,
                 CacheMode::ReadOldWriteNew => true,
             };
@@ -376,8 +388,10 @@ async fn check_cache<
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum CacheMode {
-    /// Only read from the cache, never write to it.
+    /// Only read from the cache, never write to it. Misses are proxied, but the response is not cached.
     ReadOnly,
+    /// Only read from the cache, never write to it. If a cache miss occurs, return a 502 Bad Gateway error.
+    ReadOnlyRequireHit,
     /// Read from the cache, and write to it when a cache miss occurs.
     ReadWrite,
     /// Read entries from the cache that were created before the provider-proxy start time.
