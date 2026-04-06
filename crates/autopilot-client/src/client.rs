@@ -24,10 +24,10 @@ use crate::types::{
     CreateEventPayloadToolCallAuthorization, CreateEventRequest, CreateEventResponse,
     ErrorResponse, Event, EventPayload, EventPayloadToolCall, GatewayEvent, GatewayEventPayload,
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
-    GatewayToolCallAuthorizationStatus,
-    ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
-    ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
+    GatewayToolCallAuthorizationStatus, ListConfigWritesParams, ListConfigWritesResponse,
+    ListEventsParams, ListEventsResponse, ListSessionsParams, ListSessionsResponse,
+    S3UploadRequest, S3UploadResponse, StreamEventsParams, ToolCallAuthorizationStatus,
+    ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -1224,9 +1224,7 @@ impl AutopilotClient {
             match item {
                 Some(Ok(update)) => match &update.event.payload {
                     // Auto-approve whitelisted tool calls
-                    GatewayEventPayload::ToolCall(tc)
-                        if self.tool_whitelist.contains(&tc.name) =>
-                    {
+                    GatewayEventPayload::ToolCall(tc) if self.tool_whitelist.contains(&tc.name) => {
                         self.approve_whitelisted_tool_call(
                             update.event.session_id,
                             update.event.id,
@@ -1239,13 +1237,8 @@ impl AutopilotClient {
                     // Skip Whitelist-sourced approvals since those are already handled
                     // by approve_whitelisted_tool_call above.
                     GatewayEventPayload::ToolCallAuthorization(auth)
-                        if matches!(
-                            auth.status,
-                            GatewayToolCallAuthorizationStatus::Approved
-                        ) && !matches!(
-                            auth.source,
-                            ToolCallDecisionSource::Whitelist
-                        ) =>
+                        if matches!(auth.status, GatewayToolCallAuthorizationStatus::Approved)
+                            && !matches!(auth.source, ToolCallDecisionSource::Whitelist) =>
                     {
                         if let Err(e) = self
                             .handle_tool_call_authorization(
