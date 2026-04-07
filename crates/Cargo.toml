@@ -3,6 +3,7 @@ members = [
     "autopilot-client",
     "autopilot-tools",
     "autopilot-worker",
+    "bip39-uuid-substitution",
     "config-applier",
     "durable-tools",
     "durable-tools-spawn",
