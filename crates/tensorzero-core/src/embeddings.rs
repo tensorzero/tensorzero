@@ -3,8 +3,6 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use indexmap::IndexMap;
-
 use crate::cache::{
     CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
     embedding_cache_lookup, start_cache_write,
@@ -38,6 +36,7 @@ use crate::{
     providers::openai::{OpenAIAPIType, OpenAIProvider},
 };
 use futures::future::try_join_all;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tensorzero_stored_config::{
     StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig, StoredExtraBodyConfig,

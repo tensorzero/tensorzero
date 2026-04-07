@@ -7399,6 +7399,7 @@ dependencies = [
  "sqlx",
  "tensorzero-error",
  "tensorzero-types",
+ "thiserror 2.0.18",
  "uuid",
 ]
 

@@ -14,6 +14,7 @@ use tensorzero_core::config::{
     path::ResolvedTomlPathData,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
 use tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams;
 use tensorzero_core::embeddings::UninitializedEmbeddingModelConfig;
 use tensorzero_core::evaluations::UninitializedEvaluationConfig;
@@ -615,4 +616,134 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
     );
     let source_body: String = template_row.get("source_body");
     assert_that!(source_body, eq("Judge this response carefully"));
+}
+
+// ── Tests: read-back via load_config_from_db ──────────────────────────────────
+
+/// Write a representative `UninitializedConfig` covering one singleton, one
+/// named-collection entry of each kind, plus a tool with a prompt template,
+/// and assert that `load_config_from_db` returns those values.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+
+    let model: UninitializedModelConfig = deserialize_from_json(serde_json::json!({
+        "routing": ["dummy_provider"],
+        "providers": {
+            "dummy_provider": {
+                "type": "dummy",
+                "model_name": "dummy-model"
+            }
+        }
+    }));
+    let embedding_model: UninitializedEmbeddingModelConfig =
+        deserialize_from_json(serde_json::json!({
+            "routing": ["embed_provider"],
+            "providers": {
+                "embed_provider": {
+                    "type": "openai",
+                    "model_name": "text-embedding-3-large"
+                }
+            }
+        }));
+    let metric = MetricConfig {
+        r#type: MetricConfigType::Float,
+        optimize: MetricConfigOptimize::Max,
+        level: MetricConfigLevel::Inference,
+        description: Some("Quality score".to_string()),
+    };
+    let tool = UninitializedToolConfig {
+        description: "Look up weather".to_string(),
+        parameters: fake_template(
+            "tools.get_weather.parameters",
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}",
+        ),
+        name: Some("get_weather".to_string()),
+        strict: true,
+    };
+
+    #[expect(deprecated)]
+    let config = UninitializedConfig {
+        clickhouse: Some(ClickHouseConfig {
+            disable_automatic_migrations: Some(true),
+        }),
+        postgres: Some(PostgresConfig {
+            enabled: None,
+            connection_pool_size: Some(17),
+            inference_metadata_retention_days: Some(30),
+            inference_data_retention_days: Some(7),
+        }),
+        object_storage: Some(StorageKind::Disabled),
+        autopilot: Some(AutopilotConfig {
+            tool_whitelist: Some(vec!["ls".to_string(), "cat".to_string()]),
+        }),
+        models: Some(HashMap::from([(
+            std::sync::Arc::<str>::from("model_a"),
+            model.clone(),
+        )])),
+        embedding_models: Some(HashMap::from([(
+            std::sync::Arc::<str>::from("embed_a"),
+            embedding_model.clone(),
+        )])),
+        metrics: Some(HashMap::from([("quality".to_string(), metric.clone())])),
+        tools: Some(HashMap::from([("get_weather".to_string(), tool.clone())])),
+        ..Default::default()
+    };
+
+    postgres
+        .write_stored_config(default_write_params(&config))
+        .await
+        .expect("write should succeed");
+
+    let loaded = load_config_from_db(&pool)
+        .await
+        .expect("DB load should succeed");
+
+    assert_that!(
+        loaded
+            .clickhouse
+            .as_ref()
+            .and_then(|c| c.disable_automatic_migrations),
+        some(eq(true))
+    );
+    assert_that!(
+        loaded
+            .postgres
+            .as_ref()
+            .and_then(|p| p.connection_pool_size),
+        some(eq(17))
+    );
+    assert_that!(
+        loaded.object_storage.as_ref(),
+        some(eq(&StorageKind::Disabled))
+    );
+    assert_that!(
+        loaded
+            .autopilot
+            .as_ref()
+            .and_then(|a| a.tool_whitelist.as_deref()),
+        some(elements_are![eq("ls"), eq("cat")])
+    );
+    assert_that!(
+        loaded
+            .models
+            .as_ref()
+            .and_then(|m| m.get(&std::sync::Arc::<str>::from("model_a"))),
+        some(eq(&model))
+    );
+    assert_that!(
+        loaded
+            .embedding_models
+            .as_ref()
+            .and_then(|m| m.get(&std::sync::Arc::<str>::from("embed_a"))),
+        some(eq(&embedding_model))
+    );
+    assert_that!(
+        loaded.metrics.as_ref().and_then(|m| m.get("quality")),
+        some(eq(&metric))
+    );
+    assert_that!(
+        loaded.tools.as_ref().and_then(|t| t.get("get_weather")),
+        some(eq(&tool))
+    );
 }
