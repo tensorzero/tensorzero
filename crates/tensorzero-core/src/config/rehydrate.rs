@@ -84,12 +84,6 @@ fn resolve_optional_prompt_ref(
         .transpose()
 }
 
-fn config_error(message: impl Into<String>) -> Error {
-    Error::new(ErrorDetails::Config {
-        message: message.into(),
-    })
-}
-
 // ─── Prompt-dependent helper conversions ───────────────────────────────────
 
 fn rehydrate_input_wrappers(
@@ -101,16 +95,10 @@ fn rehydrate_input_wrappers(
         assistant,
         system,
     } = stored;
-    // UninitializedInputWrappers has private fields, so use targeted serde_json round-trip
-    let json = serde_json::json!({
-        "user": resolve_optional_prompt_ref(user.as_ref(), prompts)?,
-        "assistant": resolve_optional_prompt_ref(assistant.as_ref(), prompts)?,
-        "system": resolve_optional_prompt_ref(system.as_ref(), prompts)?,
-    });
-    serde_json::from_value(json).map_err(|e| {
-        config_error(format!(
-            "Failed to deserialize `UninitializedInputWrappers` during rehydration: {e}"
-        ))
+    Ok(UninitializedInputWrappers {
+        user: resolve_optional_prompt_ref(user.as_ref(), prompts)?,
+        assistant: resolve_optional_prompt_ref(assistant.as_ref(), prompts)?,
+        system: resolve_optional_prompt_ref(system.as_ref(), prompts)?,
     })
 }
 

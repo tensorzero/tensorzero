@@ -220,14 +220,19 @@ fn collect_evaluator_prompt_ids(
     };
 
     for evaluator in evaluators.values() {
-        if let StoredEvaluatorConfig::LLMJudge(StoredLLMJudgeConfig {
-            variants: Some(variants),
-            ..
-        }) = evaluator
-        {
-            for variant in variants.values() {
-                collect_llm_judge_prompt_ids(&variant.variant, prompt_ids);
+        match evaluator {
+            StoredEvaluatorConfig::LLMJudge(StoredLLMJudgeConfig {
+                variants: Some(variants),
+                ..
+            }) => {
+                for variant in variants.values() {
+                    collect_llm_judge_prompt_ids(&variant.variant, prompt_ids);
+                }
             }
+            StoredEvaluatorConfig::LLMJudge(_)
+            | StoredEvaluatorConfig::ExactMatch(_)
+            | StoredEvaluatorConfig::ToolUse(_)
+            | StoredEvaluatorConfig::Regex(_) => {}
         }
     }
 }
@@ -730,13 +735,10 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     drop(prompt_tx);
 
     // All snapshot readers have finished, so the leader transaction is no
-    // longer needed. Committing it (vs. dropping it) is just clearer about
-    // intent — there is nothing to roll back.
-    leader_tx.commit().await.map_err(|error| {
-        vec![Error::new(ErrorDetails::Config {
-            message: format!("Failed to commit config snapshot leader transaction: {error}"),
-        })]
-    })?;
+    // longer needed. It is read-only and only existed to keep the exported
+    // snapshot alive, so we just drop it (rolling back implicitly) — there
+    // is nothing to commit.
+    drop(leader_tx);
     let prompts = prompt_rows
         .into_iter()
         .map(|row| {
