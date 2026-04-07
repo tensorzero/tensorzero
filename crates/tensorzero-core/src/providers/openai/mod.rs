@@ -2793,8 +2793,11 @@ pub(super) fn openai_response_tool_call_to_tensorzero_tool_call(
 }
 
 /// Raw helper for deserializing both `reasoning` and `reasoning_content` fields.
-/// vLLM >=0.8 sends both fields simultaneously (typically one null), so we
-/// can't use `#[serde(alias)]` which errors on duplicate keys.
+/// vLLM renamed `reasoning_content` to `reasoning` in v0.8. Between v0.8 and v0.18,
+/// both fields are sent simultaneously (typically one null) for backwards compatibility.
+/// `reasoning_content` was fully removed in v0.19.
+/// We prefer `reasoning` (the new name) and fall back to `reasoning_content`.
+/// We can't use `#[serde(alias)]` because it errors on duplicate keys.
 #[derive(Deserialize)]
 struct OpenAIResponseMessageRaw {
     content: Option<String>,
@@ -2821,7 +2824,7 @@ impl<'de> serde::Deserialize<'de> for OpenAIResponseMessage {
         let raw = OpenAIResponseMessageRaw::deserialize(deserializer)?;
         Ok(OpenAIResponseMessage {
             content: raw.content,
-            reasoning_content: raw.reasoning_content.or(raw.reasoning),
+            reasoning_content: raw.reasoning.or(raw.reasoning_content),
             tool_calls: raw.tool_calls,
         })
     }
@@ -2958,6 +2961,7 @@ struct OpenAIToolCallChunk {
 }
 
 /// Raw helper for deserializing both `reasoning` and `reasoning_content` fields in streaming deltas.
+/// See `OpenAIResponseMessageRaw` for details on the field name transition.
 #[derive(Deserialize)]
 struct OpenAIDeltaRaw {
     content: Option<String>,
@@ -2985,7 +2989,7 @@ impl<'de> serde::Deserialize<'de> for OpenAIDelta {
         let raw = OpenAIDeltaRaw::deserialize(deserializer)?;
         Ok(OpenAIDelta {
             content: raw.content,
-            reasoning_content: raw.reasoning_content.or(raw.reasoning),
+            reasoning_content: raw.reasoning.or(raw.reasoning_content),
             tool_calls: raw.tool_calls,
         })
     }
@@ -6735,7 +6739,7 @@ mod tests {
             serde_json::from_value(json_with_both).expect("should deserialize with both null");
         expect_that!(msg.reasoning_content, none());
 
-        // When both are present, `reasoning_content` takes priority.
+        // When both are present, `reasoning` (new name) takes priority.
         let json_with_both_set = serde_json::json!({
             "content": "Hello",
             "reasoning": "from reasoning",
@@ -6743,10 +6747,7 @@ mod tests {
         });
         let msg: OpenAIResponseMessage =
             serde_json::from_value(json_with_both_set).expect("should deserialize with both set");
-        expect_that!(
-            msg.reasoning_content.as_deref(),
-            some(eq("from reasoning_content"))
-        );
+        expect_that!(msg.reasoning_content.as_deref(), some(eq("from reasoning")));
 
         // When reasoning_content is null but reasoning is set, use reasoning.
         let json_rc_null_r_set = serde_json::json!({
