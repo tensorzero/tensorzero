@@ -1407,6 +1407,23 @@ jobs:
     uses: ./.github/workflows/live-tests.yml
     secrets: inherit
 
+  live-tests-config-in-database:
+    if: ${{ needs.detect-changes.outputs.live-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    needs:
+      [
+        detect-changes,
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-tests-config-in-database.yml
+    secrets: inherit
+
   inference-cache-tests:
     if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     needs:
@@ -1547,6 +1564,7 @@ jobs:
         inference-cache-tests,
         lint-rust,
         live-tests,
+        live-tests-config-in-database,
         k3d,
         mock-optimization-tests,
         mocked-batch-tests,
