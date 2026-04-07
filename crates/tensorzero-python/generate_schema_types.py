@@ -291,6 +291,8 @@ def generate_rust_schemas(cargo_workspace: Path, schema_dir: Path) -> None:
                 "tensorzero-core",
                 "-p",
                 "tensorzero-types",
+                "-p",
+                "tensorzero-inference-types",
                 "export_schema",
             ],
             cwd=cargo_workspace,

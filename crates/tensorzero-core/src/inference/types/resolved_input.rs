@@ -38,7 +38,7 @@ pub struct LazyResolvedInputMessage {
     pub content: Vec<LazyResolvedInputMessageContent>,
 }
 
-pub use tensorzero_provider_types::{FileFuture, FileUrl, LazyFile};
+pub use tensorzero_inference_types::{FileFuture, FileUrl, LazyFile};
 
 pub trait LazyFileExt {
     async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error>;

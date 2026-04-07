@@ -15,10 +15,7 @@ use tensorzero_stored_config::{
     StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
     StoredOpenAIAPIType, StoredProviderConfig,
 };
-use tensorzero_stored_config::{
-    StoredCostConfig, StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredTimeoutsConfig,
-    StoredUnifiedCostConfig,
-};
+use tensorzero_stored_config::{StoredCostConfig, StoredTimeoutsConfig, StoredUnifiedCostConfig};
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{Level, Span, span};
@@ -59,8 +56,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::ExtraBodyConfig;
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_body::{
+    ExtraBodyConfig, extra_body_config_from_stored, extra_body_config_to_stored,
+};
+use crate::inference::types::extra_headers::{
+    ExtraHeadersConfig, extra_headers_config_from_stored, extra_headers_config_to_stored,
+};
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RawResponseEntry, RequestMessage, Thought, Unknown,
@@ -254,8 +255,8 @@ impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
         let batch_cost = stored.batch_cost.map(UninitializedUnifiedCostConfig::from);
         Ok(UninitializedModelProvider {
             config,
-            extra_body: stored.extra_body.map(ExtraBodyConfig::from),
-            extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
+            extra_body: stored.extra_body.map(extra_body_config_from_stored),
+            extra_headers: stored.extra_headers.map(extra_headers_config_from_stored),
             timeouts: stored
                 .timeouts
                 .map(TimeoutsConfig::from)
@@ -1409,11 +1410,11 @@ impl From<&UninitializedModelProvider> for StoredModelProvider {
             extra_body: provider
                 .extra_body
                 .as_ref()
-                .map(StoredExtraBodyConfig::from),
+                .map(extra_body_config_to_stored),
             extra_headers: provider
                 .extra_headers
                 .as_ref()
-                .map(StoredExtraHeadersConfig::from),
+                .map(extra_headers_config_to_stored),
             timeouts: Some(StoredTimeoutsConfig::from(&provider.timeouts)),
             discard_unknown_chunks: Some(provider.discard_unknown_chunks),
             cost: provider.cost.as_ref().map(StoredCostConfig::from),
@@ -3651,7 +3652,7 @@ mod tests {
     use crate::cache::{CacheEnabledMode, CacheManager};
     use crate::config::with_skip_credential_validation;
     use crate::rate_limiting::ScopeInfo;
-    use crate::tool::ToolCallConfig;
+
     use crate::{
         cache::CacheOptions,
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
@@ -3667,6 +3668,7 @@ mod tests {
         rate_limiting::{RateLimitingConfig, RateLimitingManager, UninitializedRateLimitingConfig},
     };
     use secrecy::SecretString;
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tokio_stream::StreamExt;
     use uuid::Uuid;
 
@@ -3701,7 +3703,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -4399,7 +4401,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -4538,7 +4540,7 @@ mod tests {
             skip_relay: false,
             namespace: None,
         };
-        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
+        let tool_config = ProviderToolCallConfig::default();
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

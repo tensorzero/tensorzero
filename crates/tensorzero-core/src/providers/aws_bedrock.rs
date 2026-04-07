@@ -23,7 +23,6 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::InferenceProvider;
-use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
@@ -36,15 +35,16 @@ use crate::inference::types::{
     ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    Role as TensorZeroRole, Text, TextChunk, Usage, batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role as TensorZeroRole, Text, TextChunk,
+    Usage, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
 use crate::model::ModelProvider;
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
-use crate::tool::{
-    FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice,
-};
+use tensorzero_inference_types::FunctionToolDef;
+
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice};
 use tensorzero_types_providers::aws_bedrock::{
     self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
@@ -826,14 +826,14 @@ async fn convert_content_block_to_bedrock(
     }
 }
 
-/// Convert a FunctionToolConfig to a Bedrock Tool
-fn convert_tool(tool_config: &FunctionToolConfig) -> Tool {
+/// Convert a FunctionToolDef to a Bedrock Tool
+fn convert_tool(tool_config: &FunctionToolDef) -> Tool {
     Tool {
         tool_spec: ToolSpec {
-            name: tool_config.name().to_string(),
-            description: tool_config.description().to_string(),
+            name: tool_config.name.clone(),
+            description: tool_config.description.clone(),
             input_schema: ToolInputSchema {
-                json: tool_config.parameters().clone(),
+                json: tool_config.parameters.clone(),
             },
         },
     }

@@ -1418,9 +1418,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.58"
+version = "1.2.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1e928d4b69e3077709075a938a05ffbedfa53a84c8f766efbf8220bb1ff60e1"
+checksum = "b7a4d3ec6524d28a329fc53654bbadc9bdd7b0431f5d65f1a56ffb28a1ee5283"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -2433,7 +2433,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-core",
  "tensorzero-derive",
- "tensorzero-provider-types",
+ "tensorzero-inference-types",
  "tokio",
  "tokio-util",
  "tracing",
@@ -7273,7 +7273,7 @@ dependencies = [
  "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-error",
- "tensorzero-provider-types",
+ "tensorzero-inference-types",
  "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",
@@ -7327,6 +7327,31 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "tracing-opentelemetry",
+ "ts-rs",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tensorzero-inference-types"
+version = "2026.4.0"
+dependencies = [
+ "derive_builder 0.20.2",
+ "futures",
+ "googletest",
+ "mime 0.4.0-a.0",
+ "pyo3",
+ "rust_decimal",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sqlx",
+ "tensorzero-derive",
+ "tensorzero-error",
+ "tensorzero-types",
+ "tensorzero-types-providers",
+ "tracing",
  "ts-rs",
  "url",
  "uuid",
@@ -7397,26 +7422,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "ts-rs",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "tensorzero-provider-types"
-version = "2026.4.0"
-dependencies = [
- "futures",
- "mime 0.4.0-a.0",
- "rust_decimal",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "sqlx",
- "tensorzero-derive",
- "tensorzero-error",
- "tensorzero-types",
- "tensorzero-types-providers",
  "ts-rs",
  "url",
  "uuid",
@@ -9003,9 +9008,9 @@ dependencies = [
 
 [[package]]
 name = "writeable"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
+checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 
 [[package]]
 name = "wyz"

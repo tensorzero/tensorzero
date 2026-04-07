@@ -745,10 +745,7 @@ impl RenderedSample {
 
     #[getter]
     pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.tool_params
-            .provider_tools
-            .clone()
-            .into_bound_py_any(py)
+        serialize_to_dict(py, &self.tool_params.provider_tools).map(|x| x.into_bound(py))
     }
 
     #[getter]

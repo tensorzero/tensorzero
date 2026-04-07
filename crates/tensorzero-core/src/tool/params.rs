@@ -5,6 +5,8 @@
 //! - `BatchDynamicToolParams` - Batch version for multiple inferences
 
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::serialize_to_dict;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -141,8 +143,8 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn provider_tools(&self) -> Vec<ProviderTool> {
-        self.provider_tools.clone()
+    pub fn provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, &self.provider_tools).map(|x| x.into_bound(py))
     }
 
     pub fn __repr__(&self) -> String {

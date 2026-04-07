@@ -48,6 +48,7 @@ use crate::{
     },
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
+use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
 
 use super::openai::{
@@ -668,6 +669,19 @@ impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
     }
 }
 
+impl<'a> From<&'a FunctionToolDef> for MistralTool<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
+        MistralTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
+            },
+        }
+    }
+}
+
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to Mistral format
 pub(super) fn prepare_mistral_tools<'a>(
@@ -1080,8 +1094,9 @@ mod tests {
     use googletest::prelude::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
-    use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
     use crate::tool::{AllowedTools, ToolCallConfig};
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types_providers::mistral::{
         MistralChatChunkChoice, MistralDelta, MistralResponseFunctionCall, MistralResponseMessage,
         MistralThinkingSubChunk,
@@ -1103,7 +1118,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1158,6 +1173,7 @@ mod tests {
             },
         };
 
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1173,7 +1189,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1211,6 +1227,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1226,7 +1243,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1264,6 +1281,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1279,7 +1297,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1315,6 +1333,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1330,7 +1349,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1371,7 +1390,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1435,7 +1454,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1533,7 +1552,7 @@ mod tests {
             frequency_penalty: Some(0.1),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

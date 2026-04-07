@@ -17,8 +17,6 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
-use crate::inference::types::ProviderInferenceResponseArgs;
-use crate::inference::types::Usage;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
@@ -27,8 +25,8 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Usage,
     batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, ModelProvider};
@@ -45,7 +43,6 @@ use crate::tool::ToolCallChunk;
 use serde_json::Value;
 use tensorzero_types_providers::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
-    DeepSeekUsage,
 };
 use uuid::Uuid;
 
@@ -557,7 +554,7 @@ fn deepseek_to_tensorzero_chunk(
             usage,
         )
     });
-    let usage = chunk.usage.map(deepseek_usage_into_usage);
+    let usage = chunk.usage.map(Into::into);
     let mut content = vec![];
     let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
@@ -734,7 +731,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 usage,
             )
         });
-        let usage = deepseek_usage_into_usage(response.usage);
+        let usage = Usage::from(response.usage);
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -828,18 +825,6 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
     result
 }
 
-fn deepseek_usage_into_usage(usage: DeepSeekUsage) -> Usage {
-    Usage {
-        input_tokens: usage.prompt_tokens,
-        output_tokens: usage.completion_tokens,
-        provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
-        // DeepSeek's `prompt_cache_miss_tokens` = tokens not in cache, which are
-        // written to cache for future requests, so we map miss → write.
-        provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
-        cost: None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -848,6 +833,7 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
+    use crate::inference::types::Usage;
     use crate::inference::types::{
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -858,8 +844,8 @@ mod tests {
     use crate::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
     };
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use tensorzero_types_providers::deepseek::DeepSeekResponseMessage;
+    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use tensorzero_types_providers::deepseek::{DeepSeekResponseMessage, DeepSeekUsage};
     use tensorzero_types_providers::openai::OpenAIFinishReason;
 
     #[tokio::test]
@@ -879,7 +865,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -929,7 +915,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: Default::default(),
@@ -1503,7 +1489,7 @@ mod tests {
             prompt_cache_miss_tokens: Some(20),
         };
 
-        let usage: Usage = deepseek_usage_into_usage(deepseek_usage);
+        let usage: Usage = Usage::from(deepseek_usage);
 
         expect_that!(usage.input_tokens, eq(Some(100)));
         expect_that!(usage.output_tokens, eq(Some(50)));

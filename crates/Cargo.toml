@@ -31,7 +31,7 @@ members = [
     "tensorzero-types",
     "tensorzero-types-providers",
     "tensorzero-error",
-    "tensorzero-provider-types",
+    "tensorzero-inference-types",
     "tensorzero-unsafe-helpers",
 ]
 resolver = "2"
@@ -139,6 +139,7 @@ walkdir = "2.5.0"
 tempfile = "3.27.0"
 toml_edit = "0.25"
 googletest = "0.14.2"
+derive_builder = "0.20.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

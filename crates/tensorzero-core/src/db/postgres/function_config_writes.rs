@@ -6,16 +6,15 @@ use tensorzero_stored_config::{
     StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
     StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredChatFunctionConfig,
     StoredDiclVariantConfig, StoredEvaluatorConfig, StoredExactMatchConfig,
-    StoredExperimentationConfig, StoredExperimentationConfigWithNamespaces, StoredExtraBodyConfig,
-    StoredExtraHeadersConfig, StoredFunctionConfig, StoredInputWrappers, StoredJsonFunctionConfig,
-    StoredLLMJudgeBestOfNVariantConfig, StoredLLMJudgeChainOfThoughtVariantConfig,
-    StoredLLMJudgeChatCompletionVariantConfig, StoredLLMJudgeConfig,
-    StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat,
-    StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
-    StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
-    StoredPromptRef, StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig,
-    StoredTimeoutsConfig, StoredToolChoice, StoredToolUseConfig, StoredVariantConfig,
-    StoredVariantRef, StoredVariantVersionConfig,
+    StoredExperimentationConfig, StoredExperimentationConfigWithNamespaces, StoredFunctionConfig,
+    StoredInputWrappers, StoredJsonFunctionConfig, StoredLLMJudgeBestOfNVariantConfig,
+    StoredLLMJudgeChainOfThoughtVariantConfig, StoredLLMJudgeChatCompletionVariantConfig,
+    StoredLLMJudgeConfig, StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig,
+    StoredLLMJudgeInputFormat, StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize,
+    StoredLLMJudgeOutputType, StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo,
+    StoredMixtureOfNVariantConfig, StoredPromptRef, StoredRegexConfig, StoredRetryConfig,
+    StoredStaticExperimentationConfig, StoredTimeoutsConfig, StoredToolChoice, StoredToolUseConfig,
+    StoredVariantConfig, StoredVariantRef, StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -36,6 +35,8 @@ use crate::experimentation::{
     UninitializedExperimentationConfig, UninitializedExperimentationConfigWithNamespaces,
     track_and_stop::UninitializedTrackAndStopExperimentationConfig,
 };
+use crate::inference::types::extra_body::extra_body_config_to_stored;
+use crate::inference::types::extra_headers::extra_headers_config_to_stored;
 use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::{
     UninitializedChatCompletionConfig, UninitializedInputWrappers,
@@ -800,11 +801,11 @@ fn convert_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
+        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(StoredExtraHeadersConfig::from),
+            .map(extra_headers_config_to_stored),
     })
 }
 
@@ -858,11 +859,11 @@ fn convert_dicl_variant(
         verbosity: config.verbosity.clone(),
         max_distance: config.max_distance,
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
+        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(StoredExtraHeadersConfig::from),
+            .map(extra_headers_config_to_stored),
     })
 }
 
@@ -995,11 +996,11 @@ fn convert_llm_judge_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
+        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(StoredExtraHeadersConfig::from),
+            .map(extra_headers_config_to_stored),
     })
 }
 
@@ -1057,12 +1058,12 @@ fn convert_llm_judge_dicl_variant(
         seed: config.seed,
         json_mode: config.json_mode,
         stop_sequences: config.stop_sequences.clone(),
-        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
+        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
         retries: Some(StoredRetryConfig::from(config.retries)),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(StoredExtraHeadersConfig::from),
+            .map(extra_headers_config_to_stored),
     })
 }
 

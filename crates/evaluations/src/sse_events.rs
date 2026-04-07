@@ -152,7 +152,7 @@ mod tests {
         cost: Option<Decimal>,
         processing_time_ms: f64,
     ) -> EvaluationInfo {
-        let usage = tensorzero_provider_types::Usage {
+        let usage = tensorzero_inference_types::Usage {
             input_tokens,
             output_tokens,
             cost,

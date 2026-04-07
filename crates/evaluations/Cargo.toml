@@ -34,7 +34,7 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
-tensorzero-provider-types = { path = "../tensorzero-provider-types" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero = { path = "../tensorzero-client", features = ["e2e_tests"] }
 googletest = { workspace = true }
 
