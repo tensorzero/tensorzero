@@ -39,8 +39,10 @@ pub async fn compute_deployment_context(
     let database = app_state.get_delegating_database();
 
     let (functions, metrics, evaluations) = build_config_data(config);
-    let feedback_by_function = build_feedback_data(config, &database).await;
-    let datasets = build_dataset_data(&database).await;
+    let (feedback_by_function, datasets) = tokio::join!(
+        build_feedback_data(config, &database),
+        build_dataset_data(&database)
+    );
 
     Ok(DeploymentContext {
         functions,
