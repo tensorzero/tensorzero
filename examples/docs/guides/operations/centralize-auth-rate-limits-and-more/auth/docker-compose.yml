@@ -3,17 +3,18 @@
 
 services:
   postgres:
-    image: postgres:17
+    image: tensorzero/postgres:14
     environment:
       POSTGRES_DB: tensorzero
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: pg_isready -U postgres
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero-e2e-tests"]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
