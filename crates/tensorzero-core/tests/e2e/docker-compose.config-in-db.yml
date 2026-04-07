@@ -1,0 +1,45 @@
+# Override for docker-compose.live.yml that runs the live gateway against the
+# config-in-database read path instead of a --config-file glob.
+#
+# Usage:
+#   docker compose -f docker-compose.live.yml -f docker-compose.config-in-db.yml ...
+#
+# This override:
+#   1. Adds a one-shot `gateway-store-config` service that loads the same config
+#      glob used by the Postgres live-tests matrix (`{tensorzero,postgres}.*.toml`)
+#      into the stored_config tables via `gateway --store-config`.
+#   2. Rewires the main `gateway` service to boot from the database instead of a
+#      config file glob by clearing its `command` list and setting
+#      `TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE=true`.
+
+services:
+  gateway-store-config:
+    image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero-e2e-tests}
+    volumes:
+      - ./:/app/tensorzero-core/tests/e2e:ro
+      - ../../fixtures:/app/tensorzero-core/fixtures:ro
+      - ../../../../ui/fixtures:/app/ui/fixtures:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+    command:
+      [
+        --store-config,
+        "tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml",
+      ]
+    restart: "no"
+
+  gateway:
+    environment:
+      TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE: "true"
+    # Clear the `--config-file` args from docker-compose.live.yml so the gateway
+    # loads from Postgres instead. main.rs falls through to the DB load path
+    # when no config flag is set and the feature flag is enabled.
+    command: []
+    depends_on:
+      gateway-store-config:
+        condition: service_completed_successfully
