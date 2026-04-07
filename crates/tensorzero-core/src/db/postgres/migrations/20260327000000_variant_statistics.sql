@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS tensorzero.variant_statistics_refresh_state (
 );
 
 -- Initialize watermark at the current tail to avoid a full-table first refresh.
+-- This means historical data is NOT backfilled into variant_statistics —
+-- only new inferences created after this migration will be aggregated.
+-- To backfill, call: SELECT tensorzero.refresh_variant_statistics_incremental(full_refresh => TRUE);
 -- We use the latest created_at from both chat_inferences and json_inferences.
 INSERT INTO tensorzero.variant_statistics_refresh_state (
     singleton,
