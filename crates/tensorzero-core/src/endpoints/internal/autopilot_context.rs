@@ -26,8 +26,15 @@ use crate::evaluations::EvaluationConfig;
 use crate::function::FunctionConfig;
 use crate::utils::gateway::ResolvedAppStateData;
 
-/// Maximum time to spend fetching feedback data across all functions.
-const FEEDBACK_TIMEOUT: Duration = Duration::from_secs(5);
+/// Maximum time to spend on any single category of DB prefetch queries.
+const PREFETCH_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Maximum number of functions to include in feedback prefetch queries.
+/// Caps the Cartesian product of functions × metrics to avoid query fan-out.
+const MAX_FEEDBACK_FUNCTIONS: usize = 10;
+
+/// Maximum number of metrics to include in feedback prefetch queries.
+const MAX_FEEDBACK_METRICS: usize = 10;
 
 /// Compute a structured deployment context from the current app state.
 ///
@@ -50,9 +57,11 @@ async fn compute_deployment_context_inner(
     inference_db: &(dyn InferenceQueries + Send + Sync),
 ) -> Result<DeploymentContext, Error> {
     let (functions, metrics, evaluations) = build_config_data(config);
-    let feedback_by_function = build_feedback_data(config, feedback_db).await;
-    let datasets = build_dataset_data(dataset_db).await;
-    let inference_counts_by_function = build_inference_count_data(inference_db).await;
+    let (feedback_by_function, datasets, inference_counts_by_function) = tokio::join!(
+        build_feedback_data(config, feedback_db),
+        build_dataset_data(dataset_db),
+        build_inference_count_data(inference_db),
+    );
 
     Ok(DeploymentContext {
         functions,
@@ -161,11 +170,20 @@ async fn build_feedback_data(
         return Vec::new();
     }
 
-    // Build list of (function_name, metric_name) pairs to query
+    // Build list of (function_name, metric_name) pairs to query.
+    // HACK: We truncate to MAX_FEEDBACK_FUNCTIONS × MAX_FEEDBACK_METRICS to avoid
+    // unbounded query fan-out on large configs. A proper fix would be a single batched
+    // query, but this is good enough for now.
+    let func_names: Vec<_> = config
+        .functions
+        .keys()
+        .take(MAX_FEEDBACK_FUNCTIONS)
+        .collect();
+    let metric_names: Vec<_> = config.metrics.keys().take(MAX_FEEDBACK_METRICS).collect();
     let mut queries: Vec<(String, String)> = Vec::new();
-    for func_name in config.functions.keys() {
-        for metric_name in config.metrics.keys() {
-            queries.push((func_name.clone(), metric_name.clone()));
+    for func_name in &func_names {
+        for metric_name in &metric_names {
+            queries.push(((*func_name).clone(), (*metric_name).clone()));
         }
     }
 
@@ -184,7 +202,7 @@ async fn build_feedback_data(
         })
         .collect();
 
-    let results = match timeout(FEEDBACK_TIMEOUT, join_all(futures)).await {
+    let results = match timeout(PREFETCH_TIMEOUT, join_all(futures)).await {
         Ok(results) => results,
         Err(_) => {
             tracing::warn!("Feedback queries timed out during deployment context computation");
@@ -268,7 +286,17 @@ async fn build_dataset_data(
         offset: None,
     };
 
-    match database.get_dataset_metadata(&params).await {
+    let result = match timeout(PREFETCH_TIMEOUT, database.get_dataset_metadata(&params)).await {
+        Ok(result) => result,
+        Err(_) => {
+            tracing::warn!(
+                "Dataset metadata query timed out during deployment context computation"
+            );
+            return Vec::new();
+        }
+    };
+
+    match result {
         Ok(datasets) => datasets
             .into_iter()
             .map(|ds| DeploymentContextDataset {
@@ -287,7 +315,20 @@ async fn build_dataset_data(
 async fn build_inference_count_data(
     database: &(dyn InferenceQueries + Send + Sync),
 ) -> Vec<DeploymentContextFunctionInferenceCount> {
-    match database.list_functions_with_inference_count().await {
+    let result = match timeout(
+        PREFETCH_TIMEOUT,
+        database.list_functions_with_inference_count(),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            tracing::warn!("Inference count query timed out during deployment context computation");
+            return Vec::new();
+        }
+    };
+
+    match result {
         Ok(counts) => counts
             .into_iter()
             .map(|c| DeploymentContextFunctionInferenceCount {
