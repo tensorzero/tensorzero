@@ -48,7 +48,7 @@ use crate::error::{Error, ErrorDetails};
 /// This is typically created during config loading and then written to the database:
 ///
 /// ```ignore
-/// // During config loading (in Config::load_from_toml)
+/// // During config loading (in Config::load_unwritten_config)
 /// let snapshot = ConfigSnapshot::new(sorted_table, extra_templates)?;
 ///
 /// // Later, after database connection is established

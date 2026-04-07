@@ -15,7 +15,7 @@ use crate::{
 async fn test_config_from_toml_table_valid() {
     let config = get_sample_valid_config();
 
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to load config");
 
@@ -24,7 +24,7 @@ async fn test_config_from_toml_table_valid() {
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to load config");
 
@@ -279,9 +279,11 @@ async fn test_config_gateway_bind_address() {
 
     // Test with a valid bind address
 
-    let parsed_config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.clone())))
-        .await
-        .unwrap();
+    let parsed_config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.clone(),
+    )))
+    .await
+    .unwrap();
     assert_eq!(
         parsed_config.gateway.bind_address.unwrap().to_string(),
         "0.0.0.0:3000"
@@ -289,9 +291,11 @@ async fn test_config_gateway_bind_address() {
 
     // Test with missing gateway section
     config.remove("gateway");
-    let parsed_config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.clone())))
-        .await
-        .unwrap();
+    let parsed_config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.clone(),
+    )))
+    .await
+    .unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with missing bind_address
@@ -299,9 +303,11 @@ async fn test_config_gateway_bind_address() {
         "gateway".to_string(),
         toml::Value::Table(toml::Table::new()),
     );
-    let parsed_config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.clone())))
-        .await
-        .unwrap();
+    let parsed_config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.clone(),
+    )))
+    .await
+    .unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with invalid bind address
@@ -309,7 +315,7 @@ async fn test_config_gateway_bind_address() {
         "bind_address".to_string(),
         toml::Value::String("invalid_address".to_string()),
     );
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -334,7 +340,7 @@ async fn test_config_from_toml_table_missing_models() {
         .retain(|k, _| k == "generate_draft");
 
     assert_eq!(
-        Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+        Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
             .await
             .unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -353,7 +359,7 @@ async fn test_config_from_toml_table_missing_providers() {
         .remove("providers")
         .expect("Failed to remove `[providers]` section");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -436,9 +442,11 @@ async fn test_config_from_toml_table_missing_credentials() {
         }),
     );
 
-    let error = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.clone())))
-        .await
-        .unwrap_err();
+    let error = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.clone(),
+    )))
+    .await
+    .unwrap_err();
     assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
@@ -456,7 +464,7 @@ async fn test_config_from_toml_table_nonexistent_function() {
         .remove("functions")
         .expect("Failed to remove `[functions]` section");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -478,7 +486,7 @@ async fn test_config_from_toml_table_missing_variants() {
         .remove("variants")
         .expect("Failed to remove `[variants]` section");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -494,7 +502,7 @@ async fn test_config_from_toml_table_extra_variables_root() {
     let mut config = get_sample_valid_config();
     config.insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -512,7 +520,7 @@ async fn test_config_from_toml_table_extra_variables_models() {
         .expect("Failed to get `models.claude-haiku-4-5` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -536,7 +544,7 @@ async fn test_config_from_toml_table_blacklisted_models() {
         .expect("Failed to get `models` section")
         .insert("anthropic::claude-haiku-4-5".into(), claude_config);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
     assert!(
         error.contains(
@@ -555,7 +563,7 @@ async fn test_config_from_toml_table_extra_variables_providers() {
         .expect("Failed to get `models.claude-haiku-4-5.providers.anthropic` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -573,7 +581,7 @@ async fn test_config_from_toml_table_extra_variables_functions() {
         .expect("Failed to get `functions.generate_draft` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -591,7 +599,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         .expect("Failed to get `functions.generate_draft` section")
         .remove("output_schema");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     let config = result.unwrap();
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
@@ -611,7 +619,7 @@ async fn test_config_from_toml_table_extra_variables_variants() {
         .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -629,7 +637,7 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
         .expect("Failed to get `metrics.task_success` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(
         result
             .unwrap_err()
@@ -644,7 +652,7 @@ async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec![]);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err();
     assert!(
         error
@@ -659,7 +667,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-5-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     let error = result.unwrap_err().to_string();
     assert!(error.contains("`models.gpt-5-mini.routing`: duplicate entry `openai`"));
 }
@@ -669,7 +677,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-5-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
@@ -688,7 +696,10 @@ async fn test_config_system_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -708,7 +719,10 @@ async fn test_config_system_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -732,7 +746,10 @@ async fn test_config_user_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -752,7 +769,10 @@ async fn test_config_user_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -776,7 +796,10 @@ async fn test_config_assistant_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -796,7 +819,10 @@ async fn test_config_assistant_schema_does_not_exist() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     let error = result.unwrap_err();
     if let ErrorDetails::JsonSchema { message } = error.get_details() {
         assert!(message.contains("expected value") || message.contains("invalid type"));
@@ -825,7 +851,10 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("experimentation");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -838,7 +867,10 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("system_schema");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -864,7 +896,10 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("experimentation");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -878,7 +913,10 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("user_schema");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -905,7 +943,10 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("experimentation");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -918,7 +959,10 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("assistant_schema");
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -943,7 +987,10 @@ async fn test_config_best_of_n_candidate_not_found() {
             toml::Value::Array(vec!["non_existent_candidate".into()]),
         );
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(sample_config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        sample_config,
+    )))
+    .await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::UnknownCandidate {
@@ -967,7 +1014,7 @@ async fn test_config_validate_function_variant_negative_weight() {
         .unwrap()
         .insert("weight".into(), toml::Value::Float(-1.0));
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -986,7 +1033,7 @@ async fn test_config_validate_variant_model_not_in_models() {
     config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
         "non_existent_model".into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     assert_eq!(
         result.unwrap_err(),
@@ -1015,7 +1062,7 @@ async fn test_config_validate_variant_template_nonexistent() {
     .collect::<toml::Table>()
     .into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     // With eager loading, this should now fail during template parsing
     let error = result.unwrap_err();
@@ -1036,7 +1083,7 @@ async fn test_config_validate_evaluation_function_nonexistent() {
     let mut config = get_sample_valid_config();
     config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1061,7 +1108,7 @@ async fn test_config_validate_evaluation_name_contains_double_colon() {
         .unwrap()
         .insert("bad::evaluation".to_string(), evaluation1);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1085,7 +1132,7 @@ async fn test_config_validate_function_nonexistent_tool() {
     config["functions"]["generate_draft"]["tools"] =
         toml::Value::Array(vec!["non_existent_tool".into()]);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1111,7 +1158,7 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_function".to_string(), old_function_entry);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1137,7 +1184,7 @@ async fn test_config_validate_metric_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_metric".to_string(), old_metric_entry);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1163,7 +1210,7 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_model".to_string(), old_model_entry);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1189,7 +1236,7 @@ async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
         old_embedding_model_entry,
     );
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
@@ -1217,7 +1264,7 @@ async fn test_config_validate_tool_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_tool".to_string(), old_tool_entry);
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1236,7 +1283,7 @@ async fn test_config_validate_chat_function_json_mode() {
         .unwrap()
         .insert("json_mode".to_string(), "on".into());
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     // Check that the config is rejected, since `generate_draft` is not a json function
     let err_msg = result.unwrap_err().to_string();
@@ -1271,7 +1318,7 @@ async fn test_config_validate_variant_name_tensorzero_prefix() {
 
     // This test will only pass if your code actually rejects variant names with that prefix
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     // Adjust the expected message if your code gives a different error shape for variants
     // Or remove this test if variant names are *not* validated in that manner
@@ -1309,7 +1356,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
         }
     }
 
-    let result = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))).await;
+    let result = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))).await;
 
     assert!(result.unwrap_err().to_string().contains("`models.gpt-5-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
@@ -1318,9 +1365,11 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 #[tokio::test]
 async fn test_get_all_templates() {
     let config_table = get_sample_valid_config();
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config_table)))
-        .await
-        .expect("Failed to load config");
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config_table,
+    )))
+    .await
+    .expect("Failed to load config");
 
     // Get all templates
     let templates = Config::get_templates(&config.functions).unwrap();
@@ -1528,7 +1577,7 @@ async fn test_load_bad_extra_body_delete() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config loading should fail")
         .to_string();
@@ -1555,7 +1604,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config loading should fail")
         .to_string();
@@ -1604,9 +1653,11 @@ async fn test_config_load_shorthand_models_only() {
     tensorzero_unsafe_helpers::set_env_var_tests_only("ANTHROPIC_API_KEY", "sk-something");
     tensorzero_unsafe_helpers::set_env_var_tests_only("AZURE_API_KEY", "sk-something");
 
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect("Failed to load config");
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect("Failed to load config");
 }
 
 #[tokio::test]
@@ -1673,7 +1724,7 @@ async fn test_model_provider_unknown_field() {
 
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
     assert!(
@@ -1716,7 +1767,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
@@ -1747,7 +1798,7 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Expected error when SDK cannot determine region");
     let err_msg = err.to_string();
@@ -1781,7 +1832,7 @@ async fn test_bedrock_region_and_allow_auto() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to construct config with valid AWS Bedrock provider");
 }
@@ -1801,7 +1852,7 @@ async fn test_bedrock_dynamic_region_parses() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // Should parse successfully - dynamic region is valid
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Dynamic region should be valid config");
 }
@@ -1820,7 +1871,7 @@ async fn test_bedrock_env_region_missing_var_errors() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Should error when env var doesn't exist");
     let err_msg = err.to_string();
@@ -1846,7 +1897,7 @@ async fn test_bedrock_dynamic_credentials_parses() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // Should parse successfully - dynamic credentials are valid
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Dynamic credentials should be valid config");
 }
@@ -1868,7 +1919,7 @@ async fn test_bedrock_dynamic_credentials_with_session_token_parses() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // Should parse successfully - dynamic credentials with session token are valid
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Dynamic credentials with session token should be valid config");
 }
@@ -1888,7 +1939,7 @@ async fn test_bedrock_mixed_credential_sources_errors() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Mixed credential sources should error");
     let err_msg = err.to_string();
@@ -1912,7 +1963,7 @@ async fn test_bedrock_access_key_without_secret_errors() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("access_key without secret should error");
     let err_msg = err.to_string();
@@ -1938,7 +1989,7 @@ async fn test_bedrock_session_token_mismatch_errors() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Session token source mismatch should error");
     let err_msg = err.to_string();
@@ -1963,7 +2014,7 @@ async fn test_bedrock_dynamic_endpoint_url_parses() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // Should parse successfully - dynamic endpoint is valid
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Dynamic endpoint_url should be valid config");
 }
@@ -1983,7 +2034,7 @@ async fn test_bedrock_static_endpoint_url_parses() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // Should parse successfully - static endpoint is valid
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Static endpoint_url should be valid config");
 }
@@ -2096,7 +2147,7 @@ async fn test_config_object_storage_endpoint_env_var_resolves() {
             [functions]"#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Env-backed object storage endpoint should be valid config");
     let object_store_info = config
@@ -2127,7 +2178,7 @@ async fn test_config_object_storage_endpoint_env_var_missing_errors() {
             [functions]"#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Should error when the object storage endpoint env var is missing");
     let err_msg = err.to_string();
@@ -2150,7 +2201,7 @@ async fn test_config_object_storage_endpoint_dynamic_rejected() {
             [functions]"#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Dynamic object storage endpoints should be rejected");
     let err_msg = err.to_string();
@@ -2348,7 +2399,7 @@ async fn test_missing_json_mode_chat() {
     let err = SKIP_CREDENTIAL_VALIDATION
         .scope(
             (),
-            Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))),
+            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
         )
         .await
         .unwrap_err();
@@ -2392,7 +2443,7 @@ async fn test_missing_json_mode_dicl() {
     let err = SKIP_CREDENTIAL_VALIDATION
         .scope(
             (),
-            Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))),
+            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
         )
         .await
         .unwrap_err();
@@ -2437,7 +2488,7 @@ async fn test_missing_json_mode_mixture_of_n() {
     let err = SKIP_CREDENTIAL_VALIDATION
         .scope(
             (),
-            Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))),
+            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
         )
         .await
         .unwrap_err();
@@ -2484,7 +2535,7 @@ async fn test_missing_json_mode_best_of_n() {
     SKIP_CREDENTIAL_VALIDATION
         .scope(
             (),
-            Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))),
+            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
         )
         .await
         .expect("Config should load successfully with missing evaluator json_mode");
@@ -2550,7 +2601,7 @@ async fn test_gcp_no_endpoint_and_model() {
     let err = SKIP_CREDENTIAL_VALIDATION
         .scope(
             (),
-            Box::pin(Config::load_from_toml(ConfigInput::Fresh(config))),
+            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
         )
         .await
         .unwrap_err();
@@ -2593,9 +2644,11 @@ async fn test_config_duplicate_user_schema() {
         false,
     )
     .unwrap();
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect_err("Config should fail to load");
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect_err("Config should fail to load");
 
     assert_eq!(
         err.to_string(),
@@ -2632,9 +2685,11 @@ async fn test_config_named_schema_no_template() {
         false,
     )
     .unwrap();
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect_err("Config should fail to load");
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect_err("Config should fail to load");
 
     assert_eq!(
         err.to_string(),
@@ -2669,9 +2724,11 @@ async fn test_config_duplicate_user_template() {
         false,
     )
     .unwrap();
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect_err("Config should fail to load");
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect_err("Config should fail to load");
 
     assert_eq!(
         err.to_string(),
@@ -2705,9 +2762,11 @@ async fn test_config_invalid_template_no_schema() {
         false,
     )
     .unwrap();
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect_err("Config should fail to load");
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect_err("Config should fail to load");
 
     assert_eq!(
         err.to_string(),
@@ -2728,7 +2787,7 @@ async fn deny_timeout_with_default_global_timeout() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
 
@@ -2752,7 +2811,7 @@ async fn deny_timeout_with_non_default_global_timeout() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
 
@@ -2775,7 +2834,7 @@ async fn deny_bad_timeout_fields() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
 
@@ -2798,7 +2857,7 @@ async fn deny_bad_timeouts_non_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
 
@@ -2955,7 +3014,7 @@ async fn deny_bad_timeouts_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect_err("Config should fail to load");
 
@@ -3183,9 +3242,11 @@ async fn test_config_schema_missing_template() {
         false,
     )
     .unwrap();
-    let err = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config.table)))
-        .await
-        .expect_err("Config should fail to load");
+    let err = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config.table,
+    )))
+    .await
+    .expect_err("Config should fail to load");
 
     assert_eq!(
         err.to_string(),
@@ -3425,7 +3486,7 @@ fn test_glob_star_does_not_cross_directories() {
 async fn test_built_in_functions_loaded() {
     // Load a minimal config (empty table)
     let config = toml::Table::new();
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to load config");
 
@@ -3465,9 +3526,9 @@ async fn test_database_config_input_loads_via_shared_pipeline() {
         .map(HashMap::len)
         .unwrap_or(0);
 
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Database(Box::new(
-        uninitialized,
-    ))))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Database(
+        Box::new(uninitialized),
+    )))
     .await
     .expect("database config input should load successfully");
 
@@ -3489,7 +3550,7 @@ async fn test_database_config_input_loads_via_shared_pipeline() {
 #[tokio::test]
 async fn test_get_built_in_function() {
     let config = toml::Table::new();
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to load config");
 
@@ -3503,7 +3564,7 @@ async fn test_get_built_in_function() {
 async fn test_built_in_and_user_functions_coexist() {
     let config = get_sample_valid_config();
 
-    let config = Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Failed to load config");
 
@@ -3605,7 +3666,7 @@ async fn test_relay_warns_models_without_skip_relay() {
     "#;
 
     let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Config should load successfully");
     assert!(
@@ -3631,7 +3692,7 @@ async fn test_relay_no_warn_when_skip_relay_set() {
     "#;
 
     let config: toml::Table = toml::from_str(config_str).expect("Failed to parse config");
-    Box::pin(Config::load_from_toml(ConfigInput::Fresh(config)))
+    Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config)))
         .await
         .expect("Config should load successfully");
     assert!(
