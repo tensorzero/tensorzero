@@ -277,6 +277,8 @@ fn make_json_inference(
 
 fn make_model_inference(
     inference_id: uuid::Uuid,
+    function_name: &str,
+    variant_name: &str,
     input_tokens: Option<u32>,
     output_tokens: Option<u32>,
     cost: Option<Decimal>,
@@ -284,8 +286,8 @@ fn make_model_inference(
     StoredModelInference {
         id: uuid::Uuid::now_v7(),
         inference_id,
-        function_name: "test_function".to_string(),
-        variant_name: "test_variant".to_string(),
+        function_name: function_name.to_string(),
+        variant_name: variant_name.to_string(),
         raw_request: Some("{}".to_string()),
         raw_response: Some("{}".to_string()),
         system: None,
@@ -310,11 +312,20 @@ fn make_model_inference(
 fn make_model_inference_at(
     ts: uuid::Timestamp,
     inference_id: uuid::Uuid,
+    function_name: &str,
+    variant_name: &str,
     input_tokens: Option<u32>,
     output_tokens: Option<u32>,
     cost: Option<Decimal>,
 ) -> StoredModelInference {
-    let mut mi = make_model_inference(inference_id, input_tokens, output_tokens, cost);
+    let mut mi = make_model_inference(
+        inference_id,
+        function_name,
+        variant_name,
+        input_tokens,
+        output_tokens,
+        cost,
+    );
     mi.id = uuid::Uuid::new_v7(ts);
     mi
 }
@@ -374,11 +385,32 @@ async fn test_variant_statistics_basic_aggregation(
         make_chat_inference(chat2_id, &function_name, variant_name, Some(200), Some(75)),
     ];
     let models = vec![
-        make_model_inference(chat1_id, Some(100), Some(50), Some(Decimal::new(500, 6))),
+        make_model_inference(
+            chat1_id,
+            &function_name,
+            variant_name,
+            Some(100),
+            Some(50),
+            Some(Decimal::new(500, 6)),
+        ),
         // Retry for same chat inference
-        make_model_inference(chat1_id, Some(200), Some(100), Some(Decimal::new(1500, 6))),
+        make_model_inference(
+            chat1_id,
+            &function_name,
+            variant_name,
+            Some(200),
+            Some(100),
+            Some(Decimal::new(1500, 6)),
+        ),
         // Second chat inference — no cost
-        make_model_inference(chat2_id, Some(300), Some(150), None),
+        make_model_inference(
+            chat2_id,
+            &function_name,
+            variant_name,
+            Some(300),
+            Some(150),
+            None,
+        ),
     ];
 
     insert_and_prepare(&conn, &chats, &[], &models).await;
@@ -439,14 +471,42 @@ async fn test_variant_statistics_multiple_variants(
 
     let models = vec![
         // Variant A
-        make_model_inference(a1, Some(10), Some(5), Some(Decimal::new(100, 6))),
-        make_model_inference(a2, Some(20), Some(10), Some(Decimal::new(200, 6))),
-        make_model_inference(a3, Some(30), Some(15), Some(Decimal::new(300, 6))),
+        make_model_inference(
+            a1,
+            &function_name,
+            "variant-a",
+            Some(10),
+            Some(5),
+            Some(Decimal::new(100, 6)),
+        ),
+        make_model_inference(
+            a2,
+            &function_name,
+            "variant-a",
+            Some(20),
+            Some(10),
+            Some(Decimal::new(200, 6)),
+        ),
+        make_model_inference(
+            a3,
+            &function_name,
+            "variant-a",
+            Some(30),
+            Some(15),
+            Some(Decimal::new(300, 6)),
+        ),
         // Variant B
-        make_model_inference(b1, Some(50), Some(25), Some(Decimal::new(500, 6))),
-        make_model_inference(b2, Some(60), Some(30), None),
+        make_model_inference(
+            b1,
+            &function_name,
+            "variant-b",
+            Some(50),
+            Some(25),
+            Some(Decimal::new(500, 6)),
+        ),
+        make_model_inference(b2, &function_name, "variant-b", Some(60), Some(30), None),
         // Variant C
-        make_model_inference(c1, Some(100), Some(50), None),
+        make_model_inference(c1, &function_name, "variant-c", Some(100), Some(50), None),
     ];
 
     insert_and_prepare(&conn, &chats, &[], &models).await;
@@ -545,14 +605,62 @@ async fn test_variant_statistics_cross_minute(
 
     let models = vec![
         // Minute A
-        make_model_inference_at(ts_a1, a1, Some(10), Some(5), Some(Decimal::new(100, 6))),
-        make_model_inference_at(ts_a2, a2, Some(20), Some(10), Some(Decimal::new(200, 6))),
+        make_model_inference_at(
+            ts_a1,
+            a1,
+            &function_name,
+            variant_name,
+            Some(10),
+            Some(5),
+            Some(Decimal::new(100, 6)),
+        ),
+        make_model_inference_at(
+            ts_a2,
+            a2,
+            &function_name,
+            variant_name,
+            Some(20),
+            Some(10),
+            Some(Decimal::new(200, 6)),
+        ),
         // Minute B
-        make_model_inference_at(ts_b1, b1, Some(30), Some(15), Some(Decimal::new(300, 6))),
-        make_model_inference_at(ts_b2, b2, Some(40), Some(20), None),
-        make_model_inference_at(ts_b3, b3, Some(50), Some(25), Some(Decimal::new(500, 6))),
+        make_model_inference_at(
+            ts_b1,
+            b1,
+            &function_name,
+            variant_name,
+            Some(30),
+            Some(15),
+            Some(Decimal::new(300, 6)),
+        ),
+        make_model_inference_at(
+            ts_b2,
+            b2,
+            &function_name,
+            variant_name,
+            Some(40),
+            Some(20),
+            None,
+        ),
+        make_model_inference_at(
+            ts_b3,
+            b3,
+            &function_name,
+            variant_name,
+            Some(50),
+            Some(25),
+            Some(Decimal::new(500, 6)),
+        ),
         // Minute C
-        make_model_inference_at(ts_c1, c1, Some(60), Some(30), None),
+        make_model_inference_at(
+            ts_c1,
+            c1,
+            &function_name,
+            variant_name,
+            Some(60),
+            Some(30),
+            None,
+        ),
     ];
 
     insert_and_prepare(&conn, &chats, &[], &models).await;
@@ -644,11 +752,46 @@ async fn test_variant_statistics_mixed_chat_json(
 
     // 5 model inferences — one per inference
     let models = vec![
-        make_model_inference(chat1, Some(10), Some(5), Some(Decimal::new(100, 6))),
-        make_model_inference(chat2, Some(20), Some(10), Some(Decimal::new(200, 6))),
-        make_model_inference(json1, Some(30), Some(15), Some(Decimal::new(300, 6))),
-        make_model_inference(json2, Some(40), Some(20), Some(Decimal::new(400, 6))),
-        make_model_inference(json3, Some(50), Some(25), None),
+        make_model_inference(
+            chat1,
+            &function_name,
+            variant_name,
+            Some(10),
+            Some(5),
+            Some(Decimal::new(100, 6)),
+        ),
+        make_model_inference(
+            chat2,
+            &function_name,
+            variant_name,
+            Some(20),
+            Some(10),
+            Some(Decimal::new(200, 6)),
+        ),
+        make_model_inference(
+            json1,
+            &function_name,
+            variant_name,
+            Some(30),
+            Some(15),
+            Some(Decimal::new(300, 6)),
+        ),
+        make_model_inference(
+            json2,
+            &function_name,
+            variant_name,
+            Some(40),
+            Some(20),
+            Some(Decimal::new(400, 6)),
+        ),
+        make_model_inference(
+            json3,
+            &function_name,
+            variant_name,
+            Some(50),
+            Some(25),
+            None,
+        ),
     ];
 
     insert_and_prepare(&conn, &chats, &jsons, &models).await;
@@ -706,6 +849,8 @@ async fn test_variant_statistics_high_volume(
         let cost = Decimal::new(i64::from(i) * 100, 6);
         models.push(make_model_inference(
             id,
+            &function_name,
+            "fast",
             Some(i * 10),
             Some(i * 5),
             Some(cost),
@@ -735,12 +880,21 @@ async fn test_variant_statistics_high_volume(
         // First attempt with cost
         models.push(make_model_inference(
             id,
+            &function_name,
+            "slow",
             Some(i * 15),
             Some(i * 7),
             Some(cost),
         ));
         // Retry without cost
-        models.push(make_model_inference(id, Some(i * 15), Some(i * 7), None));
+        models.push(make_model_inference(
+            id,
+            &function_name,
+            "slow",
+            Some(i * 15),
+            Some(i * 7),
+            None,
+        ));
         slow_expected_input += u64::from(i * 15) * 2; // both attempts
         slow_expected_output += u64::from(i * 7) * 2;
         slow_expected_cost += cost; // only first attempt
