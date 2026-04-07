@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tensorzero_stored_config::StoredGEPAConfig;
+use tensorzero_stored_config::{StoredGEPAConfig, StoredRetryConfig};
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -172,8 +172,8 @@ impl From<StoredGEPAConfig> for UninitializedGEPAConfig {
     fn from(stored: StoredGEPAConfig) -> Self {
         UninitializedGEPAConfig {
             function_name: stored.function_name,
-            evaluation_name: Some(stored.evaluation_name),
-            evaluator_names: None,
+            evaluation_name: stored.evaluation_name,
+            evaluator_names: stored.evaluator_names,
             initial_variants: stored.initial_variants,
             variant_prefix: stored.variant_prefix,
             batch_size: stored.batch_size.unwrap_or_else(default_batch_size),
@@ -190,6 +190,28 @@ impl From<StoredGEPAConfig> for UninitializedGEPAConfig {
                 .unwrap_or_else(default_include_inference_for_mutation),
             retries: stored.retries.map(RetryConfig::from).unwrap_or_default(),
             max_tokens: stored.max_tokens,
+        }
+    }
+}
+
+impl From<UninitializedGEPAConfig> for StoredGEPAConfig {
+    fn from(config: UninitializedGEPAConfig) -> Self {
+        StoredGEPAConfig {
+            function_name: config.function_name,
+            evaluation_name: config.evaluation_name,
+            evaluator_names: config.evaluator_names,
+            initial_variants: config.initial_variants,
+            variant_prefix: config.variant_prefix,
+            batch_size: Some(config.batch_size),
+            max_iterations: Some(config.max_iterations),
+            max_concurrency: Some(config.max_concurrency),
+            analysis_model: config.analysis_model,
+            mutation_model: config.mutation_model,
+            seed: config.seed,
+            timeout: Some(config.timeout),
+            include_inference_for_mutation: Some(config.include_inference_for_mutation),
+            retries: Some(StoredRetryConfig::from(config.retries)),
+            max_tokens: config.max_tokens,
         }
     }
 }
@@ -563,4 +585,72 @@ pub struct GepaEvaluatorStats {
     pub mean: f64,
     pub stdev: f64,
     pub count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    fn sample_full_config() -> UninitializedGEPAConfig {
+        UninitializedGEPAConfig {
+            function_name: "my_function".to_string(),
+            evaluation_name: Some("my_eval".to_string()),
+            evaluator_names: None,
+            initial_variants: Some(vec!["v1".to_string(), "v2".to_string()]),
+            variant_prefix: Some("gepa_".to_string()),
+            batch_size: 16,
+            max_iterations: 5,
+            max_concurrency: 4,
+            analysis_model: "anthropic::claude-sonnet-4-5".to_string(),
+            mutation_model: "anthropic::claude-sonnet-4-5".to_string(),
+            seed: Some(7),
+            timeout: 600,
+            include_inference_for_mutation: false,
+            retries: RetryConfig::default(),
+            max_tokens: Some(4096),
+        }
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_with_evaluation_name() {
+        let original = sample_full_config();
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_with_evaluator_names() {
+        let mut original = sample_full_config();
+        original.evaluation_name = None;
+        original.evaluator_names = Some(vec!["a".to_string(), "b".to_string()]);
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_minimal() {
+        let original = UninitializedGEPAConfig {
+            function_name: "f".to_string(),
+            evaluation_name: Some("e".to_string()),
+            evaluator_names: None,
+            initial_variants: None,
+            variant_prefix: None,
+            batch_size: default_batch_size(),
+            max_iterations: default_max_iterations(),
+            max_concurrency: default_max_concurrency(),
+            analysis_model: "m".to_string(),
+            mutation_model: "m".to_string(),
+            seed: None,
+            timeout: default_timeout(),
+            include_inference_for_mutation: default_include_inference_for_mutation(),
+            retries: RetryConfig::default(),
+            max_tokens: None,
+        };
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
 }

@@ -434,6 +434,72 @@ impl From<StoredEndpointLocation> for EndpointLocation {
     }
 }
 
+impl From<&CredentialLocation> for StoredCredentialLocation {
+    fn from(loc: &CredentialLocation) -> Self {
+        match loc {
+            CredentialLocation::Env(inner) => Self::Env {
+                value: inner.clone(),
+            },
+            CredentialLocation::PathFromEnv(inner) => Self::PathFromEnv {
+                value: inner.clone(),
+            },
+            CredentialLocation::Dynamic(inner) => Self::Dynamic {
+                value: inner.clone(),
+            },
+            CredentialLocation::Path(inner) => Self::Path {
+                value: inner.clone(),
+            },
+            CredentialLocation::Sdk => Self::Sdk,
+            CredentialLocation::None => Self::None,
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback> for StoredCredentialLocationWithFallback {
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        match loc {
+            CredentialLocationWithFallback::Single(inner) => Self::Single {
+                location: inner.into(),
+            },
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                Self::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<&CredentialLocationOrHardcoded> for StoredCredentialLocationOrHardcoded {
+    fn from(loc: &CredentialLocationOrHardcoded) -> Self {
+        match loc {
+            CredentialLocationOrHardcoded::Hardcoded(value) => Self::Hardcoded {
+                value: value.clone(),
+            },
+            CredentialLocationOrHardcoded::Location(inner) => Self::Location {
+                location: inner.into(),
+            },
+        }
+    }
+}
+
+impl From<&EndpointLocation> for StoredEndpointLocation {
+    fn from(loc: &EndpointLocation) -> Self {
+        match loc {
+            EndpointLocation::Env(value) => Self::Env {
+                value: value.clone(),
+            },
+            EndpointLocation::Dynamic(value) => Self::Dynamic {
+                value: value.clone(),
+            },
+            EndpointLocation::Static(value) => Self::Static {
+                value: value.clone(),
+            },
+        }
+    }
+}
+
 impl TryFrom<StoredRelayConfig> for UninitializedRelayConfig {
     type Error = Error;
 
@@ -495,6 +561,98 @@ impl TryFrom<StoredGatewayConfig> for UninitializedGatewayConfig {
     }
 }
 
+impl From<ObservabilityBackend> for StoredObservabilityBackend {
+    fn from(backend: ObservabilityBackend) -> Self {
+        match backend {
+            ObservabilityBackend::Auto => StoredObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse => StoredObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres => StoredObservabilityBackend::Postgres,
+        }
+    }
+}
+
+impl From<OtlpTracesFormat> for StoredOtlpTracesFormat {
+    fn from(format: OtlpTracesFormat) -> Self {
+        match format {
+            OtlpTracesFormat::OpenTelemetry => StoredOtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference => StoredOtlpTracesFormat::OpenInference,
+        }
+    }
+}
+
+impl From<InferenceCacheBackend> for StoredInferenceCacheBackend {
+    fn from(backend: InferenceCacheBackend) -> Self {
+        match backend {
+            InferenceCacheBackend::Auto => StoredInferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse => StoredInferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey => StoredInferenceCacheBackend::Valkey,
+        }
+    }
+}
+
+impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
+    fn from(config: UninitializedGatewayConfig) -> Self {
+        StoredGatewayConfig {
+            bind_address: config.bind_address.map(|a| a.to_string()),
+            observability: config.observability.map(|obs| StoredObservabilityConfig {
+                enabled: obs.enabled,
+                backend: obs.backend.map(StoredObservabilityBackend::from),
+                async_writes: obs.async_writes,
+                batch_writes: obs.batch_writes.map(|bw| StoredBatchWritesConfig {
+                    enabled: bw.enabled,
+                    flush_interval_ms: bw.flush_interval_ms,
+                    max_rows: bw.max_rows,
+                    max_rows_postgres: bw.max_rows_postgres,
+                    write_queue_capacity: bw.write_queue_capacity,
+                }),
+            }),
+            debug: config.debug,
+            export: config.export.map(|exp| StoredExportConfig {
+                otlp: exp.otlp.map(|otlp| StoredOtlpConfig {
+                    traces: otlp.traces.map(|traces| StoredOtlpTracesConfig {
+                        enabled: traces.enabled,
+                        format: traces.format.map(StoredOtlpTracesFormat::from),
+                        extra_headers: traces.extra_headers.map(|h| h.into_iter().collect()),
+                    }),
+                }),
+            }),
+            base_path: config.base_path,
+            unstable_disable_feedback_target_validation: config
+                .unstable_disable_feedback_target_validation,
+            unstable_error_json: config.unstable_error_json,
+            disable_pseudonymous_usage_analytics: config.disable_pseudonymous_usage_analytics,
+            fetch_and_encode_input_files_before_inference: config
+                .fetch_and_encode_input_files_before_inference,
+            auth: config.auth.map(|auth| StoredAuthConfig {
+                enabled: auth.enabled,
+                cache: auth.cache.map(|c| StoredGatewayAuthCacheConfig {
+                    enabled: c.enabled,
+                    ttl_ms: c.ttl_ms,
+                }),
+            }),
+            global_outbound_http_timeout_ms: config.global_outbound_http_timeout_ms,
+            relay: config.relay.map(|r| StoredRelayConfig {
+                gateway_url: r.gateway_url.map(|u| u.to_string()),
+                api_key_location: r
+                    .api_key_location
+                    .as_ref()
+                    .map(StoredCredentialLocationWithFallback::from),
+            }),
+            metrics: config.metrics.map(|m| StoredGatewayMetricsConfig {
+                tensorzero_inference_latency_overhead_seconds_buckets: m
+                    .tensorzero_inference_latency_overhead_seconds_buckets,
+            }),
+            cache: config.cache.map(|c| StoredModelInferenceCacheConfig {
+                enabled: c.enabled,
+                backend: c.backend.map(StoredInferenceCacheBackend::from),
+                valkey: c.valkey.map(|v| StoredValkeyModelInferenceCacheConfig {
+                    ttl_s: Some(v.ttl_s),
+                }),
+            }),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
@@ -553,5 +711,201 @@ where
     match addr {
         Some(addr) => serializer.serialize_str(&addr.to_string()),
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_observability_backend_round_trip() {
+        for variant in [
+            ObservabilityBackend::Auto,
+            ObservabilityBackend::ClickHouse,
+            ObservabilityBackend::Postgres,
+        ] {
+            let stored: StoredObservabilityBackend = variant.into();
+            let restored: ObservabilityBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_otlp_traces_format_round_trip() {
+        for variant in &[
+            OtlpTracesFormat::OpenTelemetry,
+            OtlpTracesFormat::OpenInference,
+        ] {
+            let stored: StoredOtlpTracesFormat = variant.clone().into();
+            let restored: OtlpTracesFormat = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    #[gtest]
+    fn test_inference_cache_backend_round_trip() {
+        for variant in [
+            InferenceCacheBackend::Auto,
+            InferenceCacheBackend::ClickHouse,
+            InferenceCacheBackend::Valkey,
+        ] {
+            let stored: StoredInferenceCacheBackend = variant.into();
+            let restored: InferenceCacheBackend = stored.into();
+            expect_that!(restored, eq(variant));
+        }
+    }
+
+    // ── CredentialLocationWithFallback ─────────────────────────────────
+
+    fn credential_location_variants() -> Vec<CredentialLocation> {
+        vec![
+            CredentialLocation::Env("MY_KEY".to_string()),
+            CredentialLocation::PathFromEnv("MY_KEY_PATH".to_string()),
+            CredentialLocation::Dynamic("dyn_key".to_string()),
+            CredentialLocation::Path("/etc/keys/key.pem".to_string()),
+            CredentialLocation::Sdk,
+            CredentialLocation::None,
+        ]
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_single_round_trip() {
+        for loc in credential_location_variants() {
+            let original = CredentialLocationWithFallback::Single(loc);
+            let stored: StoredCredentialLocationWithFallback = (&original).into();
+            let restored: CredentialLocationWithFallback = stored.into();
+            expect_that!(restored, eq(&original));
+        }
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_with_fallback_round_trip() {
+        let original = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Env("PRIMARY".to_string()),
+            fallback: CredentialLocation::PathFromEnv("BACKUP_PATH".to_string()),
+        };
+        let stored: StoredCredentialLocationWithFallback = (&original).into();
+        let restored: CredentialLocationWithFallback = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_credential_location_with_fallback_all_fallback_combos_round_trip() {
+        // Cover the full cross-product of default × fallback to make sure each
+        // variant survives the encode/decode through stored form.
+        for default in credential_location_variants() {
+            for fallback in credential_location_variants() {
+                let original = CredentialLocationWithFallback::WithFallback {
+                    default: default.clone(),
+                    fallback: fallback.clone(),
+                };
+                let stored: StoredCredentialLocationWithFallback = (&original).into();
+                let restored: CredentialLocationWithFallback = stored.into();
+                expect_that!(restored, eq(&original));
+            }
+        }
+    }
+
+    // ── EndpointLocation ───────────────────────────────────────────────
+
+    #[gtest]
+    fn test_endpoint_location_round_trip() {
+        for variant in [
+            EndpointLocation::Env("MY_ENDPOINT".to_string()),
+            EndpointLocation::Dynamic("dyn_endpoint".to_string()),
+            EndpointLocation::Static("https://api.example.com".to_string()),
+        ] {
+            let stored: StoredEndpointLocation = (&variant).into();
+            let restored: EndpointLocation = stored.into();
+            expect_that!(restored, eq(&variant));
+        }
+    }
+
+    // ── UninitializedGatewayConfig full round trip ─────────────────────
+
+    /// Populate every field of `UninitializedGatewayConfig` with a non-default
+    /// value and verify that converting to `StoredGatewayConfig` and back is
+    /// lossless.
+    ///
+    /// Fields that are intentionally dropped on the way through storage
+    /// (`template_filesystem_access`, `observability.disable_automatic_migrations`,
+    /// `batch_writes.__force_allow_embedded_batch_writes`) are set to their
+    /// "absent" value so round-tripping still produces an equal struct.
+    #[gtest]
+    #[expect(deprecated)]
+    fn test_uninitialized_gateway_config_round_trip() {
+        let original = UninitializedGatewayConfig {
+            bind_address: Some("127.0.0.1:8080".parse().unwrap()),
+            observability: Some(ObservabilityConfig {
+                enabled: Some(true),
+                backend: Some(ObservabilityBackend::Postgres),
+                async_writes: Some(true),
+                batch_writes: Some(BatchWritesConfig {
+                    enabled: true,
+                    __force_allow_embedded_batch_writes: None,
+                    flush_interval_ms: Some(500),
+                    max_rows: Some(1000),
+                    max_rows_postgres: Some(2000),
+                    write_queue_capacity: Some(4096),
+                }),
+                disable_automatic_migrations: None,
+            }),
+            debug: Some(true),
+            // Not persisted to the stored config — config-in-DB users are banned
+            // from setting this field.
+            template_filesystem_access: None,
+            export: Some(ExportConfig {
+                otlp: Some(OtlpConfig {
+                    traces: Some(OtlpTracesConfig {
+                        enabled: Some(true),
+                        format: Some(OtlpTracesFormat::OpenInference),
+                        extra_headers: Some(HashMap::from([
+                            ("x-trace-header".to_string(), "value-1".to_string()),
+                            ("x-other".to_string(), "value-2".to_string()),
+                        ])),
+                    }),
+                }),
+            }),
+            base_path: Some("/custom/prefix".to_string()),
+            unstable_disable_feedback_target_validation: Some(true),
+            unstable_error_json: Some(true),
+            disable_pseudonymous_usage_analytics: Some(true),
+            fetch_and_encode_input_files_before_inference: Some(true),
+            auth: Some(AuthConfig {
+                enabled: true,
+                cache: Some(GatewayAuthCacheConfig {
+                    enabled: Some(true),
+                    ttl_ms: Some(12_345),
+                }),
+            }),
+            global_outbound_http_timeout_ms: Some(9_876),
+            relay: Some(UninitializedRelayConfig {
+                gateway_url: Some(Url::parse("https://relay.example.com/").unwrap()),
+                api_key_location: Some(CredentialLocationWithFallback::WithFallback {
+                    default: CredentialLocation::Env("RELAY_KEY".to_string()),
+                    fallback: CredentialLocation::Sdk,
+                }),
+            }),
+            metrics: Some(MetricsConfig {
+                tensorzero_inference_latency_overhead_seconds_buckets: Some(vec![
+                    0.005, 0.05, 0.5, 5.0,
+                ]),
+            }),
+            cache: Some(ModelInferenceCacheConfig {
+                enabled: Some(true),
+                backend: Some(InferenceCacheBackend::Valkey),
+                valkey: Some(ValkeyModelInferenceCacheConfig { ttl_s: 7_200 }),
+            }),
+        };
+
+        let stored: StoredGatewayConfig = original.clone().into();
+        let round_tripped: UninitializedGatewayConfig = stored
+            .try_into()
+            .expect("StoredGatewayConfig should convert back to UninitializedGatewayConfig");
+        expect_that!(round_tripped, eq(&original));
     }
 }

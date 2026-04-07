@@ -6,9 +6,11 @@ use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredExactMatchConfig, StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat,
-    StoredLLMJudgeOptimize, StoredLLMJudgeOutputType, StoredRegexConfig, StoredToolUseConfig,
+    StoredEvaluationConfig, StoredExactMatchConfig, StoredInferenceEvaluationConfig,
+    StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat, StoredLLMJudgeOptimize,
+    StoredLLMJudgeOutputType, StoredRegexConfig, StoredToolUseConfig,
 };
+use uuid::Uuid;
 
 use crate::variant::chain_of_thought::ChainOfThoughtConfig;
 
@@ -1096,6 +1098,95 @@ impl<'a> EvaluatorContext<'a> {
             ),
         };
         ResolvedTomlPathData::new_fake_path(path, data)
+    }
+}
+
+// ── Stored-config conversion helpers ──────────────────────────────────────────
+
+impl UninitializedEvaluationConfig {
+    /// Collect all `ResolvedTomlPathData` references that need prompt-template rows.
+    pub(crate) fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+        match self {
+            UninitializedEvaluationConfig::Inference(config) => config.prompt_templates_for_db(),
+        }
+    }
+
+    /// Convert to the stored representation for DB persistence.
+    pub(crate) fn to_stored_for_db(
+        &self,
+        prompt_template_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredEvaluationConfig, Error> {
+        match self {
+            UninitializedEvaluationConfig::Inference(config) => {
+                config.to_stored_for_db(prompt_template_version_ids)
+            }
+        }
+    }
+}
+
+impl UninitializedInferenceEvaluationConfig {
+    fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+        let mut templates = Vec::new();
+        for evaluator in self.evaluators.values() {
+            evaluator.collect_prompt_templates(&mut templates);
+        }
+        templates
+    }
+
+    fn to_stored_for_db(
+        &self,
+        prompt_template_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredEvaluationConfig, Error> {
+        let stored_evaluators = crate::db::postgres::function_config_writes::convert_evaluators(
+            &self.evaluators,
+            prompt_template_version_ids,
+        )?;
+        Ok(StoredEvaluationConfig::Inference(
+            StoredInferenceEvaluationConfig {
+                evaluators: Some(stored_evaluators),
+                function_name: self.function_name.clone(),
+                description: self.description.clone(),
+            },
+        ))
+    }
+}
+
+impl UninitializedEvaluatorConfig {
+    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+        match self {
+            UninitializedEvaluatorConfig::LLMJudge(config) => {
+                for variant in config.variants.values() {
+                    variant.inner.collect_prompt_templates(templates);
+                }
+            }
+            UninitializedEvaluatorConfig::ExactMatch(_)
+            | UninitializedEvaluatorConfig::ToolUse(_)
+            | UninitializedEvaluatorConfig::Regex(_) => {}
+        }
+    }
+}
+
+impl UninitializedLLMJudgeVariantConfig {
+    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+        match self {
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
+                templates.push(&config.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
+                templates.push(&config.evaluator.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
+                templates.push(&config.fuser.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::Dicl(config) => {
+                if let Some(system_instructions) = &config.system_instructions {
+                    templates.push(system_instructions);
+                }
+            }
+            UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
+                templates.push(&config.inner.system_instructions);
+            }
+        }
     }
 }
 

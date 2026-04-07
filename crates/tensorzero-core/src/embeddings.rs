@@ -1,10 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use tensorzero_stored_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
 
 use crate::cache::{
     CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
@@ -40,6 +39,10 @@ use crate::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{
+    StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig, StoredExtraBodyConfig,
+    StoredExtraHeadersConfig, StoredProviderConfig, StoredUnifiedCostConfig,
+};
 use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
 use tracing::{Span, instrument};
@@ -195,6 +198,47 @@ impl TryFrom<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderCo
             extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
             cost,
         })
+    }
+}
+
+impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
+    type Error = Error;
+
+    fn try_from(config: &UninitializedEmbeddingModelConfig) -> Result<Self, Error> {
+        let providers = config
+            .providers
+            .iter()
+            .map(|(provider_name, provider)| {
+                Ok::<_, Error>((
+                    provider_name.to_string(),
+                    StoredEmbeddingProviderConfig::from(provider),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+
+        Ok(StoredEmbeddingModelConfig {
+            routing: config.routing.iter().map(ToString::to_string).collect(),
+            providers,
+            timeout_ms: config.timeout_ms,
+        })
+    }
+}
+
+impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfig {
+    fn from(provider: &UninitializedEmbeddingProviderConfig) -> Self {
+        StoredEmbeddingProviderConfig {
+            provider: StoredProviderConfig::from(&provider.config),
+            timeout_ms: provider.timeout_ms,
+            extra_body: provider
+                .extra_body
+                .as_ref()
+                .map(StoredExtraBodyConfig::from),
+            extra_headers: provider
+                .extra_headers
+                .as_ref()
+                .map(StoredExtraHeadersConfig::from),
+            cost: provider.cost.as_ref().map(StoredUnifiedCostConfig::from),
+        }
     }
 }
 
@@ -933,14 +977,16 @@ impl<'a> Embedding {
 
 #[cfg(test)]
 mod tests {
+    use googletest::{expect_that, matchers::eq};
+
+    use super::*;
     use crate::{
         cache::{CacheEnabledMode, CacheManager, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model::{CredentialLocation, CredentialLocationWithFallback},
         model_table::ProviderTypeDefaultCredentials,
         rate_limiting::{RateLimitingManager, ScopeInfo},
     };
-
-    use super::*;
     #[tokio::test]
     async fn test_embedding_fallbacks() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -1112,5 +1158,37 @@ mod tests {
         let loaded_extra_headers = provider_info.extra_headers.unwrap();
         assert_eq!(loaded_extra_headers.data.len(), 1);
         assert_eq!(loaded_extra_headers.data[0], replacement);
+    }
+
+    #[googletest::gtest]
+    fn test_embedding_model_config_round_trip() {
+        let original = UninitializedEmbeddingModelConfig {
+            routing: vec![Arc::from("emb_provider")],
+            providers: HashMap::from([(
+                Arc::from("emb_provider"),
+                UninitializedEmbeddingProviderConfig {
+                    config: UninitializedProviderConfig::OpenAI {
+                        model_name: "text-embedding-3-small".to_string(),
+                        api_base: None,
+                        api_key_location: Some(CredentialLocationWithFallback::Single(
+                            CredentialLocation::Env("OPENAI_API_KEY".to_string()),
+                        )),
+                        api_type: OpenAIAPIType::ChatCompletions,
+                        include_encrypted_reasoning: false,
+                        provider_tools: vec![],
+                        content_type_overrides: HashMap::new(),
+                    },
+                    extra_body: None,
+                    extra_headers: None,
+                    timeout_ms: None,
+                    cost: None,
+                },
+            )]),
+            timeout_ms: Some(5000),
+        };
+        let stored = StoredEmbeddingModelConfig::try_from(&original).expect("should serialize");
+        let restored: UninitializedEmbeddingModelConfig =
+            stored.try_into().expect("should convert back");
+        expect_that!(restored, eq(&original));
     }
 }

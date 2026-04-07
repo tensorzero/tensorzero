@@ -10,6 +10,8 @@ use crate::stored_credential_location::{
 };
 use crate::{StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredTimeoutsConfig};
 
+pub const STORED_MODEL_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 // --- Top-level model config ---
 
 #[serde_with::skip_serializing_none]
@@ -158,6 +160,11 @@ pub enum StoredProviderConfig {
     DeepSeek {
         model_name: String,
         api_key_location: Option<StoredCredentialLocationWithFallback>,
+    },
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Dummy {
+        model_name: String,
+        api_key_location: Option<Value>,
     },
 }
 

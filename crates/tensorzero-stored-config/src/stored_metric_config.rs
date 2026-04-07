@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const STORED_METRIC_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StoredMetricType {

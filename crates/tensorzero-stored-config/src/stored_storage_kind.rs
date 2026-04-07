@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tensorzero_types::StorageKind;
 
+pub const STORED_STORAGE_KIND_SCHEMA_REVISION: i32 = 1;
+
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -17,6 +19,29 @@ pub enum StoredStorageKind {
         path: String,
     },
     Disabled,
+}
+
+impl From<&StorageKind> for StoredStorageKind {
+    fn from(kind: &StorageKind) -> Self {
+        match kind {
+            StorageKind::S3Compatible {
+                bucket_name,
+                region,
+                endpoint,
+                allow_http,
+                ..
+            } => StoredStorageKind::S3Compatible {
+                bucket_name: bucket_name.clone(),
+                region: region.clone(),
+                endpoint: endpoint.clone(),
+                allow_http: *allow_http,
+            },
+            StorageKind::Filesystem { path } => {
+                StoredStorageKind::Filesystem { path: path.clone() }
+            }
+            StorageKind::Disabled => StoredStorageKind::Disabled,
+        }
+    }
 }
 
 impl From<StoredStorageKind> for StorageKind {

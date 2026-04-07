@@ -59,6 +59,20 @@ impl From<StoredGCPVertexGeminiOptimizerSFTConfig> for UninitializedGCPVertexGem
     }
 }
 
+impl From<UninitializedGCPVertexGeminiSFTConfig> for StoredGCPVertexGeminiOptimizerSFTConfig {
+    fn from(config: UninitializedGCPVertexGeminiSFTConfig) -> Self {
+        StoredGCPVertexGeminiOptimizerSFTConfig {
+            model: config.model,
+            learning_rate_multiplier: config.learning_rate_multiplier,
+            adapter_size: config.adapter_size,
+            n_epochs: config.n_epochs,
+            export_last_checkpoint_only: config.export_last_checkpoint_only,
+            seed: config.seed,
+            tuned_model_display_name: config.tuned_model_display_name,
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl UninitializedGCPVertexGeminiSFTConfig {
@@ -146,5 +160,38 @@ impl std::fmt::Display for GCPVertexGeminiSFTJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_sft_config_round_trip_full() {
+        let original = UninitializedGCPVertexGeminiSFTConfig {
+            model: "gemini-1.5-pro".to_string(),
+            learning_rate_multiplier: Some(0.7),
+            adapter_size: Some(16),
+            n_epochs: Some(5),
+            export_last_checkpoint_only: Some(true),
+            seed: Some(123),
+            tuned_model_display_name: Some("my-tuned-gemini".to_string()),
+        };
+        let stored: StoredGCPVertexGeminiOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedGCPVertexGeminiSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gcp_vertex_gemini_sft_config_round_trip_minimal() {
+        let original = UninitializedGCPVertexGeminiSFTConfig {
+            model: "gemini-1.5-pro".to_string(),
+            ..Default::default()
+        };
+        let stored: StoredGCPVertexGeminiOptimizerSFTConfig = original.clone().into();
+        let restored: UninitializedGCPVertexGeminiSFTConfig = stored.into();
+        expect_that!(restored, eq(&original));
     }
 }
