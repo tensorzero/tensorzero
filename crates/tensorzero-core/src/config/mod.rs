@@ -1114,7 +1114,7 @@ pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result
 }
 
 /// Processes the config input (fresh TOML or snapshot) and returns all the fields
-/// needed by load_from_toml, avoiding partial moves of UninitializedConfig.
+/// needed by load_unwritten_config, avoiding partial moves of UninitializedConfig.
 async fn process_config_input(
     input: ConfigInput,
     templates: &mut TemplateConfig<'_>,
@@ -1416,13 +1416,15 @@ impl Config {
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
-                snapshot: Box::new(snapshot),
-                runtime_overlay: Box::new(runtime_overlay),
-            })))
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Snapshot {
+                    snapshot: Box::new(snapshot),
+                    runtime_overlay: Box::new(runtime_overlay),
+                },
+            )))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Snapshot {
                 snapshot: Box::new(snapshot),
                 runtime_overlay: Box::new(runtime_overlay),
             }))
@@ -1443,12 +1445,12 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Fresh(
-                globbed_config.table,
-            ))))
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Fresh(globbed_config.table),
+            )))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+            Box::pin(Self::load_unwritten_config(ConfigInput::Fresh(
                 globbed_config.table,
             )))
             .await?
@@ -1468,13 +1470,13 @@ impl Config {
         let config = crate::db::postgres::stored_config_queries::load_config_from_db(pool).await?;
         let config = Box::new(config);
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Database(
-                config,
-            ))))
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
             .await
             .map_err(|error| vec![error])?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Database(config)))
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config)))
                 .await
                 .map_err(|error| vec![error])?
         };
@@ -1486,16 +1488,17 @@ impl Config {
         Ok(unwritten_config)
     }
 
-    /// Loads and initializes a config from a parsed TOML table.
+    /// Loads and initializes an unwritten config.
     ///
-    /// This is the core config loading function that transforms a merged TOML table into
-    /// a fully validated and initialized `Config`, paired with a `ConfigSnapshot` for database storage.
+    /// This is the core config loading function that transforms raw config (TOML table, Config
+    /// snapshot, or stoored config in database) into a fully validated and initialized `Config`,
+    /// paired with a `ConfigSnapshot` for database storage.
     ///
     /// # Config Loading Flow
     ///
     /// This function performs the following steps:
     ///
-    /// 1. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
+    /// 1. **Parse to UninitializedConfig**: Convert the raw config into an `UninitializedConfig`,
     ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
     ///
     /// 2. **Initialize Components**: Load and initialize all config components:
@@ -1535,11 +1538,11 @@ impl Config {
     ///
     /// The caller pattern is:
     /// ```ignore
-    /// let unwritten_config = Config::load_from_toml(table).await?;
+    /// let unwritten_config = Config::load_unwritten_config(table).await?;
     /// let clickhouse = setup_clickhouse(&unwritten_config).await?;
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
-    async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+    async fn load_unwritten_config(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
         let is_config_snapshot = match &input {
             ConfigInput::Snapshot { .. } => true,
             ConfigInput::Fresh(_) | ConfigInput::Database(_) => false,

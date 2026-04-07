@@ -31,7 +31,7 @@ use tensorzero_core::db::postgres::postgres_setup::{
 use tensorzero_core::db::postgres::{PostgresConnectionInfo, manual_run_postgres_migrations};
 use tensorzero_core::db::valkey::ValkeyConnectionInfo;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::{self, Error, ErrorDetails};
+use tensorzero_core::error::{self, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use tensorzero_core::feature_flags;
 use tensorzero_core::observability;
 use tensorzero_core::utils::gateway;
@@ -44,6 +44,12 @@ use cli::GatewayArgs;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+/// Maximum number of Postgres connections used by the gateway's startup-time
+/// pool that loads configuration from the database. `load_config_from_db`
+/// requires a leader transaction to be held open while 14 reads run in parallel,
+/// so this number must stay above 2 (and we use a number >15 for performance).
+const STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS: u32 = 20;
 
 async fn load_startup_config(
     args: &GatewayArgs,
@@ -101,8 +107,10 @@ async fn load_startup_config(
 fn merge_db_config_load_errors(errors: Vec<Error>) -> Error {
     let mut errors = errors.into_iter();
     let Some(first_error) = errors.next() else {
-        return Error::new(ErrorDetails::Config {
-            message: "Failed to load configuration from database".to_string(),
+        return Error::new(ErrorDetails::InternalError {
+            message: format!(
+                "merge_db_config_load_errors called with empty error list. {IMPOSSIBLE_ERROR_MESSAGE}"
+            ),
         });
     };
     let remaining_messages = errors.map(|error| error.to_string()).collect::<Vec<_>>();
@@ -128,7 +136,12 @@ async fn load_startup_config_from_database()
                     .to_string(),
         })
     })?;
+    // `load_config_from_db` fans out into 14 parallel snapshot readers plus a
+    // leader transaction, so the pool must allow at least 15 simultaneous
+    // connections. We add a small margin to absorb transient slowness without
+    // hitting the default 30s acquire timeout during gateway startup.
     let pool = PgPoolOptions::new()
+        .max_connections(STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS)
         .connect(&postgres_url)
         .await
         .map_err(|error| {
