@@ -1,0 +1,21 @@
+[package]
+name = "bip39-uuid-substitution"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+blake3.workspace = true
+regex.workspace = true
+tensorzero-core.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+durable-tools = { path = "../durable-tools" }
+serde_json.workspace = true
+proptest = "1"
+
+[lints]
+workspace = true
