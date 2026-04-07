@@ -31,7 +31,24 @@ pub enum SchemaDispatchError {
 /// When a V2 is added for one config type, only that dispatcher changes;
 /// all others remain on their own revision set.
 ///
-/// Usage:
+/// # When to bump the schema revision
+///
+/// **Bump only for breaking changes** — changes where an old reader cannot
+/// correctly deserialize a row written by a new writer. Examples:
+///
+/// - Renaming or removing a field
+/// - Changing enum tag strings or discriminator values
+/// - Changing nesting structure (e.g. moving a field into a sub-object)
+/// - Promoting an `Option<T>` to required
+///
+/// **Do NOT bump for additive changes.** Adding a new `Option<T>` field (even
+/// one that takes a default on the read side) is forward- and backward-
+/// compatible: old readers ignore the unknown key, and new readers see `None`
+/// for rows written before the field existed. The same applies to adding new
+/// enum variants — old rows simply never contain them. See
+/// `tensorzero-stored-config/AGENTS.md` for the full schema revision policy.
+///
+/// # Usage
 /// ```ignore
 /// define_dispatcher!(deserialize_foo, "foo_config", {
 ///     1 => FooConfigV1,
