@@ -41,14 +41,21 @@ impl Migration for Migration0053<'_> {
 
     async fn should_apply(&self) -> Result<bool, Error> {
         // Check denormalization columns on ModelInference
-        if !check_column_exists(
+        let has_fn = check_column_exists(
             self.clickhouse,
             "ModelInference",
             "function_name",
             MIGRATION_ID,
         )
-        .await?
-        {
+        .await?;
+        let has_vn = check_column_exists(
+            self.clickhouse,
+            "ModelInference",
+            "variant_name",
+            MIGRATION_ID,
+        )
+        .await?;
+        if !(has_fn && has_vn) {
             return Ok(true);
         }
 
