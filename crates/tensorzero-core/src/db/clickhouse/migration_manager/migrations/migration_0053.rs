@@ -250,6 +250,7 @@ impl Migration for Migration0053<'_> {
             // Backfill from ModelInference (token/cost metrics)
             // JOINs against ChatInference/JsonInference to resolve function_name/variant_name
             // since existing ModelInference rows don't have these columns backfilled.
+            // Uses partial_merge join to avoid building a large hash table in memory.
             tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
             for inference_table in ["ChatInference", "JsonInference"] {
                 tracing::info!("Backfilling model inference metrics via `{inference_table}`");
@@ -262,8 +263,8 @@ impl Migration for Migration0053<'_> {
                              total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
                              count_with_cost)
                         SELECT
-                            {inference_table}.function_name AS function_name,
-                            {inference_table}.variant_name AS variant_name,
+                            it.function_name AS function_name,
+                            it.variant_name AS variant_name,
                             toStartOfMinute(mi.timestamp) AS minute,
                             sumState(mi.input_tokens) AS total_input_tokens,
                             sumState(mi.output_tokens) AS total_output_tokens,
@@ -272,9 +273,10 @@ impl Migration for Migration0053<'_> {
                             sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
                             countState(mi.cost) AS count_with_cost
                         FROM ModelInference mi
-                        INNER JOIN {inference_table} ON mi.inference_id = {inference_table}.id
+                        INNER JOIN {inference_table} AS it ON mi.inference_id = it.id
                         WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                        GROUP BY {inference_table}.function_name, {inference_table}.variant_name, minute
+                        GROUP BY it.function_name, it.variant_name, minute
+                        SETTINGS join_algorithm = 'partial_merge'
                         "
                     ))
                     .await?;
