@@ -10,6 +10,7 @@ futures.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 serde_with.workspace = true
 sqlx = { workspace = true }
 tensorzero-error = { path = "../tensorzero-error" }

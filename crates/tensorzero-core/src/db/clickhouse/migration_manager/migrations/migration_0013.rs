@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 use super::ViewOffsetDeadline;
 use super::check_table_exists;
@@ -26,16 +26,15 @@ pub struct Migration0013<'a> {
 impl Migration for Migration0013<'_> {
     /// Check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables = vec!["ChatInference", "JsonInference"];
 
         for table in tables {
             if !check_table_exists(self.clickhouse, table, "0013").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
                     message: format!("Table {table} does not exist"),
-                }
-                .into());
+                }));
             }
         }
 
@@ -45,7 +44,7 @@ impl Migration for Migration0013<'_> {
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `InferenceById` and `InferenceByEpisodeId` exist
     /// We also need to check if the materialized views have been created.
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let inference_by_id_exists =
             check_table_exists(self.clickhouse, "InferenceById", "0013").await?;
         if !inference_by_id_exists {
@@ -79,35 +78,33 @@ impl Migration for Migration0013<'_> {
         let query = "SHOW CREATE TABLE InferenceById".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
         if !result.response.contains("UInt128") {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
                     "InferenceById table is in an invalid state. Please contact TensorZero team."
                         .to_string(),
-            }
-            .into());
+            }));
         }
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
         if !result.response.contains("UInt128") {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message:
                     "InferenceByEpisodeId table is in an invalid state. Please contact TensorZero team."
                         .to_string(),
-            }
-            .into());
+            }));
         }
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
         let result = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
         if !result.response.contains("1") {
             return Ok(true);
@@ -115,13 +112,13 @@ impl Migration for Migration0013<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         // Only gets used when we are not doing a clean start
         let _view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
                     message: e.to_string(),
                 })
@@ -131,13 +128,13 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
         let chat_count: usize = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?
             .response
             .trim()
             .parse()
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
                     message: format!("failed to query if data is in Chat table: {e}"),
                 })
@@ -145,13 +142,13 @@ impl Migration for Migration0013<'_> {
         let query = "SELECT toUInt32(COUNT())  FROM JsonInference".to_string();
         let json_count: usize = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?
             .response
             .trim()
             .parse()
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
                     message: format!("failed to query if data is in Json table: {e}"),
                 })
@@ -165,11 +162,10 @@ impl Migration for Migration0013<'_> {
         if (json_has_data || chat_has_data)
             && (!inference_by_id_exists || !inference_by_episode_id_exists)
         {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0013".to_string(),
                 message: "Data already exists in the ChatInference or JsonInference tables and InferenceById or InferenceByEpisodeId is missing. Please contact TensorZero team.".to_string(),
-            }
-            .into());
+            }));
         }
         // Drop the original tables and materialized views (if they exist)
         // NOTE: We are removing these drops to ensure idempotency in migrations
@@ -213,7 +209,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
         // Create the `InferenceByEpisodeId` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
@@ -240,7 +236,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
         // Create the `uint_to_uuid` function
         let query = format!(
@@ -253,7 +249,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -281,7 +277,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -302,7 +298,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
@@ -324,7 +320,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
@@ -346,7 +342,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         /*
@@ -455,7 +451,7 @@ impl Migration for Migration0013<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

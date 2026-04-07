@@ -1115,7 +1115,7 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "User-defined function name cannot start with 'tensorzero::': tensorzero::bad_function"
+            message: "User-defined function name cannot start with `tensorzero::`: tensorzero::bad_function"
                 .to_string()
         })
     );

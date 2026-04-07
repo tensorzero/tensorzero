@@ -92,7 +92,7 @@ impl PrimaryDatastore {
         observability_config: &ObservabilityConfig,
         clickhouse: &ClickHouseConnectionInfo,
         postgres: &PostgresConnectionInfo,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         let resolved = match observability_config.backend {
             None | Some(ObservabilityBackend::Auto) => {
                 if clickhouse.client_type() != ClickHouseClientType::Disabled {
@@ -111,33 +111,30 @@ impl PrimaryDatastore {
             Some(true) => match resolved {
                 Self::Postgres => {
                     if matches!(postgres, PostgresConnectionInfo::Disabled) {
-                        return Err(ErrorDetails::AppState {
+                        return Err(DelayedError::new(ErrorDetails::AppState {
                             message:
                                 "A Postgres connection is required when the primary datastore \
                                  is Postgres and observability is enabled."
                                     .to_string(),
-                        }
-                        .into());
+                        }));
                     }
                     Ok(Self::Postgres)
                 }
                 Self::ClickHouse => {
                     if clickhouse.client_type() == ClickHouseClientType::Disabled {
-                        return Err(ErrorDetails::AppState {
+                        return Err(DelayedError::new(ErrorDetails::AppState {
                             message: "Missing environment variable `TENSORZERO_CLICKHOUSE_URL`."
                                 .to_string(),
-                        }
-                        .into());
+                        }));
                     }
                     Ok(Self::ClickHouse)
                 }
-                Self::Disabled => Err(ErrorDetails::AppState {
+                Self::Disabled => Err(DelayedError::new(ErrorDetails::AppState {
                     message: "Observability is enabled but no backend is available. \
                               Set `TENSORZERO_CLICKHOUSE_URL` or `TENSORZERO_POSTGRES_URL`, \
                               or configure `gateway.observability.backend` explicitly."
                         .to_string(),
-                }
-                .into()),
+                })),
             },
             None => {
                 if resolved == Self::Disabled {
@@ -258,7 +255,7 @@ impl ConfigQueries for DelegatingDatabaseConnection {
         self.get_database().get_config_snapshot(snapshot_hash).await
     }
 
-    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError> {
         #[expect(clippy::disallowed_methods)]
         self.get_database().write_config_snapshot(snapshot).await
     }

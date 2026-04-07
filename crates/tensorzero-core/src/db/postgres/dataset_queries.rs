@@ -57,7 +57,7 @@ impl DatasetQueries for PostgresConnectionInfo {
         &self,
         params: &GetDatasetMetadataParams,
     ) -> Result<Vec<DatasetMetadata>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_dataset_metadata_query(params);
 
         let rows = qb.build().fetch_all(pool).await?;
@@ -76,7 +76,7 @@ impl DatasetQueries for PostgresConnectionInfo {
     }
 
     async fn insert_datapoints(&self, datapoints: &[StoredDatapoint]) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         // Separate chat and JSON datapoints
         let mut chat_datapoints: Vec<&StoredChatInferenceDatapoint> = Vec::new();
@@ -102,7 +102,7 @@ impl DatasetQueries for PostgresConnectionInfo {
         dataset_name: &str,
         function_name: Option<&str>,
     ) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_count_datapoints_query(dataset_name, function_name);
 
         let row = qb.build().fetch_one(pool).await?;
@@ -145,7 +145,7 @@ impl DatasetQueries for PostgresConnectionInfo {
         &self,
         params: &GetDatapointsParams,
     ) -> Result<Vec<StoredDatapoint>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         // If neither IDs nor dataset are provided, reject the query.
         if params.dataset_name.is_none() && params.ids.is_none() {
@@ -190,7 +190,7 @@ impl DatasetQueries for PostgresConnectionInfo {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         // Validate input
         if let Some(ids) = datapoint_ids
@@ -217,7 +217,7 @@ impl DatasetQueries for PostgresConnectionInfo {
         source_datapoint_ids: &[Uuid],
         id_mappings: &HashMap<Uuid, Uuid>,
     ) -> Result<Vec<Option<Uuid>>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         if source_datapoint_ids.is_empty() {
             return Ok(vec![]);

@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::{
     config::MetricConfig,
     db::{feedback::FeedbackQueries, postgres::PostgresConnectionInfo},
-    error::Error,
+    error::{DelayedError, Error},
     variant::VariantInfo,
 };
 
@@ -86,7 +86,7 @@ impl VariantSampler for AdaptiveExperimentationConfig {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         self.inner
             .setup(db, function_name, postgres, cancel_token)
             .await

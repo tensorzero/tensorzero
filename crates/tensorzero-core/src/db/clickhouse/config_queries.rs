@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::ConfigQueries;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 
 #[async_trait]
 impl ConfigQueries for ClickHouseConnectionInfo {
@@ -48,7 +48,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         ConfigSnapshot::from_stored(&row.config, row.extra_templates, row.tags, &snapshot_hash)
     }
 
-    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError> {
         #[derive(Serialize)]
         struct ConfigSnapshotRow<'a> {
             config: &'a str,
@@ -61,7 +61,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         let version_hash = snapshot.hash.clone();
 
         let config_string = toml::to_string(&snapshot.config).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
+            DelayedError::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize config snapshot: {e}"),
             })
         })?;
@@ -75,7 +75,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         };
 
         let json_data = serde_json::to_string(&row).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
+            DelayedError::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize config snapshot: {e}"),
             })
         })?;

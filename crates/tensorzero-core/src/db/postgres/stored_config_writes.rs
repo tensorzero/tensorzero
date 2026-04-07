@@ -42,7 +42,7 @@ impl PostgresConnectionInfo {
         &self,
         params: WriteStoredConfigParams<'_>,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut tx = pool
             .begin()
             .await
@@ -61,6 +61,16 @@ async fn write_stored_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteStoredConfigParams<'_>,
 ) -> Result<(), Error> {
+    // Acquire a single global advisory lock to serialize concurrent
+    // whole-config writes. This mirrors the per-function advisory lock in
+    // `write_function_config_in_tx`, and prevents two whole-config writes
+    // from interleaving across the many tables this function touches. The
+    // per-function lock is still acquired separately inside
+    // `write_function_config_in_tx`, so a whole-config write will also
+    // conflict with concurrent single-function writes for any function it
+    // touches.
+    acquire_stored_config_advisory_lock(tx).await?;
+
     // Exhaustive destructure so the compiler forces us to handle every field
     // when new ones are added to `WriteStoredConfigParams`.
     let WriteStoredConfigParams {
@@ -284,6 +294,42 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
+    Ok(())
+}
+
+// ── Advisory lock ─────────────────────────────────────────────────────────────
+
+/// Fixed advisory-lock key for whole-config writes. Derived once from the
+/// BLAKE3 hash of `"tensorzero::stored_config::global"` (first 8 bytes
+/// interpreted as a little-endian `i64`). Using a single fixed key means
+/// every whole-config writer agrees on the same lock.
+static STORED_CONFIG_ADVISORY_LOCK_KEY: std::sync::LazyLock<i64> = std::sync::LazyLock::new(|| {
+    // BLAKE3 output is always 32 bytes; read the first 8 as a little-endian i64.
+    let hash = blake3::hash(b"tensorzero::stored_config::global");
+    let bytes: [u8; 8] = hash.as_bytes()[..8].try_into().unwrap_or([0u8; 8]);
+    i64::from_le_bytes(bytes)
+});
+
+/// Acquires a transaction-level exclusive advisory lock that serializes all
+/// concurrent whole-config writes. The lock is released automatically when
+/// the transaction ends.
+async fn acquire_stored_config_advisory_lock(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<(), Error> {
+    let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(*STORED_CONFIG_ADVISORY_LOCK_KEY)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|e| {
+            postgres_query_error("Failed to acquire advisory lock for stored config", e)
+        })?;
+    if !acquired {
+        return Err(Error::new(ErrorDetails::PostgresQuery {
+            message:
+                "Failed to lock stored config for update; another client is writing the config. Please retry."
+                    .to_string(),
+        }));
+    }
     Ok(())
 }
 

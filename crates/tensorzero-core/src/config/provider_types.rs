@@ -565,46 +565,85 @@ impl From<StoredProviderTypesConfig> for ProviderTypesConfig {
     }
 }
 
-fn convert_stored_api_key_defaults(
+/// Resolves the `api_key_location` from a stored `defaults` overlay.
+///
+/// Returns `None` only when the overlay itself was absent. When the overlay
+/// is present but its `api_key_location` is `None` (e.g. a stored snapshot
+/// from a writer that omitted the field), falls back to `default_location`
+/// and logs a warning so the operator notices the missing value.
+fn resolve_stored_api_key_defaults(
     stored: Option<StoredApiKeyDefaults>,
+    provider_type: &str,
+    default_location: impl FnOnce() -> CredentialLocationWithFallback,
 ) -> Option<CredentialLocationWithFallback> {
-    stored.and_then(|d| d.api_key_location.map(Into::into))
+    let defaults = stored?;
+    Some(
+        defaults
+            .api_key_location
+            .map(Into::into)
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "Stored provider type config for `{provider_type}` has `defaults` set but \
+             `api_key_location` is missing — falling back to the built-in default."
+                );
+                default_location()
+            }),
+    )
 }
 
-fn convert_stored_gcp_credential_defaults(
+/// Like `resolve_stored_api_key_defaults`, but for GCP-style credential overlays.
+fn resolve_stored_gcp_credential_defaults(
     stored: Option<StoredGCPCredentialDefaults>,
+    provider_type: &str,
+    default_location: impl FnOnce() -> CredentialLocationWithFallback,
 ) -> Option<CredentialLocationWithFallback> {
-    stored.and_then(|d| d.credential_location.map(Into::into))
+    let defaults = stored?;
+    Some(
+        defaults
+            .credential_location
+            .map(Into::into)
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "Stored provider type config for `{provider_type}` has `defaults` set but \
+                     `credential_location` is missing — falling back to the built-in default."
+                );
+                default_location()
+            }),
+    )
 }
 
 // --- Simple provider types (api_key_location only) ---
 
 macro_rules! impl_from_simple_provider_type {
-    ($stored:ty => $target:ty, $defaults:ident) => {
+    ($stored:ty => $target:ty, $defaults:ident, $provider_type:literal) => {
         impl From<$stored> for $target {
             fn from(stored: $stored) -> Self {
                 Self {
-                    defaults: convert_stored_api_key_defaults(stored.defaults)
-                        .map(|api_key_location| $defaults { api_key_location }),
+                    defaults: resolve_stored_api_key_defaults(
+                        stored.defaults,
+                        $provider_type,
+                        || $defaults::default().api_key_location,
+                    )
+                    .map(|api_key_location| $defaults { api_key_location }),
                 }
             }
         }
     };
 }
 
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AnthropicProviderTypeConfig, AnthropicDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AzureProviderTypeConfig, AzureDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => DeepSeekProviderTypeConfig, DeepSeekDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GoogleAIStudioGeminiProviderTypeConfig, GoogleAIStudioGeminiDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GroqProviderTypeConfig, GroqDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => HyperbolicProviderTypeConfig, HyperbolicDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => MistralProviderTypeConfig, MistralDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenAIProviderTypeConfig, OpenAIDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenRouterProviderTypeConfig, OpenRouterDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => SGLangProviderTypeConfig, SGLangDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => TGIProviderTypeConfig, TGIDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => VLLMProviderTypeConfig, VLLMDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => XAIProviderTypeConfig, XAIDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AnthropicProviderTypeConfig, AnthropicDefaults, "anthropic");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AzureProviderTypeConfig, AzureDefaults, "azure");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => DeepSeekProviderTypeConfig, DeepSeekDefaults, "deepseek");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GoogleAIStudioGeminiProviderTypeConfig, GoogleAIStudioGeminiDefaults, "google_ai_studio_gemini");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GroqProviderTypeConfig, GroqDefaults, "groq");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => HyperbolicProviderTypeConfig, HyperbolicDefaults, "hyperbolic");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => MistralProviderTypeConfig, MistralDefaults, "mistral");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenAIProviderTypeConfig, OpenAIDefaults, "openai");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenRouterProviderTypeConfig, OpenRouterDefaults, "openrouter");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => SGLangProviderTypeConfig, SGLangDefaults, "sglang");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => TGIProviderTypeConfig, TGIDefaults, "tgi");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => VLLMProviderTypeConfig, VLLMDefaults, "vllm");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => XAIProviderTypeConfig, XAIDefaults, "xai");
 
 // --- Fireworks ---
 
@@ -612,8 +651,10 @@ impl From<StoredFireworksProviderTypeConfig> for FireworksProviderTypeConfig {
     fn from(stored: StoredFireworksProviderTypeConfig) -> Self {
         Self {
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_api_key_defaults(stored.defaults)
-                .map(|api_key_location| FireworksDefaults { api_key_location }),
+            defaults: resolve_stored_api_key_defaults(stored.defaults, "fireworks", || {
+                FireworksDefaults::default().api_key_location
+            })
+            .map(|api_key_location| FireworksDefaults { api_key_location }),
         }
     }
 }
@@ -631,11 +672,14 @@ impl From<StoredFireworksProviderSFTConfig> for FireworksSFTConfig {
 impl From<StoredGCPCredentialProviderTypeConfig> for GCPVertexAnthropicProviderTypeConfig {
     fn from(stored: StoredGCPCredentialProviderTypeConfig) -> Self {
         Self {
-            defaults: convert_stored_gcp_credential_defaults(stored.defaults).map(
-                |credential_location| GCPDefaults {
-                    credential_location,
-                },
-            ),
+            defaults: resolve_stored_gcp_credential_defaults(
+                stored.defaults,
+                "gcp_vertex_anthropic",
+                || GCPDefaults::default().credential_location,
+            )
+            .map(|credential_location| GCPDefaults {
+                credential_location,
+            }),
         }
     }
 }
@@ -647,11 +691,14 @@ impl From<StoredGCPVertexGeminiProviderTypeConfig> for GCPVertexGeminiProviderTy
         Self {
             batch: stored.batch.map(Into::into),
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_gcp_credential_defaults(stored.defaults).map(
-                |credential_location| GCPDefaults {
-                    credential_location,
-                },
-            ),
+            defaults: resolve_stored_gcp_credential_defaults(
+                stored.defaults,
+                "gcp_vertex_gemini",
+                || GCPDefaults::default().credential_location,
+            )
+            .map(|credential_location| GCPDefaults {
+                credential_location,
+            }),
         }
     }
 }
@@ -693,8 +740,10 @@ impl From<StoredTogetherProviderTypeConfig> for TogetherProviderTypeConfig {
     fn from(stored: StoredTogetherProviderTypeConfig) -> Self {
         Self {
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_api_key_defaults(stored.defaults)
-                .map(|api_key_location| TogetherDefaults { api_key_location }),
+            defaults: resolve_stored_api_key_defaults(stored.defaults, "together", || {
+                TogetherDefaults::default().api_key_location
+            })
+            .map(|api_key_location| TogetherDefaults { api_key_location }),
         }
     }
 }

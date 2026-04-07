@@ -81,6 +81,7 @@ pub mod namespace;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
+pub mod rehydrate;
 pub mod snapshot;
 mod span_map;
 #[cfg(test)]
@@ -1097,6 +1098,20 @@ struct ProcessedConfigInput {
     runtime_overlay: RuntimeOverlay,
 }
 
+pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result<(), Error> {
+    for name in config.functions.as_ref().into_iter().flat_map(|m| m.keys()) {
+        if name.starts_with("tensorzero::") {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "User-defined function name cannot start with `tensorzero::`: {name}"
+                ),
+            }));
+        }
+    }
+
+    Ok(())
+}
+
 /// Processes the config input (fresh TOML or snapshot) and returns all the fields
 /// needed by load_from_toml, avoiding partial moves of UninitializedConfig.
 async fn process_config_input(
@@ -1114,17 +1129,9 @@ async fn process_config_input(
             // Deserialize the TOML table into UninitializedConfig
             let mut config = UninitializedConfig::try_from(table)?;
 
-            // Validate that user functions don't use tensorzero:: prefix
+            validate_user_config_names(&config)?;
+
             let mut functions = config.functions.unwrap_or_default();
-            for name in functions.keys() {
-                if name.starts_with("tensorzero::") {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "User-defined function name cannot start with 'tensorzero::': {name}"
-                        ),
-                    }));
-                }
-            }
 
             // Inject built-in functions into the config (SINGLE INJECTION POINT)
             let built_in_functions = built_in::get_all_built_in_functions()?;

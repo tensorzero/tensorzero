@@ -527,27 +527,27 @@ json_mode = "strict"
 
 [functions.json_success.variants.together]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.json_success.variants.together-strict]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-max_tokens = 100
+max_tokens = 1024
 json_mode = "strict"
 
 [functions.json_success.variants.together-implicit]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "tool"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.json_success.variants.sglang]
 type = "chat_completion"
@@ -808,11 +808,11 @@ max_tokens = 100
 
 [functions.json_success.variants.together_json_mode_off]
 type = "chat_completion"
-model = "qwen3-next-80b-a3b-instruct-together"
+model = "glm-5-together"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
-max_tokens = 100
+max_tokens = 1024
 
 [functions.json_success.variants.vllm_json_mode_off]
 type = "chat_completion"

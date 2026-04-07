@@ -27,7 +27,7 @@ impl DICLQueries for PostgresConnectionInfo {
             return Ok(0);
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         // Process in batches to avoid query size limits
         // Embeddings can be large, so use smaller batches
@@ -50,7 +50,7 @@ impl DICLQueries for PostgresConnectionInfo {
         embedding: &[f32],
         limit: u32,
     ) -> Result<Vec<DICLExampleWithDistance>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let embedding_str = format_embedding_for_postgres(embedding);
 
@@ -96,7 +96,7 @@ impl DICLQueries for PostgresConnectionInfo {
         function_name: &str,
         variant_name: &str,
     ) -> Result<bool, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let row = sqlx::query(
             r"
@@ -120,7 +120,7 @@ impl DICLQueries for PostgresConnectionInfo {
         function_name: &str,
         variant_name: &str,
     ) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let result = sqlx::query(
             r"

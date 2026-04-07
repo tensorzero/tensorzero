@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 use super::check_table_exists;
 use async_trait::async_trait;
@@ -22,30 +22,29 @@ pub struct Migration0004<'a> {
 impl Migration for Migration0004<'_> {
     /// Check if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0004".to_string(),
                 message: "ModelInference table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
 
         Ok(())
     }
 
     /// Check if the migration has already been applied by checking if the new columns exist
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let database = self.clickhouse.database();
         let query = format!(
             "SELECT name FROM system.columns WHERE database = '{database}' AND table = 'ModelInference'"
         );
         let response = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0004".to_string(),
                     message: format!("Failed to fetch columns for ModelInference: {e}"),
                 })
@@ -61,7 +60,7 @@ impl Migration for Migration0004<'_> {
         }
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Add a column `system` to the `ModelInference` table
         let query = r"
             ALTER TABLE ModelInference
@@ -71,7 +70,7 @@ impl Migration for Migration0004<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
@@ -84,7 +83,7 @@ impl Migration for Migration0004<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

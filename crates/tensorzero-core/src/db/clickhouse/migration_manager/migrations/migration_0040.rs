@@ -1,7 +1,7 @@
 use super::{check_column_exists, check_table_exists};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 /// Adds an optional `name` column to datapoint tables for a human-readable label/name. This doesn't have to be
@@ -14,12 +14,12 @@ const MIGRATION_ID: &str = "0040";
 
 #[async_trait]
 impl Migration for Migration0040<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables_to_check = ["ChatInferenceDatapoint", "JsonInferenceDatapoint"];
 
         for table_name in tables_to_check {
             if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: format!("{table_name} table does not exist"),
                 }));
@@ -28,7 +28,7 @@ impl Migration for Migration0040<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let chat_inference_datapoint_has_name = check_column_exists(
             self.clickhouse,
             "ChatInferenceDatapoint",
@@ -47,15 +47,15 @@ impl Migration for Migration0040<'_> {
         Ok(!chat_inference_datapoint_has_name || !json_inference_datapoint_has_name)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS name Nullable(String);"
                     .to_string(),
             )
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS name Nullable(String);"
                     .to_string(),
             )
@@ -70,7 +70,7 @@ impl Migration for Migration0040<'_> {
             .to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

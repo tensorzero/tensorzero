@@ -1,7 +1,7 @@
 use super::check_column_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 const MIGRATION_ID: &str = "0047";
@@ -15,19 +15,19 @@ pub struct Migration0047<'a> {
 
 #[async_trait]
 impl Migration for Migration0047<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         Ok(!check_column_exists(self.clickhouse, "ModelInference", "cost", MIGRATION_ID).await?)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS cost Nullable(Decimal(18, 9))"
             ))
             .await?;
@@ -40,7 +40,7 @@ impl Migration for Migration0047<'_> {
         format!("ALTER TABLE ModelInference{on_cluster_name} DROP COLUMN cost;")
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         Ok(check_column_exists(self.clickhouse, "ModelInference", "cost", MIGRATION_ID).await?)
     }
 }

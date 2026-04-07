@@ -17,12 +17,16 @@ use tensorzero_core::config::{
 use tensorzero_core::config::{NonStreamingTimeouts, StreamingTimeouts, TimeoutsConfig};
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::function_config_writes::WriteFunctionConfigParams;
+use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
 use tensorzero_core::evaluations::{
     ExactMatchConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
     LLMJudgeOutputType, UninitializedEvaluatorConfig,
     UninitializedLLMJudgeChatCompletionVariantConfig, UninitializedLLMJudgeConfig,
     UninitializedLLMJudgeDiclVariantConfig, UninitializedLLMJudgeVariantConfig,
     UninitializedLLMJudgeVariantInfo,
+};
+use tensorzero_core::experimentation::adaptive_experimentation::{
+    AdaptiveExperimentationAlgorithm, UninitializedAdaptiveExperimentationConfig,
 };
 use tensorzero_core::experimentation::{
     StaticExperimentationConfig, UninitializedExperimentationConfig,
@@ -303,7 +307,12 @@ fn sample_json_function() -> UninitializedFunctionConfig {
             }),
             namespaces: HashMap::from([(
                 "beta".to_string(),
-                UninitializedExperimentationConfig::TrackAndStop(sample_track_and_stop_config()),
+                UninitializedExperimentationConfig::Adaptive(
+                    UninitializedAdaptiveExperimentationConfig {
+                        algorithm: Some(AdaptiveExperimentationAlgorithm::TrackAndStop),
+                        inner: sample_track_and_stop_config(),
+                    },
+                ),
             )]),
         }),
         evaluators: HashMap::from([
@@ -510,6 +519,35 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
             .await
             .expect("prompt count query should succeed");
     assert_that!(prompt_count, ge(12));
+}
+
+/// Write a function config and then read the whole DB back via
+/// `load_config_from_db`, asserting that the loaded `UninitializedConfig`
+/// contains a function equal to the one we wrote.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn write_function_config_round_trips_via_load_config_from_db(pool: PgPool) {
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+    let config = sample_json_function();
+    postgres
+        .write_function_config(WriteFunctionConfigParams {
+            function_name: "test",
+            config: &config,
+            expected_current_version_id: None,
+            creation_source: "ui",
+            source_autopilot_session_id: None,
+            extra_templates: &HashMap::new(),
+        })
+        .await
+        .expect("write should succeed");
+
+    let loaded = load_config_from_db(&pool)
+        .await
+        .expect("DB load should succeed");
+
+    assert_that!(
+        loaded.functions.as_ref().and_then(|f| f.get("test")),
+        some(eq(&sample_json_function()))
+    );
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]

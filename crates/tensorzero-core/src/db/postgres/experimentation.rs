@@ -16,7 +16,7 @@ impl ExperimentationQueries for PostgresConnectionInfo {
         function_name: &str,
         candidate_variant_name: &str,
     ) -> Result<String, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let response = sqlx::query_as!(
             CheckAndSetVariantResponse,

@@ -84,18 +84,17 @@ impl Optimizer for GEPAConfig {
         // Read TENSORZERO_CLICKHOUSE_URL from env, consistent with gateway startup
         // (see tensorzero-core/src/utils/gateway.rs).
         let gateway_clickhouse = match std::env::var("TENSORZERO_CLICKHOUSE_URL") {
-            Ok(url) => {
-                ClickHouseConnectionInfo::new(
-                    &url,
-                    config
-                        .gateway
-                        .observability
-                        .batch_writes
-                        .clone()
-                        .unwrap_or_default(),
-                )
-                .await?
-            }
+            Ok(url) => ClickHouseConnectionInfo::new(
+                &url,
+                config
+                    .gateway
+                    .observability
+                    .batch_writes
+                    .clone()
+                    .unwrap_or_default(),
+            )
+            .await
+            .map_err(|e| e.log())?,
             Err(_) => ClickHouseConnectionInfo::new_disabled(),
         };
         let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {

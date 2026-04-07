@@ -495,7 +495,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         namespace: Option<&str>,
         max_samples_per_variant: Option<u64>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         // Handle empty variant_names - return early to avoid unnecessary query
         if let Some(names) = variant_names
             && names.is_empty()
@@ -540,7 +540,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         // Handle empty variant_names
         if let Some(ref names) = variant_names
             && names.is_empty()
@@ -595,7 +595,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<FeedbackRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         if before.is_some() && after.is_some() {
             return Err(Error::new(ErrorDetails::InvalidRequest {
                 message: "Cannot specify both before and after in query_feedback_by_target_id"
@@ -639,7 +639,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         target_id: Uuid,
     ) -> Result<FeedbackBounds, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         // Query bounds for all 4 tables in parallel using static queries
         let (boolean, float, comment, demonstration) = tokio::join!(
             query_boolean_bounds(pool, target_id),
@@ -684,7 +684,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
     }
 
     async fn count_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let row = sqlx::query!(
             r#"
             SELECT (
@@ -710,7 +710,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         after: Option<Uuid>,
         limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let limit = limit.unwrap_or(100) as i64;
         query_demonstration_feedback(pool, inference_id, before, after, limit).await
     }
@@ -721,7 +721,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         function_config: &FunctionConfig,
         variant_name: Option<&str>,
     ) -> Result<Vec<MetricWithFeedback>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let table = function_config.postgres_table_name();
 
         let mut qb = build_metrics_with_feedback_query(function_name, table, variant_name);
@@ -751,7 +751,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         target_id: Uuid,
     ) -> Result<Vec<LatestFeedbackRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let rows = sqlx::query!(
             r#"
             SELECT metric_name as "metric_name!", tensorzero.max_uuid(id)::TEXT as "latest_id!"
@@ -783,7 +783,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         params: GetVariantPerformanceParams<'_>,
     ) -> Result<Vec<VariantPerformanceRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let metric_level = params.metric_level();
         let inference_table = params.function_type.postgres_table_name();
         let metric_table = params.metric_config.r#type.postgres_table_name();
@@ -836,7 +836,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         row: &BooleanMetricFeedbackInsert,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let tags_json = serde_json::to_value(&row.tags).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tags: {e}"),
@@ -866,7 +866,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
     }
 
     async fn insert_float_feedback(&self, row: &FloatMetricFeedbackInsert) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let tags_json = serde_json::to_value(&row.tags).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tags: {e}"),
@@ -896,7 +896,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
     }
 
     async fn insert_comment_feedback(&self, row: &CommentFeedbackInsert) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let tags_json = serde_json::to_value(&row.tags).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tags: {e}"),
@@ -934,7 +934,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         row: &DemonstrationFeedbackInsert,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let tags_json = serde_json::to_value(&row.tags).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tags: {e}"),
@@ -972,7 +972,7 @@ impl FeedbackQueries for PostgresConnectionInfo {
         &self,
         row: &StaticEvaluationHumanFeedbackInsert,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         sqlx::query!(
             r#"
             INSERT INTO tensorzero.inference_evaluation_human_feedback

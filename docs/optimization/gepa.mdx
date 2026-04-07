@@ -95,21 +95,17 @@ To demonstrate that GEPA works even with noisy evaluators, we don't provide demo
 <Accordion title="Example: Data Extraction (Named Entity Recognition) — Evaluation">
 
 ```toml title="tensorzero.toml"
-[evaluations.extract_entities_eval]
-type = "inference"
-function_name = "extract_entities"
-
-[evaluations.extract_entities_eval.evaluators.judge_improvement]
+[functions.extract_entities.evaluators.judge_improvement]
 type = "llm_judge"
 output_type = "float"
 include = { reference_output = true }
 optimize = "max"
 description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Evaluates: correctness (only proper nouns, no common nouns/numbers/metadata), schema compliance, completeness, verbatim entity extraction (exact spelling/capitalization), and absence of duplicate entities."
 
-[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+[functions.extract_entities.evaluators.judge_improvement.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
-system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+system_instructions = "functions/extract_entities/evaluators/judge_improvement/system_instructions.txt"
 json_mode = "strict"
 ```
 
@@ -180,7 +176,7 @@ GEPA supports evaluations with any number of evaluators and any evaluator type (
 
 <Step title="Launch GEPA">
 
-Launch GEPA by specifying the name of your function, dataset, and evaluation.
+Launch GEPA by specifying the name of your function, dataset, and evaluators.
 You are also free to choose the models used to analyze inferences and generate new templates.
 
 The `analysis_model` reflects on individual inferences, reports on whether they are optimal, need improvement, or are erroneous, and provides suggestions for prompt template improvement.
@@ -195,7 +191,7 @@ We recommend using strong models for these tasks.
 result = await t0.optimization.gepa.launch(
     function_name="extract_entities",
     dataset_name="extract_entities_dataset",
-    evaluation_name="extract_entities_eval",
+    evaluators=["judge_improvement"],
     analysis_model="openai::gpt-5.2",
     mutation_model="openai::gpt-5.2",
     initial_variants=["baseline"],
@@ -215,7 +211,7 @@ curl -X POST http://localhost:3000/v1/optimization/gepa \
   -d '{
     "function_name": "extract_entities",
     "dataset_name": "extract_entities_dataset",
-    "evaluation_name": "extract_entities_eval",
+    "evaluators": ["judge_improvement"],
     "analysis_model": "openai::gpt-5.2",
     "mutation_model": "openai::gpt-5.2",
     "initial_variants": ["baseline"],
@@ -450,8 +446,15 @@ Launch a GEPA optimization task. Returns a task ID for polling.
 
 {/* Evaluation Parameters */}
 
-<ParamField body="evaluation_name" type="string" required>
-  Name of a configured evaluation to use for scoring.
+<ParamField body="evaluators" type="list[string]">
+  List of evaluator names (defined under the function's configuration) used to
+  score candidate variants. Mutually exclusive with `evaluation_name`; exactly
+  one must be provided.
+</ParamField>
+
+<ParamField body="evaluation_name" type="string">
+  Name of a configured evaluation to use for scoring. Mutually exclusive with
+  `evaluators`; exactly one must be provided.
 </ParamField>
 
 {/* Optional Parameters */}

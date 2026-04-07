@@ -85,7 +85,7 @@ impl PostgresConnectionInfo {
         // prefix check) should happen at the AppStateData layer by building a full
         // Config from a patched UninitializedConfig.
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut tx = pool
             .begin()
             .await

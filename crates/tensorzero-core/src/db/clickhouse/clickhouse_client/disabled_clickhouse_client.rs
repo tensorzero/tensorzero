@@ -23,7 +23,7 @@ pub struct DisabledClickHouseClient;
 
 #[async_trait]
 impl ClickHouseClient for DisabledClickHouseClient {
-    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, DelayedError> {
         Ok(Arc::new(DisabledClickHouseClient))
     }
 
@@ -51,7 +51,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
         &self,
         _rows: Vec<String>,
         _table: TableName,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         Ok(())
     }
 
@@ -59,7 +59,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
         &self,
         _rows: Vec<String>,
         _table: TableName,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         Ok(())
     }
 
@@ -95,7 +95,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
         &self,
         _external_data: ExternalDataInfo,
         _query: String,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         Ok(ClickHouseResponse {
             response: String::new(),
             metadata: ClickHouseResponseMetadata {
@@ -105,11 +105,11 @@ impl ClickHouseClient for DisabledClickHouseClient {
         })
     }
 
-    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, DelayedError> {
         Ok(true)
     }
 
-    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+    async fn create_database_and_migrations_table(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
@@ -135,7 +135,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
 
 #[async_trait]
 impl HealthCheckable for DisabledClickHouseClient {
-    async fn health(&self) -> Result<(), Error> {
+    async fn health(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 }

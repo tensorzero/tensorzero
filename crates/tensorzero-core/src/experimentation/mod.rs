@@ -6,13 +6,17 @@ use std::{
     sync::Arc,
 };
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredAdaptiveExperimentationAlgorithm, StoredExperimentationConfig,
+    StoredExperimentationConfigWithNamespaces,
+};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::config::Namespace;
 use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::error::{DelayedError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 pub use adaptive_experimentation::{
     AdaptiveExperimentationAlgorithm, AdaptiveExperimentationConfig,
@@ -276,7 +280,7 @@ pub trait VariantSampler {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error>;
+    ) -> Result<(), DelayedError>;
     async fn sample(
         &self,
         function_name: &str,
@@ -322,7 +326,7 @@ impl ExperimentationConfig {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         match self {
             Self::Default => Ok(()),
             Self::Static(config) => {
@@ -533,7 +537,7 @@ impl VariantSampler for AlwaysFailsConfig {
         _function_name: &str,
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         Ok(())
     }
 
@@ -579,6 +583,51 @@ impl VariantSampler for AlwaysFailsConfig {
             .into_iter()
             .map(|variant_name| (variant_name, uniform_prob))
             .collect())
+    }
+}
+
+impl From<StoredExperimentationConfig> for UninitializedExperimentationConfig {
+    fn from(stored: StoredExperimentationConfig) -> Self {
+        match stored {
+            StoredExperimentationConfig::Static(s) => {
+                let weighted = match s.candidate_variants {
+                    Some(map) => WeightedVariants::from_map(map.into_iter().collect()),
+                    None => WeightedVariants::from_map(Default::default()),
+                };
+                UninitializedExperimentationConfig::Static(StaticExperimentationConfig {
+                    candidate_variants: weighted,
+                    fallback_variants: s.fallback_variants.unwrap_or_default(),
+                })
+            }
+            StoredExperimentationConfig::Adaptive(a) => {
+                let algo = match a.algorithm {
+                    Some(StoredAdaptiveExperimentationAlgorithm::TrackAndStop) | None => {
+                        AdaptiveExperimentationAlgorithm::TrackAndStop
+                    }
+                };
+                UninitializedExperimentationConfig::Adaptive(
+                    UninitializedAdaptiveExperimentationConfig {
+                        algorithm: Some(algo),
+                        inner: a.into(),
+                    },
+                )
+            }
+        }
+    }
+}
+
+impl From<StoredExperimentationConfigWithNamespaces>
+    for UninitializedExperimentationConfigWithNamespaces
+{
+    fn from(stored: StoredExperimentationConfigWithNamespaces) -> Self {
+        let base = stored.base.into();
+        let namespaces = stored
+            .namespaces
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(k, v)| (k, v.into()))
+            .collect();
+        UninitializedExperimentationConfigWithNamespaces { base, namespaces }
     }
 }
 
