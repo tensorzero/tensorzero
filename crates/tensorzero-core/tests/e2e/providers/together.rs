@@ -16,7 +16,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together".to_string(),
-        model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+        model_name: "glm-5-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -24,7 +24,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-extra-body".to_string(),
-        model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+        model_name: "glm-5-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -32,7 +32,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-extra-headers".to_string(),
-        model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+        model_name: "glm-5-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -40,7 +40,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-dynamic".to_string(),
-        model_name: "qwen3-next-80b-a3b-instruct-together-dynamic".into(),
+        model_name: "glm-5-together-dynamic".into(),
         model_provider_name: "together".into(),
         credentials,
     }];
@@ -49,14 +49,14 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "together".to_string(),
-            model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+            model_name: "glm-5-together".into(),
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "together-strict".to_string(),
-            model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+            model_name: "glm-5-together".into(),
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
@@ -65,7 +65,7 @@ async fn get_providers() -> E2ETestProviders {
     let json_mode_off_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together_json_mode_off".to_string(),
-        model_name: "qwen3-next-80b-a3b-instruct-together".into(),
+        model_name: "glm-5-together".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -98,7 +98,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-shorthand".to_string(),
-        model_name: "together::Qwen/Qwen3-Next-80B-A3B-Instruct".into(),
+        model_name: "together::zai-org/GLM-5".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -106,7 +106,7 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together".to_string(),
-        model_name: "Qwen/Qwen3-Next-80B-A3B-Instruct".into(),
+        model_name: "zai-org/GLM-5".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
@@ -114,17 +114,14 @@ async fn get_providers() -> E2ETestProviders {
     let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "together-shorthand".to_string(),
-        model_name: "together::Qwen/Qwen3-Next-80B-A3B-Instruct".into(),
+        model_name: "together::zai-org/GLM-5".into(),
         model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "together".into(),
-        model_info: HashMap::from([(
-            "model_name".to_string(),
-            "Qwen/Qwen3-Next-80B-A3B-Instruct".to_string(),
-        )]),
+        model_info: HashMap::from([("model_name".to_string(), "zai-org/GLM-5".to_string())]),
         use_modal_headers: false,
     }];
 
