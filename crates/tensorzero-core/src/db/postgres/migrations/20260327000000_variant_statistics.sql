@@ -170,5 +170,6 @@ BEGIN
 END;
 $$;
 
--- Backfill all historical data into variant_statistics.
-SELECT tensorzero.refresh_variant_statistics_incremental(full_refresh => TRUE);
+-- No backfill of historical data. The watermark is initialized at the current
+-- tail, so only new inferences will be aggregated. To manually backfill:
+--   SELECT tensorzero.refresh_variant_statistics_incremental(full_refresh => TRUE);

@@ -1,4 +1,3 @@
-use super::ViewOffsetDeadline;
 use super::check_column_exists;
 use super::check_table_exists;
 use super::migration_0037::quantiles_sql_args;
@@ -128,8 +127,9 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // Record timestamp T (now + offset) for MV WHERE clauses
-        let deadline = ViewOffsetDeadline::new();
+        // Record timestamp T (now + small offset) for MV WHERE clauses.
+        // On non-clean-start, MVs only capture inserts after this timestamp
+        // to avoid double-counting with any concurrent writes.
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -138,7 +138,7 @@ impl Migration for Migration0053<'_> {
                     message: e.to_string(),
                 })
             })?
-            + ViewOffsetDeadline::offset())
+            + std::time::Duration::from_secs(5))
         .as_nanos();
 
         let model_view_where = if clean_start {
@@ -224,108 +224,9 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // ── Phase 3: Backfill historical data ──
-
-        if !clean_start {
-            deadline.wait().await;
-
-            let view_timestamp_nanos_string = view_timestamp_nanos.to_string();
-
-            // Verify the model view was created with our timestamp
-            let create_table = self
-                .clickhouse
-                .run_query_synchronous_no_params(
-                    "SHOW CREATE TABLE VariantStatisticsModelView".to_string(),
-                )
-                .await?
-                .response;
-
-            if !create_table.contains(&view_timestamp_nanos_string) {
-                tracing::warn!(
-                    "Materialized view `VariantStatisticsModelView` was not written because it was recently created. This is likely due to a concurrent migration. Unless the other migration failed, no action is required."
-                );
-                return Ok(());
-            }
-
-            // Backfill from ModelInference (token/cost metrics)
-            // JOINs against ChatInference/JsonInference to resolve function_name/variant_name
-            // since existing ModelInference rows don't have these columns backfilled.
-            // Uses partial_merge join to avoid building a large hash table in memory.
-            tracing::info!("Running backfill of `VariantStatistics` from `ModelInference`");
-            for inference_table in ["ChatInference", "JsonInference"] {
-                tracing::info!("Backfilling model inference metrics via `{inference_table}`");
-                self.clickhouse
-                    .run_query_synchronous_no_params(format!(
-                        r"
-                        INSERT INTO VariantStatistics
-                            (function_name, variant_name, minute,
-                             total_input_tokens, total_output_tokens, total_cost,
-                             total_provider_cache_read_input_tokens, total_provider_cache_write_input_tokens,
-                             count_with_cost)
-                        SELECT
-                            it.function_name AS function_name,
-                            it.variant_name AS variant_name,
-                            toStartOfMinute(mi.timestamp) AS minute,
-                            sumState(mi.input_tokens) AS total_input_tokens,
-                            sumState(mi.output_tokens) AS total_output_tokens,
-                            sumState(mi.cost) AS total_cost,
-                            sumState(mi.provider_cache_read_input_tokens) AS total_provider_cache_read_input_tokens,
-                            sumState(mi.provider_cache_write_input_tokens) AS total_provider_cache_write_input_tokens,
-                            countState(mi.cost) AS count_with_cost
-                        FROM ModelInference mi
-                        INNER JOIN {inference_table} AS it ON mi.inference_id = it.id
-                        WHERE UUIDv7ToDateTime(mi.id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                        GROUP BY it.function_name, it.variant_name, minute
-                        SETTINGS join_algorithm = 'partial_merge'
-                        "
-                    ))
-                    .await?;
-            }
-
-            // Backfill from ChatInference (latency/count metrics)
-            tracing::info!("Running backfill of `VariantStatistics` from `ChatInference`");
-            self.clickhouse
-                .run_query_synchronous_no_params(format!(
-                    r"
-                    INSERT INTO VariantStatistics
-                        (function_name, variant_name, minute,
-                         processing_time_ms_quantiles, ttft_ms_quantiles, count)
-                    SELECT
-                        function_name,
-                        variant_name,
-                        toStartOfMinute(timestamp) AS minute,
-                        quantilesTDigestState({qs})(processing_time_ms) AS processing_time_ms_quantiles,
-                        quantilesTDigestState({qs})(ttft_ms) AS ttft_ms_quantiles,
-                        countState() AS count
-                    FROM ChatInference
-                    WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                    GROUP BY function_name, variant_name, minute
-                    "
-                ))
-                .await?;
-
-            // Backfill from JsonInference (latency/count metrics)
-            tracing::info!("Running backfill of `VariantStatistics` from `JsonInference`");
-            self.clickhouse
-                .run_query_synchronous_no_params(format!(
-                    r"
-                    INSERT INTO VariantStatistics
-                        (function_name, variant_name, minute,
-                         processing_time_ms_quantiles, ttft_ms_quantiles, count)
-                    SELECT
-                        function_name,
-                        variant_name,
-                        toStartOfMinute(timestamp) AS minute,
-                        quantilesTDigestState({qs})(processing_time_ms) AS processing_time_ms_quantiles,
-                        quantilesTDigestState({qs})(ttft_ms) AS ttft_ms_quantiles,
-                        countState() AS count
-                    FROM JsonInference
-                    WHERE UUIDv7ToDateTime(id) < fromUnixTimestamp64Nano({view_timestamp_nanos})
-                    GROUP BY function_name, variant_name, minute
-                    "
-                ))
-                .await?;
-        }
+        // No backfill of historical data into VariantStatistics. The MVs will
+        // capture all new inserts going forward. Historical data can be backfilled
+        // manually if needed via INSERT ... SELECT queries.
 
         Ok(())
     }
