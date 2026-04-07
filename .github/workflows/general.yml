@@ -49,12 +49,14 @@ jobs:
               - '!**/README.md'
               - '!docs/**'
               - '!examples/**'
+              - '!for-agents/**'
               - '!recipes/**'
               - '!ui/**'
             code:
               - '**'
               - '!**/README.md'
               - '!docs/**'
+              - '!for-agents/**'
             docs:
               - 'docs/**'
             live-tests:
@@ -62,6 +64,7 @@ jobs:
               - '!**/README.md'
               - '!docs/**'
               - '!examples/**'
+              - '!for-agents/**'
               - '!recipes/**'
               - '!ui/**'
 
