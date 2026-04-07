@@ -40,7 +40,7 @@ use crate::db::rate_limiting::DisabledRateLimitQueries;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::endpoints;
 use crate::endpoints::openai_compatible::RouterExt;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::howdy::{get_deployment_id, setup_howdy};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, RateLimitingManager};
@@ -323,7 +323,7 @@ impl GatewayHandle {
         config: UnwrittenConfig,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         let valkey_url = std::env::var("TENSORZERO_VALKEY_URL").ok();
@@ -348,7 +348,7 @@ impl GatewayHandle {
         valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
 
@@ -457,7 +457,7 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         let primary_datastore = PrimaryDatastore::resolve(
             &config.gateway.observability,
             &clickhouse_connection_info,
@@ -536,14 +536,13 @@ impl GatewayHandle {
             .map(|s| s.as_str())
             .collect();
         if !unknown_whitelist_tools.is_empty() {
-            return Err(ErrorDetails::AppState {
+            return Err(DelayedError::new(ErrorDetails::AppState {
                 message: format!(
                     "Unknown tool names in `autopilot.tool_whitelist`: {unknown_whitelist_tools:?}. \
                      These tools do not exist and will never be auto-approved. \
                      Check for typos in your configuration."
                 ),
-            }
-            .into());
+            }));
         }
 
         let spawn_client = if let Some(pool) = postgres_connection_info.get_pool() {
@@ -577,13 +576,12 @@ impl GatewayHandle {
         if config.gateway.auth.enabled
             && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
-            return Err(ErrorDetails::AppState {
+            return Err(DelayedError::new(ErrorDetails::AppState {
                 message:
                     "Authentication is enabled (`gateway.auth.enabled = true`) but Postgres is not available. \
                      Authentication requires Postgres. Set `TENSORZERO_POSTGRES_URL` or disable auth."
                         .to_string(),
-            }
-            .into());
+            }));
         }
 
         let cache_manager = CacheManager::new_from_connections(
@@ -676,7 +674,9 @@ impl AppStateData<Arc<Config>> {
 
         let db = self.get_delegating_database();
         #[expect(clippy::disallowed_methods)]
-        db.write_config_snapshot(snapshot).await
+        db.write_config_snapshot(snapshot)
+            .await
+            .map_err(|e| e.log())
     }
 
     /// Create an AppStateData for use with a historical config snapshot.
@@ -695,17 +695,21 @@ impl AppStateData<Arc<Config>> {
         shutdown_token: CancellationToken,
         primary_datastore: PrimaryDatastore,
     ) -> Result<Self, Error> {
-        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
-            Arc::new(config.rate_limiting.clone()),
-            &valkey_connection_info,
-            &postgres_connection_info,
-        )?);
+        let rate_limiting_manager = Arc::new(
+            RateLimitingManager::new_from_connections(
+                Arc::new(config.rate_limiting.clone()),
+                &valkey_connection_info,
+                &postgres_connection_info,
+            )
+            .map_err(|e| e.log())?,
+        );
         let cache_manager = CacheManager::new_from_connections(
             &valkey_cache_connection_info,
             &clickhouse_connection_info,
             &config.gateway.cache,
             primary_datastore,
-        )?;
+        )
+        .map_err(|e| e.log())?;
         Ok(Self {
             config,
             uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
@@ -748,13 +752,15 @@ impl AppStateData<SwappableConfig> {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Box::pin(Config::new_empty()).await?, Some(clickhouse_url)).await
+    setup_clickhouse(&Box::pin(Config::new_empty()).await?, Some(clickhouse_url))
+        .await
+        .map_err(|e| e.log())
 }
 
 pub async fn setup_clickhouse(
     config: &UnwrittenConfig,
     clickhouse_url: Option<String>,
-) -> Result<ClickHouseConnectionInfo, Error> {
+) -> Result<ClickHouseConnectionInfo, DelayedError> {
     // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
     // ClickHouse.
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
@@ -823,9 +829,9 @@ async fn create_postgres_connection(
     postgres_url: &str,
     connection_pool_size: u32,
     batch_writes: &BatchWritesConfig,
-) -> Result<PostgresConnectionInfo, Error> {
+) -> Result<PostgresConnectionInfo, DelayedError> {
     let connect_options: PgConnectOptions = postgres_url.parse().map_err(|err: sqlx::Error| {
-        Error::new(ErrorDetails::PostgresConnectionInitialization {
+        DelayedError::new(ErrorDetails::PostgresConnectionInitialization {
             message: err.to_string(),
         })
     })?;
@@ -839,7 +845,7 @@ async fn create_postgres_connection(
         .connect_with(connect_options)
         .await
         .map_err(|err| {
-            Error::new(ErrorDetails::PostgresConnectionInitialization {
+            DelayedError::new(ErrorDetails::PostgresConnectionInitialization {
                 message: err.to_string(),
             })
         })?;
@@ -867,7 +873,7 @@ async fn create_postgres_connection(
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<&str>,
-) -> Result<PostgresConnectionInfo, Error> {
+) -> Result<PostgresConnectionInfo, DelayedError> {
     if config.postgres.enabled.is_some() {
         crate::utils::deprecation_warning(
             "`postgres.enabled` is deprecated (2026.3+) and will be removed in a future release. \
@@ -884,10 +890,9 @@ pub async fn setup_postgres(
         }
         // Postgres enabled but no URL (deprecated)
         (Some(true), None) => {
-            return Err(ErrorDetails::AppState {
+            return Err(DelayedError::new(ErrorDetails::AppState {
                 message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
-            }
-            .into());
+            }));
         }
         // Postgres enabled and URL provided (deprecated)
         (Some(true), Some(postgres_url)) => {
@@ -947,7 +952,7 @@ pub async fn setup_postgres(
 ///
 /// # Arguments
 /// * `valkey_url` - Optional Valkey URL (from `TENSORZERO_VALKEY_URL` env var)
-pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionInfo, Error> {
+pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionInfo, DelayedError> {
     match valkey_url {
         Some(url) => ValkeyConnectionInfo::new(url).await,
         None => {
@@ -968,7 +973,7 @@ pub async fn setup_valkey(valkey_url: Option<&str>) -> Result<ValkeyConnectionIn
 pub async fn setup_valkey_cache(
     valkey_cache_url: Option<&str>,
     valkey_connection_info: &ValkeyConnectionInfo,
-) -> Result<ValkeyConnectionInfo, Error> {
+) -> Result<ValkeyConnectionInfo, DelayedError> {
     match valkey_cache_url {
         Some(url) => {
             tracing::info!(
@@ -994,11 +999,11 @@ async fn setup_autopilot_client(
     deployment_id: Option<&String>,
     available_tools: HashSet<String>,
     tool_whitelist: HashSet<String>,
-) -> Result<Option<Arc<AutopilotClient>>, Error> {
+) -> Result<Option<Arc<AutopilotClient>>, DelayedError> {
     match std::env::var("TENSORZERO_AUTOPILOT_API_KEY") {
         Ok(api_key) => {
             let pool = postgres_connection_info.get_pool().ok_or_else(|| {
-                Error::new(ErrorDetails::AppState {
+                DelayedError::new(ErrorDetails::AppState {
                     message: "Autopilot client requires Postgres; set `TENSORZERO_POSTGRES_URL`."
                         .to_string(),
                 })
@@ -1006,7 +1011,7 @@ async fn setup_autopilot_client(
 
             // Require `deployment_id` (from ClickHouse) for autopilot
             if deployment_id.is_none() {
-                return Err(Error::new(ErrorDetails::AppState {
+                return Err(DelayedError::new(ErrorDetails::AppState {
                     message:
                         "Failed to fetch the deployment ID from ClickHouse. Please make sure that ClickHouse is running and accessible."
                             .to_string(),
@@ -1027,7 +1032,7 @@ async fn setup_autopilot_client(
             // Allow custom base URL for testing
             if let Ok(base_url) = std::env::var("TENSORZERO_AUTOPILOT_BASE_URL") {
                 let url = base_url.parse().map_err(|e| {
-                    Error::new(ErrorDetails::AppState {
+                    DelayedError::new(ErrorDetails::AppState {
                         message: format!("Invalid TENSORZERO_AUTOPILOT_BASE_URL: {e}"),
                     })
                 })?;
@@ -1035,7 +1040,11 @@ async fn setup_autopilot_client(
                 tracing::info!("Autopilot client using custom base URL: {}", base_url);
             }
 
-            let client = builder.build().await.map_err(Error::from)?;
+            let client = builder.build().await.map_err(|e| {
+                DelayedError::new(ErrorDetails::AppState {
+                    message: format!("Failed to build autopilot client: {e}"),
+                })
+            })?;
             // TODO: Handshake with API to validate credentials
             tracing::info!("Autopilot client initialized");
             Ok(Some(Arc::new(client)))
@@ -1046,7 +1055,7 @@ async fn setup_autopilot_client(
             );
             Ok(None)
         }
-        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(ErrorDetails::AppState {
+        Err(std::env::VarError::NotUnicode(_)) => Err(DelayedError::new(ErrorDetails::AppState {
             message: "TENSORZERO_AUTOPILOT_API_KEY contains invalid UTF-8".to_string(),
         })),
     }
@@ -1164,7 +1173,8 @@ pub async fn start_openai_compatible_gateway(
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
     ))
-    .await?;
+    .await
+    .map_err(|e| e.log())?;
 
     let router = Router::new()
         .register_openai_compatible_routes()

@@ -69,7 +69,7 @@ use crate::{
         feedback::{FeedbackByVariant, FeedbackQueries},
         postgres::PostgresConnectionInfo,
     },
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{DelayedError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     utils::spawn_ignoring_shutdown,
     variant::VariantInfo,
 };
@@ -482,11 +482,11 @@ impl VariantSampler for TrackAndStopConfig {
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         // Track-and-Stop requires Postgres for episode-to-variant mapping
         match postgres {
             PostgresConnectionInfo::Disabled => {
-                return Err(Error::new(ErrorDetails::Config {
+                return Err(DelayedError::new(ErrorDetails::Config {
                     message: format!(
                         "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is not available. \
                         Track-and-Stop requires Postgres for episode-to-variant consistency. \
@@ -502,7 +502,7 @@ impl VariantSampler for TrackAndStopConfig {
 
         // Check if postgres is healthy
         postgres.health().await.map_err(|e| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: format!(
                     "Track-and-Stop experimentation is configured for function `{function_name}` but Postgres is unhealthy: {e}. \
                     Track-and-Stop requires a healthy Postgres connection for episode-to-variant consistency.",

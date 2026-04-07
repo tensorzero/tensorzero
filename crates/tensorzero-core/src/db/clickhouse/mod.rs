@@ -68,10 +68,13 @@ impl ClickHouseConnectionInfo {
     /// returns Ok(Production{ ... })
     ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
-    pub async fn new(database_url: &str, batch_config: BatchWritesConfig) -> Result<Self, Error> {
+    pub async fn new(
+        database_url: &str,
+        batch_config: BatchWritesConfig,
+    ) -> Result<Self, DelayedError> {
         // Add a query string for the database using the URL crate
         let mut database_url = Url::parse(database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
@@ -138,7 +141,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn recreate(&self) -> Result<Self, Error> {
         Ok(Self {
-            inner: self.inner.recreate().await?,
+            inner: self.inner.recreate().await.map_err(|e| e.log())?,
         })
     }
 
@@ -182,7 +185,10 @@ impl ClickHouseConnectionInfo {
                 })
             })
             .collect();
-        self.inner.write_batched_internal(rows_json?, table).await
+        self.inner
+            .write_batched_internal(rows_json?, table)
+            .await
+            .map_err(|e| e.log())
     }
 
     /// Like `write_batched`, but takes pre-serialized JSON strings instead of serializable rows.
@@ -191,7 +197,10 @@ impl ClickHouseConnectionInfo {
         rows: Vec<String>,
         table: TableName,
     ) -> Result<(), Error> {
-        self.inner.write_batched_internal(rows, table).await
+        self.inner
+            .write_batched_internal(rows, table)
+            .await
+            .map_err(|e| e.log())
     }
 
     /// Write rows to ClickHouse without, without using our batched write implementation.
@@ -200,8 +209,12 @@ impl ClickHouseConnectionInfo {
         &self,
         rows: Rows<'_, T>,
         table: TableName,
-    ) -> Result<(), Error> {
-        let rows_json = rows.as_json()?;
+    ) -> Result<(), DelayedError> {
+        let rows_json = rows.as_json().map_err(|e| {
+            DelayedError::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
         self.inner
             .write_non_batched_internal(rows_json.into_owned(), table)
             .await
@@ -241,6 +254,14 @@ impl ClickHouseConnectionInfo {
         self.run_query_synchronous(query, &HashMap::default()).await
     }
 
+    pub async fn run_query_synchronous_no_params_delayed_err(
+        &self,
+        query: String,
+    ) -> Result<ClickHouseResponse, DelayedError> {
+        self.run_query_synchronous_delayed_err(query, &HashMap::default())
+            .await
+    }
+
     pub async fn run_query_synchronous_no_params_de<T>(&self, query: String) -> Result<T, Error>
     where
         T: DeserializeOwned,
@@ -263,19 +284,19 @@ impl ClickHouseConnectionInfo {
         &self,
         external_data: ExternalDataInfo,
         query: String,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         self.inner
             .run_query_with_external_data(external_data, query)
             .await
     }
 
-    pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+    pub async fn check_database_and_migrations_table_exists(&self) -> Result<bool, DelayedError> {
         self.inner
             .check_database_and_migrations_table_exists()
             .await
     }
 
-    pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+    pub async fn create_database_and_migrations_table(&self) -> Result<(), DelayedError> {
         self.inner.create_database_and_migrations_table().await
     }
 
@@ -309,7 +330,7 @@ impl Display for ClickHouseConnectionInfo {
 // Update the HealthCheckable implementation to delegate to the trait
 #[async_trait]
 impl HealthCheckable for ClickHouseConnectionInfo {
-    async fn health(&self) -> Result<(), Error> {
+    async fn health(&self) -> Result<(), DelayedError> {
         self.inner.health().await
     }
 }
@@ -394,42 +415,40 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     }
 }
 
-fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
+fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, DelayedError> {
     // Check the scheme
     match url.scheme() {
         "http" | "https" => {}
         "clickhouse" | "clickhousedb" => {
-            return Err(ErrorDetails::Config {
+            return Err(DelayedError::new(ErrorDetails::Config {
                 message: format!(
                     "Invalid scheme in ClickHouse URL: '{}'. Use 'http' or 'https' instead.",
                     url.scheme()
                 ),
-            }
-            .into());
+            }));
         }
-        _ => return Err(ErrorDetails::Config {
-            message: format!(
-                "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
-                url.scheme()
-            ),
+        _ => {
+            return Err(DelayedError::new(ErrorDetails::Config {
+                message: format!(
+                    "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
+                    url.scheme()
+                ),
+            }));
         }
-        .into()),
     }
 
     // Validate the host
     if url.host().is_none() {
-        return Err(ErrorDetails::Config {
+        return Err(DelayedError::new(ErrorDetails::Config {
             message: "Missing hostname in ClickHouse URL".to_string(),
-        }
-        .into());
+        }));
     }
 
     // Validate that none of the query strings have key "database"
     if url.query_pairs().any(|(key, _)| key == "database") {
-        return Err(ErrorDetails::Config {
+        return Err(DelayedError::new(ErrorDetails::Config {
             message: "The query string 'database' is not allowed in the ClickHouse URL".to_string(),
-        }
-        .into());
+        }));
     }
     // username, password, and query-strings are optional, so we don't need to validate them
 
@@ -447,17 +466,15 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         0 => None, // Empty path is valid
         1 => {
             if path_segments[0].is_empty() {
-                return Err(ErrorDetails::Config {
+                return Err(DelayedError::new(ErrorDetails::Config {
                     message: "The database name in the path of the ClickHouse URL cannot be empty".to_string(),
-                }
-                .into());
+                }));
             }
             Some(path_segments[0].to_string())
         }
-        _ => return Err(ErrorDetails::Config {
+        _ => return Err(DelayedError::new(ErrorDetails::Config {
             message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
-        }
-        .into()),
+        })),
     })
 }
 
@@ -562,13 +579,12 @@ mod tests {
         let database_url = Url::parse("clickhouse://localhost:8123/").unwrap();
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
-            err,
+            *err.get_details(),
             ErrorDetails::Config {
                 message:
                     "Invalid scheme in ClickHouse URL: 'clickhouse'. Use 'http' or 'https' instead."
                         .to_string(),
             }
-            .into()
         );
 
         let database_url = Url::parse("https://localhost:8123/").unwrap();
@@ -602,12 +618,11 @@ mod tests {
                 .unwrap();
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
-            err,
+            *err.get_details(),
             ErrorDetails::Config {
                 message: "The query string 'database' is not allowed in the ClickHouse URL"
                     .to_string(),
             }
-            .into()
         );
 
         let database_url =
@@ -615,11 +630,10 @@ mod tests {
                 .unwrap();
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
-            err,
+            *err.get_details(),
             ErrorDetails::Config {
                 message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
             }
-            .into()
         );
 
         let database_url =

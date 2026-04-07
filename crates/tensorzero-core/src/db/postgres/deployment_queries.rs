@@ -26,11 +26,7 @@ impl PostgresConnectionInfo {
     /// is a blake3 hash of a UUIDv7, generated once and stored as a singleton row.
     /// Race conditions are handled via `ON CONFLICT DO NOTHING`.
     async fn get_or_create_deployment_id(&self) -> Result<String, DelayedError> {
-        let pool = self.get_pool_result().map_err(|e| {
-            DelayedError::new(ErrorDetails::PostgresConnection {
-                message: e.to_string(),
-            })
-        })?;
+        let pool = self.get_pool_result()?;
 
         // Try to read existing deployment ID
         let row = sqlx::query("SELECT deployment_id FROM tensorzero.deployment_id LIMIT 1")
@@ -54,11 +50,7 @@ impl PostgresConnectionInfo {
     /// and needs to keep the deployment ID consistent across both databases.
     /// Uses `ON CONFLICT DO NOTHING` to handle races, then re-reads the winner.
     pub async fn insert_deployment_id(&self, deployment_id: &str) -> Result<String, DelayedError> {
-        let pool = self.get_pool_result().map_err(|e| {
-            DelayedError::new(ErrorDetails::PostgresConnection {
-                message: e.to_string(),
-            })
-        })?;
+        let pool = self.get_pool_result()?;
 
         sqlx::query(
             "INSERT INTO tensorzero.deployment_id (deployment_id) VALUES ($1) ON CONFLICT (dummy) DO NOTHING",

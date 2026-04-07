@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 use super::check_table_exists;
@@ -26,11 +26,11 @@ const MIGRATION_ID: &str = "0029";
 
 #[async_trait]
 impl Migration for Migration0029<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Note: This migration is special in that in its original form it wouldn't run in a
         // clean start setting because migration 0023 was banned.
         // We want to write at least once that this migration was run to the TensorZeroMigration table
@@ -40,22 +40,22 @@ impl Migration for Migration0029<'_> {
         // If not, we run this once, the migration manager will write the row, and we will skip it every subsequent time.
         let response = self
             .clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 "SELECT 1 FROM TensorZeroMigration WHERE migration_id = 29 LIMIT 1".to_string(),
             )
             .await?;
         return Ok(response.response.trim() != "1");
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;".to_string(),
             )
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;".to_string(),
             )
             .await?;
@@ -68,7 +68,7 @@ impl Migration for Migration0029<'_> {
         r"/* no action required */ SELECT 1;".to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let float_materialized_view_exists = check_table_exists(
             self.clickhouse,

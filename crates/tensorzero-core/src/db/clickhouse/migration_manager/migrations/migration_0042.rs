@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 use super::get_column_type;
@@ -16,11 +16,11 @@ const MIGRATION_ID: &str = "0042";
 
 #[async_trait]
 impl Migration for Migration0042<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if get_column_type(
             self.clickhouse,
             "ModelInferenceCache",
@@ -48,9 +48,9 @@ impl Migration for Migration0042<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"ALTER TABLE ModelInferenceCache
                 MODIFY COLUMN input_tokens Nullable(UInt32)"
                     .to_string(),
@@ -58,7 +58,7 @@ impl Migration for Migration0042<'_> {
             .await?;
 
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r"ALTER TABLE ModelInferenceCache
                 MODIFY COLUMN output_tokens Nullable(UInt32)"
                     .to_string(),
@@ -74,7 +74,7 @@ impl Migration for Migration0042<'_> {
             .to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

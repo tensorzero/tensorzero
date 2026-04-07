@@ -363,7 +363,10 @@ async fn run() -> Result<(), ExitCode> {
     let gateway_handle =
         gateway::GatewayHandle::new(unwritten_config, available_tools, tool_whitelist)
             .await
-            .log_err_pretty("Failed to initialize AppState")?;
+            .map_err(|e| {
+                e.log_at_level("Failed to initialize AppState: ", tracing::Level::ERROR);
+                ExitCode::FAILURE
+            })?;
 
     validate_postgres_extensions_for_postgres_primary(&gateway_handle).await?;
 

@@ -42,7 +42,7 @@ impl PostgresConnectionInfo {
         &self,
         params: WriteStoredConfigParams<'_>,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut tx = pool
             .begin()
             .await

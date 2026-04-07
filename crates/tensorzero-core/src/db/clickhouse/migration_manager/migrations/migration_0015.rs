@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 use super::get_column_type;
@@ -12,13 +12,13 @@ pub struct Migration0015<'a> {
 
 #[async_trait]
 impl Migration for Migration0015<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
     /// Check if the migration has already been applied by checking if
     /// the `input_tokens` and `output_tokens` columns are nullable
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if get_column_type(self.clickhouse, "ModelInference", "input_tokens", "0015").await?
             != "Nullable(UInt32)"
         {
@@ -35,7 +35,7 @@ impl Migration for Migration0015<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Alter the `input_tokens` column of `ModelInference` to be a nullable column
         let query = r"
             ALTER TABLE ModelInference
@@ -43,7 +43,7 @@ impl Migration for Migration0015<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Alter the `output_tokens` column of `ModelInference` to be a nullable column
@@ -53,7 +53,7 @@ impl Migration for Migration0015<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
@@ -68,7 +68,7 @@ impl Migration for Migration0015<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

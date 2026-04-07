@@ -14,7 +14,7 @@ use crate::db::delegating_connection::PrimaryDatastore;
 use crate::db::valkey::ValkeyConnectionInfo;
 use crate::db::valkey::cache::ValkeyCacheClient;
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
-use crate::error::{Error, ErrorDetails, warn_discarded_cache_write};
+use crate::error::{DelayedError, Error, ErrorDetails, warn_discarded_cache_write};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -58,7 +58,7 @@ impl CacheManager {
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         cache_config: &ModelInferenceCacheConfig,
         primary_datastore: PrimaryDatastore,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         if cache_config.enabled == Some(false) {
             return Ok(Self::disabled());
         }
@@ -73,27 +73,25 @@ impl CacheManager {
                 let explicitly_enabled = cache_config.enabled == Some(true);
                 if primary_datastore == PrimaryDatastore::ClickHouse {
                     if !clickhouse_available && explicitly_enabled {
-                        return Err(ErrorDetails::AppState {
+                        return Err(DelayedError::new(ErrorDetails::AppState {
                             message: format!(
                                 "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
                                  Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
                                 cache_config.backend,
                             ),
-                        }
-                        .into());
+                        }));
                     }
                     return Ok(Self::new(Arc::new(clickhouse_connection_info.clone())));
                 }
                 // Postgres primary: check if any backend is available
                 if explicitly_enabled && !valkey_available && !clickhouse_available {
-                    return Err(ErrorDetails::AppState {
+                    return Err(DelayedError::new(ErrorDetails::AppState {
                         message: format!(
                             "`cache.enabled` is `true` but the cache backend (`{:?}`) is not available. \
                              Ensure the required connection URL is set, or set `cache.enabled` to `false`.",
                             cache_config.backend,
                         ),
-                    }
-                    .into());
+                    }));
                 }
                 match valkey_connection_info {
                     ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
@@ -104,12 +102,11 @@ impl CacheManager {
             }
             Some(InferenceCacheBackend::ClickHouse) => {
                 if !clickhouse_available {
-                    return Err(ErrorDetails::AppState {
+                    return Err(DelayedError::new(ErrorDetails::AppState {
                         message: "`cache.backend` is set to `clickhouse` but ClickHouse is not available. \
                                   Ensure the required connection URL is set, or remove the `cache.backend` setting."
                             .to_string(),
-                    }
-                    .into());
+                    }));
                 }
                 Ok(Self::new(Arc::new(clickhouse_connection_info.clone())))
             }
@@ -117,12 +114,11 @@ impl CacheManager {
                 ValkeyConnectionInfo::Enabled { connection } => Ok(Self::new(Arc::new(
                     ValkeyCacheClient::new(connection.clone(), cache_config.valkey.as_ref().map(|v| v.ttl_s).unwrap_or_else(|| ValkeyModelInferenceCacheConfig::default().ttl_s)),
                 ))),
-                ValkeyConnectionInfo::Disabled => Err(ErrorDetails::AppState {
+                ValkeyConnectionInfo::Disabled => Err(DelayedError::new(ErrorDetails::AppState {
                     message: "`cache.backend` is set to `valkey` but Valkey is not available. \
                               Ensure the required connection URL is set, or remove the `cache.backend` setting."
                         .to_string(),
-                }
-                .into()),
+                })),
             },
         }
     }

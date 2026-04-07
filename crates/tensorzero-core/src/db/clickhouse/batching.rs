@@ -11,7 +11,7 @@ use tokio::task::JoinSet;
 
 use crate::db::batching::{ChannelReceiver, process_channel_with_capacity_and_timeout};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 
 /// Wraps either a bounded or unbounded mpsc sender.
 #[derive(Debug)]
@@ -57,12 +57,12 @@ impl BatchSender {
     pub fn new(
         clickhouse: ClickHouseConnectionInfo,
         config: BatchWritesConfig,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         // We call `tokio::task::block_in_place` in our `Drop` impl to wait for outstanding
         // batch writes to finish. This does not work on the CurrentThread runtime,
         // so we fail here rather than panicking at shutdown.
         if Handle::current().runtime_flavor() == RuntimeFlavor::CurrentThread {
-            return Err(Error::new(ErrorDetails::InternalError {
+            return Err(DelayedError::new(ErrorDetails::InternalError {
                 message: "Cannot use ClickHouse batching with the CurrentThread Tokio runtime"
                     .to_string(),
             }));
@@ -76,14 +76,14 @@ impl BatchSender {
         };
         let reader_channels = enum_map::enum_map! {
             table_name => { channels[table_name].0.take().ok_or_else(|| {
-                Error::new(ErrorDetails::InternalError {
+                DelayedError::new(ErrorDetails::InternalError {
                     message: format!("Failed to take reader channel for table {table_name:?}. {IMPOSSIBLE_ERROR_MESSAGE}"),
                 })
             })? }
         };
         let writer_channels = enum_map::enum_map! {
             table_name => { channels[table_name].1.take().ok_or_else(|| {
-                Error::new(ErrorDetails::InternalError {
+                DelayedError::new(ErrorDetails::InternalError {
                     message: format!("Failed to take writer channel for table {table_name:?}. {IMPOSSIBLE_ERROR_MESSAGE}"),
                 })
             })? }
@@ -174,7 +174,8 @@ impl BatchWriter {
                         .await
                     {
                         // TODO: if this errors, should we retry?
-                        tracing::error!("Error writing to ClickHouse: {e}");
+                        // Log the error (converting DelayedError to Error)
+                        e.log();
                     }
                     buffer
                 }

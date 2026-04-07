@@ -24,7 +24,7 @@ struct DatapointRow {
 #[async_trait]
 impl ResolveUuidQueries for PostgresConnectionInfo {
     async fn resolve_uuid(&self, id: &Uuid) -> Result<Vec<ResolvedObject>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         // Run all queries concurrently
         let (

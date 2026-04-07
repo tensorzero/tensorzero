@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 use super::ViewOffsetDeadline;
 use super::check_table_exists;
@@ -15,7 +15,7 @@ pub struct Migration0009<'a> {
 impl Migration for Migration0009<'_> {
     /// Check if the four feedback tables exist
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables = vec![
             "BooleanMetricFeedback",
             "CommentFeedback",
@@ -25,11 +25,10 @@ impl Migration for Migration0009<'_> {
 
         for table in tables {
             if !check_table_exists(self.clickhouse, table, "0009").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0009".to_string(),
                     message: format!("Table {table} does not exist"),
-                }
-                .into());
+                }));
             }
         }
 
@@ -40,7 +39,7 @@ impl Migration for Migration0009<'_> {
     /// This should be equivalent to checking if `BooleanMetricFeedbackByTargetId`,
     /// `CommentFeedbackByTargetId`, `DemonstrationFeedbackByTargetId` and
     /// `FloatMetricFeedbackByTargetId` exist
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let tables = vec![
             "BooleanMetricFeedbackByTargetId",
             "CommentFeedbackByTargetId",
@@ -55,13 +54,13 @@ impl Migration for Migration0009<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         // Only gets used when we are not doing a clean start
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0009".to_string(),
                     message: e.to_string(),
                 })
@@ -93,7 +92,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
         // Create the materialized view for the `BooleanMetricFeedbackByTargetId` table from BooleanMetricFeedback
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -119,7 +118,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Create the `CommentFeedbackByTargetId` table
@@ -145,7 +144,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `CommentFeedbackByTargetId` table from CommentFeedback
@@ -167,7 +166,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Create the `DemonstrationFeedbackByInferenceId` table
@@ -192,7 +191,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `DemonstrationFeedbackByInferenceId` table from DemonstrationFeedback
@@ -213,7 +212,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Create the `FloatMetricFeedbackByTargetId` table
@@ -239,7 +238,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for the `FloatMetricFeedbackByTargetId` table from FloatMetricFeedback
@@ -266,7 +265,7 @@ impl Migration for Migration0009<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
@@ -286,7 +285,9 @@ impl Migration for Migration0009<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
-                self.clickhouse.run_query_synchronous_no_params(query).await
+                self.clickhouse
+                    .run_query_synchronous_no_params_delayed_err(query)
+                    .await
             };
             let insert_comment_feedback = async {
                 let query = format!(
@@ -302,7 +303,9 @@ impl Migration for Migration0009<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
-                self.clickhouse.run_query_synchronous_no_params(query).await
+                self.clickhouse
+                    .run_query_synchronous_no_params_delayed_err(query)
+                    .await
             };
             let insert_demonstration_feedback = async {
                 let query = format!(
@@ -317,7 +320,9 @@ impl Migration for Migration0009<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
-                self.clickhouse.run_query_synchronous_no_params(query).await
+                self.clickhouse
+                    .run_query_synchronous_no_params_delayed_err(query)
+                    .await
             };
             let insert_float_metric_feedback = async {
                 let query = format!(
@@ -333,7 +338,9 @@ impl Migration for Migration0009<'_> {
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "
                 );
-                self.clickhouse.run_query_synchronous_no_params(query).await
+                self.clickhouse
+                    .run_query_synchronous_no_params_delayed_err(query)
+                    .await
             };
 
             tokio::try_join!(
@@ -365,7 +372,7 @@ impl Migration for Migration0009<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

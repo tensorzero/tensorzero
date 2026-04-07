@@ -5,7 +5,7 @@ use super::check_table_exists;
 use super::materialize_index;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 /// This migration adds bloom filter indices on `id` columns to the feedback tables
 /// and the `ModelInference` table.
@@ -24,20 +24,19 @@ const TABLES: [&str; 5] = [
 
 #[async_trait]
 impl Migration for Migration0046<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         for table in &TABLES {
             if !check_table_exists(self.clickhouse, table, "0046").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0046".to_string(),
                     message: format!("{table} table does not exist"),
-                }
-                .into());
+                }));
             }
         }
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         for table in &TABLES {
             if !check_index_exists(self.clickhouse, table, "id_index").await? {
                 return Ok(true);
@@ -46,13 +45,13 @@ impl Migration for Migration0046<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         for table in &TABLES {
             let create_index_query = format!(
                 "ALTER TABLE {table} ADD INDEX IF NOT EXISTS id_index id TYPE bloom_filter GRANULARITY 1;"
             );
             self.clickhouse
-                .run_query_synchronous_no_params(create_index_query)
+                .run_query_synchronous_no_params_delayed_err(create_index_query)
                 .await?;
 
             materialize_index(self.clickhouse, table, "id_index").await?;
@@ -69,7 +68,7 @@ impl Migration for Migration0046<'_> {
             .join("\n        ")
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

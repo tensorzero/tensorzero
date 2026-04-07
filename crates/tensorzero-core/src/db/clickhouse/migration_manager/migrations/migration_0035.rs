@@ -1,7 +1,7 @@
 use super::check_table_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 /// Migration 0034 contained a slightly incorrect implementation of the CumulativeUsageView that assumed
@@ -18,9 +18,9 @@ const MIGRATION_ID: &str = "0035";
 
 #[async_trait]
 impl Migration for Migration0035<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelInference table does not exist".to_string(),
             }));
@@ -28,7 +28,7 @@ impl Migration for Migration0035<'_> {
         let cumulative_usage_table_exists =
             check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await?;
         if !cumulative_usage_table_exists {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "CumulativeUsage table does not exist".to_string(),
             }));
@@ -36,7 +36,7 @@ impl Migration for Migration0035<'_> {
         let cumulative_usage_view_exists =
             check_table_exists(self.clickhouse, "CumulativeUsageView", MIGRATION_ID).await?;
         if !cumulative_usage_view_exists {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "CumulativeUsageView table does not exist".to_string(),
             }));
@@ -44,10 +44,12 @@ impl Migration for Migration0035<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let create_view = self
             .clickhouse
-            .run_query_synchronous_no_params("SHOW CREATE TABLE CumulativeUsageView".to_string())
+            .run_query_synchronous_no_params_delayed_err(
+                "SHOW CREATE TABLE CumulativeUsageView".to_string(),
+            )
             .await?
             .response;
 
@@ -57,10 +59,10 @@ impl Migration for Migration0035<'_> {
         Ok(true)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"ALTER TABLE CumulativeUsageView{on_cluster_name} MODIFY QUERY
                   SELECT
                     tupleElement(t, 1) AS type,
@@ -88,7 +90,7 @@ impl Migration for Migration0035<'_> {
         "SELECT 1".to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

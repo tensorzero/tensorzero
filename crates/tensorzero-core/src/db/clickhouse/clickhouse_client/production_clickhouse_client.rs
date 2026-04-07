@@ -23,7 +23,6 @@ use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
 use crate::db::clickhouse::batching::BatchSender;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
 use crate::error::DelayedError;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::Error;
@@ -52,9 +51,9 @@ impl ProductionClickHouseClient {
         cluster_name: Option<String>,
         database: String,
         batch_config: BatchWritesConfig,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, DelayedError> {
         let parsed_database_url = Url::parse(database_url.expose_secret()).map_err(|e| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: format!("Invalid ClickHouse database URL: {e}"),
             })
         })?;
@@ -65,7 +64,7 @@ impl ProductionClickHouseClient {
             Some(
                 urlencoding::decode(parsed_database_url.username())
                     .map_err(|e| {
-                        Error::new(ErrorDetails::Config {
+                        DelayedError::new(ErrorDetails::Config {
                             message: format!("Failed to decode ClickHouse username from URL: {e}"),
                         })
                     })?
@@ -77,7 +76,7 @@ impl ProductionClickHouseClient {
             Some(password) => Some(SecretString::from(
                 urlencoding::decode(password)
                     .map_err(|e| {
-                        Error::new(ErrorDetails::Config {
+                        DelayedError::new(ErrorDetails::Config {
                             message: format!("Failed to decode ClickHouse password from URL: {e}"),
                         })
                     })?
@@ -89,14 +88,14 @@ impl ProductionClickHouseClient {
         let mut sanitized_database_url = parsed_database_url.clone();
         if !parsed_database_url.username().is_empty() {
             sanitized_database_url.set_username("").map_err(|()| {
-                Error::new(ErrorDetails::Config {
+                DelayedError::new(ErrorDetails::Config {
                     message: "Failed to sanitize ClickHouse URL username".to_string(),
                 })
             })?;
         }
         if parsed_database_url.password().is_some() {
             sanitized_database_url.set_password(None).map_err(|()| {
-                Error::new(ErrorDetails::Config {
+                DelayedError::new(ErrorDetails::Config {
                     message: "Failed to sanitize ClickHouse URL password".to_string(),
                 })
             })?;
@@ -135,13 +134,13 @@ impl ProductionClickHouseClient {
 fn make_clickhouse_http_client(
     username: Option<String>,
     password: Option<SecretString>,
-) -> Result<Client, Error> {
+) -> Result<Client, DelayedError> {
     let mut headers = HeaderMap::new();
     if let Some(username) = username.as_ref() {
         headers.insert(
         "X-ClickHouse-User",
         HeaderValue::from_str(username).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseConnection {
+            DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!("Failed to build ClickHouse HTTP client because username contains invalid bytes: {e}"),
             })
         })?,
@@ -149,7 +148,7 @@ fn make_clickhouse_http_client(
     }
     if let Some(password) = password {
         let mut password_header_value = HeaderValue::from_str(password.expose_secret()).map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseConnection {
+            DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!("Failed to build ClickHouse HTTP client because password contains invalid bytes: {e}"),
             })
         })?;
@@ -164,7 +163,7 @@ fn make_clickhouse_http_client(
         .tcp_keepalive(Some(Duration::from_secs(60)))
         .build()
         .map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseConnection {
+            DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!("Failed to build ClickHouse HTTP client: {e}"),
             })
         })
@@ -173,7 +172,7 @@ fn make_clickhouse_http_client(
 // Trait implementations for ProductionClickHouseClient
 #[async_trait]
 impl ClickHouseClient for ProductionClickHouseClient {
-    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, Error> {
+    async fn recreate(&self) -> Result<Arc<dyn ClickHouseClient>, DelayedError> {
         Ok(Arc::new(
             ProductionClickHouseClient::new(
                 self.database_url.clone(),
@@ -209,7 +208,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         &self,
         rows: Vec<String>,
         table: TableName,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         write_production(
             self,
             Rows::<String>::Serialized(&rows),
@@ -223,7 +222,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         &self,
         rows: Vec<String>,
         table: TableName,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         write_production(self, Rows::<String>::Serialized(&rows), table, None).await
     }
 
@@ -316,9 +315,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
         &self,
         external_data: ExternalDataInfo,
         query: String,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
@@ -339,7 +338,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .send()
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: e.to_string(),
                 })
             })?;
@@ -348,13 +347,13 @@ impl ClickHouseClient for ProductionClickHouseClient {
         // Get the ClickHouse summary info from the headers
         let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
             let summary_str = summary.to_str().map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: format!("Failed to parse x-clickhouse-summary header: {e}"),
                 })
             })?;
 
             serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
                 })
             })?
@@ -367,7 +366,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         };
 
         let response_body = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: e.to_string(),
             })
         })?;
@@ -377,15 +376,15 @@ impl ClickHouseClient for ProductionClickHouseClient {
                 response: response_body,
                 metadata,
             }),
-            _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
+            _ => Err(DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: response_body,
             })),
         }
     }
 
-    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
+    async fn check_database_and_migrations_table_exists(&self) -> Result<bool, DelayedError> {
         let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
@@ -407,21 +406,21 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .send()
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: e.to_string(),
                 })
             })?;
 
         let status = response.status();
         let text = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: format!("Failed to fetch response text: {e}"),
             })
         })?;
 
         // Check if the request was successful before trying to parse the response
         if !status.is_success() {
-            return Err(Error::new(ErrorDetails::ClickHouseConnection {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!(
                     "ClickHouse query failed with status {}: {}",
                     status.as_u16(),
@@ -431,7 +430,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         }
 
         let count: u8 = text.trim().parse().map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: format!("Failed to parse count response as u8: {e}"),
             })
         })?;
@@ -440,19 +439,31 @@ impl ClickHouseClient for ProductionClickHouseClient {
             return Ok(false);
         }
 
-        // Create a temporary wrapper to call check_table_exists
+        // Check if the TensorZeroMigration table exists using a delayed error query
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
         };
-        let migrations_table_exists =
-            check_table_exists(&temp_connection_info, "TensorZeroMigration", "0000").await?;
+        let query = format!(
+            "SELECT 1 FROM system.tables WHERE database = '{}' AND name = 'TensorZeroMigration'",
+            temp_connection_info.database(),
+        );
+        let response = temp_connection_info
+            .run_query_synchronous_no_params_delayed_err(query)
+            .await
+            .map_err(|e| {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
+                    id: "0000".to_string(),
+                    message: e.suppress_logging_of_error_message(),
+                })
+            })?;
+        let migrations_table_exists = response.response.trim() == "1";
 
         Ok(migrations_table_exists)
     }
 
-    async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
+    async fn create_database_and_migrations_table(&self) -> Result<(), DelayedError> {
         let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
@@ -481,7 +492,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .send()
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: e.to_string(),
                 })
             })?;
@@ -489,7 +500,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         let status = response.status();
 
         let response_body = response.text().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: e.to_string(),
             })
         })?;
@@ -497,7 +508,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         match status {
             reqwest::StatusCode::OK => {}
             _ => {
-                return Err(Error::new(ErrorDetails::ClickHouseQuery {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseQuery {
                     message: response_body,
                 }));
             }
@@ -527,12 +538,12 @@ impl ClickHouseClient for ProductionClickHouseClient {
             PRIMARY KEY (migration_id)"
         );
 
-        // Create a temporary wrapper to call run_query_synchronous
+        // Create a temporary wrapper to call run_query_synchronous_delayed_err
         let temp_connection_info = ClickHouseConnectionInfo {
             inner: Arc::new(self.clone()),
         };
         temp_connection_info
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await
             .map(|_| ())?;
         Ok(())
@@ -579,10 +590,10 @@ impl ClickHouseClient for ProductionClickHouseClient {
 
 #[async_trait]
 impl HealthCheckable for ProductionClickHouseClient {
-    async fn health(&self) -> Result<(), Error> {
+    async fn health(&self) -> Result<(), DelayedError> {
         // We need to ping the /ping endpoint to check if ClickHouse is healthy
         let mut ping_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
-            Error::new(ErrorDetails::Config {
+            DelayedError::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
@@ -593,18 +604,16 @@ impl HealthCheckable for ProductionClickHouseClient {
 
         match self.client.get(ping_url).timeout(timeout).send().await {
             Ok(response) if response.status().is_success() => Ok(()),
-            Ok(response) => Err(ErrorDetails::ClickHouseConnection {
+            Ok(response) => Err(DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!(
                     "ClickHouse is not healthy (status code {}): {}",
                     response.status(),
                     response.text().await.unwrap_or_default()
                 ),
-            }
-            .into()),
-            Err(e) => Err(ErrorDetails::ClickHouseConnection {
+            })),
+            Err(e) => Err(DelayedError::new(ErrorDetails::ClickHouseConnection {
                 message: format!("ClickHouse is not healthy: {e:?}"),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -614,7 +623,7 @@ async fn write_production<T: Serialize + Send + Sync>(
     rows: Rows<'_, T>,
     table: TableName,
     batch: Option<&BatchSender>,
-) -> Result<(), Error> {
+) -> Result<(), DelayedError> {
     let is_empty = match &rows {
         Rows::Unserialized(rows) => rows.is_empty(),
         Rows::Serialized(rows) => rows.is_empty(),
@@ -623,14 +632,24 @@ async fn write_production<T: Serialize + Send + Sync>(
     if is_empty {
         return Ok(());
     }
-    let rows_json = rows.as_json();
+    let rows_json = rows.as_json().map_err(|e| {
+        DelayedError::new(ErrorDetails::Serialization {
+            message: e.to_string(),
+        })
+    })?;
 
     if let Some(batch_sender) = batch {
-        batch_sender.add_to_batch(table, rows_json?.into_owned())?;
+        batch_sender
+            .add_to_batch(table, rows_json.into_owned())
+            .map_err(|e| {
+                DelayedError::new(ErrorDetails::InternalError {
+                    message: e.to_string(),
+                })
+            })?;
         return Ok(());
     }
 
-    let rows_json = rows_json?.join("\n");
+    let rows_json = rows_json.join("\n");
     let table = table.as_str();
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
@@ -648,7 +667,7 @@ async fn write_production<T: Serialize + Send + Sync>(
         .send()
         .await
         .map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseQuery {
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
                 message: format!("{e:?}"),
             })
         })?;
@@ -661,7 +680,7 @@ async fn write_production<T: Serialize + Send + Sync>(
 
     match status {
         reqwest::StatusCode::OK => Ok(()),
-        _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
+        _ => Err(DelayedError::new(ErrorDetails::ClickHouseQuery {
             message: response_body,
         })),
     }
