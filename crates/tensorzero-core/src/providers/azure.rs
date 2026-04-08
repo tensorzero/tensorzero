@@ -15,7 +15,6 @@ use crate::embeddings::{
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
@@ -27,7 +26,7 @@ use crate::inference::types::{ApiType, ContentBlockOutput, Thought};
 use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -945,7 +944,7 @@ mod tests {
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
 
     #[tokio::test]
     async fn test_azure_request_new() {
@@ -964,7 +963,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1012,7 +1011,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: Default::default(),

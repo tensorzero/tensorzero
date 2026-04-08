@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 use super::check_detached_table_exists;
@@ -34,11 +34,11 @@ const MIGRATION_ID: &str = "0036";
 
 #[async_trait]
 impl Migration for Migration0036<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         if !check_detached_table_exists(
             self.clickhouse,
@@ -61,16 +61,16 @@ impl Migration for Migration0036<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"DETACH TABLE IF EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name} PERMANENTLY;"
             ))
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"DETACH TABLE IF EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name} PERMANENTLY;"
             ))
             .await?;
@@ -84,7 +84,7 @@ impl Migration for Migration0036<'_> {
         "SELECT 1".to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

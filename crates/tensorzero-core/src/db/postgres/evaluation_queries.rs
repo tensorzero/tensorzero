@@ -80,7 +80,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
             return Ok(Vec::new());
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         #[derive(sqlx::FromRow)]
         struct InferenceEvaluationRunMetadataRow {
@@ -121,7 +121,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         &self,
         run: &InferenceEvaluationRunInsert,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let variant_names_json = serde_json::to_value(&run.variant_names).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -178,7 +178,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
     async fn count_total_evaluation_runs(&self) -> Result<u64, Error> {
         // This is most likely performant enough because we expect evaluations to have small scale;
         // If not, switch to approximated counts via pg_class.reltuples.
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let count: i64 =
             sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM tensorzero.inference_evaluation_runs")
                 .fetch_one(pool)
@@ -191,7 +191,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationRunInfoRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_list_evaluation_runs_query(limit, offset);
         let rows: Vec<EvaluationRunInfoRow> = qb.build_query_as().fetch_all(pool).await?;
         Ok(rows)
@@ -205,7 +205,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         if evaluation_run_ids.is_empty() {
             return Ok(0);
         }
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_count_datapoints_for_evaluation_query(function_name, evaluation_run_ids);
         let row: PgRow = qb.build().fetch_one(pool).await?;
         let count: i64 = row.get("count");
@@ -220,7 +220,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<EvaluationRunSearchResult>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_search_evaluation_runs_query(
             evaluation_name,
             function_name,
@@ -240,7 +240,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         if evaluation_run_ids.is_empty() {
             return Ok(vec![]);
         }
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_evaluation_run_infos_query(evaluation_run_ids, function_name);
         let rows: Vec<EvaluationRunInfoByIdRow> = qb.build_query_as().fetch_all(pool).await?;
         Ok(rows)
@@ -252,7 +252,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         function_name: &str,
         function_type: FunctionConfigType,
     ) -> Result<Vec<EvaluationRunInfoByIdRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_evaluation_run_infos_for_datapoint_query(
             datapoint_id,
             function_name,
@@ -271,7 +271,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         if evaluation_run_ids.is_empty() {
             return Ok(vec![]);
         }
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_evaluation_usage_statistics_query(
             function_name,
             function_type,
@@ -302,7 +302,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         if evaluation_run_ids.is_empty() || metric_names.is_empty() {
             return Ok(vec![]);
         }
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let raw_rows = get_evaluation_statistics_raw(
             pool,
             function_name,
@@ -331,7 +331,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         if evaluation_run_ids.is_empty() {
             return Ok(vec![]);
         }
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_evaluation_results_query(
             function_name,
             evaluation_run_ids,
@@ -376,7 +376,7 @@ impl EvaluationQueries for PostgresConnectionInfo {
         datapoint_id: &Uuid,
         output: &str,
     ) -> Result<Option<InferenceEvaluationHumanFeedbackRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb =
             build_get_inference_evaluation_human_feedback_query(metric_name, datapoint_id, output);
         let row: Option<PgRow> = qb.build().fetch_optional(pool).await?;

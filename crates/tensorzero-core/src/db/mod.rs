@@ -52,7 +52,7 @@ pub trait ClickHouseConnection:
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait HealthCheckable {
-    async fn health(&self) -> Result<(), Error>;
+    async fn health(&self) -> Result<(), DelayedError>;
 }
 
 #[cfg_attr(test, automock)]
@@ -222,7 +222,7 @@ pub trait ConfigQueries: Send + Sync {
         snapshot_hash: SnapshotHash,
     ) -> Result<ConfigSnapshot, Error>;
 
-    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error>;
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError>;
 }
 
 #[async_trait]

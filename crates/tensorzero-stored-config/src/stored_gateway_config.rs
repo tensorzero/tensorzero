@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::stored_credential_location::StoredCredentialLocationWithFallback;
 
+pub const STORED_GATEWAY_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 // --- Top-level gateway config ---
 
 #[serde_with::skip_serializing_none]

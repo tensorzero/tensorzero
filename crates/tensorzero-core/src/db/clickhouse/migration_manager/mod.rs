@@ -9,8 +9,8 @@ use crate::config::BatchWritesConfig;
 use crate::db::HealthCheckable;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::endpoints::status::TENSORZERO_VERSION;
+use crate::error::ErrorDetails;
 use crate::error::delayed_error::DelayedError;
-use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
@@ -170,7 +170,7 @@ pub enum MigrationTableState {
 pub async fn check_migrations_state(
     clickhouse: &ClickHouseConnectionInfo,
     all_migrations: &[Box<dyn Migration + Send + Sync + '_>],
-) -> Result<MigrationTableState, Error> {
+) -> Result<MigrationTableState, DelayedError> {
     let migration_records = match get_all_migration_records(clickhouse).await {
         Ok(records) => records,
         Err(e) => {
@@ -201,7 +201,7 @@ pub async fn check_migrations_state(
     let expected_migration_ids = all_migrations
         .iter()
         .map(|m| m.migration_num())
-        .collect::<Result<Vec<_>, Error>>()?;
+        .collect::<Result<Vec<_>, DelayedError>>()?;
     Ok(compare_migration_tables(
         expected_migration_ids,
         migration_ids,
@@ -248,7 +248,7 @@ pub struct RunMigrationManagerArgs<'a> {
     pub disable_automatic_migrations: bool,
 }
 
-pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
+pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), DelayedError> {
     let RunMigrationManagerArgs {
         clickhouse,
         is_manual_run,
@@ -277,7 +277,9 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
         | MigrationTableState::UnableToParse => {
             // if is_manual_run = False and disable_automatic_migrations = True, throw error. Otherwise, run the (possibly missing) migrations.
             if !is_manual_run && disable_automatic_migrations {
-                Err(Error::new(ErrorDetails::ClickHouseMigrationsDisabled))
+                Err(DelayedError::new(
+                    ErrorDetails::ClickHouseMigrationsDisabled,
+                ))
             } else {
                 // Run the migrations
                 // Otherwise run the missing migrations
@@ -288,9 +290,11 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
                 if !database_and_migrations_table_exists {
                     if clickhouse.is_cluster_configured() && !is_manual_run {
                         let database = clickhouse.database();
-                        return Err(ErrorDetails::ClickHouseConfiguration {
-                message: format!("Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. {RUN_MIGRATIONS_COMMAND}"),
-            }.into());
+                        return Err(DelayedError::new(ErrorDetails::ClickHouseConfiguration {
+                            message: format!(
+                                "Database {database} does not exist. We do not automatically run migrations to create and set it up when replication is configured. {RUN_MIGRATIONS_COMMAND}"
+                            ),
+                        }));
                     } else {
                         // This is a no-op if the database already exists
                         clickhouse.create_database_and_migrations_table().await?;
@@ -334,23 +338,24 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
 /// If the instance is not configured to replicate, there should be either a cloud ClickHouse,
 /// a non-replicated OSS ClickHouse, or a replicated ClickHouse (this latter requires the
 /// `TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE` environment variable to be set to "1").
-async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+async fn check_replication_settings(
+    clickhouse: &ClickHouseConnectionInfo,
+) -> Result<(), DelayedError> {
     // First, let's check if we are using ClickHouse Cloud
     let cloud_mode_response = clickhouse
-        .run_query_synchronous_no_params("SELECT getSetting('cloud_mode')".to_string())
+        .run_query_synchronous_no_params_delayed_err("SELECT getSetting('cloud_mode')".to_string())
         .await?;
     let cloud_mode: bool = cloud_mode_response.response.trim().parse().map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
+        DelayedError::new(ErrorDetails::ClickHouseDeserialization {
             message: format!("Failed to deserialize cloud mode response: {e}"),
         })
     })?;
     tracing::debug!("ClickHouse Cloud mode: {}", cloud_mode);
     // If we are using ClickHouse Cloud, we do not allow a cluster to be configured
     if cloud_mode && clickhouse.is_cluster_configured() {
-        return Err(ErrorDetails::ClickHouseConfiguration {
+        return Err(DelayedError::new(ErrorDetails::ClickHouseConfiguration {
             message: "Clusters cannot be configured when using ClickHouse Cloud.".to_string(),
-        }
-        .into());
+        }));
     }
 
     // Next, let's check if there are replicated tables in our deployment
@@ -365,7 +370,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
         );"
     .to_string();
     let max_cluster_count_response = clickhouse
-        .run_query_synchronous_no_params(max_cluster_count_query)
+        .run_query_synchronous_no_params_delayed_err(max_cluster_count_query)
         .await?;
     let max_cluster_count: u32 =
         max_cluster_count_response
@@ -373,7 +378,7 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
             .trim()
             .parse()
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseDeserialization {
+                DelayedError::new(ErrorDetails::ClickHouseDeserialization {
                     message: format!("Failed to deserialize max cluster count response: {e}"),
                 })
             })?;
@@ -389,14 +394,14 @@ async fn check_replication_settings(clickhouse: &ClickHouseConnectionInfo) -> Re
         && !cloud_mode
         && !non_replicated_tensorzero_on_replicated_clickhouse_override
     {
-        return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
+        return Err(DelayedError::new(ErrorDetails::ClickHouseConfiguration {
             message: "TensorZero is not configured for replication but ClickHouse contains a replicated cluster. Please set the environment variable `TENSORZERO_CLICKHOUSE_CLUSTER_NAME` to set up replication. (Advanced users only: Alternatively, set the environment variable `TENSORZERO_OVERRIDE_NON_REPLICATED_CLICKHOUSE=1` to set up a non-replicated deployment in your replicated cluster.)".to_string(),
         }));
     }
 
     // If the user has configured a replicated ClickHouse deployment but we don't have a replicated ClickHouse instance, we fail.
     if max_cluster_count <= 1 && clickhouse.is_cluster_configured() {
-        return Err(Error::new(ErrorDetails::ClickHouseConfiguration {
+        return Err(DelayedError::new(ErrorDetails::ClickHouseConfiguration {
             message: "TensorZero is configured for replication but ClickHouse is not configured for replication. Please ensure that ClickHouse is configured for replication.".to_string(),
         }));
     };
@@ -455,7 +460,7 @@ pub async fn insert_migration_record(
     clickhouse: &ClickHouseConnectionInfo,
     migration: &(impl Migration + ?Sized),
     execution_time: Duration,
-) -> Result<(), Error> {
+) -> Result<(), DelayedError> {
     let migration_id = migration.migration_num()?;
     let migration_name = migration.name();
     clickhouse
@@ -482,13 +487,12 @@ pub struct RunMigrationArgs<'a, T: Migration + ?Sized> {
     pub is_replicated: bool,
 }
 
-pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
+pub async fn manual_run_clickhouse_migrations() -> Result<(), DelayedError> {
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
     let Some(clickhouse_url) = clickhouse_url else {
-        return Err(ErrorDetails::ClickHouseConfiguration {
+        return Err(DelayedError::new(ErrorDetails::ClickHouseConfiguration {
             message: "`TENSORZERO_CLICKHOUSE_URL` was not found.".to_string(),
-        }
-        .into());
+        }));
     };
     let clickhouse =
         ClickHouseConnectionInfo::new(&clickhouse_url, BatchWritesConfig::default()).await?;
@@ -507,7 +511,7 @@ pub async fn manual_run_clickhouse_migrations() -> Result<(), Error> {
 /// Returns Ok(true) if the migration succeeds.
 pub async fn run_migration(
     args: RunMigrationArgs<'_, impl Migration + ?Sized>,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let RunMigrationArgs {
         clickhouse,
         migration,
@@ -523,7 +527,12 @@ pub async fn run_migration(
         let migration_name = migration.name();
 
         if is_replicated && !manual_run {
-            return Err(ErrorDetails::ClickHouseMigration { id: migration_name, message: format!("Migrations must be run manually if using a replicated ClickHouse cluster. {RUN_MIGRATIONS_COMMAND}") }.into());
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
+                id: migration_name,
+                message: format!(
+                    "Migrations must be run manually if using a replicated ClickHouse cluster. {RUN_MIGRATIONS_COMMAND}"
+                ),
+            }));
         }
 
         tracing::info!("Applying migration: {migration_name} with clean_start: {clean_start}");
@@ -549,11 +558,10 @@ pub async fn run_migration(
                     "Failed migration success check: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
                     migration.rollback_instructions()
                 );
-                return Err(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: migration_name.to_string(),
                     message: "Migration success check failed".to_string(),
-                }
-                .into());
+                }));
             }
             Err(e) => {
                 tracing::error!(
@@ -606,41 +614,39 @@ mod tests {
             "Migration1".to_string()
         }
 
-        async fn can_apply(&self) -> Result<(), Error> {
+        async fn can_apply(&self) -> Result<(), DelayedError> {
             self.called_can_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             if self.can_apply_result {
                 Ok(())
             } else {
-                Err(ErrorDetails::ClickHouseMigration {
+                Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration can_apply failed".to_string(),
-                }
-                .into())
+                }))
             }
         }
 
-        async fn should_apply(&self) -> Result<bool, Error> {
+        async fn should_apply(&self) -> Result<bool, DelayedError> {
             self.called_should_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(self.should_apply_result)
         }
 
-        async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
             self.called_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             if self.apply_result {
                 Ok(())
             } else {
-                Err(ErrorDetails::ClickHouseMigration {
+                Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration apply failed".to_string(),
-                }
-                .into())
+                }))
             }
         }
 
-        async fn has_succeeded(&self) -> Result<bool, Error> {
+        async fn has_succeeded(&self) -> Result<bool, DelayedError> {
             self.called_has_succeeded
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(self.has_succeeded_result)

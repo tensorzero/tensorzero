@@ -1,7 +1,7 @@
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use crate::serde_util::deserialize_u64;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -21,9 +21,9 @@ const MIGRATION_ID: &str = "0034";
 
 #[async_trait]
 impl Migration for Migration0034<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         if !check_table_exists(self.clickhouse, "ModelInference", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "ModelInference table does not exist".to_string(),
             }));
@@ -31,7 +31,7 @@ impl Migration for Migration0034<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // If either the CumulativeUsage table or CumulativeUsageView view doesn't exist, we need to create it
         if !check_table_exists(self.clickhouse, "CumulativeUsage", MIGRATION_ID).await? {
             return Ok(true);
@@ -42,12 +42,12 @@ impl Migration for Migration0034<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -63,7 +63,7 @@ impl Migration for Migration0034<'_> {
             },
         );
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS CumulativeUsage{on_cluster_name} (
                         type LowCardinality(String),
                         count UInt64,
@@ -104,7 +104,7 @@ impl Migration for Migration0034<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // NOTE: this migration is subsumed by 0035 so we do not need to run the backfill for this table any more
@@ -117,7 +117,7 @@ impl Migration for Migration0034<'_> {
             // and conclude the migration.
             let create_table = self
                 .clickhouse
-                .run_query_synchronous_no_params(
+                .run_query_synchronous_no_params_delayed_err(
                     "SHOW CREATE TABLE CumulativeUsageView".to_string(),
                 )
                 .await?
@@ -144,12 +144,12 @@ impl Migration for Migration0034<'_> {
             );
             let response = self
                 .clickhouse
-                .run_query_synchronous_no_params(query)
+                .run_query_synchronous_no_params_delayed_err(query)
                 .await?;
             let trimmed_response = response.response.trim();
             let parsed_response =
                 serde_json::from_str::<CountResponse>(trimmed_response).map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                    DelayedError::new(ErrorDetails::ClickHouseDeserialization {
                         message: format!("Failed to deserialize count query: {e}"),
                     })
                 })?;
@@ -168,7 +168,7 @@ impl Migration for Migration0034<'_> {
                 "
             );
             self.clickhouse
-                .run_query_synchronous_no_params(write_query)
+                .run_query_synchronous_no_params_delayed_err(write_query)
                 .await?;
         }
 
@@ -184,7 +184,7 @@ impl Migration for Migration0034<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

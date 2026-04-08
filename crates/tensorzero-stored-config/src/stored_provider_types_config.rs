@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::stored_credential_location::StoredCredentialLocationWithFallback;
 
+pub const STORED_PROVIDER_TYPES_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 // --- Top-level ---
 
 #[serde_with::skip_serializing_none]

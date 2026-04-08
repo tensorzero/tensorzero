@@ -4112,9 +4112,11 @@ pub async fn test_inference_params_dynamic_credentials_inference_request_with_pr
     };
     // Note: Claude models don't allow both `temperature` and `top_p` to be specified
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
-    // kimi-k2p5 is a reasoning model that uses tokens for thinking, so it needs more max_tokens
+    // Some reasoning models use tokens for thinking, so they need more max_tokens
     let dynamic_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
         1500
+    } else if provider.model_name.contains("glm-5") {
+        1024
     } else {
         120
     };
@@ -4294,7 +4296,7 @@ pub async fn check_inference_params_response(
         .unwrap()
         .as_u64()
         .unwrap();
-    let expected_max_tokens: u64 = if is_azure_reasoning {
+    let expected_max_tokens: u64 = if is_azure_reasoning || provider.model_name.contains("glm-5") {
         1024
     } else if provider.model_name.contains("kimi-k2p5") {
         1500
@@ -4418,9 +4420,11 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
     };
     // Note: Claude models don't allow both `temperature` and `top_p` to be specified
     let is_claude_model = provider.model_name.to_lowercase().contains("claude");
-    // kimi-k2p5 is a reasoning model that uses tokens for thinking, so it needs more max_tokens
+    // Some reasoning models use tokens for thinking, so they need more max_tokens
     let dynamic_max_tokens: u64 = if provider.model_name.contains("kimi-k2p5") {
         1500
+    } else if provider.model_name.contains("glm-5") {
+        1024
     } else {
         120
     };
@@ -4602,7 +4606,7 @@ pub async fn test_inference_params_dynamic_credentials_streaming_inference_reque
         .unwrap()
         .as_u64()
         .unwrap();
-    let expected_max_tokens: u64 = if is_azure_reasoning {
+    let expected_max_tokens: u64 = if is_azure_reasoning || provider.model_name.contains("glm-5") {
         1024
     } else if provider.model_name.contains("kimi-k2p5") {
         1500
@@ -11575,7 +11579,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         1000
     } else if provider.model_name.contains("kimi-k2p5") {
         1500
-    } else if is_azure_reasoning {
+    } else if is_azure_reasoning || provider.model_name.contains("glm-5") {
         1024
     } else {
         100

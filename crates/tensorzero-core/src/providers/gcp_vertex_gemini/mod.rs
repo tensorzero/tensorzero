@@ -42,7 +42,6 @@ use crate::error::{
 };
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::InferenceProvider;
-use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
@@ -59,16 +58,16 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ModelInferenceRequest, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Usage,
-    batch::StartBatchProviderInferenceResponse, serialize_or_log,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    RequestMessage, Usage, batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
 use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{
-    FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
-};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
+
+use crate::tool::{FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::mock::get_mock_provider_api_base;
 
 use super::helpers::{JsonlBatchFileInfo, convert_stream_error, parse_jsonl_batch_file};
@@ -1764,6 +1763,16 @@ impl<'a> From<&'a FunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a>
     }
 }
 
+impl<'a> From<&'a FunctionToolDef> for GCPVertexGeminiFunctionDeclaration<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
+        GCPVertexGeminiFunctionDeclaration {
+            name: &tool.name,
+            description: Some(&tool.description),
+            parameters: Some(process_jsonschema_for_gcp_vertex_gemini(&tool.parameters)),
+        }
+    }
+}
+
 impl<'a> From<&'a Vec<FunctionToolConfig>> for GCPVertexGeminiTool<'a> {
     fn from(tools: &'a Vec<FunctionToolConfig>) -> Self {
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
@@ -1851,7 +1860,7 @@ impl<'a> From<&'a FunctionTool> for GCPVertexGeminiSFTTool<'a> {
 const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
 impl<'a> GCPVertexGeminiToolConfig<'a> {
-    fn from_tool_config(tool_config: &'a ToolCallConfig, model_name: &'a str) -> Self {
+    fn from_tool_config(tool_config: &'a ProviderToolCallConfig, model_name: &'a str) -> Self {
         match &tool_config.tool_choice {
             ToolChoice::None => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
@@ -3250,8 +3259,10 @@ mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::JSONSchema;
+    use tensorzero_inference_types::ProviderToolCallConfig;
+
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
+    use crate::tool::{StaticToolConfig, ToolResult};
     use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
@@ -3387,9 +3398,8 @@ mod tests {
         let supports_any_model_name = "gemini-2.5-pro";
 
         // Test Auto mode
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
@@ -3409,9 +3419,8 @@ mod tests {
         );
 
         // The Pro model supports Any mode
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
@@ -3431,9 +3440,8 @@ mod tests {
         );
 
         // The Pro model supports Any mode with allowed function names
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Specific("get_temperature".to_string()),
@@ -3456,9 +3464,8 @@ mod tests {
         );
 
         // Test Auto mode with specific allowed tools - should use Any mode
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
@@ -3484,9 +3491,8 @@ mod tests {
         assert_eq!(allowed_names, vec!["tool1", "tool2"]);
 
         // Test Required mode with specific allowed tools (new behavior)
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
@@ -3508,9 +3514,8 @@ mod tests {
             }
         );
 
-        let tool_call_config = ToolCallConfig {
-            static_tools_available: vec![],
-            dynamic_tools_available: vec![],
+        let tool_call_config = ProviderToolCallConfig {
+            tools: vec![],
             openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::None,
@@ -3533,12 +3538,12 @@ mod tests {
     #[tokio::test]
     async fn test_gcp_vertex_request_try_from() {
         // Test Case 1: Empty message list
-        let tool_config = ToolCallConfig::default();
+        let provider_tool_config = ProviderToolCallConfig::default();
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -3577,7 +3582,7 @@ mod tests {
             inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -3630,7 +3635,7 @@ mod tests {
             inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
@@ -3702,7 +3707,7 @@ mod tests {
             inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
@@ -4131,6 +4136,7 @@ mod tests {
 
     #[test]
     fn test_prepare_tools() {
+        let multi_tool_provider_config = ProviderToolCallConfig::from(&*MULTI_TOOL_CONFIG);
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -4146,7 +4152,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&multi_tool_provider_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -4190,7 +4196,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&multi_tool_provider_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

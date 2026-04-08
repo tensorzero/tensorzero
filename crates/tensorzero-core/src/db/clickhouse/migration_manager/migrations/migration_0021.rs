@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use super::{ViewOffsetDeadline, check_column_exists, check_table_exists, get_default_expression};
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 /// This migration adds a ReplacingMergeTree table TagInference.
 /// This table stores data that allows us to efficiently query for tags by key and value
@@ -27,7 +27,7 @@ const MIGRATION_ID: &str = "0021";
 
 #[async_trait]
 impl Migration for Migration0021<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let chat_inference_table_exists =
             check_table_exists(self.clickhouse, "ChatInference", MIGRATION_ID).await?;
         let json_inference_table_exists =
@@ -38,13 +38,13 @@ impl Migration for Migration0021<'_> {
             check_table_exists(self.clickhouse, "JsonInferenceDatapoint", MIGRATION_ID).await?;
 
         if !chat_inference_table_exists || !json_inference_table_exists {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "One or more of the inference tables do not exist".to_string(),
             }));
         }
         if !chat_inference_datapoint_table_exists || !json_inference_datapoint_table_exists {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "One or more of the inference datapoint tables do not exist".to_string(),
             }));
@@ -53,7 +53,7 @@ impl Migration for Migration0021<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let tag_inference_table_exists =
             check_table_exists(self.clickhouse, "TagInference", MIGRATION_ID).await?;
         let tag_chat_inference_view_exists =
@@ -99,13 +99,13 @@ impl Migration for Migration0021<'_> {
             || !json_default_updated_at_correct)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         // Only gets used when we are not doing a clean start
         let view_deadline = ViewOffsetDeadline::new();
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -139,7 +139,7 @@ impl Migration for Migration0021<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add the staled_at column to both datapoint tables
@@ -148,7 +148,7 @@ impl Migration for Migration0021<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = r"
@@ -156,7 +156,7 @@ impl Migration for Migration0021<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Update the defaults of updated_at for the Datapoint tables to be now64
@@ -165,7 +165,7 @@ impl Migration for Migration0021<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = r"
@@ -173,7 +173,7 @@ impl Migration for Migration0021<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -203,7 +203,7 @@ impl Migration for Migration0021<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = format!(
@@ -226,7 +226,7 @@ impl Migration for Migration0021<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         if !clean_start {
@@ -250,7 +250,7 @@ impl Migration for Migration0021<'_> {
                 "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query.to_string())
+                    .run_query_synchronous_no_params_delayed_err(query.to_string())
                     .await
             };
 
@@ -272,7 +272,7 @@ impl Migration for Migration0021<'_> {
                 "
                 );
                 self.clickhouse
-                    .run_query_synchronous_no_params(query.to_string())
+                    .run_query_synchronous_no_params_delayed_err(query.to_string())
                     .await
             };
 
@@ -299,7 +299,7 @@ impl Migration for Migration0021<'_> {
     ")
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

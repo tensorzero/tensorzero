@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 
 use super::{check_column_exists, check_table_exists};
@@ -18,14 +18,14 @@ pub struct Migration0011<'a> {
 
 #[async_trait]
 impl Migration for Migration0011<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
     /// Check if the migration needs to be applied
     /// This should be equivalent to checking if `ModelInferenceCache` is missing or
     /// if the `cached` column is missing from `ModelInference`
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let table_exists =
             check_table_exists(self.clickhouse, "ModelInferenceCache", "0011").await?;
         let cached_column_exists =
@@ -33,7 +33,7 @@ impl Migration for Migration0011<'_> {
         Ok(!table_exists || !cached_column_exists)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Create the `ModelInferenceCache` table
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
@@ -64,7 +64,7 @@ impl Migration for Migration0011<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Add the `cached` column to ModelInference
@@ -73,7 +73,7 @@ impl Migration for Migration0011<'_> {
         ";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
@@ -91,7 +91,7 @@ impl Migration for Migration0011<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

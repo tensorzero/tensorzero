@@ -91,7 +91,7 @@ async fn health_check_inner(
 #[cfg(test)]
 mod tests {
     use crate::db::MockHealthCheckable;
-    use crate::error::{Error, ErrorDetails};
+    use crate::error::{DelayedError, ErrorDetails};
 
     use super::*;
 
@@ -104,7 +104,7 @@ mod tests {
     fn mock_unhealthy() -> MockHealthCheckable {
         let mut mock = MockHealthCheckable::new();
         mock.expect_health().returning(|| {
-            Err(Error::new(ErrorDetails::InternalError {
+            Err(DelayedError::new(ErrorDetails::InternalError {
                 message: "unhealthy".to_string(),
             }))
         });

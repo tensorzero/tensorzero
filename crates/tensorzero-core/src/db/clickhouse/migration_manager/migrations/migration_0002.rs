@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 
 use super::check_table_exists;
 
@@ -14,13 +14,13 @@ pub struct Migration0002<'a> {
 
 #[async_trait]
 impl Migration for Migration0002<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `DynamicInContextLearningExample` exists
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let exists =
             check_table_exists(self.clickhouse, "DynamicInContextLearningExample", "0002").await?;
         if !exists {
@@ -30,7 +30,7 @@ impl Migration for Migration0002<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         // Create the `DynamicInContextLearningExample` table
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -58,7 +58,7 @@ impl Migration for Migration0002<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
         Ok(())
     }
@@ -72,7 +72,7 @@ impl Migration for Migration0002<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

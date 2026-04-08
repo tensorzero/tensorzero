@@ -25,7 +25,7 @@ impl EpisodeQueries for PostgresConnectionInfo {
         function_name: Option<String>,
         filters: Option<InferenceFilter>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         query_episode_table_impl(
             pool,
             config,
@@ -39,7 +39,7 @@ impl EpisodeQueries for PostgresConnectionInfo {
     }
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         query_episode_table_bounds_impl(pool).await
     }
 }

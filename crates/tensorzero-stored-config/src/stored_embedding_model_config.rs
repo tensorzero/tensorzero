@@ -6,6 +6,8 @@ use crate::stored_cost::StoredUnifiedCostConfig;
 use crate::stored_model_config::StoredProviderConfig;
 use crate::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
+pub const STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION: i32 = 1;
+
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredEmbeddingModelConfig {

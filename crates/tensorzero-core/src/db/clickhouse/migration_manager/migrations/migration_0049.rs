@@ -1,7 +1,7 @@
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 pub struct Migration0049<'a> {
@@ -12,7 +12,7 @@ const MIGRATION_ID: &str = "0049";
 
 #[async_trait]
 impl Migration for Migration0049<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let tables_to_check = [
             "TagInference",
             "FloatMetricFeedback",
@@ -21,7 +21,7 @@ impl Migration for Migration0049<'_> {
 
         for table_name in tables_to_check {
             if !check_table_exists(self.clickhouse, table_name, MIGRATION_ID).await? {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: format!("{table_name} table does not exist"),
                 }));
@@ -30,14 +30,14 @@ impl Migration for Migration0049<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         if !check_table_exists(self.clickhouse, "InferenceEvaluationRuns", MIGRATION_ID).await? {
             return Ok(true);
         }
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -47,7 +47,7 @@ impl Migration for Migration0049<'_> {
             },
         );
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"
                 CREATE TABLE IF NOT EXISTS InferenceEvaluationRuns{on_cluster_name}
                 (
@@ -76,7 +76,7 @@ impl Migration for Migration0049<'_> {
         // Best-effort backfill from historical inference tags and feedback.
         // `metrics.optimize` is unknown for historical runs and is set to null.
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 r#"
                 INSERT INTO InferenceEvaluationRuns
                 (
@@ -191,7 +191,7 @@ impl Migration for Migration0049<'_> {
         "DROP TABLE IF EXISTS InferenceEvaluationRuns SYNC;".to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         check_table_exists(self.clickhouse, "InferenceEvaluationRuns", MIGRATION_ID).await
     }
 }

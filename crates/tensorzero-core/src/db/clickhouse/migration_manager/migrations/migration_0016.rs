@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::{check_table_exists, table_is_nonempty};
@@ -23,7 +23,7 @@ pub struct Migration0016<'a> {
 
 #[async_trait]
 impl Migration for Migration0016<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
@@ -31,7 +31,7 @@ impl Migration for Migration0016<'_> {
     /// This should be equivalent to checking if `ChatInferenceDatapoint` is missing
     /// or if `JsonInferenceDatapoint` is missing
     /// OR if they exist and either `output` column is not Nullable(String)
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let chat_inference_dataset_table_exists =
             check_table_exists(self.clickhouse, "ChatInferenceDatapoint", "0016").await?;
         let json_inference_dataset_table_exists =
@@ -43,12 +43,12 @@ impl Migration for Migration0016<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await? {
             let chat_inference_dataset_has_data =
                 table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0016").await?;
             if chat_inference_dataset_has_data {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0016".to_string(),
                     message: "ChatInferenceDataset has data. Your database state is invalid."
                         .to_string(),
@@ -60,7 +60,7 @@ impl Migration for Migration0016<'_> {
             let json_inference_dataset_has_data =
                 table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0016").await?;
             if json_inference_dataset_has_data {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0016".to_string(),
                     message: "JsonInferenceDataset has data. Your database state is invalid."
                         .to_string(),
@@ -72,13 +72,13 @@ impl Migration for Migration0016<'_> {
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the `ChatInferenceDatapoint` table
@@ -118,7 +118,7 @@ impl Migration for Migration0016<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the `JsonInferenceDatapoint` table
@@ -151,7 +151,7 @@ impl Migration for Migration0016<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         Ok(())
@@ -168,7 +168,7 @@ impl Migration for Migration0016<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

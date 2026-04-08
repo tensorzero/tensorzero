@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 
 /// This migration adds the `DynamicRunEpisodeByRunId` table and the
 /// `DynamicRunEpisodeByRunIdView` materialized view.
@@ -24,29 +24,27 @@ pub struct Migration0026<'a> {
 
 #[async_trait]
 impl Migration for Migration0026<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let dynamic_evaluation_run_table_exists =
             check_table_exists(self.clickhouse, "DynamicEvaluationRun", "0027").await?;
         if !dynamic_evaluation_run_table_exists {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0027".to_string(),
                 message: "DynamicEvaluationRun table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         let dynamic_evaluation_run_episode_table_exists =
             check_table_exists(self.clickhouse, "DynamicEvaluationRunEpisode", "0026").await?;
         if !dynamic_evaluation_run_episode_table_exists {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0026".to_string(),
                 message: "DynamicEvaluationRunEpisode table does not exist".to_string(),
-            }
-            .into());
+            }));
         }
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let dynamic_evaluation_run_episode_by_run_id_table_exists = check_table_exists(
             self.clickhouse,
             "DynamicEvaluationRunEpisodeByRunId",
@@ -75,7 +73,7 @@ impl Migration for Migration0026<'_> {
             || !dynamic_evaluation_run_by_project_name_view_exists)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -101,7 +99,7 @@ impl Migration for Migration0026<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = format!(
@@ -115,7 +113,7 @@ impl Migration for Migration0026<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
@@ -142,7 +140,7 @@ impl Migration for Migration0026<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         let query = format!(
@@ -157,7 +155,7 @@ impl Migration for Migration0026<'_> {
         );
         let _ = self
             .clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
         Ok(())
     }
@@ -175,7 +173,7 @@ impl Migration for Migration0026<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

@@ -6,7 +6,7 @@ use sqlx::Row;
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::ConfigQueries;
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 
 #[async_trait]
 impl ConfigQueries for PostgresConnectionInfo {
@@ -14,7 +14,7 @@ impl ConfigQueries for PostgresConnectionInfo {
         &self,
         snapshot_hash: SnapshotHash,
     ) -> Result<ConfigSnapshot, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let row = sqlx::query(
             r"SELECT config, extra_templates, tags
@@ -43,17 +43,26 @@ impl ConfigQueries for PostgresConnectionInfo {
         ConfigSnapshot::from_stored(&config, extra_templates, tags, &snapshot_hash)
     }
 
-    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), Error> {
+    async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError> {
         let pool = self.get_pool_result()?;
 
         let config_string = toml::to_string(&snapshot.config).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
+            DelayedError::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize config snapshot: {e}"),
             })
         })?;
 
-        let extra_templates_json = serde_json::to_value(&snapshot.extra_templates)?;
-        let tags_json = serde_json::to_value(&snapshot.tags)?;
+        let extra_templates_json =
+            serde_json::to_value(&snapshot.extra_templates).map_err(|e| {
+                DelayedError::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })?;
+        let tags_json = serde_json::to_value(&snapshot.tags).map_err(|e| {
+            DelayedError::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
 
         sqlx::query(
             r"INSERT INTO tensorzero.config_snapshots (hash, config, extra_templates, tensorzero_version, tags)
@@ -68,7 +77,12 @@ impl ConfigQueries for PostgresConnectionInfo {
         .bind(crate::endpoints::status::TENSORZERO_VERSION)
         .bind(&tags_json)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            DelayedError::new(ErrorDetails::PostgresQuery {
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }

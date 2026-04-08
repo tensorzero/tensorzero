@@ -396,13 +396,6 @@ model_name = "accounts/fireworks/models/kimi-k2p5"
 type = "fireworks"
 model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
 
-[models."qwen3-next-80b-a3b-instruct-together"]
-routing = ["together"]
-
-[models."qwen3-next-80b-a3b-instruct-together".providers.together]
-type = "together"
-model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
-
 [models."phi-3.5-mini-instruct-tgi"]
 routing = ["tgi"]
 
@@ -410,20 +403,20 @@ routing = ["tgi"]
 type = "tgi"
 api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
 
-[models."qwen3-next-80b-a3b-instruct-together-dynamic"]
-routing = ["together"]
-
-[models."qwen3-next-80b-a3b-instruct-together-dynamic".providers.together]
-type = "together"
-model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
-api_key_location = "dynamic::together_api_key"
-
 [models."glm-5-together"]
 routing = ["together"]
 
 [models."glm-5-together".providers.together]
 type = "together"
 model_name = "zai-org/GLM-5"
+
+[models."glm-5-together-dynamic"]
+routing = ["together"]
+
+[models."glm-5-together-dynamic".providers.together]
+type = "together"
+model_name = "zai-org/GLM-5"
+api_key_location = "dynamic::together_api_key"
 
 [models."Qwen/Qwen3-1.7B"]
 routing = ["sglang"]

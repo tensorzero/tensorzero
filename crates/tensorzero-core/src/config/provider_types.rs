@@ -32,7 +32,6 @@ pub struct ProviderTypesConfig {
     pub xai: Option<XAIProviderTypeConfig>,
 }
 
-#[cfg(test)]
 fn convert_simple_provider_type_config(
     defaults: &impl ApiKeyDefaultsConfig,
 ) -> StoredSimpleProviderTypeConfig {
@@ -71,12 +70,10 @@ impl From<&GCPBatchConfigType> for StoredGCPBatchConfigType {
     }
 }
 
-#[cfg(test)]
 trait ApiKeyDefaultsConfig {
     fn api_key_location(&self) -> &CredentialLocationWithFallback;
 }
 
-#[cfg(test)]
 macro_rules! impl_api_key_defaults_config {
     ($($defaults:ty),* $(,)?) => {
         $(
@@ -89,7 +86,6 @@ macro_rules! impl_api_key_defaults_config {
     };
 }
 
-#[cfg(test)]
 impl_api_key_defaults_config!(
     AnthropicDefaults,
     AzureDefaults,
@@ -569,46 +565,85 @@ impl From<StoredProviderTypesConfig> for ProviderTypesConfig {
     }
 }
 
-fn convert_stored_api_key_defaults(
+/// Resolves the `api_key_location` from a stored `defaults` overlay.
+///
+/// Returns `None` only when the overlay itself was absent. When the overlay
+/// is present but its `api_key_location` is `None` (e.g. a stored snapshot
+/// from a writer that omitted the field), falls back to `default_location`
+/// and logs a warning so the operator notices the missing value.
+fn resolve_stored_api_key_defaults(
     stored: Option<StoredApiKeyDefaults>,
+    provider_type: &str,
+    default_location: impl FnOnce() -> CredentialLocationWithFallback,
 ) -> Option<CredentialLocationWithFallback> {
-    stored.and_then(|d| d.api_key_location.map(Into::into))
+    let defaults = stored?;
+    Some(
+        defaults
+            .api_key_location
+            .map(Into::into)
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "Stored provider type config for `{provider_type}` has `defaults` set but \
+             `api_key_location` is missing — falling back to the built-in default."
+                );
+                default_location()
+            }),
+    )
 }
 
-fn convert_stored_gcp_credential_defaults(
+/// Like `resolve_stored_api_key_defaults`, but for GCP-style credential overlays.
+fn resolve_stored_gcp_credential_defaults(
     stored: Option<StoredGCPCredentialDefaults>,
+    provider_type: &str,
+    default_location: impl FnOnce() -> CredentialLocationWithFallback,
 ) -> Option<CredentialLocationWithFallback> {
-    stored.and_then(|d| d.credential_location.map(Into::into))
+    let defaults = stored?;
+    Some(
+        defaults
+            .credential_location
+            .map(Into::into)
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    "Stored provider type config for `{provider_type}` has `defaults` set but \
+                     `credential_location` is missing — falling back to the built-in default."
+                );
+                default_location()
+            }),
+    )
 }
 
 // --- Simple provider types (api_key_location only) ---
 
 macro_rules! impl_from_simple_provider_type {
-    ($stored:ty => $target:ty, $defaults:ident) => {
+    ($stored:ty => $target:ty, $defaults:ident, $provider_type:literal) => {
         impl From<$stored> for $target {
             fn from(stored: $stored) -> Self {
                 Self {
-                    defaults: convert_stored_api_key_defaults(stored.defaults)
-                        .map(|api_key_location| $defaults { api_key_location }),
+                    defaults: resolve_stored_api_key_defaults(
+                        stored.defaults,
+                        $provider_type,
+                        || $defaults::default().api_key_location,
+                    )
+                    .map(|api_key_location| $defaults { api_key_location }),
                 }
             }
         }
     };
 }
 
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AnthropicProviderTypeConfig, AnthropicDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AzureProviderTypeConfig, AzureDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => DeepSeekProviderTypeConfig, DeepSeekDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GoogleAIStudioGeminiProviderTypeConfig, GoogleAIStudioGeminiDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GroqProviderTypeConfig, GroqDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => HyperbolicProviderTypeConfig, HyperbolicDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => MistralProviderTypeConfig, MistralDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenAIProviderTypeConfig, OpenAIDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenRouterProviderTypeConfig, OpenRouterDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => SGLangProviderTypeConfig, SGLangDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => TGIProviderTypeConfig, TGIDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => VLLMProviderTypeConfig, VLLMDefaults);
-impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => XAIProviderTypeConfig, XAIDefaults);
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AnthropicProviderTypeConfig, AnthropicDefaults, "anthropic");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => AzureProviderTypeConfig, AzureDefaults, "azure");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => DeepSeekProviderTypeConfig, DeepSeekDefaults, "deepseek");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GoogleAIStudioGeminiProviderTypeConfig, GoogleAIStudioGeminiDefaults, "google_ai_studio_gemini");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => GroqProviderTypeConfig, GroqDefaults, "groq");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => HyperbolicProviderTypeConfig, HyperbolicDefaults, "hyperbolic");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => MistralProviderTypeConfig, MistralDefaults, "mistral");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenAIProviderTypeConfig, OpenAIDefaults, "openai");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => OpenRouterProviderTypeConfig, OpenRouterDefaults, "openrouter");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => SGLangProviderTypeConfig, SGLangDefaults, "sglang");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => TGIProviderTypeConfig, TGIDefaults, "tgi");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => VLLMProviderTypeConfig, VLLMDefaults, "vllm");
+impl_from_simple_provider_type!(StoredSimpleProviderTypeConfig => XAIProviderTypeConfig, XAIDefaults, "xai");
 
 // --- Fireworks ---
 
@@ -616,8 +651,10 @@ impl From<StoredFireworksProviderTypeConfig> for FireworksProviderTypeConfig {
     fn from(stored: StoredFireworksProviderTypeConfig) -> Self {
         Self {
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_api_key_defaults(stored.defaults)
-                .map(|api_key_location| FireworksDefaults { api_key_location }),
+            defaults: resolve_stored_api_key_defaults(stored.defaults, "fireworks", || {
+                FireworksDefaults::default().api_key_location
+            })
+            .map(|api_key_location| FireworksDefaults { api_key_location }),
         }
     }
 }
@@ -635,11 +672,14 @@ impl From<StoredFireworksProviderSFTConfig> for FireworksSFTConfig {
 impl From<StoredGCPCredentialProviderTypeConfig> for GCPVertexAnthropicProviderTypeConfig {
     fn from(stored: StoredGCPCredentialProviderTypeConfig) -> Self {
         Self {
-            defaults: convert_stored_gcp_credential_defaults(stored.defaults).map(
-                |credential_location| GCPDefaults {
-                    credential_location,
-                },
-            ),
+            defaults: resolve_stored_gcp_credential_defaults(
+                stored.defaults,
+                "gcp_vertex_anthropic",
+                || GCPDefaults::default().credential_location,
+            )
+            .map(|credential_location| GCPDefaults {
+                credential_location,
+            }),
         }
     }
 }
@@ -651,11 +691,14 @@ impl From<StoredGCPVertexGeminiProviderTypeConfig> for GCPVertexGeminiProviderTy
         Self {
             batch: stored.batch.map(Into::into),
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_gcp_credential_defaults(stored.defaults).map(
-                |credential_location| GCPDefaults {
-                    credential_location,
-                },
-            ),
+            defaults: resolve_stored_gcp_credential_defaults(
+                stored.defaults,
+                "gcp_vertex_gemini",
+                || GCPDefaults::default().credential_location,
+            )
+            .map(|credential_location| GCPDefaults {
+                credential_location,
+            }),
         }
     }
 }
@@ -697,8 +740,10 @@ impl From<StoredTogetherProviderTypeConfig> for TogetherProviderTypeConfig {
     fn from(stored: StoredTogetherProviderTypeConfig) -> Self {
         Self {
             sft: stored.sft.map(Into::into),
-            defaults: convert_stored_api_key_defaults(stored.defaults)
-                .map(|api_key_location| TogetherDefaults { api_key_location }),
+            defaults: resolve_stored_api_key_defaults(stored.defaults, "together", || {
+                TogetherDefaults::default().api_key_location
+            })
+            .map(|api_key_location| TogetherDefaults { api_key_location }),
         }
     }
 }
@@ -710,6 +755,117 @@ impl From<StoredTogetherProviderSFTConfig> for TogetherSFTConfig {
             wandb_base_url: stored.wandb_base_url,
             wandb_project_name: stored.wandb_project_name,
             hf_api_token: stored.hf_api_token,
+        }
+    }
+}
+
+impl From<&ProviderTypesConfig> for StoredProviderTypesConfig {
+    fn from(config: &ProviderTypesConfig) -> Self {
+        StoredProviderTypesConfig {
+            anthropic: config
+                .anthropic
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            azure: config
+                .azure
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            deepseek: config
+                .deepseek
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            fireworks: config
+                .fireworks
+                .as_ref()
+                .map(|c| StoredFireworksProviderTypeConfig {
+                    sft: c.sft.as_ref().map(|s| StoredFireworksProviderSFTConfig {
+                        account_id: s.account_id.clone(),
+                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredApiKeyDefaults::from(&d.api_key_location)),
+                }),
+            gcp_vertex_gemini: config.gcp_vertex_gemini.as_ref().map(|c| {
+                StoredGCPVertexGeminiProviderTypeConfig {
+                    batch: c.batch.as_ref().map(StoredGCPBatchConfigType::from),
+                    sft: c.sft.as_ref().map(|s| StoredGCPProviderSFTConfig {
+                        project_id: s.project_id.clone(),
+                        region: s.region.clone(),
+                        bucket_name: s.bucket_name.clone(),
+                        bucket_path_prefix: s.bucket_path_prefix.clone(),
+                        service_account: s.service_account.clone(),
+                        kms_key_name: s.kms_key_name.clone(),
+                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredGCPCredentialDefaults::from(&d.credential_location)),
+                }
+            }),
+            gcp_vertex_anthropic: config.gcp_vertex_anthropic.as_ref().map(|c| {
+                StoredGCPCredentialProviderTypeConfig {
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredGCPCredentialDefaults::from(&d.credential_location)),
+                }
+            }),
+            google_ai_studio_gemini: config
+                .google_ai_studio_gemini
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            groq: config
+                .groq
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            hyperbolic: config
+                .hyperbolic
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            mistral: config
+                .mistral
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            openai: config
+                .openai
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            openrouter: config
+                .openrouter
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            sglang: config
+                .sglang
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            tgi: config
+                .tgi
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            together: config
+                .together
+                .as_ref()
+                .map(|c| StoredTogetherProviderTypeConfig {
+                    sft: c.sft.as_ref().map(|s| StoredTogetherProviderSFTConfig {
+                        wandb_api_key: s.wandb_api_key.clone(),
+                        wandb_base_url: s.wandb_base_url.clone(),
+                        wandb_project_name: s.wandb_project_name.clone(),
+                        hf_api_token: s.hf_api_token.clone(),
+                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredApiKeyDefaults::from(&d.api_key_location)),
+                }),
+            vllm: config
+                .vllm
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
+            xai: config
+                .xai
+                .as_ref()
+                .and_then(|c| c.defaults.as_ref().map(convert_simple_provider_type_config)),
         }
     }
 }
@@ -828,6 +984,137 @@ mod tests {
     }
 
     // ── GCP Vertex Gemini provider type config (full round trip) ───────
+
+    // ── Full ProviderTypesConfig round trip ────────────────────────────
+
+    /// Populate every provider variant in `ProviderTypesConfig` and verify
+    /// that converting to `StoredProviderTypesConfig` and back is lossless.
+    #[gtest]
+    fn test_provider_types_config_round_trip() {
+        fn env_single(name: &str) -> CredentialLocationWithFallback {
+            CredentialLocationWithFallback::Single(CredentialLocation::Env(name.to_string()))
+        }
+        fn path_single(path: &str) -> CredentialLocationWithFallback {
+            CredentialLocationWithFallback::Single(CredentialLocation::PathFromEnv(
+                path.to_string(),
+            ))
+        }
+
+        let original = ProviderTypesConfig {
+            anthropic: Some(AnthropicProviderTypeConfig {
+                defaults: Some(AnthropicDefaults {
+                    api_key_location: env_single("ANTHROPIC_KEY"),
+                }),
+            }),
+            azure: Some(AzureProviderTypeConfig {
+                defaults: Some(AzureDefaults {
+                    api_key_location: env_single("AZURE_KEY"),
+                }),
+            }),
+            deepseek: Some(DeepSeekProviderTypeConfig {
+                defaults: Some(DeepSeekDefaults {
+                    api_key_location: env_single("DEEPSEEK_KEY"),
+                }),
+            }),
+            fireworks: Some(FireworksProviderTypeConfig {
+                sft: Some(FireworksSFTConfig {
+                    account_id: "fireworks-account".to_string(),
+                }),
+                defaults: Some(FireworksDefaults {
+                    api_key_location: env_single("FIREWORKS_KEY"),
+                }),
+            }),
+            gcp_vertex_gemini: Some(GCPVertexGeminiProviderTypeConfig {
+                batch: Some(GCPBatchConfigType::CloudStorage(
+                    GCPBatchConfigCloudStorage {
+                        input_uri_prefix: "gs://my-bucket/in/".to_string(),
+                        output_uri_prefix: "gs://my-bucket/out/".to_string(),
+                    },
+                )),
+                sft: Some(GCPSFTConfig {
+                    project_id: "my-project".to_string(),
+                    region: "us-central1".to_string(),
+                    bucket_name: "my-bucket".to_string(),
+                    bucket_path_prefix: Some("sft/".to_string()),
+                    service_account: Some("svc@my-project.iam".to_string()),
+                    kms_key_name: Some("my-kms-key".to_string()),
+                }),
+                defaults: Some(GCPDefaults {
+                    credential_location: path_single("GCP_VERTEX_GEMINI_CREDS"),
+                }),
+            }),
+            gcp_vertex_anthropic: Some(GCPVertexAnthropicProviderTypeConfig {
+                defaults: Some(GCPDefaults {
+                    credential_location: path_single("GCP_VERTEX_ANTHROPIC_CREDS"),
+                }),
+            }),
+            google_ai_studio_gemini: Some(GoogleAIStudioGeminiProviderTypeConfig {
+                defaults: Some(GoogleAIStudioGeminiDefaults {
+                    api_key_location: env_single("GOOGLE_AI_STUDIO_KEY"),
+                }),
+            }),
+            groq: Some(GroqProviderTypeConfig {
+                defaults: Some(GroqDefaults {
+                    api_key_location: env_single("GROQ_KEY"),
+                }),
+            }),
+            hyperbolic: Some(HyperbolicProviderTypeConfig {
+                defaults: Some(HyperbolicDefaults {
+                    api_key_location: env_single("HYPERBOLIC_KEY"),
+                }),
+            }),
+            mistral: Some(MistralProviderTypeConfig {
+                defaults: Some(MistralDefaults {
+                    api_key_location: env_single("MISTRAL_KEY"),
+                }),
+            }),
+            openai: Some(OpenAIProviderTypeConfig {
+                defaults: Some(OpenAIDefaults {
+                    api_key_location: env_single("OPENAI_KEY"),
+                }),
+            }),
+            openrouter: Some(OpenRouterProviderTypeConfig {
+                defaults: Some(OpenRouterDefaults {
+                    api_key_location: env_single("OPENROUTER_KEY"),
+                }),
+            }),
+            sglang: Some(SGLangProviderTypeConfig {
+                defaults: Some(SGLangDefaults {
+                    api_key_location: env_single("SGLANG_KEY"),
+                }),
+            }),
+            tgi: Some(TGIProviderTypeConfig {
+                defaults: Some(TGIDefaults {
+                    api_key_location: env_single("TGI_KEY"),
+                }),
+            }),
+            together: Some(TogetherProviderTypeConfig {
+                sft: Some(TogetherSFTConfig {
+                    wandb_api_key: Some("wandb-key".to_string()),
+                    wandb_base_url: Some("https://wandb.example.com".to_string()),
+                    wandb_project_name: Some("my-project".to_string()),
+                    hf_api_token: Some("hf-token".to_string()),
+                }),
+                defaults: Some(TogetherDefaults {
+                    api_key_location: env_single("TOGETHER_KEY"),
+                }),
+            }),
+            vllm: Some(VLLMProviderTypeConfig {
+                defaults: Some(VLLMDefaults {
+                    api_key_location: env_single("VLLM_KEY"),
+                }),
+            }),
+            xai: Some(XAIProviderTypeConfig {
+                defaults: Some(XAIDefaults {
+                    api_key_location: env_single("XAI_KEY"),
+                }),
+            }),
+        };
+
+        let stored: StoredProviderTypesConfig = (&original).into();
+        let round_tripped: ProviderTypesConfig = stored.into();
+        expect_that!(round_tripped, eq(&original));
+    }
 
     #[gtest]
     fn test_gcp_vertex_gemini_provider_type_config_round_trip() {

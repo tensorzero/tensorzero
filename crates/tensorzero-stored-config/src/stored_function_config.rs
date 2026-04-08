@@ -70,6 +70,16 @@ impl From<&ToolChoice> for StoredToolChoice {
     }
 }
 
+impl From<StoredToolChoice> for tensorzero_types::ToolChoice {
+    fn from(stored: StoredToolChoice) -> Self {
+        match stored {
+            StoredToolChoice::None => Self::None,
+            StoredToolChoice::Auto => Self::Auto,
+            StoredToolChoice::Required => Self::Required,
+            StoredToolChoice::Specific { name } => Self::Specific(name),
+        }
+    }
+}
 // --- Experimentation ---
 
 #[serde_with::skip_serializing_none]

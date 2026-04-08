@@ -1,9 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
-
-use indexmap::IndexMap;
 
 use crate::cache::{
     CacheData, CacheValidationInfo, EmbeddingCacheData, EmbeddingModelProviderRequest,
@@ -14,8 +12,12 @@ use crate::cost::{CostConfig, ResponseMode, compute_cost, load_unified_cost_conf
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::RequestMessagesOrBatch;
-use crate::inference::types::extra_body::ExtraBodyConfig;
-use crate::inference::types::extra_headers::ExtraHeadersConfig;
+use crate::inference::types::extra_body::{
+    ExtraBodyConfig, extra_body_config_from_stored, extra_body_config_to_stored,
+};
+use crate::inference::types::extra_headers::{
+    ExtraHeadersConfig, extra_headers_config_from_stored, extra_headers_config_to_stored,
+};
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
@@ -38,11 +40,11 @@ use crate::{
     providers::openai::{OpenAIAPIType, OpenAIProvider},
 };
 use futures::future::try_join_all;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use tensorzero_stored_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
-#[cfg(test)]
 use tensorzero_stored_config::{
-    StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredProviderConfig, StoredUnifiedCostConfig,
+    StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig, StoredProviderConfig,
+    StoredUnifiedCostConfig,
 };
 use tensorzero_types::UninitializedUnifiedCostConfig;
 use tokio::time::error::Elapsed;
@@ -195,14 +197,13 @@ impl TryFrom<StoredEmbeddingProviderConfig> for UninitializedEmbeddingProviderCo
         Ok(UninitializedEmbeddingProviderConfig {
             config,
             timeout_ms: stored.timeout_ms,
-            extra_body: stored.extra_body.map(ExtraBodyConfig::from),
-            extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
+            extra_body: stored.extra_body.map(extra_body_config_from_stored),
+            extra_headers: stored.extra_headers.map(extra_headers_config_from_stored),
             cost,
         })
     }
 }
 
-#[cfg(test)]
 impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
     type Error = Error;
 
@@ -216,7 +217,7 @@ impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig 
                     StoredEmbeddingProviderConfig::from(provider),
                 ))
             })
-            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         Ok(StoredEmbeddingModelConfig {
             routing: config.routing.iter().map(ToString::to_string).collect(),
@@ -226,7 +227,6 @@ impl TryFrom<&UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig 
     }
 }
 
-#[cfg(test)]
 impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConfig {
     fn from(provider: &UninitializedEmbeddingProviderConfig) -> Self {
         StoredEmbeddingProviderConfig {
@@ -235,11 +235,11 @@ impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConf
             extra_body: provider
                 .extra_body
                 .as_ref()
-                .map(StoredExtraBodyConfig::from),
+                .map(extra_body_config_to_stored),
             extra_headers: provider
                 .extra_headers
                 .as_ref()
-                .map(StoredExtraHeadersConfig::from),
+                .map(extra_headers_config_to_stored),
             cost: provider.cost.as_ref().map(StoredUnifiedCostConfig::from),
         }
     }

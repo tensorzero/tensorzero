@@ -4,6 +4,9 @@ import type { Thought } from "./Thought";
 import type { ToolCall } from "./ToolCall";
 import type { Unknown } from "./Unknown";
 
+/**
+ * Types of content blocks that can be returned by a model provider
+ */
 export type ContentBlockOutput =
   | ({ type: "text" } & Text)
   | ({ type: "tool_call" } & ToolCall)

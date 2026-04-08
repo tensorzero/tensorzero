@@ -1,7 +1,8 @@
 use rust_decimal::Decimal;
-pub use tensorzero_types::{ApiType, RawResponseEntry};
 
-pub use tensorzero_provider_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
+pub use tensorzero_inference_types::{RawUsageEntry, Usage, raw_usage_entries_from_value};
+
+pub use tensorzero_types::{ApiType, RawResponseEntry};
 
 /// Take the cumulative max of two `Option<u32>` values from streaming chunks.
 ///
@@ -45,7 +46,7 @@ fn cumulative_max_decimal(
                     "Unexpected non-cumulative `{field_name}` in streaming response ({current} > {new}); using the higher value."
                 );
             }
-            Some(current.max(new))
+            Some(Decimal::max(current, new))
         }
     }
 }

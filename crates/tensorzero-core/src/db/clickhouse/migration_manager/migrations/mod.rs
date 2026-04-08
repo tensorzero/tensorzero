@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
-    error::{Error, ErrorDetails},
+    error::{ErrorDetails, delayed_error::DelayedError},
 };
 
 /// Default offset for materialized view recreation during migrations.
@@ -101,19 +101,21 @@ pub async fn check_table_exists(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     migration_id: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let query = format!(
         "SELECT 1 FROM system.tables WHERE database = '{}' AND name = '{}'",
         clickhouse.database(),
         table
     );
-    match clickhouse.run_query_synchronous_no_params(query).await {
+    match clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await
+    {
         Err(e) => {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
-                message: e.to_string(),
-            }
-            .into());
+                message: e.suppress_logging_of_error_message().to_string(),
+            }));
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -131,19 +133,21 @@ pub async fn check_detached_table_exists(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     migration_id: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let query = format!(
         "SELECT 1 FROM system.detached_tables WHERE database = '{}' AND table = '{}'",
         clickhouse.database(),
         table
     );
-    match clickhouse.run_query_synchronous_no_params(query).await {
+    match clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await
+    {
         Err(e) => {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
-                message: e.to_string(),
-            }
-            .into());
+                message: e.suppress_logging_of_error_message().to_string(),
+            }));
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -161,7 +165,7 @@ async fn check_column_exists(
     table: &str,
     column: &str,
     migration_id: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let query = format!(
         r"
             SELECT 1
@@ -175,13 +179,15 @@ async fn check_column_exists(
         table,
         column,
     );
-    match clickhouse.run_query_synchronous_no_params(query).await {
+    match clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await
+    {
         Err(e) => {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
-                message: e.to_string(),
-            }
-            .into());
+                message: e.suppress_logging_of_error_message().to_string(),
+            }));
         }
         Ok(response) => {
             if response.response.trim() != "1" {
@@ -197,19 +203,21 @@ async fn get_column_type(
     table: &str,
     column: &str,
     migration_id: &str,
-) -> Result<String, Error> {
+) -> Result<String, DelayedError> {
     let query = format!(
         "SELECT type FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
         clickhouse.database(),
         table,
         column
     );
-    match clickhouse.run_query_synchronous_no_params(query).await {
-        Err(e) => Err(ErrorDetails::ClickHouseMigration {
+    match clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await
+    {
+        Err(e) => Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
-            message: e.to_string(),
-        }
-        .into()),
+            message: e.suppress_logging_of_error_message().to_string(),
+        })),
         Ok(response) => Ok(response.response.trim().to_string()),
     }
 }
@@ -219,19 +227,21 @@ async fn get_default_expression(
     table: &str,
     column: &str,
     migration_id: &str,
-) -> Result<String, Error> {
+) -> Result<String, DelayedError> {
     let query = format!(
         "SELECT default_expression FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
         clickhouse.database(),
         table,
         column
     );
-    match clickhouse.run_query_synchronous_no_params(query).await {
-        Err(e) => Err(ErrorDetails::ClickHouseMigration {
+    match clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await
+    {
+        Err(e) => Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
-            message: e.to_string(),
-        }
-        .into()),
+            message: e.suppress_logging_of_error_message().to_string(),
+        })),
         Ok(response) => Ok(response.response.trim().to_string()),
     }
 }
@@ -240,11 +250,13 @@ async fn table_is_nonempty(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     migration_id: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let query = format!("SELECT COUNT() FROM {table} FORMAT CSV");
-    let result = clickhouse.run_query_synchronous_no_params(query).await?;
+    let result = clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await?;
     Ok(result.response.trim().parse::<i64>().map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseMigration {
+        DelayedError::new(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
             message: e.to_string(),
         })
@@ -254,13 +266,15 @@ async fn table_is_nonempty(
 async fn get_table_engine(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
-) -> Result<String, Error> {
+) -> Result<String, DelayedError> {
     let query = format!(
         "SELECT engine FROM system.tables WHERE database='{}' AND name='{}'",
         clickhouse.database(),
         table
     );
-    let result = clickhouse.run_query_synchronous_no_params(query).await?;
+    let result = clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await?;
     Ok(result.response.trim().to_string())
 }
 
@@ -268,14 +282,16 @@ async fn check_index_exists(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     index: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DelayedError> {
     let query = format!(
         "SELECT 1 FROM system.data_skipping_indices WHERE database='{}' AND table='{}' AND name='{}'",
         clickhouse.database(),
         table,
         index
     );
-    let result = clickhouse.run_query_synchronous_no_params(query).await?;
+    let result = clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await?;
     Ok(result.response.trim() == "1")
 }
 
@@ -289,12 +305,14 @@ pub async fn materialize_index(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
     index: &str,
-) -> Result<(), Error> {
+) -> Result<(), DelayedError> {
     // Submit the mutation asynchronously by overriding mutations_sync at the query level.
     // The connection-level mutations_sync=2 is overridden by the SETTINGS clause.
     let query =
         format!("ALTER TABLE {table} MATERIALIZE INDEX {index} SETTINGS mutations_sync = 0");
-    clickhouse.run_query_synchronous_no_params(query).await?;
+    clickhouse
+        .run_query_synchronous_no_params_delayed_err(query)
+        .await?;
 
     // Poll system.mutations until no pending mutations remain for this table.
     let poll_interval = Duration::from_millis(100);
@@ -305,10 +323,12 @@ pub async fn materialize_index(
         let query = format!(
             "SELECT count() FROM system.mutations WHERE database = currentDatabase() AND table = '{table}' AND is_done = 0 FORMAT CSV"
         );
-        let result = clickhouse.run_query_synchronous_no_params(query).await?;
+        let result = clickhouse
+            .run_query_synchronous_no_params_delayed_err(query)
+            .await?;
 
         let pending: i64 = result.response.trim().parse().map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
+            DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "materialize_index".to_string(),
                 message: format!("Failed to parse pending mutation count for table `{table}`: {e}"),
             })
@@ -319,14 +339,13 @@ pub async fn materialize_index(
         }
 
         if start.elapsed() > timeout {
-            return Err(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "materialize_index".to_string(),
                 message: format!(
                     "Timed out waiting for MATERIALIZE INDEX `{index}` on table `{table}` to complete ({pending} mutations still pending after {}s)",
                     timeout.as_secs()
                 ),
-            }
-            .into());
+            }));
         }
 
         tokio::time::sleep(poll_interval).await;

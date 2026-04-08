@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{feedback::FeedbackQueries, postgres::PostgresConnectionInfo},
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{DelayedError, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
 };
@@ -287,7 +287,7 @@ impl VariantSampler for StaticExperimentationConfig {
         _function_name: &str,
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<(), DelayedError> {
         // Validation (duplicates, weights, variant existence) is done in
         // StaticConfig::validate() at config load time.
         Ok(())

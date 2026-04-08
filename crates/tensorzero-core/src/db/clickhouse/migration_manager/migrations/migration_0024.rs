@@ -1,6 +1,6 @@
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::{check_column_exists, check_table_exists};
@@ -17,11 +17,11 @@ pub struct Migration0024<'a> {
 
 #[async_trait]
 impl Migration for Migration0024<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         let json_inference_table_exists =
             check_table_exists(self.clickhouse, "JsonInference", "0024").await?;
         if !json_inference_table_exists {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0024".to_string(),
                 message: "JsonInference table does not exist".to_string(),
             }));
@@ -30,7 +30,7 @@ impl Migration for Migration0024<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         let auxiliary_content_column_exists = check_column_exists(
             self.clickhouse,
             "JsonInference",
@@ -42,9 +42,9 @@ impl Migration for Migration0024<'_> {
         Ok(!auxiliary_content_column_exists)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 "ALTER TABLE JsonInference ADD COLUMN IF NOT EXISTS auxiliary_content String"
                     .to_string(),
             )
@@ -57,7 +57,7 @@ impl Migration for Migration0024<'_> {
         "ALTER TABLE JsonInference DROP COLUMN auxiliary_content".to_string()
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

@@ -3,7 +3,7 @@ use crate::db::clickhouse::migration_manager::migrations::{
     check_column_exists, check_table_exists,
 };
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::Error;
+use crate::error::delayed_error::DelayedError;
 use async_trait::async_trait;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -80,11 +80,11 @@ pub struct Migration0043<'a> {
 
 #[async_trait]
 impl<'a> Migration for Migration0043<'a> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Check if ConfigSnapshot table doesn't exist
         if !check_table_exists(self.clickhouse, "ConfigSnapshot", MIGRATION_ID).await? {
             return Ok(true);
@@ -102,7 +102,7 @@ impl<'a> Migration for Migration0043<'a> {
             let query = format!("SHOW CREATE TABLE {view}");
             let result = self
                 .clickhouse
-                .run_query_synchronous_no_params(query)
+                .run_query_synchronous_no_params_delayed_err(query)
                 .await?;
             if !result.response.contains("snapshot_hash") {
                 return Ok(true);
@@ -112,7 +112,7 @@ impl<'a> Migration for Migration0043<'a> {
         Ok(false)
     }
 
-    async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, _clean_start: bool) -> Result<(), DelayedError> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
@@ -138,7 +138,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(create_table_query)
+            .run_query_synchronous_no_params_delayed_err(create_table_query)
             .await?;
 
         // Add snapshot_hash column to existing tables
@@ -147,7 +147,7 @@ impl<'a> Migration for Migration0043<'a> {
                 "ALTER TABLE {table}{on_cluster_name} ADD COLUMN IF NOT EXISTS snapshot_hash Nullable(UInt256)"
             );
             self.clickhouse
-                .run_query_synchronous_no_params(query)
+                .run_query_synchronous_no_params_delayed_err(query)
                 .await?;
         }
 
@@ -171,7 +171,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -188,7 +188,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -205,7 +205,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -221,7 +221,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Group 2: Inference indexing views
@@ -239,7 +239,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -256,7 +256,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -273,7 +273,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -290,7 +290,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Group 3: Tag extraction views
@@ -311,7 +311,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -331,7 +331,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -348,7 +348,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -365,7 +365,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Group 4: Feedback by variant views (with JOINs)
@@ -421,7 +421,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -476,7 +476,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Group 5: Feedback tag views
@@ -494,7 +494,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -511,7 +511,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -528,7 +528,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -545,7 +545,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         // Update views that use SELECT * from tables we're adding snapshot_hash to.
@@ -572,7 +572,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         let query = format!(
@@ -592,7 +592,7 @@ impl<'a> Migration for Migration0043<'a> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query)
+            .run_query_synchronous_no_params_delayed_err(query)
             .await?;
 
         Ok(())
@@ -647,7 +647,7 @@ impl<'a> Migration for Migration0043<'a> {
         instructions
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         Ok(!self.should_apply().await?)
     }
 }

@@ -1,6 +1,6 @@
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 use super::{ViewOffsetDeadline, check_detached_table_exists, check_table_exists};
@@ -52,16 +52,16 @@ const MIGRATION_ID: &str = "0028";
 
 #[async_trait]
 impl Migration for Migration0028<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         // As long as FloatMetricFeedback and BooleanMetricFeedback exist, we can apply this migration
         if !check_table_exists(self.clickhouse, "FloatMetricFeedback", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "FloatMetricFeedback table does not exist".to_string(),
             }));
         }
         if !check_table_exists(self.clickhouse, "BooleanMetricFeedback", MIGRATION_ID).await? {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+            return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: MIGRATION_ID.to_string(),
                 message: "BooleanMetricFeedback table does not exist".to_string(),
             }));
@@ -69,7 +69,7 @@ impl Migration for Migration0028<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let human_feedback_table_exists = check_table_exists(
             self.clickhouse,
@@ -107,13 +107,13 @@ impl Migration for Migration0028<'_> {
             || !(boolean_materialized_view_exists || detached_boolean_materialized_view_exists))
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let view_deadline = ViewOffsetDeadline::new();
         let current_time = std::time::SystemTime::now();
         let view_timestamp = (current_time
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -137,7 +137,7 @@ impl Migration for Migration0028<'_> {
             },
         );
         self.clickhouse
-            .run_query_synchronous_no_params(
+            .run_query_synchronous_no_params_delayed_err(
                 format!(r"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback{on_cluster_name} (
                     metric_name LowCardinality(String),
                     datapoint_id UUID,
@@ -228,7 +228,7 @@ impl Migration for Migration0028<'_> {
         "
         );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         // Create the materialized view for BooleanMetricFeedback
@@ -303,7 +303,7 @@ impl Migration for Migration0028<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params_delayed_err(query.to_string())
             .await?;
 
         if !clean_start {
@@ -311,7 +311,7 @@ impl Migration for Migration0028<'_> {
             let current_timestamp = current_time
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| {
-                    Error::new(ErrorDetails::ClickHouseMigration {
+                    DelayedError::new(ErrorDetails::ClickHouseMigration {
                         id: MIGRATION_ID.to_string(),
                         message: e.to_string(),
                     })
@@ -406,7 +406,7 @@ impl Migration for Migration0028<'_> {
         "
             );
             self.clickhouse
-                .run_query_synchronous_no_params(query.to_string())
+                .run_query_synchronous_no_params_delayed_err(query.to_string())
                 .await?;
         }
 
@@ -425,7 +425,7 @@ impl Migration for Migration0028<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }

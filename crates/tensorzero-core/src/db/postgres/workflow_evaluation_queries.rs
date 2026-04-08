@@ -40,7 +40,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<WorkflowEvaluationProjectRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_list_workflow_evaluation_projects_query(limit, offset);
 
         let rows: Vec<WorkflowEvaluationProjectRow> = qb.build_query_as().fetch_all(pool).await?;
@@ -49,7 +49,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
     }
 
     async fn count_workflow_evaluation_projects(&self) -> Result<u32, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let count: i32 = sqlx::query_scalar!(
             r#"
@@ -71,7 +71,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         project_name: Option<&str>,
         search_query: Option<&str>,
     ) -> Result<Vec<WorkflowEvaluationRunRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb =
             build_search_workflow_evaluation_runs_query(limit, offset, project_name, search_query);
 
@@ -87,7 +87,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         run_id: Option<Uuid>,
         project_name: Option<&str>,
     ) -> Result<Vec<WorkflowEvaluationRunWithEpisodeCountRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_list_workflow_evaluation_runs_query(limit, offset, run_id, project_name);
 
         let rows: Vec<WorkflowEvaluationRunWithEpisodeCountRow> =
@@ -97,7 +97,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
     }
 
     async fn count_workflow_evaluation_runs(&self) -> Result<u32, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let count: i32 = sqlx::query_scalar!(
             r#"
@@ -121,7 +121,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
             return Ok(vec![]);
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_workflow_evaluation_runs_query(run_ids, project_name);
 
         let rows: Vec<WorkflowEvaluationRunRow> = qb.build_query_as().fetch_all(pool).await?;
@@ -134,7 +134,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         run_id: Uuid,
         metric_name: Option<&str>,
     ) -> Result<Vec<WorkflowEvaluationRunStatisticsRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let raw_stats =
             get_workflow_evaluation_run_statistics_raw(pool, run_id, metric_name).await?;
 
@@ -179,7 +179,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
             return Ok(Vec::new());
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         list_workflow_evaluation_run_episodes_by_task_name_impl(pool, run_ids, limit, offset).await
     }
 
@@ -191,7 +191,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
             return Ok(0);
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_count_workflow_evaluation_run_episodes_by_task_name_query(run_ids);
 
         let row: PgRow = qb.build().fetch_one(pool).await?;
@@ -206,12 +206,12 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<WorkflowEvaluationRunEpisodeWithFeedbackRow>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         get_workflow_evaluation_run_episodes_with_feedback_impl(pool, run_id, limit, offset).await
     }
 
     async fn count_workflow_evaluation_run_episodes(&self, run_id: Uuid) -> Result<u32, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_count_workflow_evaluation_run_episodes_query(run_id);
 
         let row: PgRow = qb.build().fetch_one(pool).await?;
@@ -229,7 +229,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         run_display_name: Option<&str>,
         snapshot_hash: &SnapshotHash,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let variant_pins_json = serde_json::to_value(variant_pins).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -270,7 +270,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         tags: &HashMap<String, String>,
         snapshot_hash: &SnapshotHash,
     ) -> Result<(), Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let tags_json = serde_json::to_value(tags).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -301,7 +301,7 @@ impl WorkflowEvaluationQueries for PostgresConnectionInfo {
         &self,
         episode_id: Uuid,
     ) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut qb = build_get_workflow_evaluation_run_by_episode_id_query(episode_id);
 
         let row: Option<WorkflowEvaluationRunByEpisodeRow> =

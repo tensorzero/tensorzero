@@ -31,8 +31,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredMetricLevel, StoredMetricOptimize, StoredMetricType, StoredNonStreamingTimeouts,
-    StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
+    StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
+    StoredNonStreamingTimeouts, StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig,
+    StoredToolConfig,
 };
 use tracing::Span;
 use tracing::instrument;
@@ -80,6 +81,7 @@ pub mod namespace;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
+pub mod rehydrate;
 pub mod snapshot;
 mod span_map;
 #[cfg(test)]
@@ -126,6 +128,14 @@ impl From<tensorzero_stored_config::StoredAutopilotConfig> for AutopilotConfig {
     fn from(stored: tensorzero_stored_config::StoredAutopilotConfig) -> Self {
         AutopilotConfig {
             tool_whitelist: stored.tool_whitelist,
+        }
+    }
+}
+
+impl From<&AutopilotConfig> for tensorzero_stored_config::StoredAutopilotConfig {
+    fn from(config: &AutopilotConfig) -> Self {
+        tensorzero_stored_config::StoredAutopilotConfig {
+            tool_whitelist: config.tool_whitelist.clone(),
         }
     }
 }
@@ -516,6 +526,14 @@ impl From<tensorzero_stored_config::StoredClickHouseConfig> for ClickHouseConfig
     }
 }
 
+impl From<&ClickHouseConfig> for tensorzero_stored_config::StoredClickHouseConfig {
+    fn from(config: &ClickHouseConfig) -> Self {
+        tensorzero_stored_config::StoredClickHouseConfig {
+            disable_automatic_migrations: config.disable_automatic_migrations,
+        }
+    }
+}
+
 impl ObservabilityConfig {
     /// Returns true when observability writes (inferences, feedback) should be persisted.
     /// Defaults to true when `enabled` is not explicitly set.
@@ -745,6 +763,17 @@ impl From<&MetricConfigLevel> for StoredMetricLevel {
         match value {
             MetricConfigLevel::Inference => Self::Inference,
             MetricConfigLevel::Episode => Self::Episode,
+        }
+    }
+}
+
+impl From<&MetricConfig> for StoredMetricConfig {
+    fn from(config: &MetricConfig) -> Self {
+        StoredMetricConfig {
+            r#type: config.r#type.into(),
+            optimize: config.optimize.into(),
+            level: StoredMetricLevel::from(&config.level),
+            description: config.description.clone(),
         }
     }
 }
@@ -1069,6 +1098,20 @@ struct ProcessedConfigInput {
     runtime_overlay: RuntimeOverlay,
 }
 
+pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result<(), Error> {
+    for name in config.functions.as_ref().into_iter().flat_map(|m| m.keys()) {
+        if name.starts_with("tensorzero::") {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "User-defined function name cannot start with `tensorzero::`: {name}"
+                ),
+            }));
+        }
+    }
+
+    Ok(())
+}
+
 /// Processes the config input (fresh TOML or snapshot) and returns all the fields
 /// needed by load_from_toml, avoiding partial moves of UninitializedConfig.
 async fn process_config_input(
@@ -1086,17 +1129,9 @@ async fn process_config_input(
             // Deserialize the TOML table into UninitializedConfig
             let mut config = UninitializedConfig::try_from(table)?;
 
-            // Validate that user functions don't use tensorzero:: prefix
+            validate_user_config_names(&config)?;
+
             let mut functions = config.functions.unwrap_or_default();
-            for name in functions.keys() {
-                if name.starts_with("tensorzero::") {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "User-defined function name cannot start with 'tensorzero::': {name}"
-                        ),
-                    }));
-                }
-            }
 
             // Inject built-in functions into the config (SINGLE INJECTION POINT)
             let built_in_functions = built_in::get_all_built_in_functions()?;
@@ -2878,12 +2913,10 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    #[expect(dead_code)]
     pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
         [&self.parameters]
     }
 
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn convert_for_db(
         &self,
         prompt_template_version_ids: &HashMap<String, Uuid>,
@@ -2988,6 +3021,16 @@ impl From<tensorzero_stored_config::StoredPostgresConfig> for PostgresConfig {
             connection_pool_size: stored.connection_pool_size,
             inference_metadata_retention_days: stored.inference_metadata_retention_days,
             inference_data_retention_days: stored.inference_data_retention_days,
+        }
+    }
+}
+
+impl From<&PostgresConfig> for tensorzero_stored_config::StoredPostgresConfig {
+    fn from(config: &PostgresConfig) -> Self {
+        tensorzero_stored_config::StoredPostgresConfig {
+            connection_pool_size: config.connection_pool_size,
+            inference_metadata_retention_days: config.inference_metadata_retention_days,
+            inference_data_retention_days: config.inference_data_retention_days,
         }
     }
 }

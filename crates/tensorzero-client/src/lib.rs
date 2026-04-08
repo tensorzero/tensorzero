@@ -601,7 +601,9 @@ impl ClientExt for Client {
                 .clickhouse_connection_info
                 .health()
                 .await
-                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+                .map_err(|e| TensorZeroError::Other {
+                    source: e.log().into(),
+                }),
         }
     }
 

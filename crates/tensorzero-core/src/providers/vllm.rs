@@ -18,7 +18,6 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::Thought;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
@@ -28,7 +27,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    batch::StartBatchProviderInferenceResponse,
+    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
@@ -620,11 +619,14 @@ mod tests {
                 OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
                 OpenAIToolChoiceString, OpenAIUsage,
             },
-            test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            test_helpers::{
+                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
+            },
         },
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
     #[tokio::test]
@@ -695,7 +697,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: Default::default(),
@@ -1014,7 +1016,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*MULTI_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1053,6 +1055,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
+        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -1070,7 +1073,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&tool_config)),
+            tool_config: Some(Cow::Borrowed(&provider_tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),

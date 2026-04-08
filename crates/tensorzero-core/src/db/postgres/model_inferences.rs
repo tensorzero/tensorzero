@@ -76,7 +76,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         &self,
         inference_id: Uuid,
     ) -> Result<Vec<StoredModelInference>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         let mut qb = build_get_model_inferences_query(inference_id);
         let rows: Vec<StoredModelInference> = qb.build_query_as().fetch_all(pool).await?;
@@ -94,7 +94,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
             return Ok(());
         }
 
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         let mut metadata_qb = build_insert_model_inferences_query(rows)?;
         metadata_qb.build().execute(pool).await?;
         let mut io_qb = build_insert_model_inference_data_query(rows)?;
@@ -103,7 +103,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
     }
 
     async fn count_distinct_models_used(&self) -> Result<u32, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         count_distinct_models_used_impl(pool).await
     }
 
@@ -112,7 +112,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<ModelUsageTimePoint>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         get_model_usage_timeseries_impl(pool, time_window, max_periods).await
     }
 
@@ -120,7 +120,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         &self,
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
 
         if time_window == TimeWindow::Minute {
             let mut query_builder = build_model_latency_quantiles_raw_query(&time_window);
@@ -184,7 +184,7 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
         model_name: Option<&str>,
         model_provider_name: Option<&str>,
     ) -> Result<Vec<CacheStatisticsTimePoint>, Error> {
-        let pool = self.get_pool_result()?;
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
         get_cache_statistics_timeseries_impl(
             pool,
             time_window,

@@ -36,7 +36,6 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
-use crate::inference::types::ProviderInferenceResponseArgs;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
@@ -47,7 +46,7 @@ use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::inference::types::{
     ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{Credential, ModelProvider};
@@ -900,7 +899,7 @@ mod tests {
                 ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
                 ChatCompletionToolChoice, ChatCompletionToolType,
             },
-            test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL},
         },
     };
 
@@ -967,7 +966,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&*WEATHER_PROVIDER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
