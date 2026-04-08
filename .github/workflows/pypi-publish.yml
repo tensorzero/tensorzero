@@ -8,8 +8,9 @@ on:
     types: [released]
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  pull-requests: write
 
 jobs:
   build-wheels:
@@ -54,3 +55,12 @@ jobs:
         # when making actual releases. We still fail on the job when running the
         # workflow manually, as that's the only reason we'd want to run it.
         continue-on-error: ${{ github.event_name == 'release' }}
+
+  upgrade-tensorzero-deps:
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'release'
+    needs: [release]
+    uses: ./.github/workflows/upgrade-tensorzero-deps.yml
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
