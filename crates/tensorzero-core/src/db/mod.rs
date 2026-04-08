@@ -134,6 +134,25 @@ pub struct ModelUsageTimePoint {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct VariantUsageTimePoint {
+    pub period_start: DateTime<Utc>,
+    pub variant_name: String,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub output_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub count: Option<u64>,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub cost: Option<Decimal>,
+    #[serde(default, deserialize_with = "deserialize_option_u64")]
+    pub count_with_cost: Option<u64>,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
 pub struct CacheStatisticsTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,

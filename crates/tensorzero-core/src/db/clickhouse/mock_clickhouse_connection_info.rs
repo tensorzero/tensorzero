@@ -27,7 +27,7 @@ use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
 use crate::db::{
     CacheStatisticsTimePoint, ConfigQueries, MockConfigQueries, ModelLatencyDatapoint,
-    ModelUsageTimePoint, TimeWindow,
+    ModelUsageTimePoint, TimeWindow, VariantUsageTimePoint,
 };
 use crate::error::{DelayedError, Error};
 use crate::function::FunctionConfig;
@@ -318,6 +318,17 @@ impl ModelInferenceQueries for MockClickHouseConnectionInfo {
                 model_name,
                 model_provider_name,
             )
+            .await
+    }
+
+    async fn get_variant_usage_timeseries(
+        &self,
+        function_name: &str,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<VariantUsageTimePoint>, Error> {
+        self.model_inference_queries
+            .get_variant_usage_timeseries(function_name, time_window, max_periods)
             .await
     }
 }
