@@ -516,7 +516,9 @@ pub struct Args {
     pub mode: CacheMode,
     /// If `true`, normalizes UUIDs and random localhost ports in request bodies
     /// before computing cache keys, making them deterministic across test runs.
-    #[arg(long, default_value = "true")]
+    /// Defaults to `false` to avoid invalidating existing cache entries.
+    /// Enable this after repopulating the cache with the new algorithm.
+    #[arg(long, default_value = "false")]
     pub sanitize_body: bool,
     /// If `true`, saves the request body in the cached output for debugging purposes.
     /// The saved request body is not used when reading from the cache.
