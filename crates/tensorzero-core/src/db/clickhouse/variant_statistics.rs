@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 
 use super::ClickHouseConnectionInfo;
+use super::escape_string_for_clickhouse_literal;
 use super::migration_manager::migrations::migration_0037::{QUANTILES, quantiles_sql_args};
 use crate::db::variant_statistics::{
     GetVariantStatisticsParams, VariantStatisticsQueries, VariantStatisticsRow,
 };
+use crate::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -24,30 +26,32 @@ impl VariantStatisticsQueries for ClickHouseConnectionInfo {
         let mut query_params: HashMap<&str, &str> =
             HashMap::from([("function_name", function_name_str.as_str())]);
 
-        // We build variant_names filter inline since ClickHouse parameterized arrays
-        // are cumbersome. The names are validated via the API layer.
-        let variant_names_csv;
+        let variant_names_param;
         if let Some(variant_names) = &params.variant_names
             && !variant_names.is_empty()
         {
-            variant_names_csv = variant_names
-                .iter()
-                .map(|v| format!("'{}'", v.replace('\'', "\\'")))
-                .collect::<Vec<_>>()
-                .join(", ");
-            where_clauses.push(format!("variant_name IN ({variant_names_csv})"));
+            variant_names_param = format!(
+                "[{}]",
+                variant_names
+                    .iter()
+                    .map(|v| format!("'{}'", escape_string_for_clickhouse_literal(v)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            query_params.insert("variant_names", variant_names_param.as_str());
+            where_clauses.push("variant_name IN {variant_names:Array(String)}".to_string());
         }
 
         let after_str;
         if let Some(after) = &params.after {
-            after_str = after.format("%Y-%m-%d %H:%M:%S").to_string();
+            after_str = after.format(CLICKHOUSE_DATETIME_FORMAT).to_string();
             query_params.insert("after", after_str.as_str());
             where_clauses.push("minute >= {after:DateTime}".to_string());
         }
 
         let before_str;
         if let Some(before) = &params.before {
-            before_str = before.format("%Y-%m-%d %H:%M:%S").to_string();
+            before_str = before.format(CLICKHOUSE_DATETIME_FORMAT).to_string();
             query_params.insert("before", before_str.as_str());
             where_clauses.push("minute < {before:DateTime}".to_string());
         }

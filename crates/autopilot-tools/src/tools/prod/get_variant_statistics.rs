@@ -90,11 +90,11 @@ impl ToolMetadata for GetVariantStatisticsTool {
                 },
                 "after": {
                     "type": "string",
-                    "description": "Optional lower bound on the time window (inclusive, RFC 3339 format, e.g. '2025-01-01T00:00:00Z')."
+                    "description": "Optional lower bound on the time window (inclusive, RFC 3339 format, e.g. `2025-01-01T00:00:00Z`)."
                 },
                 "before": {
                     "type": "string",
-                    "description": "Optional upper bound on the time window (exclusive, RFC 3339 format, e.g. '2025-01-01T00:00:00Z')."
+                    "description": "Optional upper bound on the time window (exclusive, RFC 3339 format, e.g. `2025-01-01T00:00:00Z`)."
                 }
             },
             "required": ["function_name"],

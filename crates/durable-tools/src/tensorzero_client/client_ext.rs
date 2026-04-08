@@ -34,6 +34,7 @@ use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::endpoints::openai_compatible::types::embeddings::{
     OpenAICompatibleEmbeddingParams, OpenAIEmbedding, OpenAIEmbeddingResponse,
 };
+use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::inference::types::Usage;
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_optimizers::endpoints::{
@@ -902,9 +903,14 @@ impl TensorZeroClient for Client {
                     chrono::DateTime::parse_from_rfc3339(&s)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
                         .map_err(|e| {
-                            TensorZeroClientError::NotSupported(format!(
-                                "Invalid RFC 3339 datetime for `{field}`: {e}"
-                            ))
+                            TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                                source: Error::new(ErrorDetails::InvalidRequest {
+                                    message: format!(
+                                        "Invalid RFC 3339 datetime for `{field}`: {e}"
+                                    ),
+                                })
+                                .into(),
+                            })
                         })
                 };
                 let after = after.map(|s| parse_rfc3339(s, "after")).transpose()?;
