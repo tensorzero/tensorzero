@@ -2,15 +2,15 @@
 // Slack notifications for external (non-org-member) activity.
 //
 // Required secrets (set via `wrangler secret put`):
+//   GITHUB_APP_ID          - GitHub App ID
+//   GITHUB_APP_PRIVATE_KEY - GitHub App private key (PKCS#8 PEM)
+//   GITHUB_INSTALLATION_ID - GitHub App installation ID for the tensorzero org
 //   GITHUB_WEBHOOK_SECRET  - the webhook secret configured in the GitHub App
 //   SLACK_BOT_TOKEN        - Slack Bot User OAuth Token (xoxb-...)
-//   GITHUB_APP_ID          - GitHub App ID
-//   GITHUB_APP_PRIVATE_KEY - GitHub App private key (PEM)
-//   GITHUB_INSTALLATION_ID - GitHub App installation ID for the tensorzero org
 //
 // Required vars (set in wrangler.toml):
-//   SLACK_CHANNEL          - Slack channel ID to post to
 //   GITHUB_ORG             - GitHub organization name
+//   SLACK_CHANNEL          - Slack channel ID to post to
 
 import { App } from "@octokit/app";
 import { Octokit } from "@octokit/core";

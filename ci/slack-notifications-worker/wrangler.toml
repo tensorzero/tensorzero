@@ -3,12 +3,12 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [vars]
-SLACK_CHANNEL = "C09HC3Q2XV2"
 GITHUB_ORG = "tensorzero"
+SLACK_CHANNEL = "C09HC3Q2XV2"
 
 # Secrets (set via `wrangler secret put`):
-#   GITHUB_WEBHOOK_SECRET
-#   SLACK_BOT_TOKEN
 #   GITHUB_APP_ID
 #   GITHUB_APP_PRIVATE_KEY
 #   GITHUB_INSTALLATION_ID
+#   GITHUB_WEBHOOK_SECRET
+#   SLACK_BOT_TOKEN
