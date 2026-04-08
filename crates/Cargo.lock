@@ -2789,6 +2789,7 @@ dependencies = [
  "evaluations",
  "flate2",
  "futures",
+ "googletest",
  "http 1.4.0",
  "http-body-util",
  "metrics-exporter-prometheus",

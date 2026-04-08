@@ -25,6 +25,7 @@ use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use snapshot::SnapshotHash;
+use sqlx::PgPool;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -1113,7 +1114,7 @@ pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result
 }
 
 /// Processes the config input (fresh TOML or snapshot) and returns all the fields
-/// needed by load_from_toml, avoiding partial moves of UninitializedConfig.
+/// needed by load_unwritten_config, avoiding partial moves of UninitializedConfig.
 async fn process_config_input(
     input: ConfigInput,
     templates: &mut TemplateConfig<'_>,
@@ -1126,107 +1127,7 @@ async fn process_config_input(
                 );
             }
 
-            // Deserialize the TOML table into UninitializedConfig
-            let mut config = UninitializedConfig::try_from(table)?;
-
-            validate_user_config_names(&config)?;
-
-            let mut functions = config.functions.unwrap_or_default();
-
-            // Inject built-in functions into the config (SINGLE INJECTION POINT)
-            let built_in_functions = built_in::get_all_built_in_functions()?;
-            functions.extend(built_in_functions);
-            config.functions = Some(functions);
-
-            // Destructure the config now that we've added built-in functions
-            let UninitializedConfig {
-                gateway,
-                clickhouse,
-                postgres,
-                rate_limiting,
-                object_storage,
-                models,
-                embedding_models,
-                functions,
-                metrics,
-                tools,
-                evaluations,
-                provider_types,
-                optimizers,
-                autopilot,
-            } = config.clone();
-
-            // Resolve Options with defaults
-            let gateway = gateway.unwrap_or_default();
-            let clickhouse = clickhouse.unwrap_or_default();
-            let postgres = postgres.unwrap_or_default();
-            let rate_limiting = rate_limiting.unwrap_or_default();
-            let models = models.unwrap_or_default();
-            let embedding_models = embedding_models.unwrap_or_default();
-            let functions = functions.unwrap_or_default();
-            let metrics = metrics.unwrap_or_default();
-            let tools = tools.unwrap_or_default();
-            let evaluations = evaluations.unwrap_or_default();
-            let provider_types = provider_types.unwrap_or_default();
-            let optimizers = optimizers.unwrap_or_default();
-            let autopilot = autopilot.unwrap_or_default();
-
-            // Load ALL functions (user + built-in), including their evaluators
-            let mut loaded_functions = HashMap::new();
-            for (name, func_config) in functions {
-                let loaded = func_config.load(&name, &metrics)?;
-                loaded_functions.insert(name, loaded);
-            }
-
-            let object_store_info = ObjectStoreInfo::new(object_storage)?;
-            let runtime_overlay =
-                RuntimeOverlay::from_uninitialized_config(&config, object_store_info.clone());
-            let gateway_config = gateway.load(object_store_info.as_ref())?;
-
-            // Initialize templates from ALL functions (including built-in)
-            // Build a temporary map of just the function configs for template extraction
-            let all_template_paths = Config::get_templates_from_loaded(&loaded_functions)?;
-            if gateway_config
-                .template_filesystem_access
-                .enabled
-                .unwrap_or(false)
-            {
-                deprecation_warning(
-                    "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
-                );
-            }
-            let template_fs_path = gateway_config
-                .template_filesystem_access
-                .base_path
-                .as_ref()
-                .map(|x| x.get_real_path());
-            let extra_templates = templates
-                .initialize(all_template_paths, template_fs_path)
-                .await?;
-
-            // Create snapshot from the config (which now includes built-in functions)
-            let uninitialized_config = config.clone();
-            let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
-
-            Ok(ProcessedConfigInput {
-                tools,
-                models,
-                embedding_models,
-                metrics,
-                evaluations,
-                provider_types,
-                optimizers,
-                clickhouse,
-                postgres,
-                rate_limiting,
-                autopilot,
-                snapshot,
-                loaded_functions,
-                gateway_config,
-                object_store_info,
-                uninitialized_config,
-                runtime_overlay,
-            })
+            process_uninitialized_config(UninitializedConfig::try_from(table)?, templates).await
         }
         ConfigInput::Snapshot {
             snapshot,
@@ -1346,7 +1247,111 @@ async fn process_config_input(
                 runtime_overlay: captured_runtime_overlay,
             })
         }
+        ConfigInput::Database(config) => process_uninitialized_config(*config, templates).await,
     }
+}
+
+async fn process_uninitialized_config(
+    mut config: UninitializedConfig,
+    templates: &mut TemplateConfig<'_>,
+) -> Result<ProcessedConfigInput, Error> {
+    validate_user_config_names(&config)?;
+
+    // Inject built-in functions into the config (SINGLE INJECTION POINT)
+    let built_in_functions = built_in::get_all_built_in_functions()?;
+    let mut functions = config.functions.unwrap_or_default();
+    functions.extend(built_in_functions);
+    config.functions = Some(functions);
+
+    // Destructure the config now that we've added built-in functions
+    let UninitializedConfig {
+        gateway,
+        clickhouse,
+        postgres,
+        rate_limiting,
+        object_storage,
+        models,
+        embedding_models,
+        functions,
+        metrics,
+        tools,
+        evaluations,
+        provider_types,
+        optimizers,
+        autopilot,
+    } = config.clone();
+
+    // Resolve Options with defaults
+    let gateway = gateway.unwrap_or_default();
+    let clickhouse = clickhouse.unwrap_or_default();
+    let postgres = postgres.unwrap_or_default();
+    let rate_limiting = rate_limiting.unwrap_or_default();
+    let models = models.unwrap_or_default();
+    let embedding_models = embedding_models.unwrap_or_default();
+    let functions = functions.unwrap_or_default();
+    let metrics = metrics.unwrap_or_default();
+    let tools = tools.unwrap_or_default();
+    let evaluations = evaluations.unwrap_or_default();
+    let provider_types = provider_types.unwrap_or_default();
+    let optimizers = optimizers.unwrap_or_default();
+    let autopilot = autopilot.unwrap_or_default();
+
+    // Load ALL functions (user + built-in), including their evaluators
+    let mut loaded_functions = HashMap::new();
+    for (name, func_config) in functions {
+        let loaded = func_config.load(&name, &metrics)?;
+        loaded_functions.insert(name, loaded);
+    }
+
+    let object_store_info = ObjectStoreInfo::new(object_storage)?;
+    let gateway_config = gateway.load(object_store_info.as_ref())?;
+
+    // Initialize templates from ALL functions (including built-in)
+    // Build a temporary map of just the function configs for template extraction
+    let all_template_paths = Config::get_templates_from_loaded(&loaded_functions)?;
+    if gateway_config
+        .template_filesystem_access
+        .enabled
+        .unwrap_or(false)
+    {
+        deprecation_warning(
+            "The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.",
+        );
+    }
+    let template_fs_path = gateway_config
+        .template_filesystem_access
+        .base_path
+        .as_ref()
+        .map(|x| x.get_real_path());
+    let extra_templates = templates
+        .initialize(all_template_paths, template_fs_path)
+        .await?;
+
+    // Create snapshot from the config (which now includes built-in functions)
+    let runtime_overlay =
+        RuntimeOverlay::from_uninitialized_config(&config, object_store_info.clone());
+    let uninitialized_config = config.clone();
+    let snapshot = ConfigSnapshot::new(config, extra_templates.clone())?;
+
+    Ok(ProcessedConfigInput {
+        tools,
+        models,
+        embedding_models,
+        metrics,
+        evaluations,
+        provider_types,
+        optimizers,
+        clickhouse,
+        postgres,
+        rate_limiting,
+        autopilot,
+        snapshot,
+        loaded_functions,
+        gateway_config,
+        object_store_info,
+        uninitialized_config,
+        runtime_overlay,
+    })
 }
 
 /// In e2e test mode, we skip credential validation by default.
@@ -1411,13 +1416,15 @@ impl Config {
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
-                snapshot: Box::new(snapshot),
-                runtime_overlay: Box::new(runtime_overlay),
-            })))
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Snapshot {
+                    snapshot: Box::new(snapshot),
+                    runtime_overlay: Box::new(runtime_overlay),
+                },
+            )))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Snapshot {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Snapshot {
                 snapshot: Box::new(snapshot),
                 runtime_overlay: Box::new(runtime_overlay),
             }))
@@ -1438,12 +1445,12 @@ impl Config {
     ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_from_toml(ConfigInput::Fresh(
-                globbed_config.table,
-            ))))
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Fresh(globbed_config.table),
+            )))
             .await?
         } else {
-            Box::pin(Self::load_from_toml(ConfigInput::Fresh(
+            Box::pin(Self::load_unwritten_config(ConfigInput::Fresh(
                 globbed_config.table,
             )))
             .await?
@@ -1456,16 +1463,42 @@ impl Config {
         Ok(unwritten_config)
     }
 
-    /// Loads and initializes a config from a parsed TOML table.
+    pub async fn load_from_db(
+        pool: &PgPool,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Vec<Error>> {
+        let config = crate::db::postgres::stored_config_queries::load_config_from_db(pool).await?;
+        let config = Box::new(config);
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
+            .await
+            .map_err(|error| vec![error])?
+        } else {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config)))
+                .await
+                .map_err(|error| vec![error])?
+        };
+
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await.map_err(|error| vec![error])?;
+        }
+
+        Ok(unwritten_config)
+    }
+
+    /// Loads and initializes an unwritten config.
     ///
-    /// This is the core config loading function that transforms a merged TOML table into
-    /// a fully validated and initialized `Config`, paired with a `ConfigSnapshot` for database storage.
+    /// This is the core config loading function that transforms raw config (TOML table, Config
+    /// snapshot, or stoored config in database) into a fully validated and initialized `Config`,
+    /// paired with a `ConfigSnapshot` for database storage.
     ///
     /// # Config Loading Flow
     ///
     /// This function performs the following steps:
     ///
-    /// 1. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
+    /// 1. **Parse to UninitializedConfig**: Convert the raw config into an `UninitializedConfig`,
     ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
     ///
     /// 2. **Initialize Components**: Load and initialize all config components:
@@ -1505,14 +1538,14 @@ impl Config {
     ///
     /// The caller pattern is:
     /// ```ignore
-    /// let unwritten_config = Config::load_from_toml(table).await?;
+    /// let unwritten_config = Config::load_unwritten_config(table).await?;
     /// let clickhouse = setup_clickhouse(&unwritten_config).await?;
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
-    async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
+    async fn load_unwritten_config(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
         let is_config_snapshot = match &input {
             ConfigInput::Snapshot { .. } => true,
-            ConfigInput::Fresh(_) => false,
+            ConfigInput::Fresh(_) | ConfigInput::Database(_) => false,
         };
         let mut templates = TemplateConfig::new();
         let ProcessedConfigInput {
@@ -1995,6 +2028,7 @@ impl Config {
 
 pub enum ConfigInput {
     Fresh(toml::Table),
+    Database(Box<UninitializedConfig>),
     Snapshot {
         snapshot: Box<ConfigSnapshot>,
         runtime_overlay: Box<RuntimeOverlay>,
