@@ -849,6 +849,7 @@ impl TensorZeroClient for Client {
         function_name: String,
         variant_names: Option<Vec<String>>,
         after: Option<String>,
+        before: Option<String>,
     ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError> {
         match self.mode() {
             ClientMode::HTTPGateway(http) => {
@@ -868,6 +869,9 @@ impl TensorZeroClient for Client {
                     }
                     if let Some(ref after) = after {
                         query_pairs.append_pair("after", after);
+                    }
+                    if let Some(ref before) = before {
+                        query_pairs.append_pair("before", before);
                     }
                 }
 
@@ -894,22 +898,23 @@ impl TensorZeroClient for Client {
                 gateway,
                 timeout: _,
             } => {
-                let after = after
-                    .map(|s| {
-                        chrono::DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .map_err(|e| {
-                                TensorZeroClientError::NotSupported(format!(
-                                    "Invalid RFC 3339 datetime for `after`: {e}"
-                                ))
-                            })
-                    })
-                    .transpose()?;
+                let parse_rfc3339 = |s: String, field: &str| {
+                    chrono::DateTime::parse_from_rfc3339(&s)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .map_err(|e| {
+                            TensorZeroClientError::NotSupported(format!(
+                                "Invalid RFC 3339 datetime for `{field}`: {e}"
+                            ))
+                        })
+                };
+                let after = after.map(|s| parse_rfc3339(s, "after")).transpose()?;
+                let before = before.map(|s| parse_rfc3339(s, "before")).transpose()?;
                 let db = gateway.handle.app_state.get_delegating_database();
                 let params = GetVariantStatisticsParams {
                     function_name,
                     variant_names,
                     after,
+                    before,
                 };
                 let quantiles = db.get_variant_statistics_quantiles().map(|q| q.to_vec());
                 let data = db.get_variant_statistics(&params).await.map_err(|e| {

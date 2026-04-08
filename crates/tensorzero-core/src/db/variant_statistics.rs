@@ -24,6 +24,9 @@ pub struct GetVariantStatisticsParams {
     /// Optional lower bound on the time window (inclusive).
     #[serde(default)]
     pub after: Option<DateTime<Utc>>,
+    /// Optional upper bound on the time window (exclusive).
+    #[serde(default)]
+    pub before: Option<DateTime<Utc>>,
 }
 
 /// A single row of aggregated variant statistics.

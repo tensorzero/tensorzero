@@ -83,6 +83,11 @@ impl VariantStatisticsQueries for PostgresConnectionInfo {
             qb.push_bind(after);
         }
 
+        if let Some(before) = &params.before {
+            qb.push(" AND minute < ");
+            qb.push_bind(before);
+        }
+
         qb.push(" GROUP BY function_name, variant_name ORDER BY function_name, variant_name");
 
         let rows: Vec<VariantStatisticsDbRow> = qb.build_query_as().fetch_all(pool).await?;

@@ -16,4 +16,8 @@ export type GetVariantStatisticsParams = {
    * Optional lower bound on the time window (inclusive).
    */
   after: string | null;
+  /**
+   * Optional upper bound on the time window (exclusive).
+   */
+  before: string | null;
 };

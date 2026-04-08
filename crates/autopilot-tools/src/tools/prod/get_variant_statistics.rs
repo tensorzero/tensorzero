@@ -25,6 +25,9 @@ pub struct GetVariantStatisticsToolParams {
     /// Optional lower bound on the time window (inclusive, RFC 3339 format).
     #[serde(default)]
     pub after: Option<String>,
+    /// Optional upper bound on the time window (exclusive, RFC 3339 format).
+    #[serde(default)]
+    pub before: Option<String>,
 }
 
 /// Tool for getting variant-level usage and cost statistics for a function.
@@ -67,7 +70,7 @@ impl ToolMetadata for GetVariantStatisticsTool {
         Cow::Borrowed(
             "Get aggregated variant statistics (inference count, token usage, cost, and optionally latency quantiles) \
              for a function. Returns statistics grouped by variant name. \
-             Optionally filter by specific variant names and a lower time bound.",
+             Optionally filter by specific variant names and a time range.",
         )
     }
 
@@ -88,6 +91,10 @@ impl ToolMetadata for GetVariantStatisticsTool {
                 "after": {
                     "type": "string",
                     "description": "Optional lower bound on the time window (inclusive, RFC 3339 format, e.g. '2025-01-01T00:00:00Z')."
+                },
+                "before": {
+                    "type": "string",
+                    "description": "Optional upper bound on the time window (exclusive, RFC 3339 format, e.g. '2025-01-01T00:00:00Z')."
                 }
             },
             "required": ["function_name"],
@@ -116,6 +123,7 @@ impl SimpleTool for GetVariantStatisticsTool {
                 llm_params.function_name,
                 llm_params.variant_names,
                 llm_params.after,
+                llm_params.before,
             )
             .await
             .map_err(|e| AutopilotToolError::client_error("get_variant_statistics", e).into())

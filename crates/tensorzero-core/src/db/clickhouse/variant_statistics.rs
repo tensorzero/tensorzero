@@ -45,6 +45,13 @@ impl VariantStatisticsQueries for ClickHouseConnectionInfo {
             where_clauses.push("minute >= {after:DateTime}".to_string());
         }
 
+        let before_str;
+        if let Some(before) = &params.before {
+            before_str = before.format("%Y-%m-%d %H:%M:%S").to_string();
+            query_params.insert("before", before_str.as_str());
+            where_clauses.push("minute < {before:DateTime}".to_string());
+        }
+
         let where_clause = where_clauses.join(" AND ");
 
         let query = format!(

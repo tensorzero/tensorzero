@@ -16,4 +16,8 @@ export type GetVariantStatisticsToolParams = {
    * Optional lower bound on the time window (inclusive, RFC 3339 format).
    */
   after: string | null;
+  /**
+   * Optional upper bound on the time window (exclusive, RFC 3339 format).
+   */
+  before: string | null;
 };

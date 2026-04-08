@@ -549,6 +549,7 @@ mod tests {
                 function_name: String,
                 variant_names: Option<Vec<String>>,
                 after: Option<String>,
+                before: Option<String>,
             ) -> Result<tensorzero_core::db::variant_statistics::GetVariantStatisticsResponse, TensorZeroClientError>;
 
             async fn run_evaluation(

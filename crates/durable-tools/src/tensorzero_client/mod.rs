@@ -184,6 +184,7 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         function_name: String,
         variant_names: Option<Vec<String>>,
         after: Option<String>,
+        before: Option<String>,
     ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError>;
 
     /// Create an event in an autopilot session.
