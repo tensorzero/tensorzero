@@ -612,9 +612,14 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let cost1 = Decimal::from_str("0.001500000").unwrap();
     let cost2 = Decimal::from_str("0.002500000").unwrap();
 
+    // Use empty function_name/variant_name because this runs at migration index 0048,
+    // before migration 0053 adds these columns to ModelInference.
+    // With skip_serializing_if = "String::is_empty", they'll be omitted from the JSON.
     let row1 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
+        function_name: String::new(),
+        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -637,6 +642,8 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
     let row2 = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
+        function_name: String::new(),
+        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
@@ -709,6 +716,8 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
+            function_name: String::new(),
+            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -731,6 +740,8 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
+            function_name: String::new(),
+            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -753,6 +764,8 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         StoredModelInference {
             id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
+            function_name: String::new(),
+            variant_name: String::new(),
             raw_request: Some(String::new()),
             raw_response: Some(String::new()),
             system: None,
@@ -881,7 +894,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46
     ]
 );
 
@@ -1183,6 +1196,8 @@ async fn test_clickhouse_migration_manager() {
     let row = StoredModelInference {
         id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
+        function_name: String::new(),
+        variant_name: String::new(),
         raw_request: Some(String::new()),
         raw_response: Some(String::new()),
         system: None,
