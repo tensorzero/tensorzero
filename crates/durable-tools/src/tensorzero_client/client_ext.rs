@@ -22,6 +22,9 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::db::variant_statistics::{
+    GetVariantStatisticsParams, GetVariantStatisticsResponse, VariantStatisticsQueries,
+};
 use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::feedback::internal::{
     GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse, get_feedback_by_target_id,
@@ -838,6 +841,82 @@ impl TensorZeroClient for Client {
                 .map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
                 }),
+        }
+    }
+
+    async fn get_variant_statistics(
+        &self,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+        after: Option<String>,
+    ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let mut url = http.base_url.join("internal/variant_statistics").map_err(
+                    |e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    },
+                )?;
+
+                {
+                    let mut query_pairs = url.query_pairs_mut();
+                    query_pairs.append_pair("function_name", &function_name);
+                    if let Some(ref variant_names) = variant_names {
+                        for name in variant_names {
+                            query_pairs.append_pair("variant_names", name);
+                        }
+                    }
+                    if let Some(ref after) = after {
+                        query_pairs.append_pair("after", after);
+                    }
+                }
+
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let after = after
+                    .map(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .map_err(|e| {
+                                TensorZeroClientError::NotSupported(format!(
+                                    "Invalid RFC 3339 datetime for `after`: {e}"
+                                ))
+                            })
+                    })
+                    .transpose()?;
+                let db = gateway.handle.app_state.get_delegating_database();
+                let params = GetVariantStatisticsParams {
+                    function_name,
+                    variant_names,
+                    after,
+                };
+                let quantiles = db.get_variant_statistics_quantiles().map(|q| q.to_vec());
+                let data = db.get_variant_statistics(&params).await.map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+                Ok(GetVariantStatisticsResponse { quantiles, data })
+            }
         }
     }
 

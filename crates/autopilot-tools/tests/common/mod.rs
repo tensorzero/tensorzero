@@ -186,6 +186,13 @@ mock! {
             variant_names: Option<Vec<String>>,
         ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
 
+        async fn get_variant_statistics(
+            &self,
+            function_name: String,
+            variant_names: Option<Vec<String>>,
+            after: Option<String>,
+        ) -> Result<tensorzero_core::db::variant_statistics::GetVariantStatisticsResponse, TensorZeroClientError>;
+
         async fn run_evaluation(
             &self,
             params: durable_tools::RunEvaluationParams,

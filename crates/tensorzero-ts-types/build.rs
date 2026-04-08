@@ -58,6 +58,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ),
     ("WRITE_CONFIG_TOOL_PARAMS", "WriteConfigToolParams"),
     ("GEPA_TOOL_PARAMS", "GepaToolParams"),
+    (
+        "GET_VARIANT_STATISTICS_TOOL_PARAMS",
+        "GetVariantStatisticsToolParams",
+    ),
     // Output types
     ("CREATE_DATAPOINTS_RESPONSE", "CreateDatapointsResponse"),
     ("DELETE_DATAPOINTS_RESPONSE", "DeleteDatapointsResponse"),
@@ -86,6 +90,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),
+    (
+        "GET_VARIANT_STATISTICS_RESPONSE",
+        "GetVariantStatisticsResponse",
+    ),
 ];
 
 /// Parsed information from a single .ts file.
