@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 toml = { workspace = true }
 toml_edit = { workspace = true, features = ["serde"] }
+ts-rs.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -25,11 +26,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 [features]
 default = []
-ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
-
-[dependencies.ts-rs]
-workspace = true
-optional = true
 
 [lints]
 workspace = true

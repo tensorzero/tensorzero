@@ -14,9 +14,8 @@ use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct CreateDatapointsToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,
@@ -36,22 +35,18 @@ impl ToolMetadata for CreateDatapointsTool {
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "CreateDatapointsToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "CreateDatapointsResponse".to_string()
     }

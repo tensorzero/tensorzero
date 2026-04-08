@@ -28,16 +28,16 @@ use super::wire::ToolChoice;
 #[cfg(test)]
 use super::params::DynamicToolParams;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Function(FunctionToolConfig),
     OpenAICustom(OpenAICustomTool),
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum FunctionToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -47,8 +47,8 @@ pub enum FunctionToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
@@ -75,8 +75,8 @@ impl StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
@@ -87,8 +87,8 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: JSONSchema,
@@ -96,8 +96,8 @@ pub struct ImplicitToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: JSONSchema,
@@ -108,9 +108,8 @@ pub use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, PartialEq, Serialize)]
+#[ts(export)]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<FunctionToolConfig>,
     pub(crate) dynamic_tools_available: Vec<FunctionToolConfig>,

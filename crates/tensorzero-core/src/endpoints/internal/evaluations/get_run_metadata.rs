@@ -21,9 +21,8 @@ pub struct GetRunMetadataParams {
 }
 
 /// Metric metadata from an evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct RunMetricMetadata {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,9 +34,8 @@ pub struct RunMetricMetadata {
 }
 
 /// Metadata for a single evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationRunMetadata {
     pub evaluation_name: String,
     pub function_name: String,
@@ -47,9 +45,8 @@ pub struct EvaluationRunMetadata {
 }
 
 /// Response containing evaluation run metadata, keyed by run ID.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetEvaluationRunMetadataResponse {
     pub metadata: HashMap<Uuid, EvaluationRunMetadata>,
 }

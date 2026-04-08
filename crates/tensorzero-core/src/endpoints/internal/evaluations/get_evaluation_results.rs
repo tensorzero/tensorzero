@@ -29,9 +29,8 @@ pub struct GetEvaluationResultsParams {
 }
 
 /// Response containing paginated evaluation results.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetEvaluationResultsResponse {
     pub results: Vec<EvaluationResultRow>,
 }

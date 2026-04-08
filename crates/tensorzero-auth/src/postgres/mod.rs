@@ -88,22 +88,21 @@ pub enum AuthResult {
     MissingKey,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
+#[ts(export)]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
     pub workspace: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub disabled_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub expires_at: Option<DateTime<Utc>>,
 }
 

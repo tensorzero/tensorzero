@@ -58,9 +58,8 @@ pub const PROVIDER_TYPE: &str = "xai";
 
 type XAIResponse = XAIResponseGeneric<OpenAIResponseChoice>;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct XAIProvider {
     model_name: String,
     #[serde(skip)]

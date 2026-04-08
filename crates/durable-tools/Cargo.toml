@@ -9,7 +9,6 @@ workspace = true
 
 [features]
 test-support = ["dep:mockall"]
-ts-bindings = ["dep:ts-rs", "dep:tensorzero-ts-types", "tensorzero-core/ts-bindings", "evaluations/ts-bindings"]
 
 [dependencies]
 mockall = { version = "0.14", optional = true }
@@ -36,8 +35,8 @@ http.workspace = true
 
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-core.workspace = true
-tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
-ts-rs = { workspace = true, optional = true }
+tensorzero-ts-types = { path = "../tensorzero-ts-types" }
+ts-rs.workspace = true
 evaluations = { path = "../evaluations" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 indexmap = "2.13.1"

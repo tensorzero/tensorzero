@@ -47,9 +47,8 @@ use super::{
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<JSONSchema>,
@@ -62,9 +61,8 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
+#[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
     model: Arc<str>,
@@ -80,9 +78,9 @@ pub struct ChatCompletionConfig {
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     retries: RetryConfig,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
     _private: (),
@@ -207,9 +205,8 @@ impl ChatCompletionConfig {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
     pub user: Option<ResolvedTomlPathData>,
@@ -217,17 +214,15 @@ pub struct UninitializedInputWrappers {
     pub system: Option<ResolvedTomlPathData>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
     pub path: ResolvedTomlPathData,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
     /// Internal map of chat templates, made public for GEPA optimizer integration.
@@ -236,9 +231,8 @@ pub struct UninitializedChatTemplates {
 }
 
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     pub weight: Option<f64>,
@@ -256,24 +250,24 @@ pub struct UninitializedChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     pub stop_sequences: Option<Vec<String>>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<ServiceTier>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
     pub retries: RetryConfig,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
 }
 

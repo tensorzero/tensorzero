@@ -29,9 +29,8 @@ use super::track_and_stop::{TrackAndStopConfig, UninitializedTrackAndStopExperim
 
 /// Algorithm used for adaptive experimentation.
 /// Currently only `TrackAndStop` is supported.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptiveExperimentationAlgorithm {
     TrackAndStop,
@@ -41,9 +40,8 @@ pub enum AdaptiveExperimentationAlgorithm {
 /// Wraps a track-and-stop config (the only algorithm currently supported) with
 /// an additional `algorithm` field.
 #[serde_with::skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct UninitializedAdaptiveExperimentationConfig {
     pub algorithm: Option<AdaptiveExperimentationAlgorithm>,
     // All track-and-stop fields are flattened in (since this is the only option at the moment)
@@ -53,9 +51,8 @@ pub struct UninitializedAdaptiveExperimentationConfig {
 
 /// Loaded adaptive experimentation config.
 /// Wraps a loaded `TrackAndStopConfig` with `algorithm` metadata.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct AdaptiveExperimentationConfig {
     pub algorithm: AdaptiveExperimentationAlgorithm,
     #[serde(flatten)]

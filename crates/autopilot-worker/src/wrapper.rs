@@ -77,22 +77,18 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     /// so for our purposes the output of the tool is ()
     type Output = ();
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         T::llm_params_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         T::llm_params_ts_bundle_type_name()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }
@@ -249,22 +245,18 @@ where
     /// so for our purposes the output of the tool is ()
     type Output = ();
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         T::llm_params_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         T::llm_params_ts_bundle_type_name()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }
@@ -580,22 +572,18 @@ mod tests {
         type SideInfo = AutopilotSideInfo;
         type Output = TestTaskToolOutput;
 
-        #[cfg(feature = "ts-bindings")]
         fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn llm_params_ts_bundle_type_name() -> String {
             "void".to_string()
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn output_ts_bundle_type_name() -> String {
             "void".to_string()
         }
@@ -644,22 +632,18 @@ mod tests {
         type SideInfo = AutopilotSideInfo;
         type Output = TestSimpleToolOutput;
 
-        #[cfg(feature = "ts-bindings")]
         fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn llm_params_ts_bundle_type_name() -> String {
             "void".to_string()
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
 
-        #[cfg(feature = "ts-bindings")]
         fn output_ts_bundle_type_name() -> String {
             "void".to_string()
         }
