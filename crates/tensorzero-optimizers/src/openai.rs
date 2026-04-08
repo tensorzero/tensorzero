@@ -15,7 +15,8 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::{
-        OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE, grader::OpenAIGrader,
+        OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE, ReasoningFieldName,
+        grader::OpenAIGrader,
     },
     stored_inference::LazyRenderedSample,
     tool::ToolCall,
@@ -144,6 +145,7 @@ impl<'a> OpenAISupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -167,6 +169,7 @@ impl<'a> OpenAISupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -231,6 +234,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
                 // For now, this isn't configurable in RFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;

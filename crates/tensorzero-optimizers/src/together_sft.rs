@@ -31,7 +31,7 @@ use tensorzero_core::{
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::{OpenAIMessagesConfig, OpenAITool},
+        openai::{OpenAIMessagesConfig, OpenAITool, ReasoningFieldName},
         together::prepare_together_messages,
         together::tensorzero_to_together_assistant_message,
         together::{PROVIDER_TYPE, TOGETHER_API_BASE, TogetherRequestMessage},
@@ -408,6 +408,7 @@ impl<'a> TogetherSupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -432,6 +433,7 @@ impl<'a> TogetherSupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;

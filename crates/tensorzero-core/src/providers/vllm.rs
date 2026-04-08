@@ -34,7 +34,7 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, check_api_base_suffix};
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
 use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "vLLM";
@@ -440,6 +440,7 @@ impl<'a> VLLMRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::Reasoning,
             },
         )
         .await?;

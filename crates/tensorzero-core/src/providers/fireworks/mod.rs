@@ -6,7 +6,7 @@ use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::{ContentBlock, Role};
-use crate::providers::openai::OpenAIMessagesConfig;
+use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::REASONING_FIELD_CHUNK_ID,
     tool::FunctionTool,
@@ -482,6 +482,7 @@ impl<'a> FireworksRequest<'a> {
                 fetch_and_encode_input_files_before_inference: request
                     .fetch_and_encode_input_files_before_inference,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -774,6 +775,7 @@ pub async fn tensorzero_to_fireworks_assistant_message<'a>(
             content,
             tool_calls,
             reasoning_content,
+            reasoning: None,
         },
     ))
 }
@@ -1959,6 +1961,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
             .await
@@ -1998,6 +2001,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let msg = tensorzero_to_fireworks_assistant_message(Cow::Borrowed(&content_blocks), config)
             .await
@@ -2041,6 +2045,7 @@ mod tests {
             provider_type: PROVIDER_TYPE,
             fetch_and_encode_input_files_before_inference: false,
             content_type_overrides: None,
+            reasoning_field_name: ReasoningFieldName::ReasoningContent,
         };
         let result =
             tensorzero_to_fireworks_assistant_message(Cow::Owned(content_blocks), config).await;
