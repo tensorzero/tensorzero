@@ -34,6 +34,7 @@ from tensorzero import (
     StoredInputMessageContentText,
     StoredInputMessageContentThought,
     TensorZeroGateway,
+    close_patched_openai_client_gateway,  # pyright: ignore[reportDeprecated]
     patch_openai_client,  # pyright: ignore[reportDeprecated]
 )
 from tensorzero.util import uuid7
@@ -298,7 +299,10 @@ async def async_openai_client(request: FixtureRequest):
                 clickhouse_url=CLICKHOUSE_URL,
                 async_setup=True,
             )
-            yield client
+            try:
+                yield client
+            finally:
+                close_patched_openai_client_gateway(client)
 
 
 def _parse_input_message_content(content_dict: Dict[str, Any]) -> Any:
