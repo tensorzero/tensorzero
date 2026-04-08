@@ -92,7 +92,9 @@ async fn test_provider_proxy() {
             remove_user_agent_non_amazon: false,
             health_port: 0,
             mode: CacheMode::ReadWrite,
+            sanitize_body: true,
             save_request_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -250,6 +252,8 @@ async fn test_read_old_write_new() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            sanitize_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -362,6 +366,8 @@ async fn test_read_old_write_new() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            sanitize_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -412,6 +418,8 @@ async fn test_dropped_stream_body() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            sanitize_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -529,7 +537,9 @@ async fn test_read_only_require_hit() {
             sanitize_model_headers: true,
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadWrite,
+            sanitize_body: true,
             save_request_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -596,6 +606,8 @@ async fn test_read_only_require_hit() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOnlyRequireHit,
             save_request_body: true,
+            sanitize_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));
@@ -665,6 +677,8 @@ async fn test_stream_body() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            sanitize_body: true,
+            cache_miss_manifest: None,
         },
         server_started_tx,
     ));

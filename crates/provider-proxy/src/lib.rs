@@ -16,7 +16,7 @@ use std::future::Future;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
@@ -26,6 +26,7 @@ use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
+use regex::Regex;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use streaming_body_collector::StreamingBodyCollector;
@@ -33,6 +34,45 @@ use tokio::sync::oneshot;
 use tracing::level_filters::LevelFilter;
 
 const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-cache";
+
+#[derive(Serialize, Clone)]
+struct CacheMissEntry {
+    cache_key: String,
+    host: String,
+    method: String,
+    path: String,
+    timestamp: String,
+}
+
+/// Thread-safe collector for cache miss events.
+#[derive(Default, Clone)]
+struct CacheMissTracker {
+    entries: Arc<Mutex<Vec<CacheMissEntry>>>,
+}
+
+impl CacheMissTracker {
+    fn record(&self, entry: CacheMissEntry) {
+        self.entries.lock().expect("lock poisoned").push(entry);
+    }
+
+    fn write_to_file(&self, path: &std::path::Path) -> Result<(), anyhow::Error> {
+        let entries = self.entries.lock().expect("lock poisoned");
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let json = serde_json::to_string_pretty(&*entries)
+            .with_context(|| "Failed to serialize cache miss manifest")?;
+        std::fs::write(path, json).with_context(|| {
+            format!("Failed to write cache miss manifest to {}", path.display())
+        })?;
+        tracing::info!(
+            "Wrote {} cache miss entries to {}",
+            entries.len(),
+            path.display()
+        );
+        Ok(())
+    }
+}
 
 fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
     let mut param = rcgen::CertificateParams::default();
@@ -50,6 +90,22 @@ fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
 
     let key_pair = rcgen::KeyPair::generate().unwrap();
     rcgen::Issuer::new(param, key_pair)
+}
+
+/// Sanitize the request body for cache key computation.
+/// Replaces non-deterministic values (UUIDs, random localhost ports) with
+/// placeholders so that test runs produce the same cache key.
+fn sanitize_body_for_cache_key(body: &str) -> String {
+    // UUIDv4/v7 pattern: 8-4-4-4-12 hex digits
+    let uuid_re =
+        Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            .expect("Invalid UUID regex");
+    let result = uuid_re.replace_all(body, "TENSORZERO_SANITIZED_UUID");
+
+    // Localhost with random port: 127.0.0.1:PORT or localhost:PORT
+    let port_re =
+        Regex::new(r"(127\.0\.0\.1|localhost):(\d{4,5})").expect("Invalid localhost port regex");
+    port_re.replace_all(&result, "${1}:0").into_owned()
 }
 
 fn hash_value(request: &serde_json::Value) -> Result<String, anyhow::Error> {
@@ -146,6 +202,7 @@ async fn check_cache<
 >(
     start_time: std::time::SystemTime,
     args: &Args,
+    cache_miss_tracker: &CacheMissTracker,
     mut request: hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
@@ -207,8 +264,26 @@ async fn check_cache<
             sanitized_header = true;
         }
     }
-    let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
-        .with_context(|| "Failed to serialize request")?;
+    let mut json_request =
+        http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
+            .with_context(|| "Failed to serialize request")?;
+
+    // Sanitize the request body for cache key computation: normalize UUIDs
+    // and random localhost ports so test runs produce deterministic cache keys.
+    if args.sanitize_body
+        && let Some(body_array) = json_request.get("body").and_then(|b| b.as_array())
+    {
+        let body_bytes: Vec<u8> = body_array
+            .iter()
+            .filter_map(|v| v.as_u64().map(|n| n as u8))
+            .collect();
+        if let Ok(body_str) = String::from_utf8(body_bytes) {
+            let sanitized = sanitize_body_for_cache_key(&body_str);
+            json_request["body"] =
+                serde_json::Value::Array(sanitized.bytes().map(|b| b.into()).collect());
+        }
+    }
+
     let hash = hash_value(&json_request)?;
 
     // Capture the serialized request for potential debugging storage
@@ -306,6 +381,13 @@ async fn check_cache<
             "Cache miss: {}",
             path_str,
         );
+        cache_miss_tracker.record(CacheMissEntry {
+            cache_key: hash.clone(),
+            host: request.uri().host().unwrap_or("unknown").to_string(),
+            method: request.method().to_string(),
+            path: request.uri().path().to_string(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
         if matches!(args.mode, CacheMode::ReadOnlyRequireHit) {
             tracing::error!("Cache miss in ReadOnlyRequireHit mode: {path_str}");
             let body = Full::new(Bytes::from(format!(
@@ -432,10 +514,17 @@ pub struct Args {
     pub remove_user_agent_non_amazon: bool,
     #[arg(long, default_value = "read-old-write-new")]
     pub mode: CacheMode,
+    /// If `true`, normalizes UUIDs and random localhost ports in request bodies
+    /// before computing cache keys, making them deterministic across test runs.
+    #[arg(long, default_value = "true")]
+    pub sanitize_body: bool,
     /// If `true`, saves the request body in the cached output for debugging purposes.
     /// The saved request body is not used when reading from the cache.
     #[arg(long, default_value = "true")]
     pub save_request_body: bool,
+    /// Path to write a JSON manifest of all cache misses. If unset, no manifest is written.
+    #[arg(long)]
+    pub cache_miss_manifest: Option<PathBuf>,
 }
 
 fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {
@@ -519,14 +608,18 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
         Some(Cache::new(128)),
     );
 
+    let cache_miss_tracker = CacheMissTracker::default();
+
     let client = reqwest::Client::new();
     let args_clone = args.clone();
+    let tracker_clone = cache_miss_tracker.clone();
     let (server_addr, server) = proxy
         .bind(
             ("0.0.0.0", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let client = client.clone();
                 let args = args_clone.clone();
+                let tracker = tracker_clone.clone();
                 async move {
                     let (parts, body) = req.into_parts();
 
@@ -577,7 +670,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                     // Add 1ms delay to simulate network latency
                     tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
-                    let response = check_cache(start_time, &args, bytes_request.clone(), || async {
+                    let response = check_cache(start_time, &args, &tracker, bytes_request.clone(), || async {
                         let mut request: reqwest::Request =
                             bytes_request.try_into().with_context(|| {
                                 "Failed to convert Request from `hyper` to `reqwest`"
@@ -611,4 +704,14 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
         .send(server_addr)
         .expect("Failed to send server started signal");
     server.await;
+
+    // Write cache miss manifest if requested
+    if let Some(manifest_path) = &args.cache_miss_manifest
+        && let Err(e) = cache_miss_tracker.write_to_file(manifest_path)
+    {
+        tracing::error!(
+            err = e.as_ref() as &dyn std::error::Error,
+            "Failed to write cache miss manifest"
+        );
+    }
 }
