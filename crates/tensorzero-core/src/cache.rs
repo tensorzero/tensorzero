@@ -164,7 +164,7 @@ impl CacheQueries for DisabledCacheQueries {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(
     Clone,
     Copy,
@@ -177,7 +177,7 @@ impl CacheQueries for DisabledCacheQueries {
     ValueEnum,
     schemars::JsonSchema,
 )]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
 pub enum CacheEnabledMode {
@@ -198,9 +198,9 @@ impl CacheEnabledMode {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,

@@ -62,9 +62,9 @@ use uuid::Uuid;
 const PROVIDER_NAME: &str = "TGI";
 pub const PROVIDER_TYPE: &str = "tgi";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct TGIProvider {
     api_base: Url,
     #[serde(skip)]

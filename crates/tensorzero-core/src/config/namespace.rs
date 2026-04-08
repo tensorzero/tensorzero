@@ -11,8 +11,8 @@ use crate::model::ModelTable;
 ///
 /// Namespace identifiers must be non-empty strings.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export, type = "string"))]
+#[derive(ts_rs::TS)]
+#[ts(export, type = "string")]
 pub struct Namespace(String);
 
 impl JsonSchema for Namespace {

@@ -34,15 +34,15 @@ use pyo3::prelude::*;
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<StoredInputMessage>,
@@ -98,10 +98,10 @@ impl StoredInput {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
@@ -240,11 +240,11 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub enum StoredInputMessageContent {
     #[schemars(title = "StoredInputMessageContentText")]
@@ -336,9 +336,9 @@ impl StoredInputMessageContent {
 
 /// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
 /// See the deserializer implementation below for details on the legacy formats it supports.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[repr(transparent)]
 #[serde(transparent)]
@@ -501,9 +501,9 @@ impl StoredInput {
 /// Only the object-storage path is actually stored in clickhouse
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,

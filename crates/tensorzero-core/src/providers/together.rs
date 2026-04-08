@@ -68,9 +68,9 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Together";
 pub const PROVIDER_TYPE: &str = "together";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct TogetherProvider {
     model_name: String,
     #[serde(skip)]

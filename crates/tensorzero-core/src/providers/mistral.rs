@@ -72,9 +72,9 @@ type PreparedMistralToolsResult<'a> = (
     Option<bool>,
 );
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct MistralProvider {
     model_name: String,
     #[serde(skip)]

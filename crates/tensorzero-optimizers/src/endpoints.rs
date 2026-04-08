@@ -39,9 +39,9 @@ use crate::{JobHandle, Optimizer};
 // TODO(shuyangli): revisit this and see if it should be u32::MAX.
 const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -52,19 +52,19 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub enum OptimizationDataSource {
     Inferences(InferencesDataSource),
     Dataset(DatasetDataSource),
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct InferencesDataSource {
     pub output_source: InferenceOutputSource,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,10 +79,10 @@ pub struct InferencesDataSource {
     pub offset: Option<u32>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct DatasetDataSource {
     pub dataset_name: String,
 }
@@ -269,9 +269,9 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,

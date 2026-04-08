@@ -13,9 +13,9 @@ use tensorzero::{UpdateDatapointRequest, UpdateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the update_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct UpdateDatapointsToolParams {
     /// The name of the dataset containing the datapoints.
     pub dataset_name: String,
@@ -35,22 +35,18 @@ impl ToolMetadata for UpdateDatapointsTool {
     type Output = UpdateDatapointsResponse;
     type LlmParams = UpdateDatapointsToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPDATE_DATAPOINTS_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "UpdateDatapointsToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPDATE_DATAPOINTS_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "UpdateDatapointsResponse".to_string()
     }

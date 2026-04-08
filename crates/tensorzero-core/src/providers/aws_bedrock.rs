@@ -82,9 +82,9 @@ fn build_bearer_auth_headers(
 }
 
 /// AWS Bedrock provider using direct HTTP calls.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]

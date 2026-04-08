@@ -166,9 +166,9 @@ pub struct Config {
 }
 
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
     /// The total time allowed for the non-streaming request to complete.
@@ -176,9 +176,9 @@ pub struct NonStreamingTimeouts {
 }
 
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
     /// The time allowed for the first token to be produced.
@@ -190,9 +190,9 @@ pub struct StreamingTimeouts {
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
     pub non_streaming: Option<NonStreamingTimeouts>,
@@ -676,8 +676,8 @@ pub enum OtlpTracesFormat {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
@@ -688,8 +688,8 @@ pub struct MetricConfig {
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -721,11 +721,11 @@ impl MetricConfigType {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -743,8 +743,8 @@ impl From<MetricConfigOptimize> for StoredMetricOptimize {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -2437,9 +2437,9 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Default, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct SchemaData {
     #[serde(flatten)]
     pub inner: HashMap<String, SchemaWithMetadata>,
@@ -2841,9 +2841,9 @@ impl UninitializedFunctionConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
 // since we use `#[serde(flatten)]` on the `inner` field.
@@ -2851,14 +2851,14 @@ pub struct UninitializedVariantInfo {
     #[serde(flatten)]
     pub inner: UninitializedVariantConfig,
     pub timeouts: Option<TimeoutsConfig>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub namespace: Option<Namespace>,
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, TensorZeroDeserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -2983,11 +2983,11 @@ impl UninitializedToolConfig {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct PathWithContents {
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[ts(type = "string")]
     pub path: ResolvedTomlPathData,
     pub contents: String,
 }

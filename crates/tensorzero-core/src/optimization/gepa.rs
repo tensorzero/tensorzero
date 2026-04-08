@@ -36,9 +36,9 @@ pub(crate) fn default_include_inference_for_mutation() -> bool {
 /// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
 /// of high-performing variants. It uses genetic programming techniques to evolve
 /// prompt templates based on evaluation results.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct GEPAConfig {
     /// Name of the function being optimized
     pub function_name: String,
@@ -46,23 +46,23 @@ pub struct GEPAConfig {
     /// Deprecated: name of the evaluation used to score candidate variants.
     /// Prefer `evaluator_names` instead.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub evaluation_name: Option<String>,
 
     /// Names of evaluators defined on `function_name`, used to score candidate variants.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub evaluator_names: Option<Vec<String>>,
 
     /// Optional list of variant_names to initialize GEPA with.
     /// If None, will use all variants defined for the function.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub initial_variants: Option<Vec<String>>,
 
     /// Prefix for the name of the new optimized variants
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub variant_prefix: Option<String>,
 
     /// Number of training samples to analyze per iteration
@@ -82,7 +82,7 @@ pub struct GEPAConfig {
 
     /// Optional random seed for reproducibility
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub seed: Option<u32>,
 
     /// Client timeout in seconds for TensorZero gateway operations
@@ -106,28 +106,28 @@ pub struct GEPAConfig {
 
     /// Maximum number of tokens to generate for analysis and mutation model calls
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub max_tokens: Option<u32>,
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
     pub function_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub evaluation_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub evaluator_names: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub initial_variants: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub variant_prefix: Option<String>,
 
     #[serde(default = "default_batch_size")]
@@ -144,7 +144,7 @@ pub struct UninitializedGEPAConfig {
     pub mutation_model: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub seed: Option<u32>,
 
     #[serde(default = "default_timeout")]
@@ -157,7 +157,7 @@ pub struct UninitializedGEPAConfig {
     pub retries: RetryConfig,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub max_tokens: Option<u32>,
 }
 
@@ -391,9 +391,9 @@ impl GEPAConfig {
 /// Contains the final Pareto frontier of optimized variants or an error message.
 /// GEPA optimization is synchronous, so polling immediately returns the completed
 /// results or failure status.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GEPAJobHandle {
     /// Result of the GEPA optimization - either a map of variant names to their
@@ -579,8 +579,8 @@ pub struct GepaProgress {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct GepaEvaluatorStats {
     pub mean: f64,
     pub stdev: f64,

@@ -14,10 +14,10 @@ use tensorzero_derive::export_schema;
 use url::Url;
 
 /// Detail level for input images (affects fidelity and token cost)
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub enum Detail {
     Low,
@@ -26,28 +26,28 @@ pub enum Detail {
 }
 
 /// A file already encoded as base64
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[ts(type = "string")]
     #[schemars(with = "String")]
     pub mime_type: MediaType,
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
     data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub detail: Option<Detail>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub filename: Option<String>,
 }
 
@@ -200,21 +200,21 @@ impl Base64File {
 }
 
 /// Like `Base64File`, but without the data field.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     #[serde(alias = "url")] // DEPRECATED
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub source_url: Option<Url>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[ts(type = "string")]
     pub mime_type: MediaType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub detail: Option<Detail>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub filename: Option<String>,
 }
 
@@ -255,21 +255,21 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 }
 
 /// A file that can be located at a URL
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub struct UrlFile {
     #[schemars(with = "String")]
     pub url: Url,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string | null"))]
+    #[ts(type = "string | null")]
     #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub detail: Option<Detail>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub filename: Option<String>,
 }
 
@@ -302,24 +302,24 @@ impl<'de> Deserialize<'de> for UrlFile {
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[ts(type = "string")]
     #[schemars(with = "String")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub detail: Option<Detail>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub filename: Option<String>,
 }
 
@@ -364,10 +364,10 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -376,22 +376,22 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub error: Option<String>,
 }
 
 /// A file for an inference or a datapoint.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub enum File {
     #[schemars(title = "FileUrlFile")]

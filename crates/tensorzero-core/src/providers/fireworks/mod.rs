@@ -75,9 +75,9 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Fireworks";
 pub const PROVIDER_TYPE: &str = "fireworks";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct FireworksProvider {
     model_name: String,
     #[serde(skip)]

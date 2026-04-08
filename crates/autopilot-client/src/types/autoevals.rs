@@ -6,26 +6,23 @@ use uuid::Uuid;
 use super::{MultipleChoiceOption, UserQuestionAnswer};
 
 /// A block of rich content displayed alongside an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export, tag = "type", rename_all = "snake_case")
-)]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum AutoEvalContentBlock {
     /// Rendered as formatted markdown.
     Markdown {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        #[ts(optional)]
         label: Option<String>,
     },
     /// Rendered as a formatted JSON viewer.
     Json {
         data: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
+        #[ts(optional)]
         label: Option<String>,
     },
 }
@@ -38,17 +35,17 @@ pub enum AutoEvalContentBlock {
 ///
 /// Groups labeled examples together, each with rich context blocks
 /// (e.g. prompt/response) and associated labeling questions.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EventPayloadAutoEvalExampleLabeling {
     pub examples: Vec<AutoEvalExampleLabeling>,
 }
 
 /// A single example to label, with context and a structured labeling question.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalExampleLabeling {
     /// Optional since some behaviors only depend on the response
     pub maybe_excerpted_prompt: Option<AutoEvalContentBlock>,
@@ -59,39 +56,39 @@ pub struct AutoEvalExampleLabeling {
     pub label_question: AutoEvalLabelQuestion,
     /// An optional free-response explanation question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub explanation_question: Option<AutoEvalExplanationQuestion>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AutoEvalExampleSource {
     Inference(AutoEvalExampleSourceInference),
     Synthetic(AutoEvalExampleSourceSynthetic),
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalExampleSourceInference {
     /// The inference ID of the historical datapoint for auto evals
     pub id: Uuid,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalExampleSourceSynthetic {
     pub full_prompt: Option<AutoEvalContentBlock>,
     pub full_response: AutoEvalContentBlock,
 }
 
 /// A multiple-choice labeling question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalLabelQuestion {
     pub id: Uuid,
     pub header: String,
@@ -100,9 +97,9 @@ pub struct AutoEvalLabelQuestion {
 }
 
 /// A free-response explanation question within an autoeval example.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalExplanationQuestion {
     pub id: Uuid,
     pub header: String,
@@ -111,9 +108,9 @@ pub struct AutoEvalExplanationQuestion {
 
 /// Minimal input payload for submitting autoeval example labeling answers.
 /// The server enriches this with context from the original labeling event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
     /// Map from question UUID to response.
     pub responses: HashMap<Uuid, UserQuestionAnswer>,
@@ -124,9 +121,9 @@ pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
 /// Self-contained read-only payload for labeled autoeval examples.
 /// Includes the full context blocks so the UI can render everything
 /// without looking up the original labeling event.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EventPayloadAutoEvalExampleLabelingAnswers {
     pub examples: Vec<AutoEvalLabeledExample>,
     /// The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
@@ -134,9 +131,9 @@ pub struct EventPayloadAutoEvalExampleLabelingAnswers {
 }
 
 /// A labeled example with its full context and submitted answers.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalLabeledExample {
     /// Optional since some behaviors only depend on the response
     pub maybe_excerpted_prompt: Option<AutoEvalContentBlock>,
@@ -149,11 +146,11 @@ pub struct AutoEvalLabeledExample {
     pub label_answer: UserQuestionAnswer,
     /// An optional free-response explanation question.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub explanation_question: Option<AutoEvalExplanationQuestion>,
     /// The user's answer to the explanation question, if one was present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub explanation_answer: Option<UserQuestionAnswer>,
 }
 
@@ -165,9 +162,9 @@ pub struct AutoEvalLabeledExample {
 ///
 /// Contains two required free-response fields: a target behavior description
 /// and additional context, both with optional pre-filled defaults.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EventPayloadAutoEvalBehaviorSpec {
     /// The target behavior question.
     pub target_behavior: AutoEvalBehaviorSpecQuestion,
@@ -176,24 +173,24 @@ pub struct EventPayloadAutoEvalBehaviorSpec {
 }
 
 /// A free-response question within an autoeval behavior spec.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutoEvalBehaviorSpecQuestion {
     pub id: Uuid,
     pub header: String,
     pub question: String,
     /// Pre-filled text shown in the input. The user can edit or submit as-is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub default_value: Option<String>,
 }
 
 /// Minimal input payload for submitting autoeval behavior spec answers.
 /// The server enriches this with context from the original event before storing.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
     /// Map from question UUID to response.
     pub responses: HashMap<Uuid, UserQuestionAnswer>,
@@ -204,9 +201,9 @@ pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
 /// Self-contained read-only payload for answered autoeval behavior spec.
 /// Includes the full questions so the UI can render everything
 /// without looking up the original event.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EventPayloadAutoEvalBehaviorSpecAnswers {
     /// The target behavior question.
     pub target_behavior: AutoEvalBehaviorSpecQuestion,

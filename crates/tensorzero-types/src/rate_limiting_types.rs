@@ -11,9 +11,9 @@ pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
     nano_cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum RateLimitResource {
     ModelInference,
@@ -120,9 +120,9 @@ impl Serialize for FailedRateLimit {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -130,9 +130,9 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(try_from = "Vec<RateLimitingConfigScope>")]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
 
@@ -199,9 +199,9 @@ impl std::ops::Index<usize> for RateLimitingConfigScopes {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(untagged)]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
@@ -210,9 +210,9 @@ pub enum RateLimitingConfigScope {
     // function_name = "my_function"
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
@@ -233,9 +233,9 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
 }
@@ -251,9 +251,9 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -290,9 +290,9 @@ impl<'de> Deserialize<'de> for TagValueScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),
     Each,

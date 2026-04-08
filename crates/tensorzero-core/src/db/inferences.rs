@@ -189,9 +189,9 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 // TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
     /// No output - used when creating datapoints without output.
@@ -323,16 +323,16 @@ pub enum PaginationParams {
 }
 
 /// Inference metadata from the InferenceById table.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct InferenceMetadata {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
     pub function_type: FunctionType,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }
@@ -419,9 +419,9 @@ pub struct GetFunctionThroughputByVariantParams<'a> {
 }
 
 /// Row returned from the get_function_throughput_by_variant query.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct VariantThroughput {
     /// Start datetime of the period in RFC 3339 format with milliseconds
     #[serde(serialize_with = "serialize_utc_datetime_rfc_3339_with_millis")]
@@ -432,9 +432,9 @@ pub struct VariantThroughput {
 }
 
 /// Row returned from the list_functions_with_inference_count query.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct FunctionInferenceCount {
     pub function_name: String,
     /// ISO 8601 timestamp of the most recent inference for this function

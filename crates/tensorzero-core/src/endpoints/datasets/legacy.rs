@@ -32,10 +32,10 @@ use crate::inference::types::pyo3_helpers::{
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,
@@ -52,12 +52,12 @@ impl DatapointKind {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub enum Datapoint {
     #[schemars(title = "DatapointChat")]
@@ -394,10 +394,10 @@ impl Datapoint {
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
@@ -416,7 +416,7 @@ pub struct ChatInferenceDatapoint {
     pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, string>"))]
+    #[ts(type = "Record<string, string>")]
     pub tags: Option<HashMap<String, String>>,
     #[serde(
         skip_serializing,
@@ -446,11 +446,11 @@ impl std::fmt::Display for ChatInferenceDatapoint {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -461,7 +461,7 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
@@ -469,8 +469,8 @@ pub struct JsonInferenceDatapoint {
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, string>"))]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(type = "Record<string, string>")]
+    #[ts(optional)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(
         skip_serializing,
@@ -483,16 +483,16 @@ pub struct JsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub name: Option<String>,
 }
 

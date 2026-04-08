@@ -42,22 +42,18 @@ impl ToolMetadata for EchoTool {
         Cow::Borrowed("Echoes back the input message. Used for testing the autopilot worker.")
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "void".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }

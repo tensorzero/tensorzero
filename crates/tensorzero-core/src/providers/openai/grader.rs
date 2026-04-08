@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tensorzero_derive::TensorZeroDeserialize;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -99,9 +99,9 @@ impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIStringCheckOp {
@@ -118,9 +118,9 @@ impl std::fmt::Display for OpenAIStringCheckOp {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAISimilarityMetric {
@@ -143,9 +143,9 @@ impl std::fmt::Display for OpenAISimilarityMetric {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum OpenAIRFTRole {
@@ -170,9 +170,9 @@ impl OpenAIRFTRole {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
 pub struct OpenAIModelGraderInput {
     pub role: OpenAIRFTRole,

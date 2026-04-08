@@ -13,9 +13,9 @@ use serde_json::{Map, Value};
 use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(transparent)]
 pub struct Arguments(
     // This type cannot be a Python dataclass because it's equivalent to a Map with arbitrary keys,
@@ -24,9 +24,9 @@ pub struct Arguments(
     pub Map<String, Value>,
 );
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Template {
@@ -35,10 +35,10 @@ pub struct Template {
     pub arguments: Arguments,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(untagged)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[export_schema]
 pub enum System {
     Text(String),
@@ -54,9 +54,9 @@ pub enum System {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
 #[export_schema]
@@ -80,9 +80,9 @@ impl Text {
 
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
 #[export_schema]
@@ -106,9 +106,9 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]
 pub struct Unknown {
@@ -228,9 +228,9 @@ impl Unknown {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -241,9 +241,9 @@ pub enum ThoughtSummaryBlock {
 }
 
 /// Struct that represents a model's reasoning
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
 // The fields are exposed via a manual `#[pymethods]` impl below.
 #[cfg_attr(feature = "pyo3", pyclass)]

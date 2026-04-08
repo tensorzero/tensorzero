@@ -18,9 +18,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the run_evaluation tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
@@ -88,22 +88,18 @@ impl ToolMetadata for RunEvaluationTool {
     type Output = RunEvaluationResponse;
     type LlmParams = RunEvaluationToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::RUN_EVALUATION_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "RunEvaluationToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::RUN_EVALUATION_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "RunEvaluationResponse".to_string()
     }

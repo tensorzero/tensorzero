@@ -23,9 +23,9 @@ use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 /// or a map of variant names to explicit weights.
 ///
 /// `fallback_variants` is optional and defaults to an empty list.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct StaticExperimentationConfig {
     pub candidate_variants: WeightedVariants,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -66,7 +66,6 @@ impl WeightedVariants {
     }
 }
 
-#[cfg(feature = "ts-bindings")]
 impl ts_rs::TS for WeightedVariants {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;

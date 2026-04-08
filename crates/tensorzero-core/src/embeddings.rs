@@ -245,9 +245,9 @@ impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConf
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
@@ -697,9 +697,9 @@ pub trait EmbeddingProvider {
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     Azure(AzureProvider),
@@ -720,18 +720,18 @@ impl EmbeddingProviderConfig {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeout_ms: Option<u64>,
     pub provider_name: Arc<str>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(skip)]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub cost: Option<CostConfig>,
 }
 

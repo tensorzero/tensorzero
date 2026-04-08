@@ -2,14 +2,14 @@ use crate::serde_helpers::{deserialize_delete, serialize_delete};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 pub struct ExtraHeader {
     pub name: String,
@@ -17,10 +17,10 @@ pub struct ExtraHeader {
     pub kind: ExtraHeaderKind,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum ExtraHeaderKind {
     Value(String),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
@@ -33,7 +33,7 @@ pub enum ExtraHeaderKind {
 
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
@@ -64,7 +64,7 @@ impl UnfilteredInferenceExtraHeaders {
 }
 
 /// The result of filtering `InferenceExtraHeader` by variant name.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct FilteredInferenceExtraHeaders {
@@ -72,7 +72,7 @@ pub struct FilteredInferenceExtraHeaders {
 }
 
 /// Holds the config-level and inference-level extra headers options
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FullExtraHeadersConfig {
     pub variant_extra_headers: Option<ExtraHeadersConfig>,
@@ -84,9 +84,9 @@ pub mod dynamic {
     use serde::{Deserialize, Serialize};
     use tensorzero_derive::export_schema;
 
-    #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+    #[derive(ts_rs::TS)]
     #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+    #[ts(optional_fields)]
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {

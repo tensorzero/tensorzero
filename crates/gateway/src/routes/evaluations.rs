@@ -35,9 +35,9 @@ use tensorzero_core::utils::gateway::{
 // =============================================================================
 
 /// Identifies the evaluation to run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(untagged)]
 pub enum EvaluationIdentifier {
     /// Legacy evaluation config, with evaluators configured as part of a named evaluation.
@@ -57,9 +57,9 @@ pub enum EvaluationIdentifier {
 }
 
 /// Request body for running an evaluation.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct RunEvaluationRequest {
     /// How the evaluation is configured: either explicit config or named evaluators.
     #[serde(flatten)]

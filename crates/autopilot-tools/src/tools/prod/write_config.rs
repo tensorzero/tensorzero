@@ -22,9 +22,9 @@ pub use config_applier::{
 };
 
 /// Parameters for the write_config tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,
@@ -33,7 +33,7 @@ pub struct WriteConfigToolParams {
     pub extra_templates: HashMap<String, String>,
     /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
     /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub edit: Option<Vec<EditPayload>>,
 }
 
@@ -46,22 +46,18 @@ impl ToolMetadata for WriteConfigTool {
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "WriteConfigToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "WriteConfigResponse".to_string()
     }

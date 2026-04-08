@@ -13,9 +13,9 @@ use tensorzero::GetConfigResponse;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_config tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct GetConfigToolParams {}
 
 /// Tool for retrieving config snapshots.
@@ -27,22 +27,18 @@ impl ToolMetadata for GetConfigTool {
     type Output = GetConfigResponse;
     type LlmParams = GetConfigToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_CONFIG_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GetConfigToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_CONFIG_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "GetConfigResponse".to_string()
     }

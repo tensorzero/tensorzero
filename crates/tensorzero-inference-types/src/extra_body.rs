@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::export_schema;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 pub struct ExtraBodyReplacement {
     pub pointer: String,
@@ -23,7 +23,7 @@ pub struct ExtraBodyReplacement {
     pub kind: ExtraBodyReplacementKind,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[export_schema]
 #[serde(rename_all = "snake_case")]
@@ -177,7 +177,7 @@ pub fn prepare_relay_extra_headers(
 
 /// The 'InferenceExtraBody' options provided directly in an inference request.
 /// These have not yet been filtered by variant name
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, JsonSchema, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraBody {
@@ -278,7 +278,7 @@ impl UnfilteredInferenceExtraBody {
 /// The result of filtering `InferenceExtraBody` by variant name.
 /// All `InferenceExtraBody::Variant` options with a non-matching variant have
 /// been removed, while all other options have been retained.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct FilteredInferenceExtraBody {
@@ -286,7 +286,7 @@ pub struct FilteredInferenceExtraBody {
 }
 
 /// Holds the config-level and inference-level extra body options
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FullExtraBodyConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -299,9 +299,9 @@ pub mod dynamic {
     use serde::{Deserialize, Serialize};
     use tensorzero_derive::export_schema;
 
-    #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+    #[derive(ts_rs::TS)]
     #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+    #[ts(optional_fields)]
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {

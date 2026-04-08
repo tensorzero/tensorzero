@@ -8,14 +8,6 @@ rust-version.workspace = true
 [features]
 default = []
 e2e_tests = []
-ts-bindings = [
-    "dep:ts-rs",
-    "dep:tensorzero-ts-types",
-    "tensorzero-core/ts-bindings",
-    "tensorzero/ts-bindings",
-    "config-applier/ts-bindings",
-    "durable-tools/ts-bindings",
-]
 
 [dependencies]
 durable-tools = { path = "../durable-tools" }
@@ -38,11 +30,11 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
-tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+tensorzero-ts-types = { path = "../tensorzero-ts-types" }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-ts-rs = { workspace = true, optional = true }
+ts-rs.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

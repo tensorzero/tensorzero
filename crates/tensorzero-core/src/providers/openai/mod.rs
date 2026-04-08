@@ -96,8 +96,8 @@ type PreparedOpenAIToolsResult<'a> = (
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum OpenAIAPIType {
     #[default]
     ChatCompletions,
@@ -119,19 +119,19 @@ impl From<OpenAIAPIType> for ApiType {
 /// and everything else → `file`. Some OpenAI-compatible providers (e.g. Vertex AI)
 /// don't support `file` blocks but accept PDFs as `image_url`. Use
 /// `content_type_overrides` on the provider config to override the default mapping.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum ContentBlockType {
     ImageUrl,
     File,
     InputAudio,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct OpenAIProvider {
     model_name: String,
     api_base: Option<Url>,

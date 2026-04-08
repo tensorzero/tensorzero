@@ -12,7 +12,6 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-#[cfg(feature = "ts-bindings")]
 use crate::inference::types::extra_body::DynamicExtraBody;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 #[cfg(feature = "pyo3")]
@@ -71,11 +70,11 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
     Chat(StoredChatInference),
@@ -302,16 +301,16 @@ impl StoredInferenceDatabase {
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<StoredInput>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(default)]
@@ -326,18 +325,18 @@ pub struct StoredChatInference {
     #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<DynamicExtraBody>>"))]
+    #[ts(optional)]
+    #[ts(as = "Option<Vec<DynamicExtraBody>>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_body: Option<UnfilteredInferenceExtraBody>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inference_params: Option<InferenceParams>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub processing_time_ms: Option<u64>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub ttft_ms: Option<u64>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }
@@ -407,16 +406,16 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<StoredInput>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<JsonInferenceOutput>,
     #[serde(default)]
@@ -425,25 +424,25 @@ pub struct StoredJsonInference {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<DynamicExtraBody>>"))]
+    #[ts(optional)]
+    #[ts(as = "Option<Vec<DynamicExtraBody>>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_params: Option<InferenceParams>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub processing_time_ms: Option<u64>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub ttft_ms: Option<u64>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_hash: Option<String>,
 }
@@ -537,9 +536,9 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(untagged)]
 pub enum StoredOutput {
     Chat(Vec<ContentBlockChatOutput>),
@@ -551,10 +550,10 @@ pub enum StoredOutput {
 /// and by resolving all network resources (e.g. images).
 /// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct RenderedSample {
     pub function_name: String,
     pub function_type: FunctionType,

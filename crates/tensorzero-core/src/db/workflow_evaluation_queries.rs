@@ -10,7 +10,6 @@ use mockall::automock;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[cfg(feature = "ts-bindings")]
 use ts_rs::TS;
 
 use crate::config::snapshot::SnapshotHash;
@@ -214,9 +213,9 @@ pub trait WorkflowEvaluationQueries {
 }
 
 /// A single workflow evaluation run episode with its associated feedback.
-#[cfg_attr(feature = "ts-bindings", derive(TS))]
+#[derive(TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The episode ID
     pub episode_id: Uuid,
@@ -229,7 +228,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
     pub tags: HashMap<String, String>,
     /// The task name (datapoint_name). NULL for episodes without a task name.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub task_name: Option<String>,
     /// Metric names for feedback, sorted alphabetically
     pub feedback_metric_names: Vec<String>,
@@ -240,9 +239,9 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
 /// A workflow evaluation run episode with feedback, including its group key.
 ///
 /// The group_key is either the task_name or a generated key for episodes with NULL task_name.
-#[cfg_attr(feature = "ts-bindings", derive(TS))]
+#[derive(TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'
     pub group_key: String,
@@ -257,7 +256,7 @@ pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     pub tags: HashMap<String, String>,
     /// The task name (datapoint_name). NULL for episodes without a task name.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub task_name: Option<String>,
     /// Metric names for feedback, sorted alphabetically
     pub feedback_metric_names: Vec<String>,

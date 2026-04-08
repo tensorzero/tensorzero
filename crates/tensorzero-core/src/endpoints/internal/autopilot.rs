@@ -44,13 +44,13 @@ static UUID_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` is
 /// injected from the gateway's app state, so it's not included in this request.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct CreateEventGatewayRequest {
     pub payload: CreateEventPayload,
     /// Used for idempotency when adding events to an existing session.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(default)]
     pub previous_user_message_event_id: Option<Uuid>,
 }
@@ -59,9 +59,9 @@ pub struct CreateEventGatewayRequest {
 ///
 /// This is the request type used by the HTTP handler. The `deployment_id` and
 /// `tensorzero_version` are injected from the gateway's app state.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ApproveAllToolCallsGatewayRequest {
     /// Only approve tool calls with event IDs <= this value.
     /// Prevents race condition where new tool calls arrive after client fetched the list.
@@ -80,9 +80,9 @@ pub struct S3InitiateUploadGatewayRequest {
 ///
 /// Indicates whether the autopilot client is configured (i.e., whether
 /// `TENSORZERO_AUTOPILOT_API_KEY` is set).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AutopilotStatusResponse {
     pub enabled: bool,
 }

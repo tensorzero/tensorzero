@@ -18,9 +18,9 @@ use tensorzero_core::db::feedback::FeedbackByVariant;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,
@@ -45,22 +45,18 @@ impl ToolMetadata for GetFeedbackByVariantTool {
     type Output = Vec<FeedbackByVariant>;
     type LlmParams = GetFeedbackByVariantToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_VARIANT_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GetFeedbackByVariantToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_BY_VARIANT
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "FeedbackByVariant[]".to_string()
     }

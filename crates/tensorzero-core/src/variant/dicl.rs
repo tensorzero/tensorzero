@@ -53,9 +53,9 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
@@ -72,9 +72,9 @@ pub struct DiclConfig {
     #[serde(flatten)]
     pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     extra_body: Option<ExtraBodyConfig>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     extra_headers: Option<ExtraHeadersConfig>,
     retries: RetryConfig,
     max_distance: Option<f32>,
@@ -195,9 +195,9 @@ impl DiclConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     pub weight: Option<f64>,
@@ -212,21 +212,21 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
     pub max_distance: Option<f32>,
 }

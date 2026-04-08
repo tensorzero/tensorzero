@@ -14,9 +14,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_target_id tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct GetFeedbackByTargetIdToolParams {
     /// The target ID (inference or episode) to get feedback for.
     pub target_id: Uuid,
@@ -37,22 +37,18 @@ impl ToolMetadata for GetFeedbackByTargetIdTool {
     type Output = GetFeedbackByTargetIdResponse;
     type LlmParams = GetFeedbackByTargetIdToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdResponse".to_string()
     }

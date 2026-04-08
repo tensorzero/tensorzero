@@ -24,9 +24,9 @@ use crate::{
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct UiConfig {
     pub functions: HashMap<String, Arc<FunctionConfig>>,
     pub metrics: HashMap<String, MetricConfig>,

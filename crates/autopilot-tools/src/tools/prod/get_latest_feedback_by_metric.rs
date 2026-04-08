@@ -14,9 +14,9 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct GetLatestFeedbackByMetricToolParams {
     /// The target ID (inference ID) to get feedback for.
     pub target_id: Uuid,
@@ -33,22 +33,18 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_LATEST_FEEDBACK_BY_METRIC_TOOL_PARAMS
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GetLatestFeedbackByMetricToolParams".to_string()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LATEST_FEEDBACK_ID_BY_METRIC_RESPONSE
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "LatestFeedbackIdByMetricResponse".to_string()
     }

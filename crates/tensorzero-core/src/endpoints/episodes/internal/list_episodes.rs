@@ -28,9 +28,9 @@ pub struct ListEpisodesParams {
 }
 
 /// Request body for the POST episode table endpoint
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct ListEpisodesRequest {
     /// Maximum number of episodes to return (max 100)
     #[schemars(extend("maximum" = 100, "minimum" = 1))]
@@ -50,9 +50,9 @@ pub struct ListEpisodesRequest {
     pub filters: Option<InferenceFilter>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ListEpisodesResponse {
     pub episodes: Vec<EpisodeByIdRow>,
 }

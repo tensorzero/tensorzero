@@ -20,9 +20,9 @@ use crate::{
     providers::openai::grader::OpenAIGrader,
 };
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
 #[serde(untagged)]
 pub enum RFTJsonSchemaInfoOption {
@@ -46,9 +46,9 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -68,9 +68,9 @@ impl std::fmt::Display for OpenAIRFTResponseFormat {
 /// Initialized OpenAI RFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -89,9 +89,9 @@ pub struct OpenAIRFTConfig {
 /// Uninitialized OpenAI RFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
@@ -562,9 +562,9 @@ impl UninitializedOpenAIRFTConfig {
 
 /// Minimal job handle for OpenAI RFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAIRFTJobHandle {
     pub job_id: String,

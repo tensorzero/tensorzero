@@ -105,9 +105,9 @@ pub struct WriteConfigRequest {
 }
 
 /// Response from writing a config snapshot.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct WriteConfigResponse {
     /// The hash identifying this config version.
     pub hash: String,

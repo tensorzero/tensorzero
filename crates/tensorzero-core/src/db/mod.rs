@@ -71,10 +71,10 @@ pub trait EpisodeQueries: Send + Sync {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum TimeWindow {
     Minute,
     Hour,
@@ -111,9 +111,9 @@ impl TimeWindow {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
@@ -124,15 +124,15 @@ pub struct ModelUsageTimePoint {
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub count: Option<u64>,
     #[serde(default, with = "rust_decimal::serde::float_option")]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[ts(type = "number | null")]
     pub cost: Option<Decimal>,
     #[serde(default, deserialize_with = "deserialize_option_u64")]
     pub count_with_cost: Option<u64>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct CacheStatisticsTimePoint {
     pub period_start: DateTime<Utc>,
     pub model_name: String,
@@ -149,9 +149,9 @@ pub struct CacheStatisticsTimePoint {
     pub cache_read_ratio: Option<f64>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
     // should be an array of quantiles_len u64
@@ -161,9 +161,9 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_u64")]
@@ -174,9 +174,9 @@ pub struct EpisodeByIdRow {
     pub last_inference_id: Uuid,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct TableBoundsWithCount {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,
@@ -195,9 +195,9 @@ impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Se
 {
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Debug, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct TableBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_id: Option<Uuid>,

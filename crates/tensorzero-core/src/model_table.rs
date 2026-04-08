@@ -130,9 +130,9 @@ impl Display for ProviderType {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[derive(Serialize, Debug)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 // TODO: investigate why derive(TS) doesn't work if we add bounds to BaseModelTable itself
 // #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]
 // #[serde(try_from = "HashMap<Arc<str>, T>")]
@@ -144,7 +144,7 @@ pub struct BaseModelTable<T> {
     /// Use `BaseModelTable::get()` instead, which handles both explicit and shorthand models.
     pub table: HashMap<Arc<str>, T>,
     #[serde(skip)]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub default_credentials: Arc<ProviderTypeDefaultCredentials>,
     global_outbound_http_timeout: chrono::Duration,
 }
