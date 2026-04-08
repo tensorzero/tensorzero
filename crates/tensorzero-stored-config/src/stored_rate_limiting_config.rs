@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tensorzero_error::rate_limiting_types::{
+use tensorzero_types::rate_limiting_types::{
     ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, RateLimitResource,
     RateLimitingConfigPriority, RateLimitingConfigScope, RateLimitingConfigScopes,
     TagRateLimitingConfigScope, TagValueScope,

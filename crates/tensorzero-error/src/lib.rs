@@ -24,12 +24,10 @@ use uuid::Uuid;
 
 use tensorzero_types::{ApiType, RawResponseEntry, SnapshotHash, StoragePath, Thought};
 
-use crate::rate_limiting_types::{FailedRateLimit, RateLimitingConfigScopes};
+use tensorzero_types::rate_limiting_types::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
 pub use delayed_error::DelayedError;
-
-pub mod rate_limiting_types;
 
 const RUN_MIGRATIONS_COMMAND: &str = "Please see our documentation to learn more about deploying ClickHouse: https://www.tensorzero.com/docs/deployment/clickhouse";
 
