@@ -338,7 +338,7 @@ async fn insert_and_prepare(
     json_inferences: &[JsonInferenceDatabaseInsert],
     model_inferences: &[StoredModelInference],
 ) {
-    // Insert chat and json inferences first (populates InferenceById in ClickHouse)
+    // Insert chat and json inferences
     if !chat_inferences.is_empty() {
         conn.insert_chat_inferences(chat_inferences)
             .await
@@ -350,7 +350,7 @@ async fn insert_and_prepare(
             .expect("Failed to insert json inferences");
     }
 
-    // Flush to ensure InferenceById is populated (needed for ClickHouse MV JOIN)
+    // Flush to ensure writes are visible before inserting model inferences
     conn.flush_pending_writes().await;
 
     // Insert model inferences (linked via inference_id)

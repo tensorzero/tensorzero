@@ -89,12 +89,12 @@ impl Migration for Migration0053<'_> {
             ))
             .await?;
 
-        // Note: we do NOT backfill existing ModelInference rows because ClickHouse
-        // does not support correlated subqueries in ALTER TABLE UPDATE. Instead:
+        // Historical ModelInference rows are NOT backfilled (ClickHouse does not
+        // support correlated subqueries in ALTER TABLE UPDATE). This is fine:
         // - New rows: application code populates function_name/variant_name on insert.
-        // - VariantStatistics backfill (Phase 3): JOINs ChatInference/JsonInference
-        //   for historical data, so denormalized columns aren't needed for old rows.
-        // - The MV's `function_name != ''` filter correctly excludes unbackfilled rows.
+        // - The MV's `function_name != ''` filter excludes old unbackfilled rows.
+        // - Historical VariantStatistics data is also not backfilled; only new
+        //   inserts going forward are captured by the MVs.
 
         // ── Phase 2: Create VariantStatistics table and materialized views ──
 

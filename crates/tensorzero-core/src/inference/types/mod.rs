@@ -1551,7 +1551,7 @@ impl ModelInferenceResponseWithMetadata {
 
 impl StoredModelInference {
     /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
-    /// Used when inserting into ClickHouse.
+    /// Used when inserting into the database.
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
