@@ -155,14 +155,21 @@ where
     V: TomlTreeMut,
     Visitor: TomlPathVisitor<V>,
 {
-    let mut path: Vec<String> = initial_path.iter().map(|s| (*s).to_string()).collect();
-    walk_recursive(entry, pattern, &mut path, visitor)
+    let path: Vec<String> = initial_path.iter().map(|s| (*s).to_string()).collect();
+    walk_recursive(entry, pattern, &path, visitor)
+}
+
+fn extend_path(path: &[String], next: String) -> Vec<String> {
+    let mut new_path = Vec::with_capacity(path.len() + 1);
+    new_path.extend_from_slice(path);
+    new_path.push(next);
+    new_path
 }
 
 fn walk_recursive<V, Visitor>(
     entry: &mut V,
     pattern: &[PathComponent],
-    path: &mut Vec<String>,
+    path: &[String],
     visitor: &mut Visitor,
 ) -> Result<(), Visitor::Error>
 where
@@ -184,14 +191,12 @@ where
                 return Ok(());
             };
 
-            path.push((*literal).to_string());
-            let result = if pattern.len() == 1 {
-                visitor.visit_leaf(nested, path)
+            let new_path = extend_path(path, (*literal).to_string());
+            if pattern.len() == 1 {
+                visitor.visit_leaf(nested, &new_path)
             } else {
-                walk_recursive(nested, &pattern[1..], path, visitor)
-            };
-            path.pop();
-            result
+                walk_recursive(nested, &pattern[1..], &new_path, visitor)
+            }
         }
         PathComponent::Wildcard => {
             if pattern.len() == 1 {
@@ -208,22 +213,13 @@ where
 
             let keys = table.keys();
             for key in keys {
-                path.push(key.clone());
+                let new_path = extend_path(path, key.clone());
 
-                let visit_result = visitor.visit_wildcard_key(path);
-                if visit_result.is_err() {
-                    path.pop();
-                    return visit_result;
+                visitor.visit_wildcard_key(&new_path)?;
+
+                if let Some(nested) = table.get_mut(&key) {
+                    walk_recursive(nested, &pattern[1..], &new_path, visitor)?;
                 }
-
-                let recurse_result = if let Some(nested) = table.get_mut(&key) {
-                    walk_recursive(nested, &pattern[1..], path, visitor)
-                } else {
-                    Ok(())
-                };
-
-                path.pop();
-                recurse_result?;
             }
             Ok(())
         }
