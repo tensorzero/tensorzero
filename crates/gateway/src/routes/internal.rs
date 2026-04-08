@@ -290,6 +290,9 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
                 "/internal/config_toml",
                 get(endpoints::internal::config_toml::get_latest_config_toml_handler),
             )
+            // `apply` and `validate` accept the full editable config document in the request
+            // body, which can be large — we use `POST` instead of `GET` so callers don't have
+            // to URL-encode the entire TOML + referenced file contents into the query string.
             .route(
                 "/internal/config_toml/apply",
                 post(endpoints::internal::config_toml::apply_config_toml_handler),

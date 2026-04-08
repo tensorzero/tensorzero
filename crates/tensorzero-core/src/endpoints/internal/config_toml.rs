@@ -236,28 +236,9 @@ pub async fn apply_config_toml_handler(
     let (current_toml, current_path_contents) = config_to_toml(&current_uninitialized)?;
     let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
 
-    if current_signature != request.base_signature && current_signature != canonical_signature {
+    if current_signature != request.base_signature {
         return Err(Error::new(ErrorDetails::ConfigCompareAndSwapConflict {
             message: "Config changed underneath you, reload the latest snapshot before applying your edits.".to_string(),
-        }));
-    }
-
-    if current_signature == canonical_signature {
-        // No-op: the edit is identical to what's already in the DB. We still
-        // need a validated `Config` to produce the hash for the response, so
-        // validate the current snapshot here (the only load on this branch).
-        let current_validated =
-            Config::load_from_uninitialized(current_uninitialized, false).await?;
-        tx.rollback().await.map_err(|e| {
-            Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Failed to roll back no-op config TOML apply transaction: {e}"),
-            })
-        })?;
-        return Ok(Json(ApplyConfigTomlResponse {
-            toml: current_toml,
-            path_contents: current_path_contents,
-            hash: current_validated.hash.to_string(),
-            base_signature: current_signature,
         }));
     }
 

@@ -92,8 +92,23 @@ pub(crate) async fn write_stored_config_in_tx(
         config,
         creation_source,
         source_autopilot_session_id,
-        extra_templates,
+        extra_templates: caller_extra_templates,
     } = params;
+
+    // Merge the caller-provided templates with the ones discovered during
+    // validation (e.g. via MiniJinja `{% include %}` from
+    // `template_filesystem_access`). Using the validated snapshot's
+    // discovered templates ensures the persisted config is self-contained
+    // even when callers don't manually enumerate transitive includes — a
+    // reload on another gateway (or after a restart without filesystem
+    // access) will still find every referenced template.
+    let mut merged_extra_templates: HashMap<String, String> = unwritten.extra_templates().clone();
+    for (key, body) in caller_extra_templates {
+        merged_extra_templates
+            .entry(key.clone())
+            .or_insert_with(|| body.clone());
+    }
+    let extra_templates = &merged_extra_templates;
 
     // Exhaustive destructure of `UninitializedConfig` so the compiler forces
     // us to handle every section when new ones are added.
@@ -316,6 +331,9 @@ pub(crate) async fn write_stored_config_in_tx(
     // has no way to provide since it only sees the `UninitializedConfig`.
     let mut functions_new_names: HashSet<String> = HashSet::new();
     for (function_name, function_config) in functions.as_ref().into_iter().flat_map(|m| m.iter()) {
+        // This bulk path is the single approved caller of the skipping-CAS
+        // variant (enforced via `disallowed-methods` in `clippy.toml`).
+        #[expect(clippy::disallowed_methods)]
         write_function_config_in_tx_skipping_cas(
             tx,
             function_name,
