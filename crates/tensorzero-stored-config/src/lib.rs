@@ -7,13 +7,13 @@ mod stored_embedding_model_config;
 mod stored_evaluation_config;
 mod stored_extra_body;
 mod stored_extra_headers;
+mod stored_file;
 mod stored_function_config;
 mod stored_gateway_config;
 mod stored_metric_config;
 pub mod stored_model_config;
 mod stored_optimizer_info;
 mod stored_postgres_config;
-mod stored_prompt_template;
 mod stored_provider_types_config;
 mod stored_rate_limiting_config;
 mod stored_storage_kind;
@@ -53,6 +53,7 @@ pub use stored_extra_body::{
 pub use stored_extra_headers::{
     StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
 };
+pub use stored_file::{StoredFile, StoredFileRef};
 pub use stored_function_config::{
     STORED_FUNCTION_CONFIG_SCHEMA_REVISION, StoredAdaptiveExperimentationAlgorithm,
     StoredAdaptiveExperimentationConfig, StoredChatFunctionConfig, StoredExperimentationConfig,
@@ -85,7 +86,6 @@ pub use stored_optimizer_info::{
     StoredTogetherOptimizerSFTConfig, StoredTogetherTrainingMethod, StoredTogetherTrainingType,
 };
 pub use stored_postgres_config::{STORED_POSTGRES_CONFIG_SCHEMA_REVISION, StoredPostgresConfig};
-pub use stored_prompt_template::{StoredPromptRef, StoredPromptTemplate};
 pub use stored_provider_types_config::{
     STORED_PROVIDER_TYPES_CONFIG_SCHEMA_REVISION, StoredApiKeyDefaults,
     StoredFireworksProviderSFTConfig, StoredFireworksProviderTypeConfig,

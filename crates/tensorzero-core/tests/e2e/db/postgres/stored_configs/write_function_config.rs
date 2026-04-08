@@ -465,7 +465,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         stored_function
             .output_schema
             .as_ref()
-            .map(|schema| schema.template_key.as_str()),
+            .map(|schema| schema.file_path.as_str()),
         some(eq("functions.test.output_schema"))
     );
     assert_that!(
@@ -501,7 +501,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
         chat_variant
             .system_template
             .as_ref()
-            .map(|template| template.template_key.as_str()),
+            .map(|template| template.file_path.as_str()),
         some(eq("functions.test.variants.chat.system_template"))
     );
     assert_that!(
@@ -514,7 +514,7 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
     );
 
     let prompt_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM tensorzero.prompt_template_configs")
+        sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM tensorzero.stored_files")
             .fetch_one(&pool)
             .await
             .expect("prompt count query should succeed");
