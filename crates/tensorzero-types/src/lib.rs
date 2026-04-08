@@ -10,6 +10,7 @@ pub mod file;
 pub mod inference_filters;
 pub mod inference_params;
 pub mod message;
+pub mod rate_limiting_types;
 pub mod role;
 pub mod serde_utils;
 pub mod snapshot;

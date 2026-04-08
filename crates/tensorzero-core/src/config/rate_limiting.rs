@@ -1597,7 +1597,7 @@ mod tests {
         let config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
         assert_eq!(
             config.default_nano_cost,
-            tensorzero_error::rate_limiting_types::NANO_DOLLARS_PER_DOLLAR,
+            tensorzero_types::rate_limiting_types::NANO_DOLLARS_PER_DOLLAR,
             "After initialization, None should resolve to $1.00 = 1 billion nano-dollars"
         );
     }

@@ -17,7 +17,7 @@ use tensorzero_stored_config::{
     StoredRateLimitingRule,
 };
 
-pub use tensorzero_error::rate_limiting_types::*;
+pub use tensorzero_types::rate_limiting_types::*;
 
 mod rate_limiting_manager;
 
