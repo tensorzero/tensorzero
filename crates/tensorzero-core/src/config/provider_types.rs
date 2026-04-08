@@ -1,6 +1,3 @@
-use crate::config::gateway::{
-    credential_location_with_fallback_from_stored, credential_location_with_fallback_to_stored,
-};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
 use tensorzero_stored_config::{
@@ -39,29 +36,7 @@ fn convert_simple_provider_type_config(
     defaults: &impl ApiKeyDefaultsConfig,
 ) -> StoredSimpleProviderTypeConfig {
     StoredSimpleProviderTypeConfig {
-        defaults: Some(stored_api_key_defaults_from_credential_location(
-            defaults.api_key_location(),
-        )),
-    }
-}
-
-fn stored_api_key_defaults_from_credential_location(
-    api_key_location: &CredentialLocationWithFallback,
-) -> StoredApiKeyDefaults {
-    StoredApiKeyDefaults {
-        api_key_location: Some(credential_location_with_fallback_to_stored(
-            api_key_location,
-        )),
-    }
-}
-
-fn stored_gcp_credential_defaults_from_credential_location(
-    credential_location: &CredentialLocationWithFallback,
-) -> StoredGCPCredentialDefaults {
-    StoredGCPCredentialDefaults {
-        credential_location: Some(credential_location_with_fallback_to_stored(
-            credential_location,
-        )),
+        defaults: Some(StoredApiKeyDefaults::from(defaults.api_key_location())),
     }
 }
 
@@ -589,7 +564,7 @@ fn resolve_stored_api_key_defaults(
     Some(
         defaults
             .api_key_location
-            .map(credential_location_with_fallback_from_stored)
+            .map(CredentialLocationWithFallback::from)
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "Stored provider type config for `{provider_type}` has `defaults` set but \
@@ -610,7 +585,7 @@ fn resolve_stored_gcp_credential_defaults(
     Some(
         defaults
             .credential_location
-            .map(credential_location_with_fallback_from_stored)
+            .map(CredentialLocationWithFallback::from)
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "Stored provider type config for `{provider_type}` has `defaults` set but \
@@ -790,9 +765,10 @@ impl From<&ProviderTypesConfig> for StoredProviderTypesConfig {
                     sft: c.sft.as_ref().map(|s| StoredFireworksProviderSFTConfig {
                         account_id: s.account_id.clone(),
                     }),
-                    defaults: c.defaults.as_ref().map(|d| {
-                        stored_api_key_defaults_from_credential_location(&d.api_key_location)
-                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredApiKeyDefaults::from(&d.api_key_location)),
                 }),
             gcp_vertex_gemini: config.gcp_vertex_gemini.as_ref().map(|c| {
                 StoredGCPVertexGeminiProviderTypeConfig {
@@ -805,20 +781,18 @@ impl From<&ProviderTypesConfig> for StoredProviderTypesConfig {
                         service_account: s.service_account.clone(),
                         kms_key_name: s.kms_key_name.clone(),
                     }),
-                    defaults: c.defaults.as_ref().map(|d| {
-                        stored_gcp_credential_defaults_from_credential_location(
-                            &d.credential_location,
-                        )
-                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredGCPCredentialDefaults::from(&d.credential_location)),
                 }
             }),
             gcp_vertex_anthropic: config.gcp_vertex_anthropic.as_ref().map(|c| {
                 StoredGCPCredentialProviderTypeConfig {
-                    defaults: c.defaults.as_ref().map(|d| {
-                        stored_gcp_credential_defaults_from_credential_location(
-                            &d.credential_location,
-                        )
-                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredGCPCredentialDefaults::from(&d.credential_location)),
                 }
             }),
             google_ai_studio_gemini: config
@@ -863,9 +837,10 @@ impl From<&ProviderTypesConfig> for StoredProviderTypesConfig {
                         wandb_project_name: s.wandb_project_name.clone(),
                         hf_api_token: s.hf_api_token.clone(),
                     }),
-                    defaults: c.defaults.as_ref().map(|d| {
-                        stored_api_key_defaults_from_credential_location(&d.api_key_location)
-                    }),
+                    defaults: c
+                        .defaults
+                        .as_ref()
+                        .map(|d| StoredApiKeyDefaults::from(&d.api_key_location)),
                 }),
             vllm: config
                 .vllm
@@ -910,10 +885,10 @@ mod tests {
         let original = CredentialLocationWithFallback::Single(CredentialLocation::PathFromEnv(
             "GCP_VERTEX_CREDENTIALS_PATH".to_string(),
         ));
-        let stored = stored_gcp_credential_defaults_from_credential_location(&original);
+        let stored = StoredGCPCredentialDefaults::from(&original);
         let restored = stored
             .credential_location
-            .map(credential_location_with_fallback_from_stored)
+            .map(CredentialLocationWithFallback::from)
             .expect("stored credential_location should be present");
         expect_that!(restored, eq(&original));
     }
@@ -924,10 +899,10 @@ mod tests {
             default: CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string()),
             fallback: CredentialLocation::Sdk,
         };
-        let stored = stored_gcp_credential_defaults_from_credential_location(&original);
+        let stored = StoredGCPCredentialDefaults::from(&original);
         let restored = stored
             .credential_location
-            .map(credential_location_with_fallback_from_stored)
+            .map(CredentialLocationWithFallback::from)
             .expect("stored credential_location should be present");
         expect_that!(restored, eq(&original));
     }
@@ -942,7 +917,7 @@ mod tests {
             ),
         };
         let stored = StoredGCPCredentialProviderTypeConfig {
-            defaults: Some(stored_gcp_credential_defaults_from_credential_location(
+            defaults: Some(StoredGCPCredentialDefaults::from(
                 &defaults.credential_location,
             )),
         };
@@ -1158,9 +1133,10 @@ mod tests {
                 service_account: s.service_account.clone(),
                 kms_key_name: s.kms_key_name.clone(),
             }),
-            defaults: original.defaults.as_ref().map(|d| {
-                stored_gcp_credential_defaults_from_credential_location(&d.credential_location)
-            }),
+            defaults: original
+                .defaults
+                .as_ref()
+                .map(|d| StoredGCPCredentialDefaults::from(&d.credential_location)),
         };
         let restored: GCPVertexGeminiProviderTypeConfig = stored.into();
         expect_that!(restored, eq(&original));

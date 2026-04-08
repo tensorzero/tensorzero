@@ -352,3 +352,144 @@ impl Clone for ProviderInferenceRequest<'_> {
         *self
     }
 }
+
+// =============================================================================
+// Stored ↔ Credential type conversions
+// =============================================================================
+
+use tensorzero_stored_config::{
+    StoredCredentialLocation, StoredCredentialLocationOrHardcoded,
+    StoredCredentialLocationWithFallback, StoredEndpointLocation,
+};
+
+impl From<StoredCredentialLocation> for CredentialLocation {
+    fn from(stored: StoredCredentialLocation) -> Self {
+        match stored {
+            StoredCredentialLocation::Env { value } => CredentialLocation::Env(value),
+            StoredCredentialLocation::PathFromEnv { value } => {
+                CredentialLocation::PathFromEnv(value)
+            }
+            StoredCredentialLocation::Dynamic { value } => CredentialLocation::Dynamic(value),
+            StoredCredentialLocation::Path { value } => CredentialLocation::Path(value),
+            StoredCredentialLocation::Sdk => CredentialLocation::Sdk,
+            StoredCredentialLocation::None => CredentialLocation::None,
+        }
+    }
+}
+
+impl From<&CredentialLocation> for StoredCredentialLocation {
+    fn from(loc: &CredentialLocation) -> Self {
+        match loc {
+            CredentialLocation::Env(v) => StoredCredentialLocation::Env { value: v.clone() },
+            CredentialLocation::PathFromEnv(v) => {
+                StoredCredentialLocation::PathFromEnv { value: v.clone() }
+            }
+            CredentialLocation::Dynamic(v) => {
+                StoredCredentialLocation::Dynamic { value: v.clone() }
+            }
+            CredentialLocation::Path(v) => StoredCredentialLocation::Path { value: v.clone() },
+            CredentialLocation::Sdk => StoredCredentialLocation::Sdk,
+            CredentialLocation::None => StoredCredentialLocation::None,
+        }
+    }
+}
+
+impl From<StoredCredentialLocationWithFallback> for CredentialLocationWithFallback {
+    fn from(stored: StoredCredentialLocationWithFallback) -> Self {
+        match stored {
+            StoredCredentialLocationWithFallback::Single { location } => {
+                CredentialLocationWithFallback::Single(location.into())
+            }
+            StoredCredentialLocationWithFallback::WithFallback { default, fallback } => {
+                CredentialLocationWithFallback::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback> for StoredCredentialLocationWithFallback {
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        match loc {
+            CredentialLocationWithFallback::Single(inner) => {
+                StoredCredentialLocationWithFallback::Single {
+                    location: inner.into(),
+                }
+            }
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                StoredCredentialLocationWithFallback::WithFallback {
+                    default: default.into(),
+                    fallback: fallback.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<StoredCredentialLocationOrHardcoded> for CredentialLocationOrHardcoded {
+    fn from(stored: StoredCredentialLocationOrHardcoded) -> Self {
+        match stored {
+            StoredCredentialLocationOrHardcoded::Hardcoded { value } => {
+                CredentialLocationOrHardcoded::Hardcoded(value)
+            }
+            StoredCredentialLocationOrHardcoded::Location { location } => {
+                CredentialLocationOrHardcoded::Location(location.into())
+            }
+        }
+    }
+}
+
+impl From<&CredentialLocationOrHardcoded> for StoredCredentialLocationOrHardcoded {
+    fn from(loc: &CredentialLocationOrHardcoded) -> Self {
+        match loc {
+            CredentialLocationOrHardcoded::Hardcoded(v) => {
+                StoredCredentialLocationOrHardcoded::Hardcoded { value: v.clone() }
+            }
+            CredentialLocationOrHardcoded::Location(inner) => {
+                StoredCredentialLocationOrHardcoded::Location {
+                    location: inner.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<StoredEndpointLocation> for EndpointLocation {
+    fn from(stored: StoredEndpointLocation) -> Self {
+        match stored {
+            StoredEndpointLocation::Env { value } => EndpointLocation::Env(value),
+            StoredEndpointLocation::Dynamic { value } => EndpointLocation::Dynamic(value),
+            StoredEndpointLocation::Static { value } => EndpointLocation::Static(value),
+        }
+    }
+}
+
+impl From<&EndpointLocation> for StoredEndpointLocation {
+    fn from(loc: &EndpointLocation) -> Self {
+        match loc {
+            EndpointLocation::Env(v) => StoredEndpointLocation::Env { value: v.clone() },
+            EndpointLocation::Dynamic(v) => StoredEndpointLocation::Dynamic { value: v.clone() },
+            EndpointLocation::Static(v) => StoredEndpointLocation::Static { value: v.clone() },
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback> for tensorzero_stored_config::StoredApiKeyDefaults {
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        tensorzero_stored_config::StoredApiKeyDefaults {
+            api_key_location: Some(StoredCredentialLocationWithFallback::from(loc)),
+        }
+    }
+}
+
+impl From<&CredentialLocationWithFallback>
+    for tensorzero_stored_config::StoredGCPCredentialDefaults
+{
+    fn from(loc: &CredentialLocationWithFallback) -> Self {
+        tensorzero_stored_config::StoredGCPCredentialDefaults {
+            credential_location: Some(StoredCredentialLocationWithFallback::from(loc)),
+        }
+    }
+}

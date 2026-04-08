@@ -28,12 +28,6 @@ use crate::cache::{
     StreamingCacheData, cache_lookup, cache_lookup_streaming, start_cache_write,
     start_cache_write_streaming,
 };
-use crate::config::gateway::{
-    credential_location_from_stored, credential_location_or_hardcoded_from_stored,
-    credential_location_or_hardcoded_to_stored, credential_location_to_stored,
-    credential_location_with_fallback_from_stored, credential_location_with_fallback_to_stored,
-    endpoint_location_from_stored, endpoint_location_to_stored,
-};
 use crate::config::with_skip_credential_validation;
 use crate::config::{
     Namespace, OtlpConfig, OtlpTracesFormat, TimeoutsConfig, provider_types::ProviderTypesConfig,
@@ -53,6 +47,10 @@ use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
 use crate::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use tensorzero_stored_config::{
+    StoredCredentialLocation, StoredCredentialLocationOrHardcoded,
+    StoredCredentialLocationWithFallback, StoredEndpointLocation,
+};
 use tensorzero_types::{UninitializedCostConfig, UninitializedUnifiedCostConfig};
 
 use crate::inference::WrappedProvider;
@@ -366,8 +364,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
             } => Ok(Self::Anthropic {
                 model_name,
                 api_base: parse_optional_url(api_base, "api_base")?,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 beta_structured_outputs,
                 provider_tools: provider_tools.unwrap_or_default(),
             }),
@@ -382,13 +379,13 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 session_token,
             } => Ok(Self::AWSBedrock {
                 model_id,
-                region: region.map(credential_location_or_hardcoded_from_stored),
+                region: region.map(CredentialLocationOrHardcoded::from),
                 allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
-                endpoint_url: endpoint_url.map(credential_location_or_hardcoded_from_stored),
-                api_key: api_key.map(credential_location_from_stored),
-                access_key_id: access_key_id.map(credential_location_from_stored),
-                secret_access_key: secret_access_key.map(credential_location_from_stored),
-                session_token: session_token.map(credential_location_from_stored),
+                endpoint_url: endpoint_url.map(CredentialLocationOrHardcoded::from),
+                api_key: api_key.map(CredentialLocation::from),
+                access_key_id: access_key_id.map(CredentialLocation::from),
+                secret_access_key: secret_access_key.map(CredentialLocation::from),
+                session_token: session_token.map(CredentialLocation::from),
             }),
             StoredProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -403,13 +400,13 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
             } => Ok(Self::AWSSagemaker {
                 endpoint_name,
                 model_name,
-                region: region.map(credential_location_or_hardcoded_from_stored),
+                region: region.map(CredentialLocationOrHardcoded::from),
                 allow_auto_detect_region: allow_auto_detect_region.unwrap_or_default(),
                 hosted_provider: hosted_provider.into(),
-                endpoint_url: endpoint_url.map(credential_location_or_hardcoded_from_stored),
-                access_key_id: access_key_id.map(credential_location_from_stored),
-                secret_access_key: secret_access_key.map(credential_location_from_stored),
-                session_token: session_token.map(credential_location_from_stored),
+                endpoint_url: endpoint_url.map(CredentialLocationOrHardcoded::from),
+                access_key_id: access_key_id.map(CredentialLocation::from),
+                secret_access_key: secret_access_key.map(CredentialLocation::from),
+                session_token: session_token.map(CredentialLocation::from),
             }),
             StoredProviderConfig::Azure {
                 deployment_id,
@@ -417,9 +414,8 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 api_key_location,
             } => Ok(Self::Azure {
                 deployment_id,
-                endpoint: endpoint_location_from_stored(endpoint),
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                endpoint: EndpointLocation::from(endpoint),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::GCPVertexAnthropic {
                 model_id,
@@ -431,8 +427,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 model_id,
                 location,
                 project_id,
-                credential_location: credential_location
-                    .map(credential_location_with_fallback_from_stored),
+                credential_location: credential_location.map(CredentialLocationWithFallback::from),
                 provider_tools: provider_tools.unwrap_or_default(),
             }),
             StoredProviderConfig::GCPVertexGemini {
@@ -446,16 +441,14 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 endpoint_id,
                 location,
                 project_id,
-                credential_location: credential_location
-                    .map(credential_location_with_fallback_from_stored),
+                credential_location: credential_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
             } => Ok(Self::GoogleAIStudioGemini {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::Groq {
                 model_name,
@@ -463,8 +456,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 reasoning_format,
             } => Ok(Self::Groq {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 reasoning_format,
             }),
             StoredProviderConfig::Hyperbolic {
@@ -472,8 +464,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 api_key_location,
             } => Ok(Self::Hyperbolic {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::Fireworks {
                 model_name,
@@ -481,8 +472,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 parse_think_blocks,
             } => Ok(Self::Fireworks {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 parse_think_blocks,
             }),
             StoredProviderConfig::Mistral {
@@ -491,8 +481,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 prompt_mode,
             } => Ok(Self::Mistral {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 prompt_mode,
             }),
             StoredProviderConfig::OpenAI {
@@ -506,8 +495,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
             } => Ok(Self::OpenAI {
                 model_name,
                 api_base: parse_optional_url(api_base, "api_base")?,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 api_type: api_type.map(OpenAIAPIType::from).unwrap_or_default(),
                 include_encrypted_reasoning: include_encrypted_reasoning.unwrap_or_default(),
                 provider_tools: provider_tools.unwrap_or_default(),
@@ -522,8 +510,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 api_key_location,
             } => Ok(Self::OpenRouter {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::Together {
                 model_name,
@@ -531,8 +518,7 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 parse_think_blocks,
             } => Ok(Self::Together {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
                 parse_think_blocks,
             }),
             StoredProviderConfig::VLLM {
@@ -542,24 +528,21 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
             } => Ok(Self::VLLM {
                 model_name,
                 api_base: parse_url(api_base, "api_base")?,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::XAI {
                 model_name,
                 api_key_location,
             } => Ok(Self::XAI {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::TGI {
                 api_base,
                 api_key_location,
             } => Ok(Self::TGI {
                 api_base: parse_url(api_base, "api_base")?,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::SGLang {
                 model_name,
@@ -568,16 +551,14 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
             } => Ok(Self::SGLang {
                 model_name,
                 api_base: parse_url(api_base, "api_base")?,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             StoredProviderConfig::DeepSeek {
                 model_name,
                 api_key_location,
             } => Ok(Self::DeepSeek {
                 model_name,
-                api_key_location: api_key_location
-                    .map(credential_location_with_fallback_from_stored),
+                api_key_location: api_key_location.map(CredentialLocationWithFallback::from),
             }),
             #[cfg(any(test, feature = "e2e_tests"))]
             StoredProviderConfig::Dummy {
@@ -1924,7 +1905,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_base: api_base.as_ref().map(ToString::to_string),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 beta_structured_outputs: *beta_structured_outputs,
                 provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
             },
@@ -1941,17 +1922,17 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_id: model_id.clone(),
                 region: region
                     .as_ref()
-                    .map(credential_location_or_hardcoded_to_stored),
+                    .map(StoredCredentialLocationOrHardcoded::from),
                 allow_auto_detect_region: Some(*allow_auto_detect_region),
                 endpoint_url: endpoint_url
                     .as_ref()
-                    .map(credential_location_or_hardcoded_to_stored),
-                api_key: api_key.as_ref().map(credential_location_to_stored),
-                access_key_id: access_key_id.as_ref().map(credential_location_to_stored),
+                    .map(StoredCredentialLocationOrHardcoded::from),
+                api_key: api_key.as_ref().map(StoredCredentialLocation::from),
+                access_key_id: access_key_id.as_ref().map(StoredCredentialLocation::from),
                 secret_access_key: secret_access_key
                     .as_ref()
-                    .map(credential_location_to_stored),
-                session_token: session_token.as_ref().map(credential_location_to_stored),
+                    .map(StoredCredentialLocation::from),
+                session_token: session_token.as_ref().map(StoredCredentialLocation::from),
             },
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1968,17 +1949,17 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 region: region
                     .as_ref()
-                    .map(credential_location_or_hardcoded_to_stored),
+                    .map(StoredCredentialLocationOrHardcoded::from),
                 allow_auto_detect_region: Some(*allow_auto_detect_region),
                 hosted_provider: hosted_provider.clone().into(),
                 endpoint_url: endpoint_url
                     .as_ref()
-                    .map(credential_location_or_hardcoded_to_stored),
-                access_key_id: access_key_id.as_ref().map(credential_location_to_stored),
+                    .map(StoredCredentialLocationOrHardcoded::from),
+                access_key_id: access_key_id.as_ref().map(StoredCredentialLocation::from),
                 secret_access_key: secret_access_key
                     .as_ref()
-                    .map(credential_location_to_stored),
-                session_token: session_token.as_ref().map(credential_location_to_stored),
+                    .map(StoredCredentialLocation::from),
+                session_token: session_token.as_ref().map(StoredCredentialLocation::from),
             },
             UninitializedProviderConfig::Azure {
                 deployment_id,
@@ -1986,10 +1967,10 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_key_location,
             } => StoredProviderConfig::Azure {
                 deployment_id: deployment_id.clone(),
-                endpoint: endpoint_location_to_stored(endpoint),
+                endpoint: StoredEndpointLocation::from(endpoint),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::GCPVertexAnthropic {
                 model_id,
@@ -2003,7 +1984,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 project_id: project_id.clone(),
                 credential_location: credential_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
             },
             UninitializedProviderConfig::GCPVertexGemini {
@@ -2019,7 +2000,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 project_id: project_id.clone(),
                 credential_location: credential_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
@@ -2028,7 +2009,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::Groq {
                 model_name,
@@ -2038,7 +2019,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 reasoning_format: reasoning_format.clone(),
             },
             UninitializedProviderConfig::Hyperbolic {
@@ -2048,7 +2029,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::Fireworks {
                 model_name,
@@ -2058,7 +2039,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 parse_think_blocks: *parse_think_blocks,
             },
             UninitializedProviderConfig::Mistral {
@@ -2069,7 +2050,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 prompt_mode: prompt_mode.clone(),
             },
             UninitializedProviderConfig::OpenAI {
@@ -2085,7 +2066,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_base: api_base.as_ref().map(ToString::to_string),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 api_type: Some((*api_type).into()),
                 include_encrypted_reasoning: Some(*include_encrypted_reasoning),
                 provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
@@ -2103,7 +2084,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::Together {
                 model_name,
@@ -2113,7 +2094,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
                 parse_think_blocks: *parse_think_blocks,
             },
             UninitializedProviderConfig::VLLM {
@@ -2125,7 +2106,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_base: api_base.to_string(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::XAI {
                 model_name,
@@ -2134,7 +2115,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::TGI {
                 api_base,
@@ -2143,7 +2124,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_base: api_base.to_string(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::SGLang {
                 model_name,
@@ -2154,7 +2135,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 api_base: api_base.to_string(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             UninitializedProviderConfig::DeepSeek {
                 model_name,
@@ -2163,7 +2144,7 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 model_name: model_name.clone(),
                 api_key_location: api_key_location
                     .as_ref()
-                    .map(credential_location_with_fallback_to_stored),
+                    .map(StoredCredentialLocationWithFallback::from),
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             UninitializedProviderConfig::Dummy {
@@ -5149,9 +5130,7 @@ mod tests {
 
         #[gtest]
         fn test_credential_location_round_trip() {
-            use crate::config::gateway::{
-                credential_location_from_stored, credential_location_to_stored,
-            };
+            use tensorzero_stored_config::StoredCredentialLocation;
             let variants = vec![
                 CredentialLocation::Env("MY_API_KEY".to_string()),
                 CredentialLocation::Dynamic("x-custom-key".to_string()),
@@ -5159,18 +5138,15 @@ mod tests {
                 CredentialLocation::None,
             ];
             for original in &variants {
-                let stored = credential_location_to_stored(original);
-                let restored = credential_location_from_stored(stored);
+                let stored = StoredCredentialLocation::from(original);
+                let restored = CredentialLocation::from(stored);
                 expect_that!(restored, eq(original));
             }
         }
 
         #[gtest]
         fn test_credential_location_with_fallback_round_trip() {
-            use crate::config::gateway::{
-                credential_location_with_fallback_from_stored,
-                credential_location_with_fallback_to_stored,
-            };
+            use tensorzero_stored_config::StoredCredentialLocationWithFallback;
             let variants = vec![
                 CredentialLocationWithFallback::Single(CredentialLocation::Env(
                     "MY_KEY".to_string(),
@@ -5181,8 +5157,8 @@ mod tests {
                 },
             ];
             for original in &variants {
-                let stored = credential_location_with_fallback_to_stored(original);
-                let restored = credential_location_with_fallback_from_stored(stored);
+                let stored = StoredCredentialLocationWithFallback::from(original);
+                let restored = CredentialLocationWithFallback::from(stored);
                 expect_that!(restored, eq(original));
             }
         }

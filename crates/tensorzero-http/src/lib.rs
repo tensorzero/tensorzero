@@ -730,8 +730,11 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                             "localhost,0.0.0.0,127.0.0.1,minio,mock-provider-api,gateway,provider-proxy,clickhouse",
                         )),
                 )
-                // When running e2e tests, we use `provider-proxy` as an MITM proxy
-                // for caching, so we need to accept the invalid (self-signed) cert.
+                // SAFETY: This is only reachable when the `e2e_tests` feature is enabled
+                // AND the `TENSORZERO_E2E_PROXY` env var is set (see cfg! guard above).
+                // In e2e tests, we use `provider-proxy` as an MITM proxy for caching
+                // provider responses, so we must accept its self-signed certificate.
+                // This is never active in production builds.
                 .danger_accept_invalid_certs(true);
     }
 
