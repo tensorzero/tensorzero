@@ -91,6 +91,23 @@ fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
     rcgen::Issuer::new(param, key_pair)
 }
 
+/// Sanitize the request body for cache key computation.
+/// Replaces non-deterministic values (UUIDs, random localhost ports) with
+/// placeholders so that test runs produce the same cache key.
+fn sanitize_body_for_cache_key(body: &str) -> String {
+    use regex::Regex;
+    // UUIDv4/v7 pattern: 8-4-4-4-12 hex digits
+    let uuid_re =
+        Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            .expect("Invalid UUID regex");
+    let result = uuid_re.replace_all(body, "TENSORZERO_SANITIZED_UUID");
+
+    // Localhost with random port: 127.0.0.1:PORT or localhost:PORT
+    let port_re =
+        Regex::new(r"(127\.0\.0\.1|localhost):(\d{4,5})").expect("Invalid localhost port regex");
+    port_re.replace_all(&result, "${1}:0").into_owned()
+}
+
 fn hash_value(request: &serde_json::Value) -> Result<String, anyhow::Error> {
     let mut hasher = Sha256::new();
     hasher.update(
@@ -247,8 +264,23 @@ async fn check_cache<
             sanitized_header = true;
         }
     }
-    let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
-        .with_context(|| "Failed to serialize request")?;
+    let mut json_request =
+        http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
+            .with_context(|| "Failed to serialize request")?;
+
+    if args.sanitize_body
+        && let Some(body_array) = json_request.get("body").and_then(|b| b.as_array())
+    {
+        let body_bytes: Vec<u8> = body_array
+            .iter()
+            .filter_map(|v| v.as_u64().map(|n| n as u8))
+            .collect();
+        if let Ok(body_str) = String::from_utf8(body_bytes) {
+            let sanitized = sanitize_body_for_cache_key(&body_str);
+            json_request["body"] =
+                serde_json::Value::Array(sanitized.bytes().map(|b| b.into()).collect());
+        }
+    }
 
     let hash = hash_value(&json_request)?;
 
@@ -480,6 +512,10 @@ pub struct Args {
     pub remove_user_agent_non_amazon: bool,
     #[arg(long, default_value = "read-old-write-new")]
     pub mode: CacheMode,
+    /// If `true`, normalizes UUIDs and random localhost ports in request bodies
+    /// before computing cache keys, making them deterministic across test runs.
+    #[arg(long, default_value = "true")]
+    pub sanitize_body: bool,
     /// If `true`, saves the request body in the cached output for debugging purposes.
     /// The saved request body is not used when reading from the cache.
     #[arg(long, default_value = "true")]
