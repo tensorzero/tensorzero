@@ -1512,9 +1512,9 @@ jobs:
         run: pnpm exec mint broken-links --check-anchors
 
   pinact:
-    # Skip on fork PRs because GitHub doesn't expose repo secrets to them.
+    # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
     # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
