@@ -16,11 +16,12 @@ jobs:
     steps:
       - name: "Check permission"
         id: check-permission
-        run: |
-          MEMBER=$((gh api 'orgs/tensorzero/members/${{ github.actor }}' && echo 1) || echo 0)
-          echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
         env:
+          ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MEMBER=$((gh api "orgs/tensorzero/members/$ACTOR" && echo 1) || echo 0)
+          echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
 
       - name: Leave a comment if permission check fails for a slash command
         if: ${{ steps.check-permission.outputs.ACTOR_MEMBER != '1' && (startsWith(github.event.comment.body, '/')) }}
