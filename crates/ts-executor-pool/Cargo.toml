@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 bip39-uuid-substitution = { path = "../bip39-uuid-substitution" }
 durable.workspace = true
-durable-tools = { path = "../durable-tools" }
+durable-tools = { path = "../durable-tools", features = ["ts-bindings"] }
 thiserror.workspace = true
 blake3.workspace = true
 regex.workspace = true
