@@ -2852,7 +2852,7 @@ async fn test_evaluation_with_dynamic_variant() {
 
     let config: Arc<Config> = match tensorzero_client.mode() {
         tensorzero_core::client::ClientMode::EmbeddedGateway { gateway, .. } => {
-            gateway.handle.app_state.config.load()
+            gateway.handle.app_state.config().load()
         }
         tensorzero_core::client::ClientMode::HTTPGateway(_) => {
             panic!("Expected EmbeddedGateway mode")

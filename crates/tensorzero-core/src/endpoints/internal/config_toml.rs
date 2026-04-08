@@ -263,7 +263,7 @@ pub async fn apply_config_toml_handler(
     // the running gateway.
     let db = app_state.get_delegating_database();
     // `Box::pin` keeps the outer future small (clippy::large_futures).
-    let written_config = Box::pin(written.into_config(&db))
+    let (written_config, runtime_overlay) = Box::pin(written.into_config(&db))
         .await
         .map_err(|e| e.log())?;
 
@@ -274,7 +274,10 @@ pub async fn apply_config_toml_handler(
     })?;
 
     let written_hash = written_config.hash.to_string();
-    swap_state.swap_config(Arc::new(written_config), edited_config);
+    swap_state
+        .swap_config(Arc::new(written_config), Arc::new(runtime_overlay))
+        .await
+        .map_err(|e| e.log())?;
 
     Ok(Json(ApplyConfigTomlResponse {
         toml: canonical_toml,

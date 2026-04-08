@@ -174,7 +174,7 @@ async fn test_config_snapshot_includes_built_in_functions(
     .unwrap();
 
     // Write snapshot to the database and get the config with its hash
-    let config = Box::pin(loaded.into_config(&conn)).await.unwrap();
+    let (config, _) = Box::pin(loaded.into_config(&conn)).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
 
     // Read back the snapshot via ConfigQueries

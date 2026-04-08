@@ -247,10 +247,11 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
 async fn validate_postgres_extensions_for_postgres_primary(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<(), ExitCode> {
-    if gateway_handle.app_state.primary_datastore != PrimaryDatastore::Postgres {
+    if gateway_handle.app_state.primary_datastore() != PrimaryDatastore::Postgres {
         return Ok(());
     }
-    let Some(pgpool) = gateway_handle.app_state.postgres_connection_info.get_pool() else {
+    let postgres = gateway_handle.app_state.postgres_connection_info();
+    let Some(pgpool) = postgres.get_pool() else {
         tracing::error!(
             "Postgres is configured to be the primary observability backend, but cannot establish a postgres connection."
         );
@@ -458,9 +459,9 @@ async fn run() -> Result<(), ExitCode> {
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
-        get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
+        get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info());
 
-    let config = gateway_handle.app_state.config.load();
+    let config = gateway_handle.app_state.config().load();
 
     // Set debug mode
     error::set_debug(config.gateway.debug).log_err_pretty("Failed to set debug mode")?;
@@ -539,7 +540,7 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print observability backend and ClickHouse status
-    let observability_backend = match gateway_handle.app_state.primary_datastore {
+    let observability_backend = match gateway_handle.app_state.primary_datastore() {
         PrimaryDatastore::ClickHouse => "ClickHouse",
         PrimaryDatastore::Postgres => "Postgres",
         PrimaryDatastore::Disabled => "disabled",
@@ -547,7 +548,7 @@ async fn run() -> Result<(), ExitCode> {
     tracing::info!("├ Observability Backend: {observability_backend}");
     tracing::info!(
         "├ ClickHouse: {}",
-        gateway_handle.app_state.clickhouse_connection_info
+        gateway_handle.app_state.clickhouse_connection_info()
     );
     let batch_writes = config
         .gateway
@@ -577,11 +578,11 @@ async fn run() -> Result<(), ExitCode> {
 
     // Print whether valkey is enabled
     let valkey_enabled_pretty =
-        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
+        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info());
     tracing::info!("├ Valkey: {valkey_enabled_pretty}");
     if std::env::var("TENSORZERO_VALKEY_CACHE_URL").is_ok() {
         let valkey_cache_enabled_pretty =
-            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info());
         tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
     }
 
@@ -795,7 +796,7 @@ async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
     // Only start if Postgres is enabled (needed for durable task queue)
-    let pool = match &gateway_handle.app_state.postgres_connection_info {
+    let pool = match gateway_handle.app_state.postgres_connection_info() {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
             if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {

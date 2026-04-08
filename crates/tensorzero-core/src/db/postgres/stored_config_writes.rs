@@ -211,7 +211,7 @@ pub(crate) async fn write_stored_config_in_tx(
     //
     // For each named collection we (a) upsert every row present in the new
     // config — which also revives any previously-tombstoned rows with the
-    // same name via the `deleted_at = NULL` clause in `upsert_named_config_row`
+    // same name via the `deleted_at = NULL` clause in `upsert_named_config_rows`
     // — and then (b) tombstone anything that was in the DB but is not in the
     // new config. This is what makes "remove a tool/model/etc. from the TOML
     // and apply" actually delete it on reload. The whole sequence is safe to

@@ -60,16 +60,19 @@ impl UnwrittenConfig {
     /// 2. Returns the `Config`
     ///
     /// The hash is used to track which config version was used for each inference request.
-    pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, DelayedError> {
+    pub async fn into_config(
+        self,
+        db: &impl ConfigQueries,
+    ) -> Result<(Config, RuntimeOverlay), DelayedError> {
         let UnwrittenConfig {
             config,
             uninitialized_config: _,
             snapshot,
-            runtime_overlay: _,
+            runtime_overlay,
         } = self;
         #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(&snapshot).await?;
-        Ok(config)
+        Ok((config, runtime_overlay))
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
