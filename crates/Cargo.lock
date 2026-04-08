@@ -7178,6 +7178,12 @@ dependencies = [
 [[package]]
 name = "tensorzero-config-paths"
 version = "2026.4.0"
+dependencies = [
+ "googletest",
+ "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
+ "toml_edit 0.25.10+spec-1.1.0",
+]
 
 [[package]]
 name = "tensorzero-core"
