@@ -1104,42 +1104,42 @@ impl<'a> EvaluatorContext<'a> {
 // ── Stored-config conversion helpers ──────────────────────────────────────────
 
 impl UninitializedEvaluationConfig {
-    /// Collect all `ResolvedTomlPathData` references that need prompt-template rows.
-    pub(crate) fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+    /// Collect all `ResolvedTomlPathData` references that need stored file rows.
+    pub(crate) fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
         match self {
-            UninitializedEvaluationConfig::Inference(config) => config.prompt_templates_for_db(),
+            UninitializedEvaluationConfig::Inference(config) => config.files_for_db(),
         }
     }
 
     /// Convert to the stored representation for DB persistence.
     pub(crate) fn to_stored_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredEvaluationConfig, Error> {
         match self {
             UninitializedEvaluationConfig::Inference(config) => {
-                config.to_stored_for_db(prompt_template_version_ids)
+                config.to_stored_for_db(file_version_ids)
             }
         }
     }
 }
 
 impl UninitializedInferenceEvaluationConfig {
-    fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+    fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
         let mut templates = Vec::new();
         for evaluator in self.evaluators.values() {
-            evaluator.collect_prompt_templates(&mut templates);
+            evaluator.collect_files(&mut templates);
         }
         templates
     }
 
     fn to_stored_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredEvaluationConfig, Error> {
         let stored_evaluators = crate::db::postgres::function_config_writes::convert_evaluators(
             &self.evaluators,
-            prompt_template_version_ids,
+            file_version_ids,
         )?;
         Ok(StoredEvaluationConfig::Inference(
             StoredInferenceEvaluationConfig {
@@ -1152,11 +1152,11 @@ impl UninitializedInferenceEvaluationConfig {
 }
 
 impl UninitializedEvaluatorConfig {
-    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
         match self {
             UninitializedEvaluatorConfig::LLMJudge(config) => {
                 for variant in config.variants.values() {
-                    variant.inner.collect_prompt_templates(templates);
+                    variant.inner.collect_files(templates);
                 }
             }
             UninitializedEvaluatorConfig::ExactMatch(_)
@@ -1167,7 +1167,7 @@ impl UninitializedEvaluatorConfig {
 }
 
 impl UninitializedLLMJudgeVariantConfig {
-    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
                 templates.push(&config.system_instructions);

@@ -11,15 +11,13 @@ use tensorzero_stored_config::schema_dispatch::{
     deserialize_variant_config,
 };
 use tensorzero_stored_config::{
-    StoredEvaluationConfig, StoredEvaluatorConfig, StoredFunctionConfig, StoredLLMJudgeConfig,
-    StoredLLMJudgeVariantConfig, StoredPromptRef, StoredPromptTemplate, StoredToolConfig,
-    StoredVariantConfig, StoredVariantVersionConfig,
+    StoredEvaluationConfig, StoredEvaluatorConfig, StoredFile, StoredFileRef, StoredFunctionConfig,
+    StoredLLMJudgeConfig, StoredLLMJudgeVariantConfig, StoredToolConfig, StoredVariantConfig,
+    StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
-use crate::config::rehydrate::{
-    PromptTemplateMap, rehydrate_evaluation, rehydrate_function, rehydrate_tool,
-};
+use crate::config::rehydrate::{FileMap, rehydrate_evaluation, rehydrate_function, rehydrate_tool};
 use crate::config::{UninitializedConfig, validate_user_config_names};
 use crate::error::{Error, ErrorDetails};
 
@@ -58,9 +56,9 @@ struct VariantVersionRow {
 }
 
 #[derive(Clone, Debug, FromRow)]
-struct PromptTemplateRow {
+struct StoredFileRow {
     id: Uuid,
-    template_key: String,
+    file_path: String,
     source_body: String,
     content_hash: Vec<u8>,
     creation_source: String,
@@ -188,17 +186,17 @@ async fn load_variant_versions(
     .await?)
 }
 
-async fn load_prompt_templates(
+async fn load_files(
     tx: &mut Transaction<'_, Postgres>,
     ids: &[Uuid],
-) -> Result<Vec<PromptTemplateRow>, Error> {
+) -> Result<Vec<StoredFileRow>, Error> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    Ok(sqlx::query_as::<_, PromptTemplateRow>(
+    Ok(sqlx::query_as::<_, StoredFileRow>(
         r"
-        SELECT id, template_key, source_body, content_hash, creation_source, source_autopilot_session_id
-        FROM tensorzero.prompt_template_configs
+        SELECT id, file_path, source_body, content_hash, creation_source, source_autopilot_session_id
+        FROM tensorzero.stored_files
         WHERE id = ANY($1)
         ",
     )
@@ -207,13 +205,13 @@ async fn load_prompt_templates(
     .await?)
 }
 
-fn push_prompt_ref_ids(prompt_ids: &mut HashSet<Uuid>, prompt_ref: &StoredPromptRef) {
-    prompt_ids.insert(prompt_ref.prompt_template_version_id);
+fn push_file_ref_ids(file_ids: &mut HashSet<Uuid>, file_ref: &StoredFileRef) {
+    file_ids.insert(file_ref.file_version_id);
 }
 
-fn collect_evaluator_prompt_ids(
+fn collect_evaluator_file_ids(
     evaluators: Option<&BTreeMap<String, StoredEvaluatorConfig>>,
-    prompt_ids: &mut HashSet<Uuid>,
+    file_ids: &mut HashSet<Uuid>,
 ) {
     let Some(evaluators) = evaluators else {
         return;
@@ -226,7 +224,7 @@ fn collect_evaluator_prompt_ids(
                 ..
             }) => {
                 for variant in variants.values() {
-                    collect_llm_judge_prompt_ids(&variant.variant, prompt_ids);
+                    collect_llm_judge_file_ids(&variant.variant, file_ids);
                 }
             }
             StoredEvaluatorConfig::LLMJudge(_)
@@ -237,69 +235,66 @@ fn collect_evaluator_prompt_ids(
     }
 }
 
-fn collect_llm_judge_prompt_ids(
-    variant: &StoredLLMJudgeVariantConfig,
-    prompt_ids: &mut HashSet<Uuid>,
-) {
+fn collect_llm_judge_file_ids(variant: &StoredLLMJudgeVariantConfig, file_ids: &mut HashSet<Uuid>) {
     match variant {
         StoredLLMJudgeVariantConfig::ChatCompletion(chat) => {
-            push_prompt_ref_ids(prompt_ids, &chat.system_instructions);
+            push_file_ref_ids(file_ids, &chat.system_instructions);
         }
         StoredLLMJudgeVariantConfig::BestOfNSampling(best_of_n) => {
-            push_prompt_ref_ids(prompt_ids, &best_of_n.evaluator.system_instructions);
+            push_file_ref_ids(file_ids, &best_of_n.evaluator.system_instructions);
         }
         StoredLLMJudgeVariantConfig::MixtureOfNSampling(mixture_of_n) => {
-            push_prompt_ref_ids(prompt_ids, &mixture_of_n.fuser.system_instructions);
+            push_file_ref_ids(file_ids, &mixture_of_n.fuser.system_instructions);
         }
         StoredLLMJudgeVariantConfig::Dicl(dicl) => {
             if let Some(system_instructions) = dicl.system_instructions.as_ref() {
-                push_prompt_ref_ids(prompt_ids, system_instructions);
+                push_file_ref_ids(file_ids, system_instructions);
             }
         }
         StoredLLMJudgeVariantConfig::ChainOfThought(chain_of_thought) => {
-            push_prompt_ref_ids(prompt_ids, &chain_of_thought.inner.system_instructions);
+            push_file_ref_ids(file_ids, &chain_of_thought.inner.system_instructions);
         }
     }
 }
 
-fn collect_function_prompt_ids(stored: &StoredFunctionConfig, prompt_ids: &mut HashSet<Uuid>) {
+fn collect_function_file_ids(stored: &StoredFunctionConfig, file_ids: &mut HashSet<Uuid>) {
     match stored {
         StoredFunctionConfig::Chat(chat) => {
-            if let Some(prompt_ref) = chat.system_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.system_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = chat.user_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.user_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = chat.assistant_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.assistant_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
             if let Some(schemas) = chat.schemas.as_ref() {
-                for prompt_ref in schemas.values() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                for file_ref in schemas.values() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
-            collect_evaluator_prompt_ids(chat.evaluators.as_ref(), prompt_ids);
+            collect_evaluator_file_ids(chat.evaluators.as_ref(), file_ids);
         }
         StoredFunctionConfig::Json(json) => {
-            if let Some(prompt_ref) = json.system_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = json.system_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = json.user_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = json.user_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = json.assistant_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = json.assistant_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
             if let Some(schemas) = json.schemas.as_ref() {
-                for prompt_ref in schemas.values() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                for file_ref in schemas.values() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
-            if let Some(prompt_ref) = json.output_schema.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = json.output_schema.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            collect_evaluator_prompt_ids(json.evaluators.as_ref(), prompt_ids);
+            collect_evaluator_file_ids(json.evaluators.as_ref(), file_ids);
         }
     }
 }
@@ -317,107 +312,107 @@ fn collect_function_variant_ids(stored: &StoredFunctionConfig, variant_ids: &mut
     }
 }
 
-fn collect_variant_prompt_ids(stored: &StoredVariantVersionConfig, prompt_ids: &mut HashSet<Uuid>) {
+fn collect_variant_file_ids(stored: &StoredVariantVersionConfig, file_ids: &mut HashSet<Uuid>) {
     match &stored.variant {
         StoredVariantConfig::ChatCompletion(chat) | StoredVariantConfig::ChainOfThought(chat) => {
-            if let Some(prompt_ref) = chat.system_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.system_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = chat.user_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.user_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = chat.assistant_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = chat.assistant_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
             if let Some(input_wrappers) = chat.input_wrappers.as_ref() {
-                if let Some(prompt_ref) = input_wrappers.user.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.user.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.assistant.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.assistant.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.system.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.system.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
             if let Some(templates) = chat.templates.as_ref() {
-                for prompt_ref in templates.values() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                for file_ref in templates.values() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
         }
         StoredVariantConfig::BestOfNSampling(best_of_n) => {
             let evaluator = &best_of_n.evaluator;
-            if let Some(prompt_ref) = evaluator.system_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = evaluator.system_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = evaluator.user_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = evaluator.user_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = evaluator.assistant_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = evaluator.assistant_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
             if let Some(input_wrappers) = evaluator.input_wrappers.as_ref() {
-                if let Some(prompt_ref) = input_wrappers.user.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.user.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.assistant.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.assistant.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.system.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.system.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
             if let Some(templates) = evaluator.templates.as_ref() {
-                for prompt_ref in templates.values() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                for file_ref in templates.values() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
         }
         StoredVariantConfig::MixtureOfN(mixture_of_n) => {
             let fuser = &mixture_of_n.fuser;
-            if let Some(prompt_ref) = fuser.system_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = fuser.system_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = fuser.user_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = fuser.user_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
-            if let Some(prompt_ref) = fuser.assistant_template.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = fuser.assistant_template.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
             if let Some(input_wrappers) = fuser.input_wrappers.as_ref() {
-                if let Some(prompt_ref) = input_wrappers.user.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.user.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.assistant.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.assistant.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
-                if let Some(prompt_ref) = input_wrappers.system.as_ref() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                if let Some(file_ref) = input_wrappers.system.as_ref() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
             if let Some(templates) = fuser.templates.as_ref() {
-                for prompt_ref in templates.values() {
-                    push_prompt_ref_ids(prompt_ids, prompt_ref);
+                for file_ref in templates.values() {
+                    push_file_ref_ids(file_ids, file_ref);
                 }
             }
         }
         StoredVariantConfig::Dicl(dicl) => {
-            if let Some(prompt_ref) = dicl.system_instructions.as_ref() {
-                push_prompt_ref_ids(prompt_ids, prompt_ref);
+            if let Some(file_ref) = dicl.system_instructions.as_ref() {
+                push_file_ref_ids(file_ids, file_ref);
             }
         }
     }
 }
 
-fn collect_tool_prompt_ids(stored: &StoredToolConfig, prompt_ids: &mut HashSet<Uuid>) {
-    push_prompt_ref_ids(prompt_ids, &stored.parameters);
+fn collect_tool_file_ids(stored: &StoredToolConfig, file_ids: &mut HashSet<Uuid>) {
+    push_file_ref_ids(file_ids, &stored.parameters);
 }
 
-fn collect_evaluation_prompt_ids(stored: &StoredEvaluationConfig, prompt_ids: &mut HashSet<Uuid>) {
+fn collect_evaluation_file_ids(stored: &StoredEvaluationConfig, file_ids: &mut HashSet<Uuid>) {
     match stored {
         StoredEvaluationConfig::Inference(inference) => {
-            collect_evaluator_prompt_ids(inference.evaluators.as_ref(), prompt_ids);
+            collect_evaluator_file_ids(inference.evaluators.as_ref(), file_ids);
         }
     }
 }
@@ -711,42 +706,42 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
         );
     }
 
-    let mut prompt_ids = HashSet::new();
+    let mut file_ids = HashSet::new();
     for stored_function in stored_functions.values() {
-        collect_function_prompt_ids(stored_function, &mut prompt_ids);
+        collect_function_file_ids(stored_function, &mut file_ids);
     }
     for (_, stored_variant) in stored_variants.values() {
-        collect_variant_prompt_ids(stored_variant, &mut prompt_ids);
+        collect_variant_file_ids(stored_variant, &mut file_ids);
     }
     for stored_tool in stored_tools.values() {
-        collect_tool_prompt_ids(stored_tool, &mut prompt_ids);
+        collect_tool_file_ids(stored_tool, &mut file_ids);
     }
     for stored_evaluation in stored_evaluations.values() {
-        collect_evaluation_prompt_ids(stored_evaluation, &mut prompt_ids);
+        collect_evaluation_file_ids(stored_evaluation, &mut file_ids);
     }
 
-    let prompt_ids = prompt_ids.into_iter().collect::<Vec<_>>();
-    let mut prompt_tx = begin_snapshot_read_tx(pool, &snapshot_id)
+    let file_ids = file_ids.into_iter().collect::<Vec<_>>();
+    let mut file_tx = begin_snapshot_read_tx(pool, &snapshot_id)
         .await
         .map_err(|error| vec![error])?;
-    let prompt_rows = load_prompt_templates(&mut prompt_tx, &prompt_ids)
+    let file_rows = load_files(&mut file_tx, &file_ids)
         .await
         .map_err(|error| vec![error])?;
-    drop(prompt_tx);
+    drop(file_tx);
 
     // All snapshot readers have finished, so the leader transaction is no
     // longer needed. It is read-only and only existed to keep the exported
     // snapshot alive, so we just drop it (rolling back implicitly) — there
     // is nothing to commit.
     drop(leader_tx);
-    let prompts = prompt_rows
+    let files = file_rows
         .into_iter()
         .map(|row| {
             (
                 row.id,
-                StoredPromptTemplate {
+                StoredFile {
                     id: row.id,
-                    template_key: row.template_key,
+                    file_path: row.file_path,
                     source_body: row.source_body,
                     content_hash: row.content_hash,
                     creation_source: row.creation_source,
@@ -754,11 +749,11 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
                 },
             )
         })
-        .collect::<PromptTemplateMap>();
+        .collect::<FileMap>();
 
     let mut tools = HashMap::new();
     for (name, stored_tool) in stored_tools {
-        match rehydrate_tool(stored_tool, &prompts) {
+        match rehydrate_tool(stored_tool, &files) {
             Ok(tool) => {
                 tools.insert(name, tool);
             }
@@ -770,7 +765,7 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
 
     let mut evaluations = HashMap::new();
     for (name, stored_evaluation) in stored_evaluations {
-        match rehydrate_evaluation(stored_evaluation, &prompts) {
+        match rehydrate_evaluation(stored_evaluation, &files) {
             Ok(evaluation) => {
                 evaluations.insert(name, evaluation);
             }
@@ -785,7 +780,7 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
         let Some(stored_function) = stored_functions.get(&active_function.name).cloned() else {
             continue;
         };
-        match rehydrate_function(stored_function, &stored_variants, &prompts) {
+        match rehydrate_function(stored_function, &stored_variants, &files) {
             Ok(function) => {
                 functions.insert(active_function.name, function);
             }

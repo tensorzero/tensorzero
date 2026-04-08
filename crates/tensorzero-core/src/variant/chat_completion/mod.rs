@@ -496,10 +496,8 @@ pub async fn prepare_request_message(
                         let context = serde_json::json!({
                             message.role.implicit_template_var().to_string(): text.text
                         });
-                        templates_config.template_message(
-                            &template.template.path.get_template_key(),
-                            &context,
-                        )?
+                        templates_config
+                            .template_message(&template.template.path.get_template_key(), &context)?
                     }
                     _ => text.text.clone(),
                 };

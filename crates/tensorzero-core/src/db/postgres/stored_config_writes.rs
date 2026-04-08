@@ -20,10 +20,8 @@ use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 
 use super::PostgresConnectionInfo;
+use super::file_writes::{CollectedFile, add_file, write_collected_files};
 use super::function_config_writes::{WriteFunctionConfigParams, write_function_config_in_tx};
-use super::prompt_template_writes::{
-    CollectedPromptTemplate, add_prompt_template, write_collected_prompt_templates,
-};
 
 #[derive(Debug)]
 pub struct WriteStoredConfigParams<'a> {
@@ -228,16 +226,16 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    // 3. Tools (with prompt templates)
+    // 3. Tools (with stored files)
     for (name, tool_config) in tools.as_ref().into_iter().flat_map(|m| m.iter()) {
-        let prompt_template_version_ids = write_prompt_templates_in_tx(
+        let file_version_ids = write_files_in_tx(
             tx,
-            tool_config.prompt_templates_for_db().into_iter(),
+            tool_config.files_for_db().into_iter(),
             creation_source,
             source_autopilot_session_id,
         )
         .await?;
-        let stored_tool = tool_config.convert_for_db(&prompt_template_version_ids)?;
+        let stored_tool = tool_config.convert_for_db(&file_version_ids)?;
         let config_json = serde_json::to_value(&stored_tool).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tool `{name}` for DB: {e}"),
@@ -253,16 +251,16 @@ async fn write_stored_config_in_tx(
         .await?;
     }
 
-    // 4. Evaluations (with prompt templates)
+    // 4. Evaluations (with stored files)
     for (name, eval_config) in evaluations.as_ref().into_iter().flat_map(|m| m.iter()) {
-        let prompt_template_version_ids = write_prompt_templates_in_tx(
+        let file_version_ids = write_files_in_tx(
             tx,
-            eval_config.prompt_templates_for_db().into_iter(),
+            eval_config.files_for_db().into_iter(),
             creation_source,
             source_autopilot_session_id,
         )
         .await?;
-        let stored_eval = eval_config.to_stored_for_db(&prompt_template_version_ids)?;
+        let stored_eval = eval_config.to_stored_for_db(&file_version_ids)?;
         let config_json = serde_json::to_value(&stored_eval).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize evaluation `{name}` for DB: {e}"),
@@ -396,23 +394,22 @@ async fn upsert_named_config_row(
     Ok(())
 }
 
-// ── Prompt-template handling for standalone tools/evaluations ─────────────────
+// ── Stored file handling for standalone tools/evaluations ─────────────────────
 
-/// Collect prompt templates for a standalone tool/evaluation config and
+/// Collect stored files for a standalone tool/evaluation config and
 /// persist them via the shared writer, reusing existing rows that already
-/// match `(template_key, content_hash)`.
-async fn write_prompt_templates_in_tx<'a>(
+/// match `(file_path, content_hash)`.
+async fn write_files_in_tx<'a>(
     tx: &mut Transaction<'_, Postgres>,
     templates: impl Iterator<Item = &'a ResolvedTomlPathData>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
-    let mut collected: BTreeMap<String, CollectedPromptTemplate> = BTreeMap::new();
+    let mut collected: BTreeMap<String, CollectedFile> = BTreeMap::new();
     for template in templates {
-        add_prompt_template(&mut collected, template)?;
+        add_file(&mut collected, template)?;
     }
-    write_collected_prompt_templates(tx, &collected, creation_source, source_autopilot_session_id)
-        .await
+    write_collected_files(tx, &collected, creation_source, source_autopilot_session_id).await
 }
 
 fn postgres_query_error(context: &str, e: sqlx::Error) -> Error {
