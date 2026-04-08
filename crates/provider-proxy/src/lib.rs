@@ -507,9 +507,9 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
-    let _ = rustls::crypto::ring::default_provider()
+    let _ = rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .inspect_err(|e| tracing::error!("Failed to install rustls ring provider: {e:?}"));
+        .inspect_err(|e| tracing::error!("Failed to install rustls aws-lc-rs provider: {e:?}"));
 
     let root_cert = make_root_cert();
 
