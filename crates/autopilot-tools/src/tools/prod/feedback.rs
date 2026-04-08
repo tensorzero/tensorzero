@@ -51,23 +51,15 @@ impl ToolMetadata for FeedbackTool {
     type SideInfo = AutopilotSideInfo;
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_TOOL_PARAMS
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "FeedbackToolParams".to_string()
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_RESPONSE
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "FeedbackResponse".to_string()
     }

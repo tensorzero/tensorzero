@@ -88,23 +88,15 @@ impl ToolMetadata for GepaTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GepaToolOutput;
     type LlmParams = GepaToolParams;
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_PARAMS
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GepaToolParams".to_string()
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_OUTPUT
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "GepaToolOutput".to_string()
     }
@@ -150,23 +142,15 @@ impl ToolMetadata for StandaloneGepaTool {
     type SideInfo = ();
     type Output = GepaToolOutput;
     type LlmParams = GepaToolParams;
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_PARAMS
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GepaToolParams".to_string()
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_OUTPUT
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "GepaToolOutput".to_string()
     }
