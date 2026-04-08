@@ -1,0 +1,10 @@
+{
+  "name": "slack-notifications-worker",
+  "version": "0.0.0",
+  "description": "Cloudflare Worker that receives GitHub webhook events and posts Slack notifications for external activity.",
+  "license": "Apache-2.0",
+  "main": "worker.js",
+  "dependencies": {
+    "@octokit/app": "^16.1.2"
+  }
+}
