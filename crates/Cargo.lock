@@ -7376,6 +7376,7 @@ dependencies = [
  "sqlx",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",
  "tracing",

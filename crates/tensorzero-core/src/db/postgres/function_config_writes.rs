@@ -35,13 +35,12 @@ use crate::experimentation::{
     UninitializedExperimentationConfig, UninitializedExperimentationConfigWithNamespaces,
     track_and_stop::UninitializedTrackAndStopExperimentationConfig,
 };
-use crate::inference::types::extra_body::extra_body_config_to_stored;
-use crate::inference::types::extra_headers::extra_headers_config_to_stored;
 use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::{
     UninitializedChatCompletionConfig, UninitializedInputWrappers,
 };
 use crate::variant::dicl::UninitializedDiclConfig;
+use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use super::PostgresConnectionInfo;
 use super::prompt_template_writes::{
@@ -801,11 +800,11 @@ fn convert_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -859,11 +858,11 @@ fn convert_dicl_variant(
         verbosity: config.verbosity.clone(),
         max_distance: config.max_distance,
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -996,11 +995,11 @@ fn convert_llm_judge_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -1058,12 +1057,12 @@ fn convert_llm_judge_dicl_variant(
         seed: config.seed,
         json_mode: config.json_mode,
         stop_sequences: config.stop_sequences.clone(),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         retries: Some(StoredRetryConfig::from(config.retries)),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 

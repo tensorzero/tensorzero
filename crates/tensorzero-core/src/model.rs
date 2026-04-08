@@ -61,12 +61,8 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::{
-    ExtraBodyConfig, extra_body_config_from_stored, extra_body_config_to_stored,
-};
-use crate::inference::types::extra_headers::{
-    ExtraHeadersConfig, extra_headers_config_from_stored, extra_headers_config_to_stored,
-};
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     ApiType, ContentBlock, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RawResponseEntry, RequestMessage, Thought, Unknown,
@@ -95,6 +91,7 @@ use crate::{
 };
 use metrics::counter;
 use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use crate::providers::{
     anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
@@ -260,8 +257,8 @@ impl TryFrom<StoredModelProvider> for UninitializedModelProvider {
         let batch_cost = stored.batch_cost.map(UninitializedUnifiedCostConfig::from);
         Ok(UninitializedModelProvider {
             config,
-            extra_body: stored.extra_body.map(extra_body_config_from_stored),
-            extra_headers: stored.extra_headers.map(extra_headers_config_from_stored),
+            extra_body: stored.extra_body.map(ExtraBodyConfig::from),
+            extra_headers: stored.extra_headers.map(ExtraHeadersConfig::from),
             timeouts: stored
                 .timeouts
                 .map(TimeoutsConfig::from)
@@ -1432,11 +1429,11 @@ impl From<&UninitializedModelProvider> for StoredModelProvider {
             extra_body: provider
                 .extra_body
                 .as_ref()
-                .map(extra_body_config_to_stored),
+                .map(StoredExtraBodyConfig::from),
             extra_headers: provider
                 .extra_headers
                 .as_ref()
-                .map(extra_headers_config_to_stored),
+                .map(StoredExtraHeadersConfig::from),
             timeouts: Some(StoredTimeoutsConfig::from(&provider.timeouts)),
             discard_unknown_chunks: Some(provider.discard_unknown_chunks),
             cost: provider.cost.as_ref().map(StoredCostConfig::from),
