@@ -12,6 +12,7 @@ path = "tests/e2e/tests.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4.6.0", features = ["derive"] }
 hex = "0.4.3"
 http = "1.4.0"
@@ -22,6 +23,7 @@ hyper-util = "0.1.19"
 moka = { version = "0.12.15", features = ["sync"] }
 pin-project = "1.1.11"
 rcgen = "0.14.7"
+regex = "1"
 reqwest.workspace = true
 rustls = { version = "0.23.37", features = ["ring"] }
 serde = { workspace = true }
