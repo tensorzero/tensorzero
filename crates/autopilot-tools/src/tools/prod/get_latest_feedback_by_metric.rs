@@ -14,8 +14,7 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct GetLatestFeedbackByMetricToolParams {
     /// The target ID (inference ID) to get feedback for.

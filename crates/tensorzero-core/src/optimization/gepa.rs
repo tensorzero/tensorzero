@@ -36,8 +36,7 @@ pub(crate) fn default_include_inference_for_mutation() -> bool {
 /// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
 /// of high-performing variants. It uses genetic programming techniques to evolve
 /// prompt templates based on evaluation results.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize)]
 #[ts(export, optional_fields)]
 pub struct GEPAConfig {
     /// Name of the function being optimized
@@ -111,8 +110,7 @@ pub struct GEPAConfig {
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
@@ -391,8 +389,7 @@ impl GEPAConfig {
 /// Contains the final Pareto frontier of optimized variants or an error message.
 /// GEPA optimization is synchronous, so polling immediately returns the completed
 /// results or failure status.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GEPAJobHandle {

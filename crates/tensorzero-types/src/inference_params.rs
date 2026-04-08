@@ -22,16 +22,14 @@ pub struct InferenceIds {
 
 /// Top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParams {
@@ -123,8 +121,7 @@ impl ChatCompletionInferenceParams {
 
 /// The V2 inference parameters — a transitional struct for parameters being
 /// migrated to explicit per-provider handling.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 pub struct ChatCompletionInferenceParamsV2 {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -154,8 +151,7 @@ pub enum JsonMode {
 ///
 /// Controls the priority and latency characteristics of the request.
 /// Different providers map these values differently to their own service tiers.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceTier {

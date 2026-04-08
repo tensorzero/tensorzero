@@ -60,8 +60,7 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct VariantInfo {
     pub inner: VariantConfig,
@@ -86,8 +85,7 @@ impl VariantInfo {
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {

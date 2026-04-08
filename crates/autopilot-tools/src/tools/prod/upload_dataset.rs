@@ -24,8 +24,7 @@ use autopilot_client::AutopilotSideInfo;
 use durable_tools::tensorzero_client::{S3UploadRequest, S3UploadResponse};
 
 /// Parameters for the upload_dataset tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct UploadDatasetToolParams {
     /// The name of the dataset to upload.
@@ -35,8 +34,7 @@ pub struct UploadDatasetToolParams {
     pub row_limit: Option<u32>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum UploadDatasetFormat {
@@ -57,8 +55,7 @@ impl UploadDatasetFormat {
 }
 
 /// Output of the upload_dataset tool.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct UploadDatasetToolOutput {
     /// The S3 URI where the dataset was uploaded (e.g., `s3://bucket/path/to/dataset.parquet`).

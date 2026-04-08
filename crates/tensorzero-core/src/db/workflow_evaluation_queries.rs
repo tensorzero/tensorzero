@@ -213,8 +213,7 @@ pub trait WorkflowEvaluationQueries {
 }
 
 /// A single workflow evaluation run episode with its associated feedback.
-#[derive(TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
+#[derive(TS, Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[ts(export)]
 pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The episode ID
@@ -239,8 +238,7 @@ pub struct WorkflowEvaluationRunEpisodeWithFeedbackRow {
 /// A workflow evaluation run episode with feedback, including its group key.
 ///
 /// The group_key is either the task_name or a generated key for episodes with NULL task_name.
-#[derive(TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
+#[derive(TS, Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[ts(export)]
 pub struct GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow {
     /// The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'

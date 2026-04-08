@@ -71,8 +71,7 @@ pub trait EpisodeQueries: Send + Sync {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
@@ -111,8 +110,7 @@ impl TimeWindow {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct ModelUsageTimePoint {
     pub period_start: DateTime<Utc>,
@@ -130,8 +128,7 @@ pub struct ModelUsageTimePoint {
     pub count_with_cost: Option<u64>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct CacheStatisticsTimePoint {
     pub period_start: DateTime<Utc>,
@@ -149,8 +146,7 @@ pub struct CacheStatisticsTimePoint {
     pub cache_read_ratio: Option<f64>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct ModelLatencyDatapoint {
     pub model_name: String,
@@ -161,8 +157,7 @@ pub struct ModelLatencyDatapoint {
     pub count: u64,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq, sqlx::FromRow)]
 #[ts(export)]
 pub struct EpisodeByIdRow {
     pub episode_id: Uuid,
@@ -174,8 +169,7 @@ pub struct EpisodeByIdRow {
     pub last_inference_id: Uuid,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export, optional_fields)]
 pub struct TableBoundsWithCount {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,8 +189,7 @@ impl<T: EpisodeQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Se
 {
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct TableBounds {
     #[serde(skip_serializing_if = "Option::is_none")]

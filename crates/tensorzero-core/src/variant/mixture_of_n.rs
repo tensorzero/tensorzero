@@ -47,8 +47,7 @@ use super::{
     infer_model_request_stream, prepare_model_inference_request,
 };
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
@@ -88,8 +87,7 @@ impl MixtureOfNConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 pub struct UninitializedMixtureOfNConfig {
@@ -100,16 +98,14 @@ pub struct UninitializedMixtureOfNConfig {
     pub fuser: UninitializedFuserConfig,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export, optional_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 pub struct UninitializedFuserConfig {

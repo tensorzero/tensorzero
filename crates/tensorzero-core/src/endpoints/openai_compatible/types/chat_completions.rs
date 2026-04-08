@@ -84,8 +84,7 @@ pub enum OpenAICompatibleResponseFormat {
     JsonObject,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonSchemaInfo {

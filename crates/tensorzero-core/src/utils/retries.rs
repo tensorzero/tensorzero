@@ -20,8 +20,7 @@ use pyo3::prelude::*;
  * this code.
  */
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Copy, Clone, PartialEq, JsonSchema, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Copy, Clone, PartialEq, JsonSchema, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {

@@ -24,8 +24,7 @@ use crate::{
 ///
 /// Contains only UI-safe fields from the gateway config, excluding sensitive
 /// information like provider credentials, API keys, and internal settings.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct UiConfig {
     pub functions: HashMap<String, Arc<FunctionConfig>>,

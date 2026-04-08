@@ -14,8 +14,7 @@ use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct InputMessage {
@@ -23,8 +22,7 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
@@ -56,8 +54,7 @@ pub enum InputMessageContent {
 }
 
 /// API representation of an input to a model.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 #[export_schema]
@@ -76,8 +73,7 @@ pub struct Input {
 // Custom Deserialize for InputMessage (handles legacy formats)
 // =============================================================================
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum TextKind {

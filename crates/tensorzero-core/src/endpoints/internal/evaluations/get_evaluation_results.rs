@@ -29,8 +29,7 @@ pub struct GetEvaluationResultsParams {
 }
 
 /// Response containing paginated evaluation results.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetEvaluationResultsResponse {
     pub results: Vec<EvaluationResultRow>,

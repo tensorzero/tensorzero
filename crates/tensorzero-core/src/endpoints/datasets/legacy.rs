@@ -32,8 +32,7 @@ use crate::inference::types::pyo3_helpers::{
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum DatapointKind {
@@ -52,8 +51,7 @@ impl DatapointKind {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
@@ -394,8 +392,7 @@ impl Datapoint {
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export, optional_fields)]
 #[export_schema]
@@ -446,8 +443,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 #[ts(export, optional_fields)]

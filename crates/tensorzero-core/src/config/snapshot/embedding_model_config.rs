@@ -65,8 +65,7 @@ impl From<UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
 /// Stored version of `UninitializedEmbeddingProviderConfig`.
 ///
 /// Accepts the deprecated `timeouts` field for backward compatibility.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
 pub struct StoredEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,

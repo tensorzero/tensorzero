@@ -20,8 +20,7 @@ use schemars::JsonSchema;
 use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 /// Parameters for the auto-reject tool (not visible to LLM - internal use only).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct AutoRejectToolCallParams {}
 

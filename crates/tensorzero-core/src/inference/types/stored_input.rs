@@ -34,8 +34,7 @@ use pyo3::prelude::*;
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
@@ -98,8 +97,7 @@ impl StoredInput {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 #[export_schema]
@@ -240,8 +238,7 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -336,8 +333,7 @@ impl StoredInputMessageContent {
 
 /// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
 /// See the deserializer implementation below for details on the legacy formats it supports.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[repr(transparent)]
@@ -501,8 +497,7 @@ impl StoredInput {
 /// Only the object-storage path is actually stored in clickhouse
 /// The `RequestMessage/StoredRequestMessage` pair is the model-level equivalent
 /// of `ResolvedInput/StoredInput`
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 pub struct StoredRequestMessage {
     pub role: Role,

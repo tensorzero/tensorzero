@@ -13,8 +13,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 /// SSE event types for evaluation streaming.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -26,8 +25,7 @@ pub enum EvaluationRunEvent {
     Complete(EvaluationRunCompleteEvent),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
@@ -46,8 +44,7 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_config: Option<EvaluationConfig>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EvaluationRunSuccessEvent {
     pub evaluation_run_id: Uuid,
@@ -59,8 +56,7 @@ pub struct EvaluationRunSuccessEvent {
     pub processing_time_ms: f64,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EvaluationRunErrorEvent {
     pub evaluation_run_id: Uuid,
@@ -68,8 +64,7 @@ pub struct EvaluationRunErrorEvent {
     pub message: String,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct EvaluationRunFatalErrorEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -77,8 +72,7 @@ pub struct EvaluationRunFatalErrorEvent {
     pub message: String,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EvaluationRunCompleteEvent {
     pub evaluation_run_id: Uuid,
@@ -86,8 +80,7 @@ pub struct EvaluationRunCompleteEvent {
 }
 
 /// Aggregated usage statistics for a completed evaluation run.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct EvaluationRunUsageSummary {
     /// Number of successful inferences

@@ -63,8 +63,7 @@ type PreparedToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct GroqProvider {
     model_name: String,

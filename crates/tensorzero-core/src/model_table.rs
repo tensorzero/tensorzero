@@ -130,8 +130,7 @@ impl Display for ProviderType {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Serialize, Debug)]
+#[derive(ts_rs::TS, Serialize, Debug)]
 #[ts(export)]
 // TODO: investigate why derive(TS) doesn't work if we add bounds to BaseModelTable itself
 // #[serde(bound(deserialize = "T: ShorthandModelConfig + Deserialize<'de>"))]

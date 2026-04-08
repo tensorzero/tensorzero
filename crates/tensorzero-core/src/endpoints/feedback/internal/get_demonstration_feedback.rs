@@ -17,8 +17,7 @@ pub struct GetDemonstrationFeedbackParams {
     pub limit: Option<u32>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetDemonstrationFeedbackResponse {
     pub feedback: Vec<DemonstrationFeedbackRow>,

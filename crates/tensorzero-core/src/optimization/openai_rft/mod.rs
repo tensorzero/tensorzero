@@ -20,8 +20,7 @@ use crate::{
     providers::openai::grader::OpenAIGrader,
 };
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
 #[serde(untagged)]
@@ -46,8 +45,7 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
@@ -68,8 +66,7 @@ impl std::fmt::Display for OpenAIRFTResponseFormat {
 /// Initialized OpenAI RFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize)]
 #[ts(export, optional_fields)]
 pub struct OpenAIRFTConfig {
     pub model: String,
@@ -89,8 +86,7 @@ pub struct OpenAIRFTConfig {
 /// Uninitialized OpenAI RFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
@@ -562,8 +558,7 @@ impl UninitializedOpenAIRFTConfig {
 
 /// Minimal job handle for OpenAI RFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAIRFTJobHandle {

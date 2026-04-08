@@ -29,8 +29,7 @@ pub struct InferenceCountQueryParams {
 }
 
 /// Grouping options for inference count
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceCountGroupBy {
@@ -39,8 +38,7 @@ pub enum InferenceCountGroupBy {
 }
 
 /// Response containing inference count
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct InferenceCountResponse {
     /// The count of inferences for the function (and optionally variant)
@@ -51,8 +49,7 @@ pub struct InferenceCountResponse {
 }
 
 /// Inference count for a variant
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct InferenceCountByVariant {
     /// The variant name
@@ -82,8 +79,7 @@ pub struct InferenceWithFeedbackCountQueryParams {
 }
 
 /// Response containing inference count with feedback count
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct InferenceWithFeedbackCountResponse {
     /// Number of feedbacks for the metric
@@ -107,8 +103,7 @@ fn default_max_periods() -> u32 {
 }
 
 /// Response containing function throughput data grouped by variant and time period
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetFunctionThroughputByVariantResponse {
     /// Throughput data for each (period, variant) combination
@@ -116,8 +111,7 @@ pub struct GetFunctionThroughputByVariantResponse {
 }
 
 /// Response containing all functions with their inference counts
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListFunctionsWithInferenceCountResponse {
     /// List of functions with their inference counts, ordered by most recent inference

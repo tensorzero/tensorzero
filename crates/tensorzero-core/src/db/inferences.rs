@@ -189,8 +189,7 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 // TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
@@ -323,8 +322,7 @@ pub enum PaginationParams {
 }
 
 /// Inference metadata from the InferenceById table.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[ts(export)]
 pub struct InferenceMetadata {
     pub id: Uuid,
@@ -419,8 +417,7 @@ pub struct GetFunctionThroughputByVariantParams<'a> {
 }
 
 /// Row returned from the get_function_throughput_by_variant query.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct VariantThroughput {
     /// Start datetime of the period in RFC 3339 format with milliseconds
@@ -432,8 +429,7 @@ pub struct VariantThroughput {
 }
 
 /// Row returned from the list_functions_with_inference_count query.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct FunctionInferenceCount {
     pub function_name: String,

@@ -6,8 +6,7 @@ use uuid::Uuid;
 use super::{MultipleChoiceOption, UserQuestionAnswer};
 
 /// A block of rich content displayed alongside an autoeval example.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum AutoEvalContentBlock {
@@ -35,16 +34,14 @@ pub enum AutoEvalContentBlock {
 ///
 /// Groups labeled examples together, each with rich context blocks
 /// (e.g. prompt/response) and associated labeling questions.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadAutoEvalExampleLabeling {
     pub examples: Vec<AutoEvalExampleLabeling>,
 }
 
 /// A single example to label, with context and a structured labeling question.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalExampleLabeling {
     /// Optional since some behaviors only depend on the response
@@ -60,8 +57,7 @@ pub struct AutoEvalExampleLabeling {
     pub explanation_question: Option<AutoEvalExplanationQuestion>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AutoEvalExampleSource {
@@ -69,16 +65,14 @@ pub enum AutoEvalExampleSource {
     Synthetic(AutoEvalExampleSourceSynthetic),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalExampleSourceInference {
     /// The inference ID of the historical datapoint for auto evals
     pub id: Uuid,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalExampleSourceSynthetic {
     pub full_prompt: Option<AutoEvalContentBlock>,
@@ -86,8 +80,7 @@ pub struct AutoEvalExampleSourceSynthetic {
 }
 
 /// A multiple-choice labeling question within an autoeval example.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalLabelQuestion {
     pub id: Uuid,
@@ -97,8 +90,7 @@ pub struct AutoEvalLabelQuestion {
 }
 
 /// A free-response explanation question within an autoeval example.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalExplanationQuestion {
     pub id: Uuid,
@@ -108,8 +100,7 @@ pub struct AutoEvalExplanationQuestion {
 
 /// Minimal input payload for submitting autoeval example labeling answers.
 /// The server enriches this with context from the original labeling event before storing.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
     /// Map from question UUID to response.
@@ -121,8 +112,7 @@ pub struct CreateEventPayloadAutoEvalExampleLabelingAnswers {
 /// Self-contained read-only payload for labeled autoeval examples.
 /// Includes the full context blocks so the UI can render everything
 /// without looking up the original labeling event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadAutoEvalExampleLabelingAnswers {
     pub examples: Vec<AutoEvalLabeledExample>,
@@ -131,8 +121,7 @@ pub struct EventPayloadAutoEvalExampleLabelingAnswers {
 }
 
 /// A labeled example with its full context and submitted answers.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalLabeledExample {
     /// Optional since some behaviors only depend on the response
@@ -162,8 +151,7 @@ pub struct AutoEvalLabeledExample {
 ///
 /// Contains two required free-response fields: a target behavior description
 /// and additional context, both with optional pre-filled defaults.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadAutoEvalBehaviorSpec {
     /// The target behavior question.
@@ -173,8 +161,7 @@ pub struct EventPayloadAutoEvalBehaviorSpec {
 }
 
 /// A free-response question within an autoeval behavior spec.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct AutoEvalBehaviorSpecQuestion {
     pub id: Uuid,
@@ -188,8 +175,7 @@ pub struct AutoEvalBehaviorSpecQuestion {
 
 /// Minimal input payload for submitting autoeval behavior spec answers.
 /// The server enriches this with context from the original event before storing.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
     /// Map from question UUID to response.
@@ -201,8 +187,7 @@ pub struct CreateEventPayloadAutoEvalBehaviorSpecAnswers {
 /// Self-contained read-only payload for answered autoeval behavior spec.
 /// Includes the full questions so the UI can render everything
 /// without looking up the original event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadAutoEvalBehaviorSpecAnswers {
     /// The target behavior question.

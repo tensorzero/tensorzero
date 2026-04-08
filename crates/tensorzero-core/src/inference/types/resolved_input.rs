@@ -410,8 +410,7 @@ impl RateLimitedInputContent for LazyFile {
 }
 
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ResolvedRequestMessage {

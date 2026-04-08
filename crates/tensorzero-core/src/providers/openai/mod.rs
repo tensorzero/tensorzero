@@ -119,8 +119,7 @@ impl From<OpenAIAPIType> for ApiType {
 /// and everything else → `file`. Some OpenAI-compatible providers (e.g. Vertex AI)
 /// don't support `file` blocks but accept PDFs as `image_url`. Use
 /// `content_type_overrides` on the provider config to override the default mapping.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ContentBlockType {
@@ -129,8 +128,7 @@ pub enum ContentBlockType {
     InputAudio,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct OpenAIProvider {
     model_name: String,

@@ -44,8 +44,7 @@ pub enum StorageKind {
 /// This is part of the public API for `File`s. In particular, this is useful for roundtripping
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

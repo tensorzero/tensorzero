@@ -26,8 +26,7 @@ use uuid::Uuid;
 
 /// Content block types allowed in autopilot event messages.
 /// Restricted to only Text blocks (no ToolCall, File, Template, etc.).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum EventPayloadMessageContent {
@@ -36,8 +35,7 @@ pub enum EventPayloadMessageContent {
 
 /// A message payload specific to autopilot events.
 /// Content is restricted to Text blocks only.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct EventPayloadMessage {
     pub role: Role,
@@ -75,8 +73,7 @@ impl From<EventPayloadMessage> for InputMessage {
 }
 
 /// A session representing an autopilot conversation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct Session {
     pub id: Uuid,
@@ -96,8 +93,7 @@ pub struct Session {
 /// Internal event type - consumers should use `GatewayEvent` instead.
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
     pub id: Uuid,
     pub payload: EventPayload,
@@ -108,8 +104,7 @@ pub struct Event {
 /// An event as seen by gateway consumers.
 ///
 /// Uses `GatewayEventPayload` which excludes `NotAvailable` authorization status.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GatewayEvent {
     pub id: Uuid,
@@ -132,8 +127,7 @@ impl TryFrom<Event> for GatewayEvent {
 }
 
 /// The UX-relevant status of the Autopilot.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum AutopilotStatus {
@@ -151,8 +145,7 @@ pub enum AutopilotStatus {
 /// Internal stream update type - consumers should use `GatewayStreamUpdate` instead.
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct StreamUpdate {
     pub event: Event,
     pub status: AutopilotStatus,
@@ -161,8 +154,7 @@ pub struct StreamUpdate {
 /// Stream update as seen by gateway consumers.
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GatewayStreamUpdate {
     pub event: GatewayEvent,
@@ -181,15 +173,13 @@ impl TryFrom<StreamUpdate> for GatewayStreamUpdate {
 }
 
 /// Error payload for an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadError {
     pub message: String,
 }
 
 /// Status update payload for an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadStatusUpdate {
     pub status_update: StatusUpdate,
 }
@@ -198,8 +188,7 @@ pub struct EventPayloadStatusUpdate {
 ///
 /// Includes enriched fields from the originating tool call and authorization events,
 /// making this payload self-contained for UI rendering.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
@@ -216,8 +205,7 @@ pub struct EventPayloadToolResult {
 /// Internal event payload type - consumers should use `GatewayEventPayload` instead.
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(tag = "type", rename_all = "snake_case")]
 pub enum EventPayload {
@@ -241,8 +229,7 @@ pub enum EventPayload {
 
 /// Minimal tool result payload for creating events.
 /// Omits server-enriched fields like `tool_call_name`, `tool_call_arguments`, etc.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEventPayloadToolResult {
     pub tool_call_event_id: Uuid,
     pub outcome: ToolOutcome,
@@ -253,8 +240,7 @@ pub struct CreateEventPayloadToolResult {
 /// Unlike `EventPayload`, this only includes variants that API clients are allowed
 /// to create. Server-enriched fields (e.g. `tool_call_name`, `tool_call_arguments`)
 /// are omitted from the inner structs.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(tag = "type", rename_all = "snake_case")]
 pub enum CreateEventPayload {
@@ -269,8 +255,7 @@ pub enum CreateEventPayload {
 /// Event payload as seen by gateway consumers.
 ///
 /// Uses `GatewayEventPayloadToolCallAuthorization` which excludes `NotAvailable` status.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum GatewayEventPayload {
@@ -328,8 +313,7 @@ impl TryFrom<EventPayload> for GatewayEventPayload {
 }
 
 /// A status update within a session.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum StatusUpdate {
@@ -344,8 +328,7 @@ pub enum StatusUpdate {
 ///
 /// This extends the interface of a standard tool call with bookkeeping information that
 /// allows the caller to send over non-llm generated parameters.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolCall {
     /// Name
     pub name: String,
@@ -357,8 +340,7 @@ pub struct EventPayloadToolCall {
 
 /// Tool call payload as seen by gateway consumers.
 /// Includes `requires_approval` which is set by the gateway based on tool whitelist config.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayEventPayloadToolCall {
     pub name: String,
     pub arguments: serde_json::Value,
@@ -385,8 +367,7 @@ impl From<EventPayloadToolCall> for GatewayEventPayloadToolCall {
 /// that do not need to be generated by LLMs (like the session id or a config hash).
 /// We should implement this as a type that has optional or mandatory fields as needed
 /// for each kind of tool
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct AutopilotSideInfo {
     /// The event ID of the ToolCall event (for correlating ToolResult).
     pub tool_call_event_id: Uuid,
@@ -402,8 +383,7 @@ pub struct AutopilotSideInfo {
 }
 
 /// Side info for optimization workflow tool (hidden from LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct OptimizationWorkflowSideInfo {
     /// Polling interval in seconds (default: 60).
     #[serde(default = "default_poll_interval_secs")]
@@ -456,8 +436,7 @@ impl AutopilotSideInfo {
 /// New producers should use `AutopilotToolResult::typed`. Consumers should use
 /// `AutopilotToolResult::value()` which returns the structured value directly
 /// or parses the legacy string as a fallback.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AutopilotToolResult {
     Typed {
@@ -495,8 +474,7 @@ impl AutopilotToolResult {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallDecisionSource {
     Ui,
@@ -506,8 +484,7 @@ pub enum ToolCallDecisionSource {
     Interrupted,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
@@ -519,8 +496,7 @@ pub struct EventPayloadToolCallAuthorization {
 }
 
 /// Minimal input payload for creating a tool call authorization event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
@@ -530,8 +506,7 @@ pub struct CreateEventPayloadToolCallAuthorization {
 /// Tool call authorization payload as seen by gateway consumers.
 ///
 /// Uses `GatewayToolCallAuthorizationStatus` which excludes `NotAvailable`.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayEventPayloadToolCallAuthorization {
     pub source: ToolCallDecisionSource,
     pub tool_call_event_id: Uuid,
@@ -556,8 +531,7 @@ impl TryFrom<EventPayloadToolCallAuthorization> for GatewayEventPayloadToolCallA
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolCallAuthorizationStatus {
     Approved,
@@ -573,8 +547,7 @@ pub enum ToolCallAuthorizationStatus {
 ///
 /// This is a narrower type than `ToolCallAuthorizationStatus` that excludes
 /// `NotAvailable` since that status is filtered out before reaching consumers.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GatewayToolCallAuthorizationStatus {
     Approved,
@@ -602,8 +575,7 @@ impl TryFrom<ToolCallAuthorizationStatus> for GatewayToolCallAuthorizationStatus
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutcome {
     Success(AutopilotToolResult),
@@ -630,8 +602,7 @@ pub enum ToolOutcome {
 // =============================================================================
 
 /// Summary statistics for a variant's performance.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct VariantSummary {
     /// Estimated mean performance.
@@ -648,8 +619,7 @@ pub struct VariantSummary {
 }
 
 /// Visualization data for a top-k evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct TopKEvaluationVisualization {
     /// Map of variant names to their summary statistics.
@@ -666,8 +636,7 @@ pub struct TopKEvaluationVisualization {
 }
 
 /// Types of visualizations that can be displayed.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum VisualizationType {
@@ -680,8 +649,7 @@ pub enum VisualizationType {
 }
 
 /// Visualization payload for an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadVisualization {
     /// The ID of the tool execution that generated this visualization.
@@ -697,16 +665,14 @@ pub struct EventPayloadVisualization {
 // =============================================================================
 
 /// Questions payload for an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadUserQuestions {
     pub questions: Vec<EventPayloadUserQuestion>,
 }
 
 /// A single question to display to the user.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadUserQuestion {
     pub id: Uuid,
@@ -719,8 +685,7 @@ pub struct EventPayloadUserQuestion {
 }
 
 /// The format of a user question.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum EventPayloadUserQuestionInner {
@@ -729,8 +694,7 @@ pub enum EventPayloadUserQuestionInner {
 }
 
 /// A free-response question with an optional pre-filled value.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FreeResponseQuestion {
     /// Pre-filled text shown in the input. The user can edit or submit as-is.
@@ -740,8 +704,7 @@ pub struct FreeResponseQuestion {
 }
 
 /// A multiple choice question with options.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MultipleChoiceQuestion {
     /// Should be 2-4 options.
@@ -755,8 +718,7 @@ pub struct MultipleChoiceQuestion {
 }
 
 /// An option in a multiple choice question.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MultipleChoiceOption {
     pub id: Uuid,
@@ -767,8 +729,7 @@ pub struct MultipleChoiceOption {
 }
 
 /// User responses payload for an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct EventPayloadUserQuestionsAnswers {
     /// Map from question UUID to response.
@@ -777,8 +738,7 @@ pub struct EventPayloadUserQuestionsAnswers {
 }
 
 /// A user's response to a question.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum UserQuestionAnswer {
@@ -788,8 +748,7 @@ pub enum UserQuestionAnswer {
 }
 
 /// A user's answer to a multiple choice question.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MultipleChoiceAnswer {
     /// IDs of the selected options.
@@ -801,8 +760,7 @@ pub struct MultipleChoiceAnswer {
 }
 
 /// A user's free-form text answer.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FreeResponseAnswer {
     pub text: String,
@@ -831,8 +789,7 @@ pub struct CreateEventRequest {
 }
 
 /// Query parameters for listing events.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListEventsParams {
     /// Maximum number of events to return. Defaults to 20.
@@ -846,8 +803,7 @@ pub struct ListEventsParams {
 }
 
 /// Query parameters for listing sessions.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListSessionsParams {
     /// Maximum number of sessions to return. Defaults to 20.
@@ -861,8 +817,7 @@ pub struct ListSessionsParams {
 }
 
 /// Query parameters for streaming events.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct StreamEventsParams {
     /// Resume streaming from this event ID (exclusive).
@@ -886,8 +841,7 @@ pub struct ApproveAllToolCallsRequest {
 // =============================================================================
 
 /// Response from creating an event.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct CreateEventResponse {
     pub event_id: Uuid,
@@ -897,8 +851,7 @@ pub struct CreateEventResponse {
 /// Internal response type - consumers should use `GatewayListEventsResponse` instead.
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct ListEventsResponse {
     pub events: Vec<Event>,
     /// The most recent `message` event with role `user` in this session.
@@ -922,8 +875,7 @@ pub struct ListEventsResponse {
 /// Response from listing events as seen by gateway consumers.
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GatewayListEventsResponse {
     pub events: Vec<GatewayEvent>,
@@ -946,16 +898,14 @@ pub struct GatewayListEventsResponse {
 }
 
 /// Response from listing sessions.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
 
 /// Query parameters for listing config writes.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListConfigWritesParams {
     /// Maximum number of config writes to return. Defaults to 20.
@@ -971,8 +921,7 @@ pub struct ListConfigWritesParams {
 /// Internal response type - consumers should use `GatewayListConfigWritesResponse` instead.
 ///
 /// Note: TS derive is needed for types that reference this, but we don't export it.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 pub struct ListConfigWritesResponse {
     pub config_writes: Vec<Event>,
 }
@@ -980,16 +929,14 @@ pub struct ListConfigWritesResponse {
 /// Response from listing config writes as seen by gateway consumers.
 ///
 /// Uses `GatewayEvent` which excludes `NotAvailable` authorization status.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GatewayListConfigWritesResponse {
     pub config_writes: Vec<GatewayEvent>,
 }
 
 /// Response from approving all pending tool calls.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ApproveAllToolCallsResponse {
     /// Number of tool calls that were approved.

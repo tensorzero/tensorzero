@@ -7,8 +7,7 @@ use url::Url;
 /// Initialized OpenAI SFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize)]
 #[ts(export, optional_fields)]
 pub struct OpenAISFTConfig {
     pub model: String,
@@ -22,8 +21,7 @@ pub struct OpenAISFTConfig {
 /// Uninitialized OpenAI SFT Config (per-job settings only).
 /// Provider-level settings (credentials) come from
 /// `provider_types.openai` defaults in the gateway config.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
@@ -132,8 +130,7 @@ impl UninitializedOpenAISFTConfig {
 
 /// Minimal job handle for OpenAI SFT.
 /// All configuration needed for polling comes from provider_types at poll time.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAISFTJobHandle {

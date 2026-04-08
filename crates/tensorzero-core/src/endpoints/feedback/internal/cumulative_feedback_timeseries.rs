@@ -20,8 +20,7 @@ pub struct GetCumulativeFeedbackTimeseriesParams {
     pub max_periods: u32,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetCumulativeFeedbackTimeseriesResponse {
     pub timeseries: Vec<CumulativeFeedbackTimeSeriesPoint>,

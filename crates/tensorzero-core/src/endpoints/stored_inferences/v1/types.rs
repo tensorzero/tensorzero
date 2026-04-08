@@ -20,8 +20,7 @@ pub use tensorzero_types::inference_filters::{
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Default, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Deserialize, Default, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct ListInferencesRequest {
@@ -149,8 +148,7 @@ impl ListInferencesRequest {
 
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct GetInferencesRequest {
@@ -173,8 +171,7 @@ pub struct GetInferencesRequest {
 }
 
 /// Response containing the requested inferences.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct GetInferencesResponse {

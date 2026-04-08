@@ -245,8 +245,7 @@ impl From<&UninitializedEmbeddingProviderConfig> for StoredEmbeddingProviderConf
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
@@ -697,8 +696,7 @@ pub trait EmbeddingProvider {
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
@@ -720,8 +718,7 @@ impl EmbeddingProviderConfig {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,

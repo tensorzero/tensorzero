@@ -105,8 +105,7 @@ impl From<&MetricConfigType> for FeedbackType {
 }
 
 // TODO(shuyangli): rename this to CreateFeedbackResponse and export
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FeedbackResponse {
     pub feedback_id: Uuid,

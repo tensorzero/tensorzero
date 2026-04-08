@@ -17,8 +17,7 @@ pub struct GetDatapointCountQueryParams {
 }
 
 /// Response containing datapoint counts
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetDatapointCountResponse {
     /// The count of datapoints for the dataset

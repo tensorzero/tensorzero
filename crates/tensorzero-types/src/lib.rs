@@ -49,8 +49,7 @@ pub use tool_failure::{NonControlToolError, ToolFailure};
 pub use usage::{ApiType, RawResponseEntry};
 use uuid::Uuid;
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
@@ -70,8 +69,7 @@ impl FunctionType {
 }
 
 /// A single resolved object type for a given UUID.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export, optional_fields)]
@@ -103,8 +101,7 @@ pub enum ResolvedObject {
 }
 
 /// Response type for the resolve_uuid endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ResolveUuidResponse {
     pub id: Uuid,

@@ -8,8 +8,7 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[export_schema]
 #[ts(export)]
 #[serde(tag = "type")]

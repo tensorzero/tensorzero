@@ -62,8 +62,7 @@ pub enum Latency {
 // Usage
 // =============================================================================
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 pub struct Usage {
     pub input_tokens: Option<u32>,
@@ -141,8 +140,7 @@ impl Usage {
 /// A single entry in the raw usage array, representing usage data from one model inference.
 /// This preserves the original provider-specific usage object for fields that TensorZero
 /// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct RawUsageEntry {
     pub model_inference_id: Uuid,
@@ -169,8 +167,7 @@ pub fn raw_usage_entries_from_value(
 // FinishReason
 // =============================================================================
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
@@ -201,8 +198,7 @@ pub enum ModelInferenceRequestJsonMode {
 // =============================================================================
 
 /// Types of content blocks that can be returned by a model provider
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -786,8 +782,7 @@ pub struct ProviderBatchInferenceResponse {
 // Tool types (no core deps)
 // =============================================================================
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
 #[ts(optional_fields)]
 pub struct ProviderToolScopeModelProvider {
@@ -796,8 +791,7 @@ pub struct ProviderToolScopeModelProvider {
     pub provider_name: Option<String>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
 #[ts(optional_fields)]
@@ -824,8 +818,7 @@ impl ProviderToolScope {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -842,8 +835,7 @@ impl std::fmt::Display for ProviderTool {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -900,8 +892,7 @@ impl OpenAICustomTool {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
@@ -911,16 +902,14 @@ pub enum OpenAICustomToolFormat {
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 pub struct OpenAIGrammarDefinition {
     pub syntax: OpenAIGrammarSyntax,
     pub definition: String,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrammarSyntax {
@@ -930,8 +919,7 @@ pub enum OpenAIGrammarSyntax {
 
 /// Records / lists the tools that were allowed in the request.
 /// Also lists how they were set (default, dynamically set).
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct AllowedTools {
@@ -939,8 +927,7 @@ pub struct AllowedTools {
     pub choice: AllowedToolsChoice,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {

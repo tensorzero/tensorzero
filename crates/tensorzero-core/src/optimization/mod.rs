@@ -42,15 +42,13 @@ pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize)]
 #[ts(export)]
 pub struct OptimizerInfo {
     pub inner: OptimizerConfig,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize)]
 #[ts(export)]
 pub enum OptimizerConfig {
     Dicl(DiclOptimizationConfig),
@@ -62,8 +60,7 @@ pub enum OptimizerConfig {
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type")]
@@ -127,8 +124,7 @@ impl OptimizationJobHandle {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
@@ -137,8 +133,7 @@ pub enum OptimizerOutput {
     Model(UninitializedModelConfig),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "status")]
 #[serde(rename_all = "snake_case")]
@@ -248,8 +243,7 @@ impl OptimizationJobInfoPyClass {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
@@ -306,8 +300,7 @@ impl TryFrom<StoredOptimizerConfig> for UninitializedOptimizerConfig {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]

@@ -12,8 +12,7 @@ use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
 use crate::utils::gateway::{AppState, SwappableAppStateData};
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct LatestFeedbackIdByMetricResponse {
     pub feedback_id_by_metric: HashMap<String, String>,

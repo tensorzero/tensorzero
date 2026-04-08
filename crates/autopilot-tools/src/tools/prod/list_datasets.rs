@@ -13,8 +13,7 @@ use tensorzero::{ListDatasetsRequest, ListDatasetsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_datasets tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct ListDatasetsToolParams {
     /// Request parameters for listing datasets (filtering, pagination).

@@ -125,8 +125,7 @@ impl DeepSeekCredentials {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct DeepSeekProvider {
     model_name: String,

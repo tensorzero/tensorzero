@@ -25,8 +25,7 @@ pub struct GetHumanFeedbackRequest {
 }
 
 /// Response for the check human feedback endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct GetHumanFeedbackResponse {
     /// The human feedback result, if it exists.

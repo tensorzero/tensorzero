@@ -19,8 +19,7 @@ use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[ts(export)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum DatapointOrderByTerm {
@@ -38,8 +37,7 @@ pub enum DatapointOrderByTerm {
 }
 
 /// Order by clauses for querying datapoints.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[ts(export)]
 #[export_schema]
 pub struct DatapointOrderBy {
@@ -52,8 +50,7 @@ pub struct DatapointOrderBy {
 }
 
 /// Request to update one or more datapoints in a dataset.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct UpdateDatapointsRequest {
@@ -62,8 +59,7 @@ pub struct UpdateDatapointsRequest {
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(ts_rs::TS)]
-#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
@@ -78,8 +74,7 @@ pub enum UpdateDatapointRequest {
 }
 
 /// An update request for a chat datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[ts(export, optional_fields)]
 #[export_schema]
 #[schemars(title = "UpdateChatDatapointRequestInternal")]
@@ -119,8 +114,7 @@ Otherwise, it will overwrite the existing tags.")]
 }
 
 /// A request to update the dynamic tool parameters of a datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, Default, Clone, PartialEq, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct UpdateDynamicToolParamsRequest {
@@ -164,8 +158,7 @@ parallel tool calls). If specified as a value, it will be set to the provided va
 }
 
 /// An update request for a JSON datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[ts(export, optional_fields)]
 #[export_schema]
 #[schemars(title = "UpdateJsonDatapointRequestInternal")]
@@ -202,8 +195,7 @@ inference succeeded but model didn't output relevant content blocks). Otherwise,
 /// A request to update the output of a JSON datapoint.
 ///
 /// We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct JsonDatapointOutputUpdate {
@@ -215,8 +207,7 @@ pub struct JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Default, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Default, Deserialize, Clone, PartialEq, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct DatapointMetadataUpdate {
@@ -230,8 +221,7 @@ be set to the provided value.")]
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct UpdateDatapointsResponse {
@@ -242,8 +232,7 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct UpdateDatapointsMetadataRequest {
@@ -252,8 +241,7 @@ pub struct UpdateDatapointsMetadataRequest {
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct UpdateDatapointMetadataRequest {
@@ -267,8 +255,7 @@ pub struct UpdateDatapointMetadataRequest {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct ListDatapointsRequest {
@@ -314,8 +301,7 @@ pub struct ListDatapointsRequest {
 
 /// Request to get specific datapoints by their IDs.
 /// Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct GetDatapointsRequest {
@@ -324,8 +310,7 @@ pub struct GetDatapointsRequest {
 }
 
 /// Response containing the requested datapoints.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct GetDatapointsResponse {
@@ -334,8 +319,7 @@ pub struct GetDatapointsResponse {
 }
 
 /// Request to create datapoints from inferences.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 pub struct CreateDatapointsFromInferenceRequest {
     #[serde(flatten)]
@@ -344,8 +328,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
-#[derive(ts_rs::TS)]
-#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -374,8 +357,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 }
 
 /// Response from creating datapoints.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct CreateDatapointsResponse {
@@ -385,8 +367,7 @@ pub struct CreateDatapointsResponse {
 
 /// Request to create datapoints manually.
 /// Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct CreateDatapointsRequest {
@@ -395,8 +376,7 @@ pub struct CreateDatapointsRequest {
 }
 
 /// A tagged request to create a single datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[export_schema]
@@ -411,8 +391,7 @@ pub enum CreateDatapointRequest {
 }
 
 /// A request to create a chat datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export, optional_fields)]
 pub struct CreateChatDatapointRequest {
@@ -445,8 +424,7 @@ pub struct CreateChatDatapointRequest {
 }
 
 /// A request to create a JSON datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export, optional_fields)]
 pub struct CreateJsonDatapointRequest {
@@ -478,8 +456,7 @@ pub struct CreateJsonDatapointRequest {
 }
 
 /// Request to delete datapoints from a dataset.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct DeleteDatapointsRequest {
@@ -488,8 +465,7 @@ pub struct DeleteDatapointsRequest {
 }
 
 /// Response containing the number of deleted datapoints.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct DeleteDatapointsResponse {
@@ -499,8 +475,7 @@ pub struct DeleteDatapointsResponse {
 
 /// Request to list datasets with optional filtering and pagination.
 /// Used by the `GET /internal/datasets` endpoint.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct ListDatasetsRequest {
@@ -516,8 +491,7 @@ pub struct ListDatasetsRequest {
 }
 
 /// Metadata for a single dataset.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct DatasetMetadata {
@@ -530,8 +504,7 @@ pub struct DatasetMetadata {
 }
 
 /// Response containing a list of datasets.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct ListDatasetsResponse {

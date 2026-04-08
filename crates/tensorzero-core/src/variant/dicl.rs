@@ -53,8 +53,7 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
@@ -195,8 +194,7 @@ impl DiclConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {

@@ -31,8 +31,7 @@ pub struct InferenceMetadataQueryParams {
 }
 
 /// Response containing a list of inference metadata
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ListInferenceMetadataResponse {
     pub inference_metadata: Vec<InferenceMetadata>,

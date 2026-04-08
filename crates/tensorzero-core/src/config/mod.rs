@@ -166,8 +166,7 @@ pub struct Config {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct NonStreamingTimeouts {
@@ -176,8 +175,7 @@ pub struct NonStreamingTimeouts {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct StreamingTimeouts {
@@ -190,8 +188,7 @@ pub struct StreamingTimeouts {
 /// Configures the timeouts for both streaming and non-streaming requests.
 /// This can be attached to various other configs (e.g. variants, models, model providers)
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct TimeoutsConfig {
@@ -721,8 +718,7 @@ impl MetricConfigType {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
@@ -2437,8 +2433,7 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
 #[ts(export, optional_fields)]
 pub struct SchemaData {
     #[serde(flatten)]
@@ -2841,8 +2836,7 @@ impl UninitializedFunctionConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(rename_all = "snake_case")]
 // We don't use `#[serde(deny_unknown_fields)]` here - it needs to go on 'UninitializedVariantConfig',
@@ -2856,8 +2850,7 @@ pub struct UninitializedVariantInfo {
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, TensorZeroDeserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, TensorZeroDeserialize, Serialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -2983,8 +2976,7 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct PathWithContents {
     #[ts(type = "string")]

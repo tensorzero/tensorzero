@@ -10,8 +10,7 @@ use crate::model::ModelTable;
 /// A validated namespace identifier.
 ///
 /// Namespace identifiers must be non-empty strings.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, ts_rs::TS)]
 #[ts(export, type = "string")]
 pub struct Namespace(String);
 

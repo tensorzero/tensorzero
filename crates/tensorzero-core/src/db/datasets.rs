@@ -16,8 +16,7 @@ use crate::error::Error;
 /// Default value for `allow_stale` in `get_datapoint` when not specified.
 pub const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MetricFilter {
     pub metric: String,
@@ -27,8 +26,7 @@ pub struct MetricFilter {
     pub join_on: MetricConfigLevel,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum DatasetOutputSource {
@@ -60,8 +58,7 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Deserialize)]
+#[derive(ts_rs::TS, Deserialize)]
 #[ts(export, optional_fields)]
 /// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {

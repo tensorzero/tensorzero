@@ -105,8 +105,7 @@ pub struct WriteConfigRequest {
 }
 
 /// Response from writing a config snapshot.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]
 pub struct WriteConfigResponse {
     /// The hash identifying this config version.

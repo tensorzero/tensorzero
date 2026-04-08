@@ -35,8 +35,7 @@ use super::config::DynamicToolConfig;
 /// Notably, provider tools (like OpenAI websearch) are not part of this enum
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
-#[derive(ts_rs::TS)]
-#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 #[strum(serialize_all = "snake_case")]
@@ -191,8 +190,7 @@ impl Tool {
 /// and return the result on the next turn (a ToolCallResult).
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]

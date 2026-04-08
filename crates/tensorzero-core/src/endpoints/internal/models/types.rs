@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
 
 /// Response containing the count of distinct models used.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct CountModelsResponse {
     /// The count of distinct models used.
@@ -23,8 +22,7 @@ pub struct GetModelUsageQueryParams {
 }
 
 /// Response containing model usage timeseries data.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetModelUsageResponse {
     /// The model usage data points.
@@ -52,8 +50,7 @@ pub struct GetCacheStatisticsQueryParams {
 }
 
 /// Response containing cache statistics timeseries data.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetCacheStatisticsResponse {
     /// The cache statistics data points.
@@ -61,8 +58,7 @@ pub struct GetCacheStatisticsResponse {
 }
 
 /// Response containing model latency quantile data.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetModelLatencyResponse {
     /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.

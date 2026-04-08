@@ -10,8 +10,7 @@ use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries}
 use crate::error::Error;
 use crate::utils::gateway::{AppState, SwappableAppStateData};
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetFeedbackBoundsResponse {
     #[ts(optional)]

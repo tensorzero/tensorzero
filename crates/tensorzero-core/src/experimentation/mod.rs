@@ -83,8 +83,7 @@ fn check_duplicates_across(
 /// Runtime experimentation config — only two variants (plus test-only AlwaysFails).
 /// Legacy types (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted to these
 /// during `load()`.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
@@ -99,8 +98,7 @@ pub enum ExperimentationConfig {
 }
 
 /// Holds the base experimentation config plus namespace-specific configs (loaded version).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 #[derive(Default)]
 pub struct ExperimentationConfigWithNamespaces {
@@ -157,8 +155,7 @@ pub enum UninitializedExperimentationConfig {
 
 /// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
 /// This is the type used in the TOML config to allow both a default config and per-namespace overrides.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[derive(ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct UninitializedExperimentationConfigWithNamespaces {
     /// The base experimentation config (type, candidate_variants, etc.)

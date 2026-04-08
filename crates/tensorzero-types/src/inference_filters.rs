@@ -11,8 +11,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_derive::export_schema;
 
 /// The ordering direction.
-#[derive(ts_rs::TS)]
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(ts_rs::TS, Copy, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[ts(export)]
 pub enum OrderDirection {
     #[serde(rename = "ascending")]
@@ -37,8 +36,7 @@ impl OrderDirection {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct FloatMetricFilter {
     pub metric_name: String,
@@ -46,8 +44,7 @@ pub struct FloatMetricFilter {
     pub comparison_operator: FloatComparisonOperator,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
@@ -55,8 +52,7 @@ pub struct BooleanMetricFilter {
 }
 
 /// Filter by tag key-value pair.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct TagFilter {
     pub key: String,
@@ -65,8 +61,7 @@ pub struct TagFilter {
 }
 
 /// Filter by timestamp.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct TimeFilter {
     #[ts(type = "Date")]
@@ -76,8 +71,7 @@ pub struct TimeFilter {
 }
 
 /// Comparison operators for float metrics.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -108,8 +102,7 @@ impl FloatComparisonOperator {
 }
 
 /// Comparison operators for timestamps.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
@@ -140,8 +133,7 @@ impl TimeComparisonOperator {
 }
 
 /// Comparison operators for tag filters.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
@@ -160,8 +152,7 @@ impl TagComparisonOperator {
 }
 
 /// Filter by whether an inference has a demonstration.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[ts(export)]
 pub struct DemonstrationFeedbackFilter {
     pub has_demonstration: bool,
@@ -169,8 +160,7 @@ pub struct DemonstrationFeedbackFilter {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[ts(export)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {
@@ -197,8 +187,7 @@ pub enum OrderByTerm {
 }
 
 /// Order by clauses for querying inferences.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[ts(export)]
 pub struct OrderBy {
     /// The property to order by.
@@ -212,8 +201,7 @@ pub struct OrderBy {
 /// Filters for querying inferences.
 /// NOTE: This is stored in DB. Please do not make breaking changes.
 /// If we have to, we should make a separate storage type and convert.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]

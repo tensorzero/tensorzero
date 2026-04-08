@@ -215,8 +215,7 @@ pub trait FeedbackQueries {
     ) -> Result<(), Error>;
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
@@ -229,8 +228,7 @@ pub struct FeedbackByVariant {
     pub count: u64,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
@@ -245,8 +243,7 @@ pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     pub count: u64,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct CumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
@@ -267,8 +264,7 @@ pub struct CumulativeFeedbackTimeSeriesPoint {
 }
 
 // Feedback by target ID types
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct BooleanMetricFeedbackRow {
     pub id: Uuid,
@@ -279,8 +275,7 @@ pub struct BooleanMetricFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FloatMetricFeedbackRow {
     pub id: Uuid,
@@ -291,8 +286,7 @@ pub struct FloatMetricFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct CommentFeedbackRow {
     pub id: Uuid,
@@ -302,8 +296,7 @@ pub struct CommentFeedbackRow {
     pub tags: std::collections::HashMap<String, String>,
     pub timestamp: DateTime<Utc>,
 }
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum CommentTargetType {
@@ -311,8 +304,7 @@ pub enum CommentTargetType {
     Episode,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct DemonstrationFeedbackRow {
     pub id: Uuid,
@@ -322,8 +314,7 @@ pub struct DemonstrationFeedbackRow {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -334,8 +325,7 @@ pub enum FeedbackRow {
     Demonstration(DemonstrationFeedbackRow),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct FeedbackBounds {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -345,8 +335,7 @@ pub struct FeedbackBounds {
     pub by_type: FeedbackBoundsByType,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize, Deserialize)]
 #[ts(export)]
 pub struct FeedbackBoundsByType {
     pub boolean: TableBounds,
@@ -355,8 +344,7 @@ pub struct FeedbackBoundsByType {
     pub demonstration: TableBounds,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MetricWithFeedback {
     pub function_name: String,
@@ -369,8 +357,7 @@ pub struct MetricWithFeedback {
     pub feedback_count: u32,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum MetricType {
@@ -404,8 +391,7 @@ pub struct GetVariantPerformanceParams<'a> {
 
 /// Row returned from the variant performance query.
 /// Contains statistics for each (variant, time_period) combination.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct VariantPerformanceRow {
     /// Start datetime of the period in RFC 3339 format.

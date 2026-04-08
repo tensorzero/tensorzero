@@ -19,8 +19,7 @@ use tensorzero_core::optimization::{
 use tensorzero_optimizers::endpoints::{LaunchOptimizationWorkflowParams, OptimizationDataSource};
 
 /// Parameters for the launch_optimization_workflow tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export, optional_fields)]
 pub struct LaunchOptimizationWorkflowToolParams {
     /// The function name to optimize.
@@ -58,8 +57,7 @@ pub struct LaunchOptimizationWorkflowToolParams {
 }
 
 /// Response from the optimization workflow tool.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct LaunchOptimizationWorkflowToolOutput {
     /// The final job info (Completed or Failed).

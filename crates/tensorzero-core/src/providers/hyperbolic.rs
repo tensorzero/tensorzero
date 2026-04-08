@@ -47,8 +47,7 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Hyperbolic";
 pub const PROVIDER_TYPE: &str = "hyperbolic";
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct HyperbolicProvider {
     model_name: String,

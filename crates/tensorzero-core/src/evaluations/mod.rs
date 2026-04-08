@@ -50,8 +50,7 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
@@ -62,8 +61,7 @@ pub struct InferenceEvaluationConfig {
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -72,8 +70,7 @@ pub enum EvaluationConfig {
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -87,8 +84,7 @@ pub enum EvaluatorConfig {
 
 /// Minimal function configuration for evaluation purposes.
 /// Contains only the information needed to validate output schemas during evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export)]
 pub enum EvaluationFunctionConfig {
@@ -161,8 +157,7 @@ impl EvaluatorConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -173,8 +168,7 @@ pub struct ExactMatchConfig {
 }
 
 /// Evaluator that checks whether an inference's tool calls match the expected behavior.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export, optional_fields)]
 #[serde(tag = "behavior")] // NOTE: custom tag for human-readable config
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -208,8 +202,7 @@ impl std::fmt::Display for ToolUseConfig {
 /// At least one of `must_match` or `must_not_match` must be specified.
 /// If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct RegexConfig {
@@ -220,8 +213,7 @@ pub struct RegexConfig {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
@@ -254,8 +246,7 @@ impl LLMJudgeConfig {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
@@ -263,8 +254,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
@@ -272,8 +262,7 @@ pub enum LLMJudgeInputFormat {
     Messages,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOutputType {
@@ -290,8 +279,7 @@ impl From<LLMJudgeOutputType> for MetricConfigType {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOptimize {
@@ -858,8 +846,7 @@ impl UninitializedEvaluatorConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[derive(ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]

@@ -35,8 +35,7 @@ use tensorzero_core::utils::gateway::{
 // =============================================================================
 
 /// Identifies the evaluation to run.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize)]
 #[ts(export)]
 #[serde(untagged)]
 pub enum EvaluationIdentifier {
@@ -57,8 +56,7 @@ pub enum EvaluationIdentifier {
 }
 
 /// Request body for running an evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct RunEvaluationRequest {
     /// How the evaluation is configured: either explicit config or named evaluators.

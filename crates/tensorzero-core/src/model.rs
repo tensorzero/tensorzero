@@ -111,8 +111,7 @@ pub(crate) fn record_usage_metrics(usage: &Usage) {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -124,8 +123,7 @@ pub struct ModelConfig {
     pub namespace: Option<Namespace>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
@@ -1378,8 +1376,7 @@ fn wrap_provider_stream(
     )
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
@@ -1426,8 +1423,7 @@ impl From<&UninitializedModelProvider> for StoredModelProvider {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct ModelProvider {
     pub name: Arc<str>,
@@ -1702,8 +1698,7 @@ impl ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -3133,8 +3128,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
 #[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
@@ -3151,8 +3145,7 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(ts_rs::TS)]
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
@@ -3186,8 +3179,7 @@ impl CredentialLocationWithFallback {
 
 /// Credential location that also allows hardcoded string values.
 /// Used for non-sensitive fields like AWS region and endpoint_url.
-#[derive(ts_rs::TS)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
 #[ts(export)]
 pub enum CredentialLocationOrHardcoded {
     /// Hardcoded value (e.g., region = "us-east-1")
@@ -3247,8 +3239,7 @@ impl Serialize for CredentialLocationOrHardcoded {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
 #[ts(export)]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL

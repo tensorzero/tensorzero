@@ -13,8 +13,7 @@ use tensorzero::GetConfigResponse;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_config tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct GetConfigToolParams {}
 

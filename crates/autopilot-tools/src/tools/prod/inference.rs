@@ -18,8 +18,7 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the inference tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct InferenceToolParams {
     /// The function name to call. Exactly one of function_name or model_name required.

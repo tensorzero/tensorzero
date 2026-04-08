@@ -61,8 +61,7 @@ fn default_inference_cache() -> CacheEnabledMode {
 }
 
 /// Parameters for running an evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct RunEvaluationParams {
     /// Name of the evaluation to run (legacy named-evaluation path).
@@ -122,8 +121,7 @@ pub struct RunEvaluationParams {
 }
 
 /// Result for a single datapoint evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct DatapointResult {
     /// ID of the datapoint that was evaluated.
@@ -142,8 +140,7 @@ pub struct DatapointResult {
 }
 
 /// Response from running an evaluation.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[ts(export)]
 pub struct RunEvaluationResponse {
     /// Unique identifier for this evaluation run.

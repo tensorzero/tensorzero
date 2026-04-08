@@ -13,8 +13,7 @@ use serde_json::{Map, Value};
 use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[ts(export)]
 #[serde(transparent)]
 pub struct Arguments(
@@ -24,8 +23,7 @@ pub struct Arguments(
     pub Map<String, Value>,
 );
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 #[export_schema]
@@ -35,8 +33,7 @@ pub struct Template {
     pub arguments: Arguments,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(untagged)]
 #[ts(export)]
 #[export_schema]
@@ -54,8 +51,7 @@ pub enum System {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -80,8 +76,7 @@ impl Text {
 
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -106,8 +101,7 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]
@@ -228,8 +222,7 @@ impl Unknown {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type")]
@@ -241,8 +234,7 @@ pub enum ThoughtSummaryBlock {
 }
 
 /// Struct that represents a model's reasoning
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export, optional_fields)]
 // Note: We don't use `get_all` because `extra_data` is `Value` which doesn't implement `IntoPyObject`.
 // The fields are exposed via a manual `#[pymethods]` impl below.

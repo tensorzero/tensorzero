@@ -17,8 +17,7 @@ pub struct GetFeedbackByTargetIdParams {
     pub limit: Option<u32>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetFeedbackByTargetIdResponse {
     pub feedback: Vec<FeedbackRow>,

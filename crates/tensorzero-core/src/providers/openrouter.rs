@@ -89,8 +89,7 @@ type PreparedOpenRouterToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct OpenRouterProvider {
     model_name: String,

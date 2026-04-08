@@ -164,8 +164,8 @@ impl CacheQueries for DisabledCacheQueries {
     }
 }
 
-#[derive(ts_rs::TS)]
 #[derive(
+    ts_rs::TS,
     Clone,
     Copy,
     Debug,
@@ -198,8 +198,7 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 pub struct CacheParamsOptions {
     #[serde(default)]

@@ -21,8 +21,7 @@ pub struct GetRunMetadataParams {
 }
 
 /// Metric metadata from an evaluation run.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct RunMetricMetadata {
     pub name: String,
@@ -35,8 +34,7 @@ pub struct RunMetricMetadata {
 }
 
 /// Metadata for a single evaluation run.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export, optional_fields)]
 pub struct EvaluationRunMetadata {
     pub evaluation_name: String,
@@ -47,8 +45,7 @@ pub struct EvaluationRunMetadata {
 }
 
 /// Response containing evaluation run metadata, keyed by run ID.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct GetEvaluationRunMetadataResponse {
     pub metadata: HashMap<Uuid, EvaluationRunMetadata>,

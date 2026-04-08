@@ -13,8 +13,7 @@ use tensorzero::{GetInferencesRequest, GetInferencesResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_inferences tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct GetInferencesToolParams {
     /// Request parameters for getting inferences by ID.

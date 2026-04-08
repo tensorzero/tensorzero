@@ -14,8 +14,7 @@ use tensorzero::{CreateDatapointRequest, CreateDatapointsResponse};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the create_datapoints tool (visible to LLM).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct CreateDatapointsToolParams {
     /// The name of the dataset to create datapoints in.

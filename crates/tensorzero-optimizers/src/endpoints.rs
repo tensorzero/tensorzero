@@ -39,8 +39,7 @@ use crate::{JobHandle, Optimizer};
 // TODO(shuyangli): revisit this and see if it should be u32::MAX.
 const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
@@ -52,8 +51,7 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[serde(untagged)]
 #[ts(export, optional_fields)]
 pub enum OptimizationDataSource {
@@ -61,8 +59,7 @@ pub enum OptimizationDataSource {
     Dataset(DatasetDataSource),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 pub struct InferencesDataSource {
@@ -79,8 +76,7 @@ pub struct InferencesDataSource {
     pub offset: Option<u32>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct DatasetDataSource {
@@ -269,8 +265,7 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Deserialize)]
+#[derive(ts_rs::TS, Debug, Deserialize)]
 #[ts(export)]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,

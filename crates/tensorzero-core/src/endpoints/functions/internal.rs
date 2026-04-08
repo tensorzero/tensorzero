@@ -23,8 +23,7 @@ pub struct MetricsQueryParams {
 }
 
 /// Response containing metrics with feedback statistics
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct MetricsWithFeedbackResponse {
     /// Metrics with feedback statistics
@@ -104,8 +103,7 @@ pub struct VariantPerformancesQueryParams {
 }
 
 /// Response containing variant performance statistics
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct VariantPerformancesResponse {
     /// Performance statistics for each (variant, time_period) combination

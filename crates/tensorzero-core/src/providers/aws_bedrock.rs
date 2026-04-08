@@ -82,8 +82,7 @@ fn build_bearer_auth_headers(
 }
 
 /// AWS Bedrock provider using direct HTTP calls.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct AWSBedrockProvider {
     model_id: String,

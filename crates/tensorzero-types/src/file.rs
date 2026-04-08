@@ -14,8 +14,7 @@ use tensorzero_derive::export_schema;
 use url::Url;
 
 /// Detail level for input images (affects fidelity and token cost)
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 #[export_schema]
@@ -26,8 +25,7 @@ pub enum Detail {
 }
 
 /// A file already encoded as base64
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 #[export_schema]
@@ -200,8 +198,7 @@ impl Base64File {
 }
 
 /// Like `Base64File`, but without the data field.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
@@ -255,8 +252,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 }
 
 /// A file that can be located at a URL
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct UrlFile {
@@ -302,8 +298,7 @@ impl<'de> Deserialize<'de> for UrlFile {
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct ObjectStoragePointer {
@@ -364,8 +359,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct ObjectStorageFile {
@@ -376,8 +370,7 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[export_schema]
 pub struct ObjectStorageError {
@@ -388,8 +381,7 @@ pub struct ObjectStorageError {
 }
 
 /// A file for an inference or a datapoint.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
 #[export_schema]

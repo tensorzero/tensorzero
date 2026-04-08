@@ -49,8 +49,7 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
@@ -413,8 +412,7 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
 #[ts(export)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
@@ -443,8 +441,7 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
 #[ts(export)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config

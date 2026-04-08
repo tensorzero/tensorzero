@@ -1691,8 +1691,7 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
@@ -1700,8 +1699,7 @@ pub enum InferenceResponse {
     Json(JsonInferenceResponse),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
@@ -1723,8 +1721,7 @@ pub struct ChatInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,

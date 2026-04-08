@@ -108,8 +108,7 @@ pub use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, PartialEq, Serialize)]
 #[ts(export)]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<FunctionToolConfig>,

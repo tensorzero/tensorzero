@@ -47,8 +47,7 @@ use super::{
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
@@ -62,8 +61,7 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Default, Serialize)]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
 #[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
@@ -207,8 +205,7 @@ impl ChatCompletionConfig {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
@@ -217,16 +214,14 @@ pub struct UninitializedInputWrappers {
     pub system: Option<ResolvedTomlPathData>,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
     pub path: ResolvedTomlPathData,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
@@ -236,8 +231,7 @@ pub struct UninitializedChatTemplates {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {

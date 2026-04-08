@@ -23,8 +23,7 @@ use super::{VariantSampler, check_duplicates_across, check_duplicates_within};
 /// or a map of variant names to explicit weights.
 ///
 /// `fallback_variants` is optional and defaults to an empty list.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 pub struct StaticExperimentationConfig {
     pub candidate_variants: WeightedVariants,

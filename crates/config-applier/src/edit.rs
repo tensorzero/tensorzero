@@ -6,8 +6,7 @@ use tensorzero_core::experimentation::UninitializedExperimentationConfig;
 use tensorzero_derive::TensorZeroDeserialize;
 
 /// Represents a targeted edit operation to apply to a TensorZero config.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize, JsonSchema)]
 #[ts(export)]
 #[serde(tag = "operation")]
 #[serde(rename_all = "snake_case")]
@@ -18,8 +17,7 @@ pub enum EditPayload {
     UpsertEvaluator(UpsertEvaluatorPayload),
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct UpsertVariantPayload {
     pub function_name: String,
@@ -27,16 +25,14 @@ pub struct UpsertVariantPayload {
     pub variant: UninitializedVariantInfo,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct UpsertExperimentationPayload {
     pub function_name: String,
     pub experimentation: UninitializedExperimentationConfig,
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
 pub struct UpsertEvaluationPayload {
     pub evaluation_name: String,

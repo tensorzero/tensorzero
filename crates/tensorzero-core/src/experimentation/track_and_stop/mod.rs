@@ -80,8 +80,7 @@ mod check_stopping;
 mod error;
 pub mod estimate_optimal_probabilities;
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct TrackAndStopConfig {
     metric: String,
@@ -155,8 +154,7 @@ pub fn compute_track_and_stop_state(
 /// Public representation of Track-and-Stop state for external callers (tests, UI, monitoring).
 /// This type exposes sampling probabilities but hides internal implementation details like
 /// the `Nursery` struct and atomic counters.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -186,8 +184,7 @@ pub enum TrackAndStopState {
 /// variant gets sampled until it graduates to the bandit phase.
 ///
 /// When serialized for external use, only the variant list is exposed (not the atomic counter).
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct Nursery {
     pub variants: Vec<String>,
@@ -264,8 +261,7 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[derive(ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct UninitializedTrackAndStopExperimentationConfig {
     pub(crate) metric: String,

@@ -11,8 +11,7 @@ pub fn nano_cost_to_cost(nano_cost: u64) -> f64 {
     nano_cost as f64 / NANO_DOLLARS_PER_DOLLAR as f64
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum RateLimitResource {
@@ -120,8 +119,7 @@ impl Serialize for FailedRateLimit {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
@@ -130,8 +128,7 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(try_from = "Vec<RateLimitingConfigScope>")]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
@@ -199,8 +196,7 @@ impl std::ops::Index<usize> for RateLimitingConfigScopes {
 // and add a test each time that ensures the sort order is maintained as further changes are made.
 //
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[ts(export)]
 #[serde(untagged)]
 pub enum RateLimitingConfigScope {
@@ -210,8 +206,7 @@ pub enum RateLimitingConfigScope {
     // function_name = "my_function"
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[ts(export)]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
@@ -233,8 +228,7 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[ts(export)]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
@@ -251,8 +245,7 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[ts(export)]
 pub enum TagValueScope {
     Concrete(String),
@@ -290,8 +283,7 @@ impl<'de> Deserialize<'de> for TagValueScope {
     }
 }
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[ts(export)]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),

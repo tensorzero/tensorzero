@@ -72,8 +72,7 @@ type PreparedMistralToolsResult<'a> = (
     Option<bool>,
 );
 
-#[derive(ts_rs::TS)]
-#[derive(Debug, Serialize)]
+#[derive(ts_rs::TS, Debug, Serialize)]
 #[ts(export)]
 pub struct MistralProvider {
     model_name: String,

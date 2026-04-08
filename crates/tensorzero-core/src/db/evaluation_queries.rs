@@ -135,8 +135,7 @@ pub struct EvaluationUsageStatisticsRow {
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
 /// system to use human feedback instead of running automated evaluators.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, serde::Serialize)]
 #[ts(export)]
 pub struct InferenceEvaluationHumanFeedbackRow {
     /// The human-provided evaluation value (JSON).
@@ -183,8 +182,7 @@ pub(crate) struct RawEvaluationResultRow {
 }
 
 /// Evaluation result for a chat function.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 pub struct ChatEvaluationResultRow {
     pub inference_id: Uuid,
@@ -238,8 +236,7 @@ pub struct ChatEvaluationResultRow {
 }
 
 /// Evaluation result for a JSON function.
-#[derive(ts_rs::TS)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
 #[ts(export, optional_fields)]
 pub struct JsonEvaluationResultRow {
     pub inference_id: Uuid,
@@ -293,8 +290,7 @@ pub struct JsonEvaluationResultRow {
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]

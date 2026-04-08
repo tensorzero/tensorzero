@@ -19,8 +19,7 @@ use uuid::Uuid;
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
-#[derive(ts_rs::TS)]
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, Default)]
 #[ts(export, optional_fields)]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
