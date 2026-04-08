@@ -52,7 +52,7 @@ use std::path::{Component, Path, PathBuf};
 use toml_edit::{Item, Value};
 
 use crate::error::ConfigApplierError;
-use tensorzero_config_paths::{PathComponent, TARGET_PATH_COMPONENTS};
+use tensorzero_config_paths::{TomlPathVisitor, WalkError, walk_target_paths_from_prefix};
 
 // ============================================================================
 // Public Types
@@ -70,6 +70,67 @@ pub struct FileToWrite {
 // ============================================================================
 // Public Functions
 // ============================================================================
+
+impl From<WalkError> for ConfigApplierError {
+    fn from(err: WalkError) -> Self {
+        ConfigApplierError::Path {
+            message: err.to_string(),
+        }
+    }
+}
+
+/// Visitor that extracts resolved-path tables into [`FileToWrite`] entries and rewrites
+/// the matching TOML nodes as relative path strings.
+struct ExtractResolvedPathsVisitor<'a> {
+    glob_base: &'a Path,
+    toml_file_dir: &'a Path,
+    files: Vec<FileToWrite>,
+}
+
+impl<'a> TomlPathVisitor<Item> for ExtractResolvedPathsVisitor<'a> {
+    type Error = ConfigApplierError;
+
+    fn visit_leaf(&mut self, value: &mut Item, path: &[String]) -> Result<(), Self::Error> {
+        let Some((terminal_key, parent_path)) = path.split_last() else {
+            return Ok(());
+        };
+        let key_path = path.join("/");
+
+        let Some((content, _original_path)) = extract_resolved_path_data(value, &key_path)? else {
+            return Ok(());
+        };
+
+        let parent_dir: PathBuf = parent_path.iter().collect();
+        let base_dir = self.glob_base.join(&parent_dir);
+        let absolute_path = canonical_file_path(&base_dir, terminal_key);
+        let relative_path = compute_relative_path(self.toml_file_dir, &absolute_path)?;
+
+        // Replace the table with a simple string value
+        *value = Item::Value(Value::from(relative_path));
+
+        self.files.push(FileToWrite {
+            absolute_path,
+            content,
+        });
+        Ok(())
+    }
+
+    fn visit_wildcard_key(&mut self, path: &[String]) -> Result<(), Self::Error> {
+        // TOML table keys are user-controlled and could contain sequences like "../".
+        // Validate the newly-pushed wildcard key to prevent path traversal attacks.
+        if let Some(key) = path.last() {
+            validate_path_component(key, &path.join("/"))?;
+        }
+        Ok(())
+    }
+
+    fn visit_non_table(&mut self, _path: &[String], _found_type: &str) -> Result<(), Self::Error> {
+        // Tolerate non-table nodes mid-walk: the user's TOML may legitimately lack subtrees
+        // that the pattern would traverse (e.g. no variants defined), so silently skip them
+        // instead of erroring.
+        Ok(())
+    }
+}
 
 /// Extract all resolved paths from an item and rewrite them as relative path references.
 ///
@@ -96,26 +157,17 @@ pub fn extract_resolved_paths(
     toml_file_dir: &Path,
     matched_prefix: &[&str],
 ) -> Result<Vec<FileToWrite>, ConfigApplierError> {
-    let mut files = Vec::new();
+    let mut visitor = ExtractResolvedPathsVisitor {
+        glob_base,
+        toml_file_dir,
+        files: Vec::new(),
+    };
 
-    // Build the base path from the prefix
-    let base_path: PathBuf = matched_prefix.iter().collect();
+    // Walk all target-path patterns matching this prefix. `matched_prefix` is prepended to the
+    // path seen by the visitor so file paths are computed against the full config-tree position.
+    walk_target_paths_from_prefix(item, matched_prefix, &mut visitor)?;
 
-    // Find all patterns matching this prefix and process their suffixes
-    for pattern in TARGET_PATH_COMPONENTS {
-        if pattern_matches_prefix(pattern, matched_prefix) && pattern.len() > matched_prefix.len() {
-            let suffix = &pattern[matched_prefix.len()..];
-            files.extend(process_pattern_suffix(
-                item,
-                suffix,
-                &base_path,
-                glob_base,
-                toml_file_dir,
-            )?);
-        }
-    }
-
-    Ok(files)
+    Ok(visitor.files)
 }
 
 /// Validates that a name is safe to use as a path component.
@@ -166,111 +218,6 @@ pub fn compute_relative_path(
             message: format!("Path contains invalid UTF-8: {}", to_file.display()),
         })
         .map(|s| s.to_string())
-}
-
-// ============================================================================
-// Private: Pattern Matching
-// ============================================================================
-
-/// Check if a pattern's first N components match a given prefix.
-///
-/// Literals must match exactly, wildcards match any prefix component.
-fn pattern_matches_prefix(pattern: &[PathComponent], prefix: &[&str]) -> bool {
-    if pattern.len() < prefix.len() {
-        return false;
-    }
-    pattern
-        .iter()
-        .zip(prefix.iter())
-        .all(|(component, key)| match component {
-            PathComponent::Wildcard => true,
-            PathComponent::Literal(lit) => *lit == *key,
-        })
-}
-
-// ============================================================================
-// Private: Tree Walking
-// ============================================================================
-
-/// Process a pattern suffix recursively, handling wildcards by enumerating actual keys.
-fn process_pattern_suffix(
-    item: &mut Item,
-    pattern_suffix: &[PathComponent],
-    path_so_far: &Path,
-    glob_base: &Path,
-    toml_file_dir: &Path,
-) -> Result<Vec<FileToWrite>, ConfigApplierError> {
-    let mut files = Vec::new();
-
-    let Some(first) = pattern_suffix.first() else {
-        return Ok(files);
-    };
-
-    match first {
-        PathComponent::Literal(key) => {
-            let Some(table) = item.as_table_mut() else {
-                return Ok(files);
-            };
-            let Some(nested_item) = table.get_mut(key) else {
-                return Ok(files);
-            };
-
-            if pattern_suffix.len() == 1 {
-                // Terminal element - check for resolved path data
-                let key_path = path_so_far.join(key).display().to_string();
-                if let Some((content, _original_path)) =
-                    extract_resolved_path_data(nested_item, &key_path)?
-                {
-                    let base_dir = glob_base.join(path_so_far);
-                    let absolute_path = canonical_file_path(&base_dir, key);
-                    let relative_path = compute_relative_path(toml_file_dir, &absolute_path)?;
-
-                    // Replace the table with a simple string value
-                    *nested_item = Item::Value(Value::from(relative_path));
-
-                    files.push(FileToWrite {
-                        absolute_path,
-                        content,
-                    });
-                }
-            } else {
-                // More components to process - recurse
-                let new_path = path_so_far.join(key);
-                files.extend(process_pattern_suffix(
-                    nested_item,
-                    &pattern_suffix[1..],
-                    &new_path,
-                    glob_base,
-                    toml_file_dir,
-                )?);
-            }
-        }
-        PathComponent::Wildcard => {
-            let Some(table) = item.as_table_mut() else {
-                return Ok(files);
-            };
-
-            let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-            for key in keys {
-                // Validate the key to prevent path traversal attacks.
-                // TOML table keys are user-controlled and could contain sequences like "../".
-                validate_path_component(&key, &path_so_far.join(&key).display().to_string())?;
-
-                if let Some(nested_item) = table.get_mut(&key) {
-                    let new_path = path_so_far.join(&key);
-                    files.extend(process_pattern_suffix(
-                        nested_item,
-                        &pattern_suffix[1..],
-                        &new_path,
-                        glob_base,
-                        toml_file_dir,
-                    )?);
-                }
-            }
-        }
-    }
-
-    Ok(files)
 }
 
 // ============================================================================
@@ -508,60 +455,6 @@ mod tests {
             result,
             PathBuf::from("/config/functions/my_func/schemas/my_schema.json"),
             "path key under schemas should output to schemas/<name>.json"
-        );
-    }
-
-    // ========================================================================
-    // pattern_matches_prefix tests
-    // ========================================================================
-
-    #[test]
-    fn test_pattern_matches_prefix_exact_match() {
-        let pattern = &[
-            PathComponent::Literal("functions"),
-            PathComponent::Wildcard,
-            PathComponent::Literal("variants"),
-            PathComponent::Wildcard,
-            PathComponent::Literal("system_template"),
-        ];
-        let prefix = &["functions", "my_func", "variants", "v1"];
-        assert!(
-            pattern_matches_prefix(pattern, prefix),
-            "pattern should match prefix with wildcard substitution"
-        );
-    }
-
-    #[test]
-    fn test_pattern_matches_prefix_literal_mismatch() {
-        let pattern = &[
-            PathComponent::Literal("functions"),
-            PathComponent::Wildcard,
-            PathComponent::Literal("variants"),
-        ];
-        let prefix = &["evaluations", "my_eval"];
-        assert!(
-            !pattern_matches_prefix(pattern, prefix),
-            "pattern should not match when literal doesn't match"
-        );
-    }
-
-    #[test]
-    fn test_pattern_matches_prefix_too_short() {
-        let pattern = &[PathComponent::Literal("functions"), PathComponent::Wildcard];
-        let prefix = &["functions", "my_func", "variants"];
-        assert!(
-            !pattern_matches_prefix(pattern, prefix),
-            "pattern should not match when it's shorter than prefix"
-        );
-    }
-
-    #[test]
-    fn test_pattern_matches_prefix_empty_prefix() {
-        let pattern = &[PathComponent::Literal("functions"), PathComponent::Wildcard];
-        let prefix: &[&str] = &[];
-        assert!(
-            pattern_matches_prefix(pattern, prefix),
-            "empty prefix should match any pattern"
         );
     }
 
