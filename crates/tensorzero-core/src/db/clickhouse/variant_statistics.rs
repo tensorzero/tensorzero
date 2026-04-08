@@ -10,8 +10,10 @@ use super::migration_manager::migrations::migration_0037::{QUANTILES, quantiles_
 use crate::db::variant_statistics::{
     GetVariantStatisticsParams, VariantStatisticsQueries, VariantStatisticsRow,
 };
-use crate::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
 use crate::error::{Error, ErrorDetails};
+
+/// Format for ClickHouse `DateTime` columns (second precision, no sub-second digits).
+const CLICKHOUSE_SECOND_PRECISION_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 #[async_trait]
 impl VariantStatisticsQueries for ClickHouseConnectionInfo {
@@ -44,14 +46,16 @@ impl VariantStatisticsQueries for ClickHouseConnectionInfo {
 
         let after_str;
         if let Some(after) = &params.after {
-            after_str = after.format(CLICKHOUSE_DATETIME_FORMAT).to_string();
+            after_str = after.format(CLICKHOUSE_SECOND_PRECISION_FORMAT).to_string();
             query_params.insert("after", after_str.as_str());
             where_clauses.push("minute >= {after:DateTime}".to_string());
         }
 
         let before_str;
         if let Some(before) = &params.before {
-            before_str = before.format(CLICKHOUSE_DATETIME_FORMAT).to_string();
+            before_str = before
+                .format(CLICKHOUSE_SECOND_PRECISION_FORMAT)
+                .to_string();
             query_params.insert("before", before_str.as_str());
             where_clauses.push("minute < {before:DateTime}".to_string());
         }
