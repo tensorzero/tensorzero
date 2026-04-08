@@ -23,7 +23,6 @@ hyper-util = "0.1.19"
 moka = { version = "0.12.15", features = ["sync"] }
 pin-project = "1.1.11"
 rcgen = "0.14.7"
-regex = "1"
 reqwest.workspace = true
 rustls = { version = "0.23.37", features = ["ring"] }
 serde = { workspace = true }
