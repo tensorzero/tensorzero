@@ -15,7 +15,6 @@ uv run pytest tests/test_embeddings.py
 """
 
 import asyncio
-import random
 
 import pytest
 
@@ -217,8 +216,7 @@ async def test_embeddings_consistency(async_openai_client):
 @pytest.mark.asyncio
 async def test_embeddings_cache_with_float_encoding(async_openai_client):
     """Test that caching works correctly with float encoding format"""
-    # Use a unique input to ensure we're not hitting existing cache
-    input_text = f"Cache test with float encoding - {random.randint(0, 1000000)}"
+    input_text = "Cache test with float encoding - deterministic"
 
     # First request with float encoding and cache enabled
     result1 = await async_openai_client.embeddings.create(
@@ -254,8 +252,7 @@ async def test_embeddings_cache_with_float_encoding(async_openai_client):
 @pytest.mark.asyncio
 async def test_embeddings_cache_with_base64_encoding(async_openai_client):
     """Test that caching works correctly with base64 encoding format"""
-    # Use a unique input to ensure we're not hitting existing cache
-    input_text = f"Cache test with base64 encoding - {random.randint(0, 1000000)}"
+    input_text = "Cache test with base64 encoding - deterministic"
 
     # First request with base64 encoding and cache enabled
     result1 = await async_openai_client.embeddings.create(

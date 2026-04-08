@@ -2405,7 +2405,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                "messages": [
                 {
                     "role": "user",
-                    "content": format!("If you see this, something has gone wrong - the request should have failed: {}", Uuid::now_v7())
+                    "content": "If you see this, something has gone wrong - the request should have failed: deterministic-cache-test"
                 }
             ]},
         "stream": stream,

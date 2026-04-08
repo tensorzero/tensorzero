@@ -234,10 +234,7 @@ async fn test_embeddings_raw_response_batch() {
 
 #[tokio::test]
 async fn test_embeddings_raw_response_with_cache() {
-    let input_text = format!(
-        "This is a cache test for embeddings raw_response - {}",
-        rand::random::<u32>()
-    );
+    let input_text = "This is a cache test for embeddings raw_response - deterministic-cache-test";
 
     // First request: populate cache with raw_response enabled
     let payload = json!({

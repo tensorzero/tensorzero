@@ -943,7 +943,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
                 tags: HashMap::from([
                     ("first_tag".to_string(), "first_value".into()),
                     ("second_tag".to_string(), "second_value".into()),
-                    ("user_id".to_string(), Uuid::now_v7().to_string()),
+                    ("user_id".to_string(), "deterministic-cache-test".into()),
                 ]),
                 ..Default::default()
             })
