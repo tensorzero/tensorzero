@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -58,14 +58,14 @@ jobs:
         shell: bash
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "optimization-test-cache"
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
@@ -95,7 +95,7 @@ jobs:
 
       - name: Post to Slack on failure
         if: failure()
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}

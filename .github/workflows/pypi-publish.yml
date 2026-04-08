@@ -35,10 +35,10 @@ jobs:
     # Download all of the wheel artifacts published by the other jobs,
     # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@92c65d2898f1f53cfdc910b962cecff86e7f8fcc
+        uses: actions/attest-build-provenance@92c65d2898f1f53cfdc910b962cecff86e7f8fcc # v1
         with:
           subject-path: "wheels-*/*"
 

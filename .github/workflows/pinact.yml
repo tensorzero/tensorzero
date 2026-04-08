@@ -1,0 +1,19 @@
+name: Pinact
+
+on:
+  pull_request: {}
+
+permissions: {}
+
+jobs:
+  pinact:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: suzuki-shunsuke/pinact-action@cf51507d80d4d6522a07348e3d58790290eaf0b6 # v2.0.0
+        with:
+          app_id: ${{ secrets.PINACT_APP_ID }}
+          app_private_key: ${{ secrets.PINACT_APP_PRIVATE_KEY }}
