@@ -13,7 +13,6 @@ use uuid::Uuid;
 
 use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
@@ -35,7 +34,8 @@ use crate::inference::types::{
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, Usage,
     batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContent;
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContentPart;
 use crate::providers::gcp_vertex_gemini::GCPVertexGeminiPartData;
@@ -173,16 +173,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     /// Google AI Studio Gemini non-streaming API request
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body =
             serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
@@ -274,16 +273,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     /// Google AI Studio Gemini streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body =
             serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
@@ -355,7 +353,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 fn stream_google_ai_studio_gemini(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    model_provider: &ModelProvider,
+    model_provider: &ModelProviderRequestInfo,
     model_name: &str,
     provider_name: &str,
     raw_request: &str,

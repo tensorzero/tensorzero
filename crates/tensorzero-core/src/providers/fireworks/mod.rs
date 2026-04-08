@@ -28,7 +28,6 @@ use super::helpers::{
 use crate::inference::types::Usage;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
-    cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
@@ -44,7 +43,7 @@ use crate::{
             },
         },
     },
-    model::{Credential, ModelProvider},
+    model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
     tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
 use tensorzero_inference_types::FunctionToolDef;
@@ -173,16 +172,15 @@ impl FireworksCredentials {
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
             FireworksRequest::new(&self.model_name, request).await?,
@@ -279,16 +277,15 @@ impl InferenceProvider for FireworksProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
             FireworksRequest::new(&self.model_name, request).await?,

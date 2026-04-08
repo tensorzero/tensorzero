@@ -6,6 +6,7 @@
 //! - Isolated serde derive expansion
 //! - Tighter incremental compilation boundaries
 
+pub mod credentials;
 pub mod extra_body;
 pub mod extra_headers;
 pub(crate) mod serde_helpers;

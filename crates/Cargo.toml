@@ -31,6 +31,7 @@ members = [
     "tensorzero-types",
     "tensorzero-types-providers",
     "tensorzero-error",
+    "tensorzero-http",
     "tensorzero-inference-types",
     "tensorzero-unsafe-helpers",
 ]

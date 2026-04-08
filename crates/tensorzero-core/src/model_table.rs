@@ -3,7 +3,6 @@ use std::{
     env,
     fmt::Display,
     fs,
-    ops::Deref,
     sync::{Arc, OnceLock},
 };
 
@@ -165,23 +164,7 @@ pub trait ShorthandModelConfig: Sized {
     ) -> Result<(), Error>;
 }
 
-/// This is `Cow` without the `T: Clone` bound.
-/// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
-#[derive(Debug)]
-pub enum CowNoClone<'a, T> {
-    Borrowed(&'a T),
-    Owned(T),
-}
-
-impl<T> Deref for CowNoClone<'_, T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            CowNoClone::Borrowed(t) => t,
-            CowNoClone::Owned(t) => t,
-        }
-    }
-}
+pub use tensorzero_http::CowNoClone;
 
 pub struct Shorthand<'a> {
     pub provider_type: &'a str,

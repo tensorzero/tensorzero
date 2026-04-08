@@ -758,6 +758,7 @@ impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
             provider_name: val.provider_name.clone(),
             extra_headers: val.extra_headers.clone(),
             extra_body: val.extra_body.clone(),
+            discard_unknown_chunks: false,
         }
     }
 }

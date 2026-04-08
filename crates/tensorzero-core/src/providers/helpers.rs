@@ -1124,6 +1124,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut body,
@@ -1162,6 +1163,7 @@ mod tests {
                 extra_headers: Default::default(),
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut body,
@@ -1180,6 +1182,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut "test".into(),
@@ -1256,6 +1259,7 @@ mod tests {
                         },
                     ],
                 }),
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut serde_json::json!({}),
@@ -1318,6 +1322,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: Default::default(),
                 extra_headers: Default::default(),
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut body,
@@ -1412,6 +1417,7 @@ mod tests {
                     ],
                 }),
                 extra_headers: None,
+                discard_unknown_chunks: false,
             },
             "dummy_model",
             &mut body,
@@ -2014,6 +2020,7 @@ mod tests {
             provider_name: "openai".into(),
             extra_headers: None,
             extra_body: None,
+            discard_unknown_chunks: false,
         };
 
         inject_extra_request_data(
@@ -2047,6 +2054,7 @@ mod tests {
             provider_name: "openai".into(),
             extra_headers: None,
             extra_body: None,
+            discard_unknown_chunks: false,
         };
 
         inject_extra_request_data(
@@ -2081,6 +2089,7 @@ mod tests {
             provider_name: "custom".into(),
             extra_headers: None,
             extra_body: None,
+            discard_unknown_chunks: false,
         };
 
         inject_extra_request_data(
@@ -2115,6 +2124,7 @@ mod tests {
             provider_name: "openai".into(),
             extra_headers: None,
             extra_body: None,
+            discard_unknown_chunks: false,
         };
 
         let headers = inject_extra_request_data(

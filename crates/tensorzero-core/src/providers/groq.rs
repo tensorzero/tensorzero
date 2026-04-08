@@ -13,7 +13,6 @@ use tensorzero_types_providers::groq::{
 };
 use tokio::time::Instant;
 
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
@@ -34,7 +33,8 @@ use crate::inference::types::{
     resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 use uuid::Uuid;
 
@@ -160,10 +160,10 @@ impl GroqCredentials {
 impl InferenceProvider for GroqProvider {
     async fn infer<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
         let api_key = self
@@ -269,16 +269,15 @@ impl InferenceProvider for GroqProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
             GroqRequest::new(&self.model_name, request, self.reasoning_format.as_deref()).await?,

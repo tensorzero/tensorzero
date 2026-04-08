@@ -15,7 +15,6 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::cache::ModelProviderRequest;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{
     Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
@@ -42,7 +41,8 @@ use crate::inference::types::{
     RequestMessage, Role, Text, TextChunk, ThoughtChunk, Unknown, Usage,
     resolved_input::{FileUrl, LazyFile, LazyFileExt},
 };
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
 use tensorzero_types_providers::openrouter::{
@@ -181,10 +181,10 @@ impl OpenRouterCredentials {
 impl InferenceProvider for OpenRouterProvider {
     async fn infer<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self
@@ -285,16 +285,15 @@ impl InferenceProvider for OpenRouterProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body =
             serde_json::to_value(OpenRouterRequest::new(&self.model_name, request).await?)
