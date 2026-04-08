@@ -1567,6 +1567,7 @@ jobs:
         k3d,
         mock-optimization-tests,
         mocked-batch-tests,
+        pinact,
         postgres-tests,
         rust-build,
         rust-test,
