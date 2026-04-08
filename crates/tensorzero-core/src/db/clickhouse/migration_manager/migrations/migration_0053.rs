@@ -3,7 +3,7 @@ use super::check_table_exists;
 use super::migration_0037::quantiles_sql_args;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
-use crate::error::{Error, ErrorDetails};
+use crate::error::{ErrorDetails, delayed_error::DelayedError};
 use async_trait::async_trait;
 
 /// Denormalizes `function_name` and `variant_name` onto the `ModelInference` table,
@@ -26,10 +26,10 @@ const MIGRATION_ID: &str = "0053";
 
 #[async_trait]
 impl Migration for Migration0053<'_> {
-    async fn can_apply(&self) -> Result<(), Error> {
+    async fn can_apply(&self) -> Result<(), DelayedError> {
         for table in ["ModelInference", "ChatInference", "JsonInference"] {
             if !check_table_exists(self.clickhouse, table, MIGRATION_ID).await? {
-                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                return Err(DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: format!("`{table}` table does not exist"),
                 }));
@@ -38,7 +38,7 @@ impl Migration for Migration0053<'_> {
         Ok(())
     }
 
-    async fn should_apply(&self) -> Result<bool, Error> {
+    async fn should_apply(&self) -> Result<bool, DelayedError> {
         // Check denormalization columns on ModelInference
         let has_fn = check_column_exists(
             self.clickhouse,
@@ -72,19 +72,19 @@ impl Migration for Migration0053<'_> {
         Ok(false)
     }
 
-    async fn apply(&self, clean_start: bool) -> Result<(), Error> {
+    async fn apply(&self, clean_start: bool) -> Result<(), DelayedError> {
         let qs = quantiles_sql_args();
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
 
         // ── Phase 1: Denormalize function_name/variant_name onto ModelInference ──
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS function_name LowCardinality(String) DEFAULT ''"
             ))
             .await?;
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 "ALTER TABLE ModelInference{on_cluster_name} ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String) DEFAULT ''"
             ))
             .await?;
@@ -107,7 +107,7 @@ impl Migration for Migration0053<'_> {
         );
 
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"CREATE TABLE IF NOT EXISTS VariantStatistics{on_cluster_name} (
                     function_name LowCardinality(String),
                     variant_name LowCardinality(String),
@@ -133,7 +133,7 @@ impl Migration for Migration0053<'_> {
         let view_timestamp_nanos = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: MIGRATION_ID.to_string(),
                     message: e.to_string(),
                 })
@@ -160,7 +160,7 @@ impl Migration for Migration0053<'_> {
         // The `function_name != ''` filter excludes rows that predate the denormalization
         // and haven't been backfilled yet.
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"
                 CREATE MATERIALIZED VIEW IF NOT EXISTS VariantStatisticsModelView{on_cluster_name}
                 TO VariantStatistics
@@ -184,7 +184,7 @@ impl Migration for Migration0053<'_> {
 
         // MV 2: VariantStatisticsChatView (triggers on ChatInference inserts)
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"
                 CREATE MATERIALIZED VIEW IF NOT EXISTS VariantStatisticsChatView{on_cluster_name}
                 TO VariantStatistics
@@ -205,7 +205,7 @@ impl Migration for Migration0053<'_> {
 
         // MV 3: VariantStatisticsJsonView (triggers on JsonInference inserts)
         self.clickhouse
-            .run_query_synchronous_no_params(format!(
+            .run_query_synchronous_no_params_delayed_err(format!(
                 r"
                 CREATE MATERIALIZED VIEW IF NOT EXISTS VariantStatisticsJsonView{on_cluster_name}
                 TO VariantStatistics
@@ -244,7 +244,7 @@ impl Migration for Migration0053<'_> {
         )
     }
 
-    async fn has_succeeded(&self) -> Result<bool, Error> {
+    async fn has_succeeded(&self) -> Result<bool, DelayedError> {
         let should_apply = self.should_apply().await?;
         Ok(!should_apply)
     }
