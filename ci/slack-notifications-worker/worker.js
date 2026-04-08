@@ -13,6 +13,10 @@
 //   GITHUB_ORG             - GitHub organization name
 
 import { App } from "@octokit/app";
+import { Octokit } from "@octokit/core";
+import { restEndpointMethods } from "@octokit/plugin-rest-endpoint-methods";
+
+const MyOctokit = Octokit.plugin(restEndpointMethods);
 
 export default {
   async fetch(request, env) {
@@ -24,7 +28,10 @@ export default {
 
     // Verify webhook signature using Octokit
     const app = createApp(env);
-    const isValid = await app.webhooks.verify(body, request.headers.get("X-Hub-Signature-256") || "");
+    const isValid = await app.webhooks.verify(
+      body,
+      request.headers.get("X-Hub-Signature-256") || "",
+    );
     if (!isValid) {
       return new Response("Unauthorized", { status: 401 });
     }
@@ -51,6 +58,7 @@ function createApp(env) {
     appId: env.GITHUB_APP_ID,
     privateKey: env.GITHUB_APP_PRIVATE_KEY,
     webhooks: { secret: env.GITHUB_WEBHOOK_SECRET },
+    Octokit: MyOctokit,
   });
 }
 
@@ -63,49 +71,85 @@ function buildNotification(event, payload, env) {
     case "issues":
       if (payload.action !== "opened") return null;
       return {
-        actor: payload.issue.user.login, channel,
+        actor: payload.issue.user.login,
+        channel,
         text: `New issue opened by ${payload.issue.user.login}`,
-        blocks: formatBlock("New issue opened", payload.issue.title, payload.issue.html_url, payload.issue.user.login),
+        blocks: formatBlock(
+          "New issue opened",
+          payload.issue.title,
+          payload.issue.html_url,
+          payload.issue.user.login,
+        ),
       };
 
     case "issue_comment":
       if (payload.action !== "created") return null;
       return {
-        actor: payload.comment.user.login, channel,
+        actor: payload.comment.user.login,
+        channel,
         text: `New comment on issue by ${payload.comment.user.login}`,
-        blocks: formatBlock("New comment on issue", payload.issue.title, payload.comment.html_url, payload.comment.user.login),
+        blocks: formatBlock(
+          "New comment on issue",
+          payload.issue.title,
+          payload.comment.html_url,
+          payload.comment.user.login,
+        ),
       };
 
     case "pull_request":
       if (payload.action !== "opened") return null;
       return {
-        actor: payload.pull_request.user.login, channel,
+        actor: payload.pull_request.user.login,
+        channel,
         text: `New pull request opened by ${payload.pull_request.user.login}`,
-        blocks: formatBlock("New pull request opened", payload.pull_request.title, payload.pull_request.html_url, payload.pull_request.user.login),
+        blocks: formatBlock(
+          "New pull request opened",
+          payload.pull_request.title,
+          payload.pull_request.html_url,
+          payload.pull_request.user.login,
+        ),
       };
 
     case "pull_request_review":
       if (payload.action !== "submitted") return null;
       return {
-        actor: payload.review.user.login, channel,
+        actor: payload.review.user.login,
+        channel,
         text: `Pull request review submitted by ${payload.review.user.login}`,
-        blocks: formatBlock("Pull request review submitted", payload.pull_request.title, payload.pull_request.html_url, payload.review.user.login),
+        blocks: formatBlock(
+          "Pull request review submitted",
+          payload.pull_request.title,
+          payload.pull_request.html_url,
+          payload.review.user.login,
+        ),
       };
 
     case "discussion":
       if (payload.action !== "created") return null;
       return {
-        actor: payload.discussion.user.login, channel,
+        actor: payload.discussion.user.login,
+        channel,
         text: `New discussion created by ${payload.discussion.user.login}`,
-        blocks: formatBlock("New discussion created", payload.discussion.title, payload.discussion.html_url, payload.discussion.user.login),
+        blocks: formatBlock(
+          "New discussion created",
+          payload.discussion.title,
+          payload.discussion.html_url,
+          payload.discussion.user.login,
+        ),
       };
 
     case "discussion_comment":
       if (payload.action !== "created") return null;
       return {
-        actor: payload.comment.user.login, channel,
+        actor: payload.comment.user.login,
+        channel,
         text: `New comment on discussion by ${payload.comment.user.login}`,
-        blocks: formatBlock("New comment on discussion", payload.discussion.title, payload.comment.html_url, payload.comment.user.login),
+        blocks: formatBlock(
+          "New comment on discussion",
+          payload.discussion.title,
+          payload.comment.html_url,
+          payload.comment.user.login,
+        ),
       };
 
     default:
@@ -115,13 +159,15 @@ function buildNotification(event, payload, env) {
 
 function formatBlock(heading, title, url, actor) {
   const actorUrl = `https://github.com/${actor}`;
-  return [{
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: `*${heading}*\n\n*Title:* <${url}|${title}>\n*Author:* <${actorUrl}|${actor}>`,
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*${heading}*\n\n*Title:* <${url}|${title}>\n*Author:* <${actorUrl}|${actor}>`,
+      },
     },
-  }];
+  ];
 }
 
 // --- Skip logic ---
@@ -129,9 +175,11 @@ function formatBlock(heading, title, url, actor) {
 async function shouldSkip(actor, env) {
   if (actor.toLowerCase().endsWith("[bot]")) return true;
 
-  const app = createApp(env);
-  const octokit = await app.getInstallationOctokit(Number(env.GITHUB_INSTALLATION_ID));
   try {
+    const app = createApp(env);
+    const octokit = await app.getInstallationOctokit(
+      Number(env.GITHUB_INSTALLATION_ID),
+    );
     await octokit.rest.orgs.checkMembershipForUser({
       org: env.GITHUB_ORG,
       username: actor,
