@@ -1511,6 +1511,20 @@ jobs:
         working-directory: docs
         run: pnpm exec mint broken-links --check-anchors
 
+  pinact:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: suzuki-shunsuke/pinact-action@cf51507d80d4d6522a07348e3d58790290eaf0b6 # v2.0.0
+        with:
+          app_id: ${{ secrets.PINACT_APP_ID }}
+          app_private_key: ${{ secrets.PINACT_APP_PRIVATE_KEY }}
+
   # See 'ci/README.md' at the repository root for more details.
   # This job queries the GitHub API for all jobs in this workflow run and asserts
   # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
