@@ -29,8 +29,8 @@ jobs:
         id: check-skip
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
-          ACTOR="${{ github.actor }}"
 
           # Check if user is a bot (ends with [bot], case insensitive)
           ACTOR_LOWER=$(echo "$ACTOR" | tr '[:upper:]' '[:lower:]')
@@ -171,7 +171,7 @@ jobs:
 
       - name: Build payload for pull request review notification
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.event.review.user.login == 'dependabot[bot]')
         id: build-pr-review-payload
         env:
           ACTOR: ${{ github.actor }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Send Slack notification for pull request review
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.event.review.user.login == 'dependabot[bot]')
         uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
         with:
           method: chat.postMessage
