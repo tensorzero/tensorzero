@@ -1688,7 +1688,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 0));
+    // Use a fixed port so that image URLs in provider requests are deterministic
+    // across test runs, enabling provider-proxy cache hits.
+    let addr = SocketAddr::from(([127, 0, 0, 1], 19877));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
