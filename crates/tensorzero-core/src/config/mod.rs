@@ -76,6 +76,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
+pub mod editable;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -1487,6 +1488,27 @@ impl Config {
         Ok(unwritten_config)
     }
 
+    pub async fn load_from_uninitialized(
+        config: UninitializedConfig,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Error> {
+        let config = Box::new(config);
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
+            .await?
+        } else {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config))).await?
+        };
+
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
+        }
+
+        Ok(unwritten_config)
+    }
+
     /// Loads and initializes an unwritten config.
     ///
     /// This is the core config loading function that transforms raw config (TOML table, Config
@@ -2136,8 +2158,8 @@ pub struct UninitializedRelayConfig {
 
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
-struct UninitializedGlobbedConfig {
-    table: toml::Table,
+pub struct UninitializedGlobbedConfig {
+    pub table: toml::Table,
 }
 
 impl UninitializedConfig {
@@ -2265,7 +2287,7 @@ impl UninitializedConfig {
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
-    fn read_toml_config(
+    pub fn read_toml_config(
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {

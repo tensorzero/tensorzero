@@ -13,4 +13,5 @@ disallowed-methods = [
     # The 'v4' feature might not get enabled by our transitive deps, so allow this to not resolve
     { path = "uuid::Uuid::new_v4", reason = "Use `Uuid::now_v7` for new UUIDs instead", allow-invalid = true },
     { path = "tensorzero_core::db::ConfigQueries::write_config_snapshot", reason = "Use `AppStateData::validate_and_write_config_snapshot` instead to ensure configs are validated before persisting" },
+    { path = "tensorzero_core::db::postgres::function_config_writes::write_function_config_in_tx_skipping_cas", reason = "Only the bulk whole-config apply path (`write_stored_config_in_tx`) may skip the per-function CAS; see the function docs for the full invariant" },
 ]

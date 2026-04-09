@@ -80,6 +80,13 @@ impl UnwrittenConfig {
     pub fn dangerous_into_config_without_writing(self) -> Config {
         self.config
     }
+
+    /// Returns the extra templates discovered from the filesystem during config loading.
+    /// These are templates resolved via MiniJinja `{% include %}` from the
+    /// `template_filesystem_access` base path.
+    pub fn extra_templates(&self) -> &HashMap<String, String> {
+        &self.snapshot.extra_templates
+    }
 }
 
 impl std::ops::Deref for UnwrittenConfig {

@@ -10,8 +10,8 @@ use sqlx::{PgPool, Row};
 
 use tensorzero_core::config::{
     AutopilotConfig, ClickHouseConfig, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-    MetricConfigType, PostgresConfig, UninitializedConfig, UninitializedToolConfig,
-    path::ResolvedTomlPathData,
+    MetricConfigType, PostgresConfig, UninitializedConfig, UninitializedFunctionConfig,
+    UninitializedToolConfig, path::ResolvedTomlPathData,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
@@ -536,7 +536,7 @@ async fn write_stored_config_persists_evaluation_with_file(pool: PgPool) {
     // cleanest way to build one from an integration test.
     let evaluation: UninitializedEvaluationConfig = deserialize_from_json(serde_json::json!({
         "type": "inference",
-        "function_name": "my_function",
+        "function_name": "basic_test",
         "description": "End-to-end evaluation",
         "evaluators": {
             "judge": {
@@ -561,7 +561,21 @@ async fn write_stored_config_persists_evaluation_with_file(pool: PgPool) {
         }
     }));
 
+    // The evaluation references `basic_test`, so the full-config validation
+    // performed at the top of `write_stored_config` requires the function to
+    // exist. A minimal chat function with a shortcut-model variant is enough.
+    let basic_test: UninitializedFunctionConfig = deserialize_from_json(serde_json::json!({
+        "type": "chat",
+        "variants": {
+            "default": {
+                "type": "chat_completion",
+                "model": "dummy::good",
+            }
+        }
+    }));
+
     let config = UninitializedConfig {
+        functions: Some(HashMap::from([("basic_test".to_string(), basic_test)])),
         evaluations: Some(HashMap::from([("my_eval".to_string(), evaluation)])),
         ..Default::default()
     };
@@ -578,7 +592,7 @@ async fn write_stored_config_persists_evaluation_with_file(pool: PgPool) {
         fetch_named_config(&pool, "evaluations_configs", "my_eval").await,
         partially(matches_json_literal!({
             "type": "inference",
-            "function_name": "my_function",
+            "function_name": "basic_test",
             "description": "End-to-end evaluation",
             "evaluators": {
                 "judge": {
