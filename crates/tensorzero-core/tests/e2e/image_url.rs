@@ -26,10 +26,10 @@ use uuid::Uuid;
 use crate::providers::common::FERRIS_PNG;
 
 /// Spawn a temporary HTTP server that serves the test image
-async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    // Use a fixed port so that image URLs in provider requests are deterministic
-    // across test runs, enabling provider-proxy cache hits.
-    let addr = SocketAddr::from(([127, 0, 0, 1], 19876));
+async fn make_temp_image_server_on_port(
+    port: u16,
+) -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
@@ -149,7 +149,9 @@ async fn test_image_url_with_fetch_true() {
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
-    let (server_addr, _shutdown_sender) = make_temp_image_server().await;
+    // Port 0 is fine here: fetch=true means the gateway downloads the image
+    // and sends base64 to the provider, so the port doesn't affect cache keys.
+    let (server_addr, _shutdown_sender) = make_temp_image_server_on_port(0).await;
     let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
 
     let client =
@@ -244,7 +246,9 @@ async fn test_image_url_with_fetch_false() {
     let episode_id = Uuid::now_v7();
 
     // The '_shutdown_sender' will wake up the receiver on drop
-    let (server_addr, _shutdown_sender) = make_temp_image_server().await;
+    // Fixed port: fetch=false means the URL is passed directly to the provider,
+    // so it must be deterministic for provider-proxy cache hits.
+    let (server_addr, _shutdown_sender) = make_temp_image_server_on_port(19876).await;
     let image_url = Url::parse(&format!("https://{server_addr}/ferris.png")).unwrap();
 
     let client =
