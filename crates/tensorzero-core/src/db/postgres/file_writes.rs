@@ -13,7 +13,7 @@
 //!
 //! The file-specific logic (walking a function config tree, merging
 //! filesystem-discovered extra templates, or iterating a tool/evaluation's
-//! `files_for_db()`) lives in the callers; this module only owns
+//! file references) lives in the callers; this module only owns
 //! the collection and SQL dedup.
 
 use std::collections::{BTreeMap, HashMap};
@@ -37,11 +37,17 @@ struct ExistingTemplateRow {
 
 /// Insert `template` into `templates`, erroring if a different body was
 /// already recorded under the same key.
+///
+/// If `shared_path_prefix_to_strip` is provided, it is stripped from the
+/// beginning of the file path before using it as the map key (and later as
+/// `file_path` in the database). This is used by the `--store-config` CLI to
+/// produce portable relative paths instead of leaking absolute filesystem paths.
 pub(super) fn add_file(
     templates: &mut BTreeMap<String, CollectedFile>,
     template: &ResolvedTomlPathData,
+    shared_path_prefix_to_strip: Option<&std::path::Path>,
 ) -> Result<(), Error> {
-    let file_path = template.get_template_key();
+    let file_path = template.stripped_path_key(shared_path_prefix_to_strip);
     let source_body = template.data().to_string();
     match templates.get(&file_path) {
         Some(existing) if existing.source_body != source_body => {
