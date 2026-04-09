@@ -86,20 +86,15 @@ impl Drop for GatewayHandle {
             self.app_state.shutdown_token.cancel();
             let disabled_placeholder = self.app_state.disabled_for_shutdown_placeholder();
             let mut app_state = std::mem::replace(&mut self.app_state, disabled_placeholder);
-            let runtime_dependencies = app_state.load_runtime_dependencies();
 
             // Grab batch writer handles so we can wait on them later.
-            let clickhouse_handle = runtime_dependencies
-                .clickhouse_connection_info
-                .batcher_join_handle();
-            let pg_handle = runtime_dependencies
-                .postgres_connection_info
-                .batcher_join_handle();
+            let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
+            let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
 
             // Return unused rate limit tokens while Postgres is still active.
-            if !runtime_dependencies.rate_limiting_manager.is_empty() {
+            if !app_state.rate_limiting_manager.is_empty() {
                 tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = runtime_dependencies.rate_limiting_manager.shutdown() {
+                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
                     tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
                 }
                 tracing::info!("Rate limit token return complete");
@@ -175,12 +170,17 @@ impl Drop for GatewayHandle {
 #[derive(Clone)]
 struct RuntimeDependencies {
     http_client: TensorzeroHttpClient,
-    clickhouse_connection_info: ClickHouseConnectionInfo,
-    postgres_connection_info: PostgresConnectionInfo,
+    // TODO(#7255): clickhouse_connection_info, postgres_connection_info, and
+    // rate_limiting_manager are intentionally excluded from this swappable bundle.
+    // - clickhouse_connection_info / postgres_connection_info: hot-swapping them would
+    //   interfere with the batch-writer drain logic in GatewayHandle::drop.
+    // - rate_limiting_manager: it pre-borrows tokens and requires a shutdown() call to
+    //   return them to the database; recreating it on each swap would lose those tokens.
+    // Support for hot-swapping them is tracked in
+    // https://github.com/tensorzero/tensorzero/issues/7255.
     valkey_connection_info: ValkeyConnectionInfo,
     valkey_cache_connection_info: ValkeyConnectionInfo,
     cache_manager: CacheManager,
-    rate_limiting_manager: Arc<RateLimitingManager>,
     primary_datastore: PrimaryDatastore,
 }
 
@@ -188,35 +188,27 @@ impl RuntimeDependencies {
     fn new(
         config: &Config,
         http_client: TensorzeroHttpClient,
-        clickhouse_connection_info: ClickHouseConnectionInfo,
-        postgres_connection_info: PostgresConnectionInfo,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        postgres_connection_info: &PostgresConnectionInfo,
         valkey_connection_info: ValkeyConnectionInfo,
         valkey_cache_connection_info: ValkeyConnectionInfo,
     ) -> Result<Self, DelayedError> {
         let primary_datastore = PrimaryDatastore::resolve(
             &config.gateway.observability,
-            &clickhouse_connection_info,
-            &postgres_connection_info,
+            clickhouse_connection_info,
+            postgres_connection_info,
         )?;
-        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
-            Arc::new(config.rate_limiting.clone()),
-            &valkey_connection_info,
-            &postgres_connection_info,
-        )?);
         let cache_manager = CacheManager::new_from_connections(
             &valkey_cache_connection_info,
-            &clickhouse_connection_info,
+            clickhouse_connection_info,
             &config.gateway.cache,
             primary_datastore,
         )?;
         Ok(Self {
             http_client,
-            clickhouse_connection_info,
-            postgres_connection_info,
             valkey_connection_info,
             valkey_cache_connection_info,
             cache_manager,
-            rate_limiting_manager,
             primary_datastore,
         })
     }
@@ -224,15 +216,9 @@ impl RuntimeDependencies {
     fn disabled(config: &Config, primary_datastore: PrimaryDatastore) -> Self {
         Self {
             http_client: config.http_client.clone(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
             valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             cache_manager: CacheManager::disabled(),
-            rate_limiting_manager: Arc::new(RateLimitingManager::new(
-                Arc::new(RateLimitingConfig::default()),
-                Arc::new(DisabledRateLimitQueries),
-            )),
             primary_datastore,
         }
     }
@@ -247,8 +233,9 @@ struct LiveState {
 
 #[derive(Clone, Default)]
 struct ConnectionUrls {
-    clickhouse_url: Option<String>,
-    postgres_url: Option<String>,
+    // TODO(#7255): clickhouse_url and postgres_url are intentionally excluded because
+    // hot-swapping those connections is not supported. See
+    // https://github.com/tensorzero/tensorzero/issues/7255.
     valkey_url: Option<String>,
     valkey_cache_url: Option<String>,
 }
@@ -256,11 +243,9 @@ struct ConnectionUrls {
 async fn build_runtime_dependencies(
     config: &Config,
     connection_urls: &ConnectionUrls,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    postgres_connection_info: &PostgresConnectionInfo,
 ) -> Result<RuntimeDependencies, DelayedError> {
-    let clickhouse_connection_info =
-        setup_clickhouse(config, connection_urls.clickhouse_url.clone()).await?;
-    let postgres_connection_info =
-        setup_postgres(config, connection_urls.postgres_url.as_deref()).await?;
     let valkey_connection_info = setup_valkey(connection_urls.valkey_url.as_deref()).await?;
     let valkey_cache_connection_info = setup_valkey_cache(
         connection_urls.valkey_cache_url.as_deref(),
@@ -341,6 +326,16 @@ pub struct AppStateData {
 pub struct SwappableAppStateData {
     live_state: Arc<ArcSwap<LiveState>>,
     connection_urls: Arc<ConnectionUrls>,
+    // TODO(#7255): These are intentionally excluded from the swappable LiveState bundle.
+    // - clickhouse_connection_info / postgres_connection_info: hot-swapping them would
+    //   interfere with the batch-writer drain logic in GatewayHandle::drop.
+    // - rate_limiting_manager: it pre-borrows tokens and requires a shutdown() call to
+    //   return them to the database; recreating it on each swap would lose those tokens.
+    // Support for hot-swapping them is tracked in https://github.com/tensorzero/tensorzero/issues/7255.
+    pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub postgres_connection_info: PostgresConnectionInfo,
+    /// Token pool manager for rate limiting pre-borrowing
+    pub rate_limiting_manager: Arc<RateLimitingManager>,
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
@@ -405,8 +400,15 @@ impl SwappableAppStateData {
         let (config, runtime_overlay) = Box::pin(unwritten.into_config(db)).await?;
         let config = Arc::new(config);
         let runtime_overlay = Arc::new(runtime_overlay);
-        let runtime_dependencies =
-            Arc::new(build_runtime_dependencies(&config, self.connection_urls.as_ref()).await?);
+        let runtime_dependencies = Arc::new(
+            build_runtime_dependencies(
+                &config,
+                self.connection_urls.as_ref(),
+                &self.clickhouse_connection_info,
+                &self.postgres_connection_info,
+            )
+            .await?,
+        );
         Ok(PreparedConfigSwap {
             config,
             runtime_overlay,
@@ -438,8 +440,8 @@ impl SwappableAppStateData {
             config: live_state.config.clone(),
             runtime_overlay: live_state.runtime_overlay.clone(),
             http_client: runtime_dependencies.http_client.clone(),
-            clickhouse_connection_info: runtime_dependencies.clickhouse_connection_info.clone(),
-            postgres_connection_info: runtime_dependencies.postgres_connection_info.clone(),
+            clickhouse_connection_info: self.clickhouse_connection_info.clone(),
+            postgres_connection_info: self.postgres_connection_info.clone(),
             valkey_connection_info: runtime_dependencies.valkey_connection_info.clone(),
             valkey_cache_connection_info: runtime_dependencies.valkey_cache_connection_info.clone(),
             cache_manager: runtime_dependencies.cache_manager.clone(),
@@ -449,7 +451,7 @@ impl SwappableAppStateData {
             autopilot_client: self.autopilot_client.clone(),
             spawn_client: self.spawn_client.clone(),
             deployment_id: self.deployment_id.clone(),
-            rate_limiting_manager: runtime_dependencies.rate_limiting_manager.clone(),
+            rate_limiting_manager: self.rate_limiting_manager.clone(),
             shutdown_token: self.shutdown_token.clone(),
             primary_datastore: runtime_dependencies.primary_datastore,
             _private: (),
@@ -465,15 +467,11 @@ impl SwappableAppStateData {
     }
 
     pub fn postgres_connection_info(&self) -> PostgresConnectionInfo {
-        self.load_runtime_dependencies()
-            .postgres_connection_info
-            .clone()
+        self.postgres_connection_info.clone()
     }
 
     pub fn clickhouse_connection_info(&self) -> ClickHouseConnectionInfo {
-        self.load_runtime_dependencies()
-            .clickhouse_connection_info
-            .clone()
+        self.clickhouse_connection_info.clone()
     }
 
     pub fn valkey_connection_info(&self) -> ValkeyConnectionInfo {
@@ -493,9 +491,7 @@ impl SwappableAppStateData {
     }
 
     pub fn rate_limiting_manager(&self) -> Arc<RateLimitingManager> {
-        self.load_runtime_dependencies()
-            .rate_limiting_manager
-            .clone()
+        self.rate_limiting_manager.clone()
     }
 }
 
@@ -598,8 +594,6 @@ impl GatewayHandle {
             valkey_cache_connection_info,
             http_client,
             ConnectionUrls {
-                clickhouse_url,
-                postgres_url,
                 valkey_url,
                 valkey_cache_url,
             },
@@ -642,12 +636,9 @@ impl GatewayHandle {
             runtime_overlay: Arc::new(RuntimeOverlay::default()),
             runtime_dependencies: Arc::new(RuntimeDependencies {
                 http_client,
-                clickhouse_connection_info,
-                postgres_connection_info,
                 valkey_connection_info: ValkeyConnectionInfo::Disabled,
                 valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
                 cache_manager,
-                rate_limiting_manager,
                 primary_datastore: PrimaryDatastore::ClickHouse,
             }),
         }));
@@ -655,6 +646,9 @@ impl GatewayHandle {
             app_state: SwappableAppStateData {
                 live_state,
                 connection_urls: Arc::new(ConnectionUrls::default()),
+                clickhouse_connection_info,
+                postgres_connection_info,
+                rate_limiting_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
@@ -711,11 +705,16 @@ impl GatewayHandle {
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
     ) -> Result<Self, DelayedError> {
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
+            Arc::new(config.rate_limiting.clone()),
+            &valkey_connection_info,
+            &postgres_connection_info,
+        )?);
         let runtime_dependencies = RuntimeDependencies::new(
             &config,
             http_client,
-            clickhouse_connection_info,
-            postgres_connection_info,
+            &clickhouse_connection_info,
+            &postgres_connection_info,
             valkey_connection_info,
             valkey_cache_connection_info,
         )?;
@@ -724,8 +723,8 @@ impl GatewayHandle {
         let cancel_token = CancellationToken::new();
         setup_howdy(
             &config,
-            runtime_dependencies.clickhouse_connection_info.clone(),
-            runtime_dependencies.postgres_connection_info.clone(),
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
             primary_datastore,
             cancel_token.clone(),
         );
@@ -734,8 +733,8 @@ impl GatewayHandle {
             None
         } else {
             get_deployment_id(
-                &runtime_dependencies.clickhouse_connection_info,
-                &runtime_dependencies.postgres_connection_info,
+                &clickhouse_connection_info,
+                &postgres_connection_info,
                 primary_datastore,
             )
             .await
@@ -743,8 +742,8 @@ impl GatewayHandle {
         };
 
         let db = Arc::new(DelegatingDatabaseConnection::new(
-            runtime_dependencies.clickhouse_connection_info.clone(),
-            runtime_dependencies.postgres_connection_info.clone(),
+            clickhouse_connection_info.clone(),
+            postgres_connection_info.clone(),
             primary_datastore,
         ));
         for (function_name, function_config) in &config.functions {
@@ -754,7 +753,7 @@ impl GatewayHandle {
                 .setup(
                     db.clone(),
                     function_name,
-                    &runtime_dependencies.postgres_connection_info,
+                    &postgres_connection_info,
                     cancel_token.clone(),
                 )
                 .await?;
@@ -763,7 +762,7 @@ impl GatewayHandle {
                     .setup(
                         db.clone(),
                         function_name,
-                        &runtime_dependencies.postgres_connection_info,
+                        &postgres_connection_info,
                         cancel_token.clone(),
                     )
                     .await?;
@@ -793,28 +792,27 @@ impl GatewayHandle {
             }));
         }
 
-        let spawn_client =
-            if let Some(pool) = runtime_dependencies.postgres_connection_info.get_pool() {
-                let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
-                    .unwrap_or_else(|_| "autopilot".to_string());
-                match SpawnClient::builder()
-                    .pool(pool.clone())
-                    .queue_name(&queue_name)
-                    .build()
-                    .await
-                {
-                    Ok(client) => Some(Arc::new(client)),
-                    Err(e) => {
-                        tracing::warn!("Failed to create `SpawnClient`: {e}");
-                        None
-                    }
+        let spawn_client = if let Some(pool) = postgres_connection_info.get_pool() {
+            let queue_name = std::env::var("TENSORZERO_AUTOPILOT_QUEUE_NAME")
+                .unwrap_or_else(|_| "autopilot".to_string());
+            match SpawnClient::builder()
+                .pool(pool.clone())
+                .queue_name(&queue_name)
+                .build()
+                .await
+            {
+                Ok(client) => Some(Arc::new(client)),
+                Err(e) => {
+                    tracing::warn!("Failed to create `SpawnClient`: {e}");
+                    None
                 }
-            } else {
-                None
-            };
+            }
+        } else {
+            None
+        };
 
         let autopilot_client = setup_autopilot_client(
-            &runtime_dependencies.postgres_connection_info,
+            &postgres_connection_info,
             deployment_id.as_ref(),
             available_tools,
             tool_whitelist,
@@ -822,10 +820,7 @@ impl GatewayHandle {
         .await?;
 
         if config.gateway.auth.enabled
-            && matches!(
-                runtime_dependencies.postgres_connection_info,
-                PostgresConnectionInfo::Disabled
-            )
+            && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
             return Err(DelayedError::new(ErrorDetails::AppState {
                 message:
@@ -844,6 +839,9 @@ impl GatewayHandle {
             app_state: SwappableAppStateData {
                 live_state,
                 connection_urls: Arc::new(connection_urls),
+                clickhouse_connection_info,
+                postgres_connection_info,
+                rate_limiting_manager,
                 deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache,
@@ -875,6 +873,12 @@ impl SwappableAppStateData {
         Self {
             live_state,
             connection_urls: Arc::new(ConnectionUrls::default()),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(RateLimitingConfig::default()),
+                Arc::new(DisabledRateLimitQueries),
+            )),
             deferred_tasks: TaskTracker::new(),
             auth_cache: None,
             config_snapshot_cache: None,
@@ -888,8 +892,8 @@ impl SwappableAppStateData {
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
         let runtime_dependencies = self.load_runtime_dependencies();
         DelegatingDatabaseConnection::new(
-            runtime_dependencies.clickhouse_connection_info.clone(),
-            runtime_dependencies.postgres_connection_info.clone(),
+            self.clickhouse_connection_info.clone(),
+            self.postgres_connection_info.clone(),
             runtime_dependencies.primary_datastore,
         )
     }
