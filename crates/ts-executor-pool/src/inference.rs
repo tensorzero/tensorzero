@@ -11,7 +11,9 @@
 use crate::ExtraInferenceTags;
 use crate::runtime::ToolContextHelper;
 use crate::tensorzero_client::TensorZeroClient;
-use bip39_uuid_substitution::{UuidSubstituter, postprocess_response, preprocess_message};
+use bip39_uuid_substitution::{
+    UuidSubstituter, UuidSubstitutionError, postprocess_response, preprocess_message,
+};
 use tensorzero_core::client::ClientInferenceParams;
 use tensorzero_core::endpoints::inference::InferenceResponse;
 use tensorzero_types::ToolError;
@@ -19,6 +21,16 @@ use tensorzero_types::tool_error::ToolResult;
 use tensorzero_types::tool_failure::NonControlToolError;
 
 use tracing::debug;
+
+/// Convert a UUID-substitution error into our standard `ToolError`. The
+/// `From` impl cannot live on `UuidSubstitutionError` because that would
+/// force `bip39-uuid-substitution` to depend on `durable-tools`/`tensorzero-types`,
+/// recreating the cycle we want to avoid.
+fn uuid_err_to_tool_err(err: UuidSubstitutionError) -> ToolError {
+    ToolError::NonControl(NonControlToolError::Internal {
+        message: err.to_string(),
+    })
+}
 
 async fn run_inference_inner<F: Future<Output = ToolResult<InferenceResponse>>>(
     extra_inference_tags: &ExtraInferenceTags,
@@ -31,7 +43,8 @@ async fn run_inference_inner<F: Future<Output = ToolResult<InferenceResponse>>>(
         .messages
         .into_iter()
         .map(|message| preprocess_message(&mut substituter, message))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(uuid_err_to_tool_err)?;
 
     debug!(
         uuid_count = substituter.len(),
@@ -42,7 +55,7 @@ async fn run_inference_inner<F: Future<Output = ToolResult<InferenceResponse>>>(
 
     let response = run_inference_fn(params).await?;
 
-    let result = postprocess_response(&substituter, response)?;
+    let result = postprocess_response(&substituter, response).map_err(uuid_err_to_tool_err)?;
 
     debug!(
         uuid_count = substituter.len(),

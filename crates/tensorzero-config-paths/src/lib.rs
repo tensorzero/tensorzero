@@ -457,6 +457,21 @@ pub static TARGET_PATH_COMPONENTS: &[&[PathComponent]] = &[
         PathComponent::Literal("fuser"),
         PathComponent::Literal("assistant_template"),
     ],
+    // TypeScript judge evaluators: `typescript_file` is a path to a .ts file.
+    &[
+        PathComponent::Literal("evaluations"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("typescript_file"),
+    ],
+    &[
+        PathComponent::Literal("functions"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("evaluators"),
+        PathComponent::Wildcard,
+        PathComponent::Literal("typescript_file"),
+    ],
     &[
         PathComponent::Literal("tools"),
         PathComponent::Wildcard,

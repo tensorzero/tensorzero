@@ -16,6 +16,7 @@ use exact_match::run_exact_match_evaluator;
 pub mod llm_judge;
 mod regex_eval;
 mod tool_use;
+pub mod typescript_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::{LLMJudgeEvaluationResult, RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
 use regex_eval::run_regex_evaluator;
@@ -304,6 +305,18 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
             debug!(result = ?result, "Regex evaluator completed");
             EvaluatorResult::Regex(result)
         }
+        EvaluatorConfig::TypescriptJudge(ts_config) => {
+            debug!("Running TypeScript judge evaluator");
+            let result = typescript_judge::run_typescript_judge_evaluator(
+                inference_response,
+                input,
+                ts_config,
+                &clients.ts_executor,
+            )
+            .await?;
+            debug!(result = ?result, "TypeScript judge evaluator completed");
+            EvaluatorResult::TypescriptJudge(result)
+        }
     })
 }
 
@@ -313,6 +326,7 @@ pub enum EvaluatorResult {
     LLMJudge(Option<LLMJudgeEvaluationResult>),
     ToolUse(Option<Value>),
     Regex(Option<Value>),
+    TypescriptJudge(Option<Value>),
 }
 
 impl<'a> EvaluatorResult {
@@ -320,7 +334,8 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(value)
             | EvaluatorResult::ToolUse(value)
-            | EvaluatorResult::Regex(value) => value.as_ref(),
+            | EvaluatorResult::Regex(value)
+            | EvaluatorResult::TypescriptJudge(value) => value.as_ref(),
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.value),
         }
     }
@@ -329,7 +344,8 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(_)
             | EvaluatorResult::ToolUse(_)
-            | EvaluatorResult::Regex(_) => None,
+            | EvaluatorResult::Regex(_)
+            | EvaluatorResult::TypescriptJudge(_) => None,
             EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.evaluator_inference_id),
         }
     }
@@ -337,7 +353,8 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(value)
             | EvaluatorResult::ToolUse(value)
-            | EvaluatorResult::Regex(value) => value,
+            | EvaluatorResult::Regex(value)
+            | EvaluatorResult::TypescriptJudge(value) => value,
             EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
         }
     }
@@ -345,7 +362,8 @@ impl<'a> EvaluatorResult {
         match self {
             EvaluatorResult::ExactMatch(_)
             | EvaluatorResult::ToolUse(_)
-            | EvaluatorResult::Regex(_) => HashMap::new(),
+            | EvaluatorResult::Regex(_)
+            | EvaluatorResult::TypescriptJudge(_) => HashMap::new(),
             EvaluatorResult::LLMJudge(value) => value
                 .as_ref()
                 .map(LLMJudgeEvaluationResult::tags)

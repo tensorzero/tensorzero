@@ -100,6 +100,10 @@ async fn llm_query_inner(
                 ts_checker: ts_checker.clone(),
                 exposed_tools: exposed_tools.clone(),
                 oom_snapshot_config,
+                // Child RLM runtimes inherit the process-wide default heap
+                // limit (`RLM_JS_HEAP_LIMIT_MIB`). Pool-level overrides only
+                // apply to top-level runtimes spawned via `RlmPool`.
+                heap_limit_bytes: None,
             },
             child_permit,
         )

@@ -14,8 +14,8 @@ use tensorzero_stored_config::{
     StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
     StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
     StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig, StoredTimeoutsConfig,
-    StoredToolChoice, StoredToolUseConfig, StoredVariantConfig, StoredVariantRef,
-    StoredVariantVersionConfig,
+    StoredToolChoice, StoredToolUseConfig, StoredTypescriptJudgeConfig, StoredVariantConfig,
+    StoredVariantRef, StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -978,6 +978,13 @@ pub(crate) fn convert_evaluators(
                     StoredEvaluatorConfig::Regex(StoredRegexConfig {
                         must_match: config.must_match.clone(),
                         must_not_match: config.must_not_match.clone(),
+                    })
+                }
+                UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                    StoredEvaluatorConfig::Typescript(StoredTypescriptJudgeConfig {
+                        typescript_code: config.typescript_file.data().to_string(),
+                        output_type: config.output_type.into(),
+                        optimize: config.optimize.into(),
                     })
                 }
             },

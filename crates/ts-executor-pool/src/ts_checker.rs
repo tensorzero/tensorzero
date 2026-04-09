@@ -39,6 +39,13 @@ const CODE_EXECUTION_AMBIENT_GLOBALS: &str = r"
 declare var console: {
   log(...args: unknown[]): void;
 };
+
+/**
+ * Report a final value back to the Rust caller via
+ * `ExecuteBlockResult::result`. Terminates execution; code after the call
+ * does not run. Pair with a runtime check on the returned `Option<String>`.
+ */
+declare function FINAL(value: string): never;
 ";
 
 /// Result of a successful typecheck: the transpiled JavaScript with types stripped.

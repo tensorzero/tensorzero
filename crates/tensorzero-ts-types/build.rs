@@ -86,6 +86,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),
+    // Types exposed to TypeScript judge evaluators (the `tensorzero_evaluator`
+    // function's `(input, output)` signature).
+    ("INPUT", "Input"),
+    ("CONTENT_BLOCK_CHAT_OUTPUT", "ContentBlockChatOutput"),
 ];
 
 /// Parsed information from a single .ts file.

@@ -237,7 +237,8 @@ fn collect_evaluator_file_ids(
             StoredEvaluatorConfig::LLMJudge(_)
             | StoredEvaluatorConfig::ExactMatch(_)
             | StoredEvaluatorConfig::ToolUse(_)
-            | StoredEvaluatorConfig::Regex(_) => {}
+            | StoredEvaluatorConfig::Regex(_)
+            | StoredEvaluatorConfig::Typescript(_) => {}
         }
     }
 }
