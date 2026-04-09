@@ -17,7 +17,9 @@ use futures::{Stream, StreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue};
 use pin_project::pin_project;
 use reqwest::{Body, Response, StatusCode};
-use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
+use reqwest::{Client, IntoUrl, RequestBuilder};
+#[cfg(feature = "e2e_tests")]
+use reqwest::{NoProxy, Proxy};
 use reqwest_sse_stream::{Event, RequestBuilderExt, ReqwestSseStreamError};
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -706,6 +708,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 
 fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
+    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut http_client_builder = Client::builder()
         .timeout(global_outbound_http_timeout.to_std().map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -714,9 +717,8 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
         })?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
-    if cfg!(feature = "e2e_tests")
-        && let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY")
-    {
+    #[cfg(feature = "e2e_tests")]
+    if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
         tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
         http_client_builder = http_client_builder
                 .proxy(
@@ -730,11 +732,8 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                             "localhost,0.0.0.0,127.0.0.1,minio,mock-provider-api,gateway,provider-proxy,clickhouse",
                         )),
                 )
-                // SAFETY: This is only reachable when the `e2e_tests` feature is enabled
-                // AND the `TENSORZERO_E2E_PROXY` env var is set (see cfg! guard above).
                 // In e2e tests, we use `provider-proxy` as an MITM proxy for caching
                 // provider responses, so we must accept its self-signed certificate.
-                // This is never active in production builds.
                 .danger_accept_invalid_certs(true);
     }
 
