@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tensorzero_types::inference_params::{JsonMode, ServiceTier};
 
-use crate::StoredPromptRef;
+use crate::StoredFileRef;
 
 pub const STORED_EVALUATION_CONFIG_SCHEMA_REVISION: i32 = 1;
 
@@ -134,7 +134,7 @@ pub enum StoredLLMJudgeVariantConfig {
 pub struct StoredLLMJudgeChatCompletionVariantConfig {
     pub active: Option<bool>,
     pub model: Arc<str>,
-    pub system_instructions: StoredPromptRef,
+    pub system_instructions: StoredFileRef,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -177,7 +177,7 @@ pub struct StoredLLMJudgeDiclVariantConfig {
     pub embedding_model: String,
     pub k: u32,
     pub model: String,
-    pub system_instructions: Option<StoredPromptRef>,
+    pub system_instructions: Option<StoredFileRef>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub presence_penalty: Option<f32>,

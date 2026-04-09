@@ -10,8 +10,8 @@ use sqlx::{PgPool, Row};
 
 use tensorzero_core::config::{
     AutopilotConfig, ClickHouseConfig, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-    MetricConfigType, PostgresConfig, UninitializedConfig, UninitializedToolConfig,
-    path::ResolvedTomlPathData,
+    MetricConfigType, PostgresConfig, UninitializedConfig, UninitializedFunctionConfig,
+    UninitializedToolConfig, path::ResolvedTomlPathData,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
@@ -102,7 +102,7 @@ async fn write_stored_config_empty_config_writes_no_rows(pool: PgPool) {
         "tools_configs",
         "evaluations_configs",
         "function_configs",
-        "prompt_template_configs",
+        "stored_files",
     ] {
         assert_that!(count_rows(&pool, table).await, eq(0));
     }
@@ -457,12 +457,12 @@ async fn write_stored_config_named_collections_upsert_by_name(pool: PgPool) {
     );
 }
 
-// ── Tests: tools with prompt templates ────────────────────────────────────────
+// ── Tests: tools with stored files ────────────────────────────────────────────
 
-/// Writing a tool should persist the tool row referencing a prompt-template
+/// Writing a tool should persist the tool row referencing a stored file
 /// row that contains the tool's parameters schema.
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
-async fn write_stored_config_persists_tool_with_prompt_template(pool: PgPool) {
+async fn write_stored_config_persists_tool_with_file(pool: PgPool) {
     let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
 
     let tool = UninitializedToolConfig {
@@ -485,10 +485,10 @@ async fn write_stored_config_persists_tool_with_prompt_template(pool: PgPool) {
         .expect("tool write should succeed");
 
     assert_that!(count_rows(&pool, "tools_configs").await, eq(1));
-    assert_that!(count_rows(&pool, "prompt_template_configs").await, eq(1));
+    assert_that!(count_rows(&pool, "stored_files").await, eq(1));
 
-    // The tool's `parameters.prompt_template_version_id` is a freshly-generated
-    // UUID, so we only assert on the fields we can predict.
+    // The tool's `parameters.file_version_id` is a freshly-generated UUID,
+    // so we only assert on the fields we can predict.
     assert_that!(
         fetch_named_config(&pool, "tools_configs", "get_weather").await,
         partially(matches_json_literal!({
@@ -496,39 +496,39 @@ async fn write_stored_config_persists_tool_with_prompt_template(pool: PgPool) {
             "name": "get_weather",
             "strict": true,
             "parameters": {
-                "template_key": "tools.get_weather.parameters",
+                "file_path": "tools.get_weather.parameters",
             },
         }))
     );
 
-    // Verify the prompt-template row exists for the referenced key and points
-    // back to the same `prompt_template_version_id` the tool stored.
+    // Verify the stored file row exists for the referenced path and points
+    // back to the same `file_version_id` the tool stored.
     let stored_tool = fetch_named_config(&pool, "tools_configs", "get_weather").await;
     let template_version_id = stored_tool
         .get("parameters")
-        .and_then(|v| v.get("prompt_template_version_id"))
+        .and_then(|v| v.get("file_version_id"))
         .and_then(serde_json::Value::as_str)
-        .expect("tool should reference a prompt template version id");
+        .expect("tool should reference a stored file version id");
     let template_row = sqlx::query(
-        "SELECT id, template_key, source_body FROM tensorzero.prompt_template_configs \
-         WHERE template_key = $1",
+        "SELECT id, file_path, source_body FROM tensorzero.stored_files \
+         WHERE file_path = $1",
     )
     .bind("tools.get_weather.parameters")
     .fetch_one(&pool)
     .await
-    .expect("prompt template row should exist");
+    .expect("stored file row should exist");
     let template_id: uuid::Uuid = template_row.get("id");
     assert_that!(template_id.to_string(), eq(template_version_id));
     let source_body: String = template_row.get("source_body");
     assert_that!(source_body, contains_substring("\"city\""));
 }
 
-// ── Tests: evaluations with prompt templates ──────────────────────────────────
+// ── Tests: evaluations with stored files ──────────────────────────────────────
 
 /// Writing an evaluation with an LLM-judge variant should persist the
-/// evaluation row and one prompt-template row per variant.
+/// evaluation row and one stored file row per variant.
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
-async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPool) {
+async fn write_stored_config_persists_evaluation_with_file(pool: PgPool) {
     let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
 
     // `UninitializedEvaluationConfig` has a custom deserializer that reads
@@ -536,7 +536,7 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
     // cleanest way to build one from an integration test.
     let evaluation: UninitializedEvaluationConfig = deserialize_from_json(serde_json::json!({
         "type": "inference",
-        "function_name": "my_function",
+        "function_name": "basic_test",
         "description": "End-to-end evaluation",
         "evaluators": {
             "judge": {
@@ -561,7 +561,21 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
         }
     }));
 
+    // The evaluation references `basic_test`, so the full-config validation
+    // performed at the top of `write_stored_config` requires the function to
+    // exist. A minimal chat function with a shortcut-model variant is enough.
+    let basic_test: UninitializedFunctionConfig = deserialize_from_json(serde_json::json!({
+        "type": "chat",
+        "variants": {
+            "default": {
+                "type": "chat_completion",
+                "model": "dummy::good",
+            }
+        }
+    }));
+
     let config = UninitializedConfig {
+        functions: Some(HashMap::from([("basic_test".to_string(), basic_test)])),
         evaluations: Some(HashMap::from([("my_eval".to_string(), evaluation)])),
         ..Default::default()
     };
@@ -572,13 +586,13 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
         .expect("evaluation write should succeed");
 
     assert_that!(count_rows(&pool, "evaluations_configs").await, eq(1));
-    assert_that!(count_rows(&pool, "prompt_template_configs").await, eq(1));
+    assert_that!(count_rows(&pool, "stored_files").await, eq(1));
 
     assert_that!(
         fetch_named_config(&pool, "evaluations_configs", "my_eval").await,
         partially(matches_json_literal!({
             "type": "inference",
-            "function_name": "my_function",
+            "function_name": "basic_test",
             "description": "End-to-end evaluation",
             "evaluators": {
                 "judge": {
@@ -594,7 +608,7 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
                                 "model": "openai::gpt-5-mini",
                                 "json_mode": "strict",
                                 "system_instructions": {
-                                    "template_key": "evaluations.my_eval.evaluators.judge.variants.judge_chat.system_instructions",
+                                    "file_path": "evaluations.my_eval.evaluators.judge.variants.judge_chat.system_instructions",
                                 },
                             },
                         },
@@ -604,14 +618,13 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
         }))
     );
 
-    let template_row =
-        sqlx::query("SELECT template_key, source_body FROM tensorzero.prompt_template_configs")
-            .fetch_one(&pool)
-            .await
-            .expect("prompt template row should exist");
-    let template_key: String = template_row.get("template_key");
+    let template_row = sqlx::query("SELECT file_path, source_body FROM tensorzero.stored_files")
+        .fetch_one(&pool)
+        .await
+        .expect("stored file row should exist");
+    let file_path: String = template_row.get("file_path");
     assert_that!(
-        template_key,
+        file_path,
         eq("evaluations.my_eval.evaluators.judge.variants.judge_chat.system_instructions")
     );
     let source_body: String = template_row.get("source_body");
@@ -621,7 +634,7 @@ async fn write_stored_config_persists_evaluation_with_prompt_template(pool: PgPo
 // ── Tests: read-back via load_config_from_db ──────────────────────────────────
 
 /// Write a representative `UninitializedConfig` covering one singleton, one
-/// named-collection entry of each kind, plus a tool with a prompt template,
+/// named-collection entry of each kind, plus a tool with a stored file,
 /// and assert that `load_config_from_db` returns those values.
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
 async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {

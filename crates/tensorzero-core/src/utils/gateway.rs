@@ -253,6 +253,25 @@ pub type LatestAppStateData = axum::extract::State<ResolvedAppStateData>;
 pub type AppState = LatestAppStateData;
 
 impl AppStateData<SwappableConfig> {
+    /// Atomically hot-swap the in-memory config snapshot and the source
+    /// `UninitializedConfig` used for subsequent validation passes.
+    ///
+    /// This is the single entry point callers should use after persisting a
+    /// new full-config document (e.g. `POST /internal/config_toml/apply`) so
+    /// the swap semantics stay in one place.
+    ///
+    /// TODO(#7232): This only swaps the `Config` snapshot — it does not yet
+    /// rebuild the other long-lived runtime dependencies on `AppStateData`
+    /// (`http_client`, DB/Valkey connection info, `rate_limiting_manager`,
+    /// `cache_manager`). Edits to infra sections of an applied TOML are
+    /// persisted and reported successful, but live requests keep using the
+    /// pre-apply runtime settings until the gateway restarts. Making those
+    /// fields hot-swappable is the natural place to plug that in.
+    pub fn swap_config(&self, config: Arc<Config>, uninitialized: UninitializedConfig) {
+        self.config.store(config);
+        self.uninitialized_config.store(Arc::new(uninitialized));
+    }
+
     /// Load the latest config snapshot, producing a concrete `AppStateData<Arc<Config>>`.
     pub fn load_latest(&self) -> AppStateData<Arc<Config>> {
         AppStateData {

@@ -32,9 +32,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
-    StoredNonStreamingTimeouts, StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig,
-    StoredToolConfig,
+    StoredFileRef, StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
+    StoredNonStreamingTimeouts, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
 };
 use tracing::Span;
 use tracing::instrument;
@@ -77,6 +76,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
+pub mod editable;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -1488,6 +1488,27 @@ impl Config {
         Ok(unwritten_config)
     }
 
+    pub async fn load_from_uninitialized(
+        config: UninitializedConfig,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Error> {
+        let config = Box::new(config);
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
+            .await?
+        } else {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config))).await?
+        };
+
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
+        }
+
+        Ok(unwritten_config)
+    }
+
     /// Loads and initializes an unwritten config.
     ///
     /// This is the core config loading function that transforms raw config (TOML table, Config
@@ -2137,8 +2158,8 @@ pub struct UninitializedRelayConfig {
 
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
-struct UninitializedGlobbedConfig {
-    table: toml::Table,
+pub struct UninitializedGlobbedConfig {
+    pub table: toml::Table,
 }
 
 impl UninitializedConfig {
@@ -2266,7 +2287,7 @@ impl UninitializedConfig {
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
-    fn read_toml_config(
+    pub fn read_toml_config(
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {
@@ -2947,28 +2968,25 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
+    pub(crate) fn files_for_db(&self) -> [&ResolvedTomlPathData; 1] {
         [&self.parameters]
     }
 
     pub(crate) fn convert_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredToolConfig, Error> {
-        let template_key = self.parameters.get_template_key();
-        let Some(prompt_template_version_id) = prompt_template_version_ids.get(&template_key)
-        else {
+        let file_path = self.parameters.get_template_key();
+        let Some(file_version_id) = file_version_ids.get(&file_path) else {
             return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Missing prompt template version ID for template key `{template_key}`."
-                ),
+                message: format!("Missing stored file version ID for file path `{file_path}`."),
             }));
         };
         Ok(StoredToolConfig {
             description: self.description.clone(),
-            parameters: StoredPromptRef {
-                prompt_template_version_id: *prompt_template_version_id,
-                template_key,
+            parameters: StoredFileRef {
+                file_version_id: *file_version_id,
+                file_path,
             },
             name: self.name.clone(),
             strict: self.strict,
@@ -3154,9 +3172,9 @@ mod round_trip_tests {
     // ── UninitializedToolConfig ────────────────────────────────────────
     //
     // `UninitializedToolConfig` only has a forward conversion to
-    // `StoredToolConfig` (the reverse requires looking up a prompt template
+    // `StoredToolConfig` (the reverse requires looking up a stored file
     // by ID), so this verifies the forward conversion preserves all fields
-    // and resolves the prompt template version ID correctly.
+    // and resolves the stored file version ID correctly.
 
     #[gtest]
     fn test_uninitialized_tool_config_convert_for_db() {
@@ -3165,7 +3183,7 @@ mod round_trip_tests {
             PathBuf::from("tools/my_tool.json"),
             Some(parameters_json),
         );
-        let template_key = parameters.get_template_key();
+        let file_path = parameters.get_template_key();
 
         let original = UninitializedToolConfig {
             description: "Tool description".to_string(),
@@ -3175,21 +3193,18 @@ mod round_trip_tests {
         };
 
         let template_id = Uuid::now_v7();
-        let mut prompt_template_version_ids = HashMap::new();
-        prompt_template_version_ids.insert(template_key.clone(), template_id);
+        let mut file_version_ids = HashMap::new();
+        file_version_ids.insert(file_path.clone(), template_id);
 
         let stored = original
-            .convert_for_db(&prompt_template_version_ids)
+            .convert_for_db(&file_version_ids)
             .expect("conversion should succeed when template id is present");
 
         expect_that!(stored.description, eq(&original.description));
         expect_that!(stored.name.as_deref(), some(eq("my_tool")));
         expect_that!(stored.strict, eq(true));
-        expect_that!(stored.parameters.template_key, eq(&template_key));
-        expect_that!(
-            stored.parameters.prompt_template_version_id,
-            eq(template_id)
-        );
+        expect_that!(stored.parameters.file_path, eq(&file_path));
+        expect_that!(stored.parameters.file_version_id, eq(template_id));
     }
 
     #[gtest]
