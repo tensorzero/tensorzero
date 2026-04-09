@@ -324,8 +324,11 @@ impl RateLimitingManager {
 
     /// Shutdown the rate limiting manager.
     /// This is a no-op in direct mode (no tokens to return).
-    pub fn shutdown(&self) -> Result<(), Error> {
-        Ok(())
+    // This method is async in preparation for supporting a non-direct mode where we
+    // actually need to do work during shutdown.
+    pub async fn shutdown(&self) {
+        tracing::info!("Returning unused rate limit tokens to database");
+        tracing::info!("Rate limit token return complete");
     }
 }
 
