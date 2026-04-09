@@ -10,6 +10,7 @@ disallowed-methods = [
     { path = "tracing_subscriber::layer::Layer::with_filter", reason = "Call `apply_filter_fixing_tracing_bug` instead" },
     { path = "tokio::task::spawn", reason = "Verify that it's okay for the gateway to shut down without waiting for this task" },
     { path = "std::process::exit", reason = "Verify that it's okay to shut down the entire process without our normal shutdown logic" },
-    { path = "uuid::Uuid::new_v4", reason = "Use `Uuid::now_v7` for new UUIDs instead" },
+    # The 'v4' feature might not get enabled by our transitive deps, so allow this to not resolve
+    { path = "uuid::Uuid::new_v4", reason = "Use `Uuid::now_v7` for new UUIDs instead", allow-invalid = true },
     { path = "tensorzero_core::db::ConfigQueries::write_config_snapshot", reason = "Use `AppStateData::validate_and_write_config_snapshot` instead to ensure configs are validated before persisting" },
 ]

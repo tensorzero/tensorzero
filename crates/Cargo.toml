@@ -33,6 +33,7 @@ members = [
     "tensorzero-error",
     "tensorzero-inference-types",
     "tensorzero-unsafe-helpers",
+    "ts-executor-pool",
 ]
 resolver = "2"
 
@@ -43,6 +44,7 @@ license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
+deno_core = "0.397.0"
 reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"] }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
