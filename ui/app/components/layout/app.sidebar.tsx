@@ -13,7 +13,7 @@ import {
   SidebarCollapse,
   SidebarExpand,
 } from "~/components/icons/Icons";
-import { KeyRound, LayoutGrid, Plus } from "lucide-react";
+import { FileCode2, KeyRound, LayoutGrid, Plus } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +30,7 @@ import {
 } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { useAutopilotAvailable } from "~/context/autopilot-available";
+import { useFeatureFlags } from "~/context/feature-flags";
 import { TensorZeroLogo } from "~/components/icons/Icons";
 import { Link } from "react-router";
 import type { IconProps } from "~/components/icons/Icons";
@@ -124,6 +125,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state, toggleSidebar } = useSidebar();
   const activePathUtils = useActivePath();
   const autopilotAvailable = useAutopilotAvailable();
+  const featureFlags = useFeatureFlags();
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -184,6 +186,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <Plus className="h-4 w-4" />
                   </Link>
                 )}
+              </SidebarMenuItem>
+            )}
+            {featureFlags.configEditor && (
+              <SidebarMenuItem className="list-none">
+                <SidebarMenuButton
+                  asChild
+                  tooltip={state === "collapsed" ? "Config" : undefined}
+                  isActive={activePathUtils.isActive("/config")}
+                >
+                  <Link to="/config" className="flex items-center gap-2">
+                    <FileCode2 className="h-4 w-4" />
+                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                      Config
+                    </span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             )}
           </SidebarGroupContent>

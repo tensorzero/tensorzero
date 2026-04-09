@@ -70,6 +70,9 @@ importers:
       '@codemirror/legacy-modes':
         specifier: ^6.5.1
         version: 6.5.2
+      '@codemirror/search':
+        specifier: 6.5.11
+        version: 6.5.11
       '@codemirror/state':
         specifier: 6.5.4
         version: 6.5.4
@@ -79,6 +82,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.1.1
         version: 5.2.2(react-hook-form@7.71.2(react@19.2.4))
+      '@lezer/highlight':
+        specifier: 1.2.3
+        version: 1.2.3
       '@radix-ui/react-switch':
         specifier: ^1.2.6
         version: 1.2.6(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

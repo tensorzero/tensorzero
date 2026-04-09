@@ -57,6 +57,7 @@ async fn load_startup_config(
     (
         tensorzero_core::config::unwritten::UnwrittenConfig,
         Option<ConfigFileGlob>,
+        bool, // config_in_database
     ),
     ExitCode,
 > {
@@ -67,7 +68,7 @@ async fn load_startup_config(
 
     if let Some(path) = args.config_file.as_ref() {
         let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
-        return Ok((unwritten_config, Some(glob)));
+        return Ok((unwritten_config, Some(glob), false));
     }
 
     if args.default_config {
@@ -77,14 +78,14 @@ async fn load_startup_config(
         let unwritten_config = Config::new_empty()
             .await
             .log_err_pretty("Failed to load default config")?;
-        return Ok((unwritten_config, None));
+        return Ok((unwritten_config, None, false));
     }
 
     if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
         let unwritten_config = load_startup_config_from_database()
             .await
             .log_err_pretty("Failed to load configuration from database")?;
-        return Ok((unwritten_config, None));
+        return Ok((unwritten_config, None, true));
     }
 
     tracing::error!("You must specify either `--config-file` or `--default-config`.");
@@ -475,7 +476,7 @@ async fn run() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
-    let (unwritten_config, glob) = load_startup_config(&args).await?;
+    let (unwritten_config, glob, config_in_database) = load_startup_config(&args).await?;
 
     let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
         .log_err_pretty("Failed to set up metrics")?;
@@ -565,13 +566,17 @@ async fn run() -> Result<(), ExitCode> {
         };
 
     // Initialize GatewayHandle
-    let gateway_handle =
-        gateway::GatewayHandle::new(unwritten_config, available_tools, tool_whitelist)
-            .await
-            .map_err(|e| {
-                e.log_at_level("Failed to initialize AppState: ", tracing::Level::ERROR);
-                ExitCode::FAILURE
-            })?;
+    let gateway_handle = gateway::GatewayHandle::new(
+        unwritten_config,
+        available_tools,
+        tool_whitelist,
+        config_in_database,
+    )
+    .await
+    .map_err(|e| {
+        e.log_at_level("Failed to initialize AppState: ", tracing::Level::ERROR);
+        ExitCode::FAILURE
+    })?;
 
     validate_postgres_extensions_for_postgres_primary(&gateway_handle).await?;
 
