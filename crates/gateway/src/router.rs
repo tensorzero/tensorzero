@@ -56,12 +56,12 @@ pub async fn build_axum_router(
         .nest_service(&mcp_path, mcp_router)
         .fallback(endpoints::fallback::handle_404);
 
-    let config = app_state.config.load();
+    let config = app_state.config().load();
     if config.gateway.auth.enabled {
         let state = TensorzeroAuthMiddlewareState::new(TensorzeroAuthMiddlewareStateInner {
             unauthenticated_routes: UNAUTHENTICATED_ROUTES,
             auth_cache: app_state.auth_cache.clone(),
-            pool: app_state.postgres_connection_info.get_pool().cloned(),
+            pool: app_state.postgres_connection_info().get_pool().cloned(),
             error_json: config.gateway.unstable_error_json,
             base_path: (!base_path.is_empty()).then(|| base_path.to_string()),
         });

@@ -79,7 +79,7 @@ impl McpToolVisitor {
             client: Arc::new(EmbeddedClient::new(app_state.load_latest())),
             heartbeater: Arc::new(NoopHeartbeater),
             registry: Arc::new(ToolRegistry::new()),
-            config_snapshot_hash: app_state.config.load().hash.to_string(),
+            config_snapshot_hash: app_state.config().load().hash.to_string(),
         }
     }
 

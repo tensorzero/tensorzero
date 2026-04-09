@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use arc_swap::ArcSwap;
-
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
-use crate::config::{ConfigFileGlob, RuntimeOverlay, UninitializedConfig};
+use crate::config::{ConfigFileGlob, RuntimeOverlay};
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
 use crate::http::TensorzeroResponseWrapper;
@@ -606,13 +604,14 @@ impl ClientBuilder {
                                 source: e.log().into(),
                             })
                         })?;
-                let runtime_overlay = Arc::new(unwritten_config.runtime_overlay().clone());
-                let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.log().into() })
-                    })?;
+                let (config, runtime_overlay) =
+                    Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
+                        .await
+                        .map_err(|e| ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                            source: e.log().into(),
+                        }))?;
                 let config = Arc::new(config);
+                let runtime_overlay = Arc::new(runtime_overlay);
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
@@ -653,7 +652,6 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config,
-                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay,
                                 clickhouse_connection_info,
                                 postgres_connection_info,
@@ -698,7 +696,6 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
-                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay.clone(),
                                 // We create a new independent `ClickHouseConnectionInfo` here,
                                 // and do *not* directly use the existing `clickhouse_connection_info`
@@ -792,7 +789,7 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
+        let (config, _) = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other {
@@ -1245,7 +1242,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     crate::endpoints::object_storage::get_object(
                         config.object_store_info.as_ref(),
                         storage_path,

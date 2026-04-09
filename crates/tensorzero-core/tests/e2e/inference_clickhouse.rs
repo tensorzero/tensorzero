@@ -106,7 +106,7 @@ async fn test_clickhouse_bulk_insert_off_default() {
         !client
             .get_app_state_data()
             .unwrap()
-            .clickhouse_connection_info
+            .clickhouse_connection_info()
             .is_batching_enabled(),
         "Batching is enabled, but should be disabled with default config!"
     );
@@ -133,7 +133,7 @@ async fn test_clickhouse_bulk_insert() {
         client
             .get_app_state_data()
             .unwrap()
-            .clickhouse_connection_info
+            .clickhouse_connection_info()
             .is_batching_enabled(),
         "Batching should be enabled with config, but is disabled!"
     );
