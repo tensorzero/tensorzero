@@ -289,6 +289,13 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPathDirectory>,
 }
 
+impl TemplateFilesystemAccess {
+    /// Returns `true` if filesystem access is explicitly enabled or a base path is configured.
+    pub fn is_active(&self) -> bool {
+        self.enabled == Some(true) || self.base_path.is_some()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`

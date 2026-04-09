@@ -442,6 +442,21 @@ async fn run() -> Result<(), ExitCode> {
                 .ok()
                 .log_err_pretty("Failed to deserialize config")?;
 
+        if uninitialized_config
+            .gateway
+            .as_ref()
+            .and_then(|g| g.template_filesystem_access.as_ref())
+            .is_some_and(|tfa| tfa.is_active())
+        {
+            tracing::error!(
+                "`template_filesystem_access` is set in the gateway config, but \
+                 `--store-config` does not support filesystem-based template access. \
+                 Remove or disable `gateway.template_filesystem_access` and modify your \
+                 templates to remove file imports before storing config."
+            );
+            return Err(ExitCode::FAILURE);
+        }
+
         // Validate by running the full load pipeline (ensures the config is valid before storing).
         // Also extracts extra templates discovered from the filesystem — all prompts, whether
         // explicitly specified or dynamically included, must be stored in the database.
