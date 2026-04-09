@@ -1,8 +1,9 @@
 //! Tool result parsing utilities.
 
-use durable_tools::{NonControlToolError, ToolFailure, ToolResult};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
+use tensorzero_types::tool_error::ToolResult;
+use tensorzero_types::tool_failure::{NonControlToolError, ToolFailure};
 
 /// The output type used for all tools (server-side and client-side)
 /// that we register with the autopilot worker.

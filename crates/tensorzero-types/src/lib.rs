@@ -16,7 +16,9 @@ pub mod serde_utils;
 pub mod snapshot;
 pub mod storage;
 pub mod tool;
+pub mod tool_error;
 pub mod tool_failure;
+pub mod tool_handle;
 pub mod usage;
 
 pub(crate) fn deprecation_warning(message: &str) {
@@ -45,7 +47,9 @@ pub use snapshot::SnapshotHash;
 pub use storage::{StorageKind, StoragePath};
 use tensorzero_derive::TensorZeroDeserialize;
 pub use tool::{InferenceResponseToolCall, ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
+pub use tool_error::ToolError;
 pub use tool_failure::{NonControlToolError, ToolFailure};
+pub use tool_handle::ToolHandle;
 pub use usage::{ApiType, RawResponseEntry};
 use uuid::Uuid;
 

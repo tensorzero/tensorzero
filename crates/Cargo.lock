@@ -8342,9 +8342,11 @@ version = "2026.4.0"
 name = "tensorzero-types"
 version = "2026.4.0"
 dependencies = [
+ "anyhow",
  "aws-smithy-types",
  "blake3",
  "chrono",
+ "durable",
  "hex",
  "infer",
  "mime 0.4.0-a.0",
@@ -8971,7 +8973,6 @@ dependencies = [
  "deno_core",
  "deno_error",
  "durable",
- "durable-tools",
  "futures",
  "icu_calendar",
  "mockall",
@@ -8981,6 +8982,7 @@ dependencies = [
  "serde_json",
  "tensorzero-core",
  "tensorzero-ts-types",
+ "tensorzero-types",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",

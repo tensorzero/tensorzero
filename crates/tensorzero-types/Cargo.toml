@@ -6,8 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 aws-smithy-types = { version = "1.4.7", features = ["byte-stream-poll-next"] }
 chrono.workspace = true
+durable.workspace = true
 hex = "0.4.3"
 num-bigint = "0.4"
 infer.workspace = true
