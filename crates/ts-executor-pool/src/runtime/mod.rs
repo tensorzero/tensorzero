@@ -12,17 +12,14 @@ mod ops;
 
 use crate::ExtraInferenceTags;
 use crate::runtime::ops::rlm_ext;
+use crate::tensorzero_client::TensorZeroClient;
 use crate::ts_checker::{ExposedToolData, TsCheckerPool};
 use crate::{SES_INIT_JS, SES_JS, TsError};
 use deno_core::v8::IsolateHandle;
 use deno_core::{JsRuntime, OpState, PollEventLoopOptions, RuntimeOptions};
 use deno_error::JsErrorBox;
-use durable::{ControlFlow, SpawnOptions, async_trait};
-use durable_tools::{
-    ClientInferenceParams, InferenceResponse, TensorZeroClient, ToolContext, ToolHandle,
-    ToolRegistry, ToolResult,
-};
-use serde_json::Value as JsonValue;
+use durable::{ControlFlow, async_trait};
+use tensorzero_types::tool_error::ToolResult;
 use tokio::runtime::Handle;
 use tracing::Span;
 
@@ -40,7 +37,7 @@ use crate::RlmConfig;
 use crate::state::OomSnapshotConfig;
 
 // ---------------------------------------------------------------------------
-// RLM loop types (shared between ts-executor-pool and durable-tools-internal)
+// RLM loop types
 // ---------------------------------------------------------------------------
 
 /// The data source for the RLM loop, encoding both what data is available
@@ -627,56 +624,7 @@ impl RlmPool {
     }
 }
 
-/// This is a wrapper trait around `ToolContext`.
-/// The only purpose is to allow us to erase the generic parameter `S` from `ToolContext` -
-/// that is, we want to be able to write `Arc<Mutex<dyn ToolContextHelper>>` instead of `Arc<Mutex<ToolContext<S>>>`.
-/// This allows the type `S` to be defined in a different crate (e.g. `AutopilotServerState`), while
-/// still keeping `ExposedTools` generic-free (so that we can downcast in deno ops).
-///
-/// Every method on this trait just delegates to the underlying `ToolContext`.
-#[async_trait]
-pub trait ToolContextHelper: Send + Sync {
-    async fn episode_id(&self) -> Uuid;
-    async fn join_tool(&mut self, handle: ToolHandle) -> ToolResult<JsonValue>;
-    async fn uuid7(&mut self) -> ToolResult<Uuid>;
-    async fn spawn_tool(
-        &mut self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-        options: SpawnOptions,
-    ) -> ToolResult<ToolHandle>;
-    async fn inference(&mut self, params: ClientInferenceParams) -> ToolResult<InferenceResponse>;
-    async fn heartbeat(&mut self) -> ToolResult<()>;
-}
-
-#[async_trait]
-impl<S: Clone + Send + Sync> ToolContextHelper for ToolContext<S> {
-    async fn episode_id(&self) -> Uuid {
-        ToolContext::episode_id(self)
-    }
-    async fn join_tool(&mut self, handle: ToolHandle) -> ToolResult<JsonValue> {
-        ToolContext::join_tool(self, handle).await
-    }
-    async fn uuid7(&mut self) -> ToolResult<Uuid> {
-        ToolContext::uuid7(self).await
-    }
-    async fn heartbeat(&mut self) -> ToolResult<()> {
-        ToolContext::heartbeat(self, None).await
-    }
-    async fn spawn_tool(
-        &mut self,
-        tool_name: &str,
-        llm_params: JsonValue,
-        side_info: JsonValue,
-        options: SpawnOptions,
-    ) -> ToolResult<ToolHandle> {
-        ToolContext::spawn_tool(self, tool_name, llm_params, side_info, options).await
-    }
-    async fn inference(&mut self, params: ClientInferenceParams) -> ToolResult<InferenceResponse> {
-        ToolContext::inference(self, params).await
-    }
-}
+pub use tensorzero_core::client::ToolContextHelper;
 
 /// Constructs side info suitable for calling tools in our `ToolContext`,
 /// using the provided value as the tool call id.
@@ -720,24 +668,9 @@ impl ExposedToolMode {
         }
     }
 
-    /// Constructs `ExposedToolMode::Whitelist` from a list of tool names
-    pub fn whitelist(registry: &ToolRegistry, tools: &[&str]) -> Result<ExposedToolMode, TsError> {
-        let mut all_exposed_tool_data = Vec::new();
-        // Validate all tools exist in the registry
-        for tool in tools {
-            let tool_data = registry.get(tool).ok_or(TsError::InvalidConfig {
-                message: format!("Tool {tool} not found in registry"),
-            })?;
-            let exposed_tool_data = ExposedToolData {
-                name: tool_data.name().to_string(),
-                param_type: tool_data.llm_params_ts_bundle(),
-                param_type_name: tool_data.llm_params_ts_bundle_type_name().clone(),
-                output_type: tool_data.output_ts_bundle(),
-                output_type_name: tool_data.output_ts_bundle_type_name().clone(),
-            };
-            all_exposed_tool_data.push(exposed_tool_data);
-        }
-        Ok(ExposedToolMode::Whitelist(all_exposed_tool_data))
+    /// Constructs `ExposedToolMode::Whitelist` from pre-built tool data.
+    pub fn whitelist(tool_data: Vec<ExposedToolData>) -> ExposedToolMode {
+        ExposedToolMode::Whitelist(tool_data)
     }
 }
 
@@ -1254,11 +1187,11 @@ async fn upload_oom_snapshot(
 mod tests {
     use super::*;
     use crate::llm_query::extract_text_from_response;
-    use durable_tools::InputMessageContent;
-    use durable_tools::MockTensorZeroClient;
-    use tensorzero_core::endpoints::inference::ChatInferenceResponse;
+    use crate::tensorzero_client::MockTensorZeroClient;
+    use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
     use tensorzero_core::inference::types::ContentBlockChatOutput;
     use tensorzero_core::inference::types::Usage;
+    use tensorzero_types::InputMessageContent;
 
     const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -1296,7 +1229,7 @@ mod tests {
         }
     }
 
-    fn first_inference_text(params: &durable_tools::ClientInferenceParams) -> String {
+    fn first_inference_text(params: &tensorzero_core::client::ClientInferenceParams) -> String {
         params
             .input
             .messages

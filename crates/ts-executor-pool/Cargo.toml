@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 bip39-uuid-substitution = { path = "../bip39-uuid-substitution" }
 durable.workspace = true
-durable-tools = { path = "../durable-tools", features = ["ts-bindings"] }
 thiserror.workspace = true
 blake3.workspace = true
 regex.workspace = true
@@ -16,6 +15,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tensorzero-core.workspace = true
 tensorzero-ts-types = { path = "../tensorzero-ts-types" }
+tensorzero-types = { path = "../tensorzero-types" }
 deno_error = "0.7"
 serde.workspace = true
 serde_json.workspace = true
@@ -38,7 +38,6 @@ ureq = "3"
 deno_core.workspace = true
 
 [dev-dependencies]
-durable-tools = { path = "../durable-tools", features = ["test-support"] }
 mockall = "0.14.0"
 proptest = "1"
 

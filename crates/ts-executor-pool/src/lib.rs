@@ -3,6 +3,7 @@ pub mod inference;
 pub mod llm_query;
 pub mod runtime;
 pub mod state;
+pub mod tensorzero_client;
 pub mod tool_result;
 pub mod ts_checker;
 pub use bip39_uuid_substitution as uuid_substitution;

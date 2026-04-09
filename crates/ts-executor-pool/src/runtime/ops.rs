@@ -7,8 +7,9 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 use deno_core::{OpState, extension, op2};
 use deno_error::JsErrorBox;
 use durable::{ControlFlow, SpawnOptions};
-use durable_tools::{TensorZeroClient, ToolError, ToolHandle};
 use serde::{Deserialize, Serialize};
+use tensorzero_types::ToolError;
+use tensorzero_types::ToolHandle;
 use tokio_util::task::AbortOnDropHandle;
 use tracing::{Instrument, Span};
 
@@ -21,6 +22,7 @@ use crate::{
         RlmPermit, RlmRuntimeState, TsCheckerRef, control_flow_to_js_error,
     },
     state::OomSnapshotConfig,
+    tensorzero_client::TensorZeroClient,
     tool_result::parse_tool_result,
     truncate_to_chars,
 };

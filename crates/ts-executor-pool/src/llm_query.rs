@@ -11,14 +11,13 @@ use crate::runtime::{
     RuntimeMode, RuntimeParams, spawn_child_runtime,
 };
 use crate::state::OomSnapshotConfig;
+use crate::tensorzero_client::TensorZeroClient;
 use crate::ts_checker::TsCheckerPool;
 use durable::ControlFlow;
-use durable_tools::{
-    ClientInferenceParams, InferenceResponse, Input, InputMessage, InputMessageContent, Role,
-    TensorZeroClient,
-};
-use tensorzero_core::endpoints::inference::ChatInferenceResponse;
+use tensorzero_core::client::ClientInferenceParams;
+use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
 use tensorzero_core::inference::types::ContentBlockChatOutput;
+use tensorzero_types::{Input, InputMessage, InputMessageContent, Role};
 
 /// Shared implementation for `op_llm_query` and `op_llm_query_batched`.
 ///

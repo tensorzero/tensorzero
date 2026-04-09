@@ -10,11 +10,13 @@
 
 use crate::ExtraInferenceTags;
 use crate::runtime::ToolContextHelper;
+use crate::tensorzero_client::TensorZeroClient;
 use bip39_uuid_substitution::{UuidSubstituter, postprocess_response, preprocess_message};
-use durable_tools::{
-    ClientInferenceParams, InferenceResponse, NonControlToolError, TensorZeroClient, ToolError,
-    ToolResult,
-};
+use tensorzero_core::client::ClientInferenceParams;
+use tensorzero_core::endpoints::inference::InferenceResponse;
+use tensorzero_types::ToolError;
+use tensorzero_types::tool_error::ToolResult;
+use tensorzero_types::tool_failure::NonControlToolError;
 
 use tracing::debug;
 
@@ -93,6 +95,6 @@ pub async fn run_inference_checkpointed(
             message: "episode_id must be None when using run_inference_checkpointed".to_string(),
         }));
     }
-    params.episode_id = Some(ctx.episode_id().await);
+    params.episode_id = Some(ctx.episode_id());
     run_inference_inner(extra_inference_tags, params, |params| ctx.inference(params)).await
 }

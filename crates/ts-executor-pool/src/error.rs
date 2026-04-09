@@ -1,6 +1,7 @@
 //! Error types for the TypeScript executor pool.
 
-use durable_tools::{NonControlToolError, TensorZeroClientError, ToolError};
+use tensorzero_types::ToolError;
+use tensorzero_types::tool_failure::NonControlToolError;
 
 /// Errors that can occur during TypeScript execution.
 #[derive(Debug, thiserror::Error)]
@@ -13,10 +14,10 @@ pub enum TsError {
     },
 
     /// TensorZero inference call failed.
-    #[error("T0 inference failed: {source}")]
+    #[error("T0 inference failed: {message}")]
     Inference {
-        /// The underlying client error.
-        source: TensorZeroClientError,
+        /// The error message from the inference client.
+        message: String,
     },
 
     /// JavaScript runtime error during code execution.
