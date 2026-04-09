@@ -5,9 +5,10 @@
 #   docker compose -f docker-compose.live.yml -f docker-compose.config-in-db.yml ...
 #
 # This override:
-#   1. Adds a one-shot `gateway-store-config` service that loads the same config
-#      glob used by the Postgres live-tests matrix (`{tensorzero,postgres}.*.toml`)
-#      into the stored_config tables via `gateway --store-config`.
+#   1. Adds a one-shot `gateway-store-config` service that loads config from
+#      `config-in-db/` (a fork of `config/` without `template_filesystem_access`
+#      and without `{% include %}` templates) into the stored_config tables via
+#      `gateway --store-config`.
 #   2. Rewires the main `gateway` service to boot from the database instead of a
 #      config file glob by clearing its `command` list and setting
 #      `TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE=true`.
@@ -29,7 +30,7 @@ services:
     command:
       [
         --store-config,
-        "tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml",
+        "tensorzero-core/tests/e2e/config-in-db/{tensorzero,postgres}.*.toml",
       ]
     restart: "no"
 
