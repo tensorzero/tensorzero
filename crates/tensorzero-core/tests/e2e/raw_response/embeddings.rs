@@ -234,20 +234,16 @@ async fn test_embeddings_raw_response_batch() {
 
 #[tokio::test]
 async fn test_embeddings_raw_response_with_cache() {
-    // Random input ensures we don't hit the internal (Valkey) cache from a previous run.
-    // The provider-proxy cache will need body sanitization to handle this.
-    let input_text = format!(
-        "This is a cache test for embeddings raw_response - {}",
-        rand::random::<u32>()
-    );
+    let input_text = "This is a cache test for embeddings raw_response";
 
-    // First request: populate cache with raw_response enabled
+    // First request: write_only bypasses cache reads (avoids stale Valkey hits)
+    // while still writing the result for the second request to read.
     let payload = json!({
         "input": input_text,
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true,
         "tensorzero::cache_options": {
-            "enabled": "on",
+            "enabled": "write_only",
             "max_age_s": 60
         }
     });
