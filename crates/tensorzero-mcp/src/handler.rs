@@ -17,6 +17,10 @@ use rmcp::{
     model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo, Tool},
     tool_handler,
 };
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP server holds SwappableAppStateData to load the latest config for each request"
+)]
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 use uuid::Uuid;
 
@@ -32,6 +36,10 @@ fn dummy_side_info(config_snapshot_hash: String) -> AutopilotSideInfo {
 }
 
 #[derive(Clone)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP server holds SwappableAppStateData to load the latest config for each request"
+)]
 pub(crate) struct TensorZeroMcpServer {
     #[expect(dead_code, reason = "retained for future tool implementations")]
     app_state: Arc<SwappableAppStateData>,
@@ -39,6 +47,10 @@ pub(crate) struct TensorZeroMcpServer {
 }
 
 impl TensorZeroMcpServer {
+    #[expect(
+        clippy::disallowed_types,
+        reason = "MCP server holds SwappableAppStateData to load the latest config for each request"
+    )]
     pub fn new(app_state: Arc<SwappableAppStateData>, tool_router: ToolRouter<Self>) -> Self {
         Self {
             app_state,
@@ -73,6 +85,10 @@ struct McpToolVisitor {
 }
 
 impl McpToolVisitor {
+    #[expect(
+        clippy::disallowed_types,
+        reason = "MCP tool visitor reads SwappableAppStateData once at initialization"
+    )]
     fn new(app_state: &SwappableAppStateData) -> Self {
         Self {
             router: ToolRouter::new(),
@@ -185,6 +201,10 @@ impl ToolVisitor for McpToolVisitor {
 }
 
 /// Build the MCP tool router by visiting all autopilot tools.
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP tool router is initialized from SwappableAppStateData at startup"
+)]
 pub(crate) async fn build_tool_router(
     app_state: &SwappableAppStateData,
 ) -> Result<ToolRouter<TensorZeroMcpServer>, String> {

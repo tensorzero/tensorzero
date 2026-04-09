@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::types::{GetWorkflowEvaluationRunStatisticsResponse, WorkflowEvaluationRunStatistics};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting workflow evaluation run statistics.
 #[derive(Debug, Deserialize)]
@@ -24,7 +24,6 @@ pub struct GetWorkflowEvaluationRunStatisticsParams {
 ///
 /// Gets aggregated statistics (count, mean, stdev, confidence intervals) for a workflow
 /// evaluation run, grouped by metric name.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.get_run_statistics", skip_all)]
 pub async fn get_workflow_evaluation_run_statistics_handler(
     State(app_state): AppState,

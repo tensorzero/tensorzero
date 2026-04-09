@@ -11,7 +11,7 @@ use super::types::{
 };
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting workflow evaluation run episodes with feedback.
 #[derive(Debug, Deserialize)]
@@ -33,7 +33,6 @@ fn default_limit() -> u32 {
 /// Handler for `GET /internal/workflow_evaluations/run_episodes`
 ///
 /// Gets workflow evaluation run episodes with their feedback for a specific run.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.get_run_episodes", skip_all)]
 pub async fn get_workflow_evaluation_run_episodes_handler(
     State(app_state): AppState,
