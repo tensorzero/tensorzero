@@ -34,10 +34,13 @@ pub struct UiConfig {
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>,
     pub model_names: Vec<String>,
     pub config_hash: String,
+    /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
+    /// Used by the UI to decide whether to show the config editor.
+    pub config_in_database: bool,
 }
 
 impl UiConfig {
-    pub fn from_config(config: &Config) -> Self {
+    pub fn from_config(config: &Config, config_in_database: bool) -> Self {
         Self {
             functions: config
                 .functions
@@ -57,6 +60,7 @@ impl UiConfig {
                 .collect(),
             model_names: config.models.table.keys().map(|s| s.to_string()).collect(),
             config_hash: config.hash.to_string(),
+            config_in_database,
         }
     }
 
@@ -134,6 +138,7 @@ impl UiConfig {
             evaluations: loaded_evaluations,
             model_names,
             config_hash: hash,
+            config_in_database: false,
         })
     }
 }
@@ -143,7 +148,10 @@ impl UiConfig {
 /// Returns a UI-safe subset of the Config.
 #[expect(clippy::unused_async)]
 pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
-    Json(UiConfig::from_config(&app_state.config))
+    Json(UiConfig::from_config(
+        &app_state.config,
+        app_state.config_in_database,
+    ))
 }
 
 /// Handler for GET /internal/ui_config/{hash}
@@ -207,7 +215,7 @@ mod tests {
             .metrics
             .insert("test_metric".to_string(), metric_config);
 
-        let ui_config = UiConfig::from_config(&config);
+        let ui_config = UiConfig::from_config(&config, false);
 
         assert_eq!(ui_config.functions.len(), 1);
         assert!(ui_config.functions.contains_key("test_function"));
@@ -263,7 +271,7 @@ mod tests {
             .metrics
             .insert("my_metric".to_string(), metric_config);
 
-        let ui_config = UiConfig::from_config(&config);
+        let ui_config = UiConfig::from_config(&config, false);
 
         // Verify functions are copied correctly
         assert_eq!(ui_config.functions.len(), 1);

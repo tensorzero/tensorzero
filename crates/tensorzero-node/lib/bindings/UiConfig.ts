@@ -17,4 +17,9 @@ export type UiConfig = {
   evaluations: { [key in string]: EvaluationConfig };
   model_names: Array<string>;
   config_hash: string;
+  /**
+   * Whether the gateway config was loaded from the database (as opposed to a file on disk).
+   * Used by the UI to decide whether to show the config editor.
+   */
+  config_in_database: boolean;
 };
