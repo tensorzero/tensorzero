@@ -51,6 +51,9 @@ use super::file_writes::{CollectedFile, add_file, write_collected_files};
 /// prefix to strip. All convert functions accept a `&FileVersionContext` so they
 /// consistently look up version IDs and build `StoredFileRef`s with the same
 /// (possibly stripped) file path.
+///
+/// The `shared_path_prefix_to_strip` is only used when storing the initial set of files
+/// in the database. We don't rely on it during regular operations.
 pub(crate) struct FileVersionContext<'a> {
     pub file_version_ids: &'a HashMap<String, Uuid>,
     pub shared_path_prefix_to_strip: Option<&'a Path>,
