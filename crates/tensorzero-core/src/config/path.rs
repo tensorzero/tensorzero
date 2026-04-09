@@ -55,6 +55,19 @@ impl ResolvedTomlPathData {
         self.__tensorzero_remapped_path.display().to_string()
     }
 
+    /// Returns the template key with `shared_path_prefix_to_strip` stripped from the front.
+    /// If `None` or the path does not start with the prefix, returns the full key unchanged.
+    pub fn stripped_path_key(&self, shared_path_prefix_to_strip: Option<&Path>) -> String {
+        let key = self.get_template_key();
+        let Some(prefix) = shared_path_prefix_to_strip else {
+            return key;
+        };
+        Path::new(&key)
+            .strip_prefix(prefix)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or(key)
+    }
+
     /// Returns true if this is a real filesystem path (not a synthetic "fake path")
     pub fn is_real_path(&self) -> bool {
         // Fake paths use a special prefix like "tensorzero::llm_judge"
