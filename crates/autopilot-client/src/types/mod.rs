@@ -3,8 +3,10 @@
 //! These types are shared between the client and server.
 
 mod autoevals;
+pub mod deployment_context;
 
 pub use autoevals::*;
+pub use deployment_context::*;
 
 use std::collections::HashMap;
 
@@ -840,6 +842,11 @@ pub struct CreateEventRequest {
     pub previous_user_message_event_id: Option<Uuid>,
     /// Must be set if the session id is nil and we are starting a new session
     pub config_snapshot_hash: Option<String>,
+    /// Pre-computed deployment context for new sessions.
+    /// Contains a structured markdown summary of functions, variants, metrics, feedback, and datasets.
+    /// Injected into the first user message's inference context so the agent starts with rich knowledge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deployment_context: Option<DeploymentContext>,
 }
 
 /// Query parameters for listing events.

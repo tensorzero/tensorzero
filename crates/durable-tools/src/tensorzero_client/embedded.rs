@@ -151,12 +151,26 @@ impl TensorZeroClient for EmbeddedClient {
         } else {
             None
         };
+        // For new sessions, compute deployment context so the agent starts with rich knowledge
+        let deployment_context = if session_id.is_nil() {
+            match tensorzero_core::endpoints::internal::autopilot_context::compute_deployment_context(&self.app_state).await {
+                Ok(ctx) => Some(ctx),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to compute deployment context");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let full_request = autopilot_client::CreateEventRequest {
             deployment_id,
             tensorzero_version: tensorzero_core::endpoints::status::TENSORZERO_VERSION.to_string(),
             payload: request.payload,
             previous_user_message_event_id: request.previous_user_message_event_id,
             config_snapshot_hash,
+            deployment_context,
         };
 
         create_event(

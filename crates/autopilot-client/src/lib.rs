@@ -34,6 +34,7 @@
 //!             metadata: Default::default(),
 //!         }),
 //!         previous_user_message_event_id: None,
+//!         deployment_context: None,
 //!     },
 //! ).await?;
 //!

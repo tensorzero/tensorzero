@@ -1,4 +1,5 @@
 pub mod autopilot;
+pub mod autopilot_context;
 pub mod config;
 pub mod count_inferences;
 pub mod evaluations;
