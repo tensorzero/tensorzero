@@ -5,7 +5,6 @@
 //! apply them back to the stored-config tables with compare-and-swap.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
@@ -23,7 +22,7 @@ use crate::db::postgres::stored_config_writes::{
 use crate::error::{Error, ErrorDetails};
 use crate::feature_flags;
 use crate::utils::gateway::{
-    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
+    AppState, PreparedConfigSwap, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
 };
 
 const CONFIG_EDITOR_ADVISORY_LOCK_KEY: i64 = 0x434F_4E46_4947_544D;
@@ -258,14 +257,17 @@ pub async fn apply_config_toml_handler(
     ))
     .await?;
 
-    // Persist `ConfigSnapshot` (a separate table used as an audit/history log, not the source of
-    // truth) before committing the transaction and hotswapping the validated config into
-    // the running gateway.
-    let db = app_state.get_delegating_database();
+    // Write the config snapshot and build new runtime dependencies **before**
+    // committing the transaction, so a runtime-dependency failure (e.g. bad
+    // connection URL in the new config) can still be rolled back cleanly
+    // instead of leaving the DB committed but the in-memory state stale.
     // `Box::pin` keeps the outer future small (clippy::large_futures).
-    let (written_config, runtime_overlay) = Box::pin(written.into_config(&db))
+    let db = app_state.get_delegating_database();
+    let prepared: PreparedConfigSwap = Box::pin(swap_state.prepare_config_swap(written, &db))
         .await
         .map_err(|e| e.log())?;
+
+    let written_hash = prepared.config().hash.to_string();
 
     tx.commit().await.map_err(|e| {
         Error::new(ErrorDetails::PostgresQuery {
@@ -273,11 +275,8 @@ pub async fn apply_config_toml_handler(
         })
     })?;
 
-    let written_hash = written_config.hash.to_string();
-    swap_state
-        .swap_config(Arc::new(written_config), Arc::new(runtime_overlay))
-        .await
-        .map_err(|e| e.log())?;
+    // Infallible: all fallible work was done in `prepare_config_swap` above.
+    swap_state.swap_config(prepared);
 
     Ok(Json(ApplyConfigTomlResponse {
         toml: canonical_toml,

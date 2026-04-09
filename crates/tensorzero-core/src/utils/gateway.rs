@@ -365,6 +365,22 @@ pub type ResolvedAppStateData = AppStateData;
 pub type LatestAppStateData = axum::extract::State<AppStateData>;
 pub type AppState = LatestAppStateData;
 
+/// Opaque bundle produced by `SwappableAppStateData::prepare_config_swap`.
+/// Holds everything needed for an infallible `swap_config` call.
+/// Building this succeeds before any database transaction is committed,
+/// so a failure here is still fully recoverable.
+pub struct PreparedConfigSwap {
+    config: Arc<Config>,
+    runtime_overlay: Arc<RuntimeOverlay>,
+    runtime_dependencies: Arc<RuntimeDependencies>,
+}
+
+impl PreparedConfigSwap {
+    pub fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+}
+
 impl SwappableAppStateData {
     /// A cloneable handle that observes the latest `Config` snapshot. Each call
     /// returns a fresh handle that shares the underlying `ArcSwap<LiveState>`,
@@ -373,24 +389,45 @@ impl SwappableAppStateData {
         SwappableConfig::new(self.live_state.clone())
     }
 
-    /// Atomically hot-swap the in-memory `Config` snapshot and the runtime
-    /// dependencies derived from it. Old runtime dependencies (DB pools, batch
-    /// writers, rate limiter, cache manager, HTTP client) are kept alive by any
-    /// in-flight requests that already resolved a snapshot and will be dropped
-    /// once those requests complete.
-    pub async fn swap_config(
+    /// Writes the config snapshot to the database and builds new runtime
+    /// dependencies, returning an opaque [`PreparedConfigSwap`].
+    ///
+    /// Callers should invoke this **before** committing any surrounding
+    /// database transaction so that a runtime-dependency build failure
+    /// (e.g. bad connection URL) can still be rolled back cleanly.
+    /// Once the transaction commits, pass the result to [`Self::swap_config`],
+    /// which is infallible.
+    pub async fn prepare_config_swap(
         &self,
-        config: Arc<Config>,
-        runtime_overlay: Arc<RuntimeOverlay>,
-    ) -> Result<(), DelayedError> {
+        unwritten: UnwrittenConfig,
+        db: &impl ConfigQueries,
+    ) -> Result<PreparedConfigSwap, DelayedError> {
+        let (config, runtime_overlay) = Box::pin(unwritten.into_config(db)).await?;
+        let config = Arc::new(config);
+        let runtime_overlay = Arc::new(runtime_overlay);
         let runtime_dependencies =
             Arc::new(build_runtime_dependencies(&config, self.connection_urls.as_ref()).await?);
-        self.live_state.store(Arc::new(LiveState {
+        Ok(PreparedConfigSwap {
             config,
             runtime_overlay,
             runtime_dependencies,
+        })
+    }
+
+    /// Atomically hot-swap the in-memory `Config` snapshot and runtime
+    /// dependencies. Old dependencies (DB pools, batch writers, rate limiter,
+    /// cache manager, HTTP client) remain alive for any in-flight requests
+    /// that have already resolved a snapshot and will be dropped once those
+    /// requests complete.
+    ///
+    /// This is infallible; all fallible work is done up front in
+    /// [`Self::prepare_config_swap`].
+    pub fn swap_config(&self, prepared: PreparedConfigSwap) {
+        self.live_state.store(Arc::new(LiveState {
+            config: prepared.config,
+            runtime_overlay: prepared.runtime_overlay,
+            runtime_dependencies: prepared.runtime_dependencies,
         }));
-        Ok(())
     }
 
     /// Load the latest config snapshot, producing a concrete `AppStateData`.
