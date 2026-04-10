@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap};
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,7 +14,7 @@ use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{ContentBlock, Text};
-use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
+use crate::model::UninitializedProviderConfig;
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
 use crate::model_table::{OpenAIKind, OpenRouterKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
@@ -381,34 +380,7 @@ impl EmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum EmbeddingInput {
-    Single(String),
-    Batch(Vec<String>),
-    SingleTokens(Vec<u32>),
-    BatchTokens(Vec<Vec<u32>>),
-}
-
-impl EmbeddingInput {
-    pub fn num_inputs(&self) -> usize {
-        match self {
-            EmbeddingInput::Single(_) => 1,
-            EmbeddingInput::Batch(texts) => texts.len(),
-            EmbeddingInput::SingleTokens(_) => 1,
-            EmbeddingInput::BatchTokens(tokens) => tokens.len(),
-        }
-    }
-
-    pub fn first(&self) -> Option<&String> {
-        match self {
-            EmbeddingInput::Single(text) => Some(text),
-            EmbeddingInput::Batch(texts) => texts.first(),
-            EmbeddingInput::SingleTokens(_) => None,
-            EmbeddingInput::BatchTokens(_) => None,
-        }
-    }
-}
+pub use tensorzero_inference_types::embeddings::EmbeddingInput;
 
 impl RateLimitedInputContent for EmbeddingInput {
     fn estimated_input_token_usage(&self) -> u64 {
@@ -426,19 +398,6 @@ impl RateLimitedInputContent for EmbeddingInput {
                 .sum::<u64>(),
         }
     }
-}
-
-impl From<String> for EmbeddingInput {
-    fn from(text: String) -> Self {
-        EmbeddingInput::Single(text)
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize)]
-pub struct EmbeddingRequest {
-    pub input: EmbeddingInput,
-    pub dimensions: Option<u32>,
-    pub encoding_format: EmbeddingEncodingFormat,
 }
 
 impl RateLimitedRequest for EmbeddingRequest {
@@ -479,27 +438,11 @@ impl RateLimitedRequest for EmbeddingRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct EmbeddingProviderRequest<'request> {
-    pub request: &'request EmbeddingRequest,
-    pub model_name: &'request str,
-    pub provider_name: &'request str,
-}
-
 pub use tensorzero_inference_types::EmbeddingEncodingFormat;
-
-#[derive(Debug, PartialEq)]
-pub struct EmbeddingProviderResponse {
-    pub id: Uuid,
-    pub input: EmbeddingInput,
-    pub embeddings: Vec<Embedding>,
-    pub created: u64,
-    pub raw_request: String,
-    pub raw_response: String,
-    pub usage: Usage,
-    pub latency: Latency,
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-}
+pub use tensorzero_inference_types::embeddings::{
+    Embedding, EmbeddingProvider, EmbeddingProviderRequest, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
@@ -678,15 +621,6 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
         })
     }
 }
-pub trait EmbeddingProvider {
-    fn embed(
-        &self,
-        request: &EmbeddingRequest,
-        client: &TensorzeroHttpClient,
-        dynamic_api_keys: &InferenceCredentials,
-        model_provider_data: &EmbeddingProviderRequestInfo,
-    ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
-}
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
@@ -726,30 +660,12 @@ pub struct EmbeddingProviderInfo {
     pub cost: Option<CostConfig>,
 }
 
-#[derive(Clone, Debug)]
-pub struct EmbeddingProviderRequestInfo {
-    pub provider_name: Arc<str>,
-    pub extra_body: Option<ExtraBodyConfig>,
-    pub extra_headers: Option<ExtraHeadersConfig>,
-}
-
 impl From<&EmbeddingProviderInfo> for EmbeddingProviderRequestInfo {
     fn from(val: &EmbeddingProviderInfo) -> Self {
         EmbeddingProviderRequestInfo {
             provider_name: val.provider_name.clone(),
             extra_body: val.extra_body.clone(),
             extra_headers: val.extra_headers.clone(),
-        }
-    }
-}
-
-impl From<&EmbeddingProviderRequestInfo> for ModelProviderRequestInfo {
-    fn from(val: &EmbeddingProviderRequestInfo) -> Self {
-        crate::model::ModelProviderRequestInfo {
-            provider_name: val.provider_name.clone(),
-            extra_headers: val.extra_headers.clone(),
-            extra_body: val.extra_body.clone(),
-            discard_unknown_chunks: false,
         }
     }
 }
@@ -919,53 +835,6 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                     .embed(request, client, dynamic_api_keys, model_provider_data)
                     .await
             }
-        }
-    }
-}
-
-impl EmbeddingProviderResponse {
-    pub fn new(
-        embeddings: Vec<Embedding>,
-        input: EmbeddingInput,
-        raw_request: String,
-        raw_response: String,
-        usage: Usage,
-        latency: Latency,
-        raw_usage: Option<Vec<RawUsageEntry>>,
-    ) -> Self {
-        Self {
-            id: Uuid::now_v7(),
-            input,
-            embeddings,
-            created: current_timestamp(),
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            raw_usage,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum Embedding {
-    Float(Vec<f32>),
-    Base64(String),
-}
-
-impl<'a> Embedding {
-    pub fn as_float(&'a self) -> Option<&'a Vec<f32>> {
-        match self {
-            Embedding::Float(vec) => Some(vec),
-            Embedding::Base64(_) => None,
-        }
-    }
-
-    pub fn ndims(&self) -> usize {
-        match self {
-            Embedding::Float(vec) => vec.len(),
-            Embedding::Base64(encoded) => encoded.len() * 3 / 16,
         }
     }
 }

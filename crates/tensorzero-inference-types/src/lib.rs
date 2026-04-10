@@ -7,6 +7,7 @@
 //! - Tighter incremental compilation boundaries
 
 pub mod credentials;
+pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
 pub(crate) mod serde_helpers;

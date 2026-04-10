@@ -8249,6 +8249,7 @@ dependencies = [
  "sqlx",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-http",
  "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",

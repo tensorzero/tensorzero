@@ -20,6 +20,7 @@ sqlx.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
+tensorzero-http = { path = "../tensorzero-http" }
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
