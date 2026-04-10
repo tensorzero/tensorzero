@@ -1115,10 +1115,11 @@ impl UninitializedEvaluationConfig {
     pub(crate) fn to_stored_for_db(
         &self,
         file_version_ids: &HashMap<String, Uuid>,
+        shared_path_prefix_to_strip: Option<&std::path::Path>,
     ) -> Result<StoredEvaluationConfig, Error> {
         match self {
             UninitializedEvaluationConfig::Inference(config) => {
-                config.to_stored_for_db(file_version_ids)
+                config.to_stored_for_db(file_version_ids, shared_path_prefix_to_strip)
             }
         }
     }
@@ -1136,10 +1137,15 @@ impl UninitializedInferenceEvaluationConfig {
     fn to_stored_for_db(
         &self,
         file_version_ids: &HashMap<String, Uuid>,
+        shared_path_prefix_to_strip: Option<&std::path::Path>,
     ) -> Result<StoredEvaluationConfig, Error> {
+        let ctx = crate::db::postgres::function_config_writes::FileVersionContext {
+            file_version_ids,
+            shared_path_prefix_to_strip,
+        };
         let stored_evaluators = crate::db::postgres::function_config_writes::convert_evaluators(
             &self.evaluators,
-            file_version_ids,
+            &ctx,
         )?;
         Ok(StoredEvaluationConfig::Inference(
             StoredInferenceEvaluationConfig {

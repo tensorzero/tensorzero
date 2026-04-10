@@ -289,6 +289,13 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPathDirectory>,
 }
 
+impl TemplateFilesystemAccess {
+    /// Returns `true` if filesystem access is explicitly enabled or a base path is configured.
+    pub fn is_active(&self) -> bool {
+        self.enabled == Some(true) || self.base_path.is_some()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
@@ -2162,6 +2169,58 @@ pub struct UninitializedGlobbedConfig {
     pub table: toml::Table,
 }
 
+impl UninitializedGlobbedConfig {
+    /// Returns the absolute filesystem paths of all real (non-fake) file references
+    /// in this config. Used by the `--store-config` CLI to compute the longest common
+    /// path prefix to strip before persisting paths to the database.
+    ///
+    /// This walks the already-resolved TOML table (where every path-valued leaf has been
+    /// rewritten to `{ __tensorzero_remapped_path: "/abs/path", __data: "..." }`) using
+    /// the same `TARGET_PATH_COMPONENTS` patterns that the config loader uses, so we
+    /// don't need to re-implement path collection logic in terms of Rust types.
+    pub fn collect_real_file_paths(&self) -> Vec<PathBuf> {
+        struct PathCollector {
+            paths: Vec<PathBuf>,
+        }
+
+        impl tensorzero_config_paths::TomlPathVisitor<toml::Value> for PathCollector {
+            type Error = tensorzero_config_paths::WalkError;
+
+            fn visit_leaf(
+                &mut self,
+                value: &mut toml::Value,
+                _path: &[String],
+            ) -> Result<(), Self::Error> {
+                if let toml::Value::Table(table) = value
+                    && let Some(toml::Value::String(p)) =
+                        table.get(tensorzero_config_paths::REMAPPED_PATH_KEY)
+                    // Skip fake paths (e.g. `tensorzero::` scheme used by the UI editor)
+                    && !p.starts_with("tensorzero::")
+                {
+                    self.paths.push(PathBuf::from(p.as_str()));
+                }
+                Ok(())
+            }
+
+            fn visit_non_table(
+                &mut self,
+                _path: &[String],
+                _found_type: &str,
+            ) -> Result<(), Self::Error> {
+                // Silently skip non-table intermediate nodes (e.g. missing optional keys)
+                Ok(())
+            }
+        }
+
+        let mut collector = PathCollector { paths: Vec::new() };
+        let mut root = toml::Value::Table(self.table.clone());
+        // Ignore errors — the walker only errors on WalkError::WildcardAtEnd (impossible
+        // given TARGET_PATH_COMPONENTS) or when visit_non_table returns Err (we always Ok).
+        let _ = tensorzero_config_paths::walk_target_paths(&mut root, &mut collector);
+        collector.paths
+    }
+}
+
 impl UninitializedConfig {
     /// Validate deprecated config fields, emitting warnings for deprecated locations
     /// and erroring if both old and new locations are set.
@@ -2968,15 +3027,14 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub(crate) fn files_for_db(&self) -> [&ResolvedTomlPathData; 1] {
-        [&self.parameters]
-    }
-
     pub(crate) fn convert_for_db(
         &self,
         file_version_ids: &HashMap<String, Uuid>,
+        shared_path_prefix_to_strip: Option<&Path>,
     ) -> Result<StoredToolConfig, Error> {
-        let file_path = self.parameters.get_template_key();
+        let file_path = self
+            .parameters
+            .stripped_path_key(shared_path_prefix_to_strip);
         let Some(file_version_id) = file_version_ids.get(&file_path) else {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!("Missing stored file version ID for file path `{file_path}`."),
@@ -3197,7 +3255,7 @@ mod round_trip_tests {
         file_version_ids.insert(file_path.clone(), template_id);
 
         let stored = original
-            .convert_for_db(&file_version_ids)
+            .convert_for_db(&file_version_ids, None)
             .expect("conversion should succeed when template id is present");
 
         expect_that!(stored.description, eq(&original.description));
@@ -3220,7 +3278,7 @@ mod round_trip_tests {
             strict: false,
         };
 
-        let result = original.convert_for_db(&HashMap::new());
+        let result = original.convert_for_db(&HashMap::new(), None);
         expect_that!(result.is_err(), eq(true));
     }
 }

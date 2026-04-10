@@ -66,20 +66,7 @@ async fn load_startup_config(
     }
 
     if let Some(path) = args.config_file.as_ref() {
-        let glob = ConfigFileGlob::new_from_path(path)
-            .log_err_pretty("Failed to process config file glob")?;
-        let unwritten_config = Config::load_and_verify_from_path(&glob)
-            .await
-            .ok() // Don't print the error here, since it was already printed when it was constructed
-            .log_err_pretty(&format!(
-                "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                glob.glob,
-                glob.paths
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ))?;
+        let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
         return Ok((unwritten_config, Some(glob)));
     }
 
@@ -152,6 +139,100 @@ async fn load_startup_config_from_database()
     Config::load_from_db(&pool, true)
         .await
         .map_err(merge_db_config_load_errors)
+}
+
+async fn load_config_from_path_glob(
+    path: &std::path::Path,
+) -> Result<
+    (
+        tensorzero_core::config::unwritten::UnwrittenConfig,
+        ConfigFileGlob,
+    ),
+    ExitCode,
+> {
+    let glob =
+        ConfigFileGlob::new_from_path(path).log_err_pretty("Failed to process config file glob")?;
+    let glob_display = glob.glob.clone();
+    let resolved_paths = glob
+        .paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = Config::load_and_verify_from_path(&glob)
+        .await
+        .ok()
+        .log_err_pretty(&format!(
+            "Failed to load config. Config file glob `{glob_display}` resolved to the following files:\n{resolved_paths}"
+        ))?;
+    Ok((config, glob))
+}
+
+async fn store_config_in_database(
+    uninitialized_config: tensorzero_core::config::UninitializedConfig,
+    extra_templates: &std::collections::HashMap<String, String>,
+    path_prefix_to_strip: Option<std::path::PathBuf>,
+) -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::AppState {
+            message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
+                      `--store-config` requires a Postgres connection."
+                .to_string(),
+        })
+    })?;
+
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::AppState {
+                message: format!("Failed to connect to Postgres: {e}"),
+            })
+        })?;
+
+    let postgres = PostgresConnectionInfo::new_with_pool(pool);
+    postgres
+        .write_stored_config(
+            tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
+                config: &uninitialized_config,
+                creation_source: "store-config-cli",
+                source_autopilot_session_id: None,
+                extra_templates,
+                path_prefix_to_strip,
+            },
+        )
+        .await?;
+
+    Ok(())
+}
+
+/// Computes the longest common ancestor directory of all provided paths.
+/// This is used to strip the local filesystem prefix from stored file paths
+/// so that absolute paths (e.g. `/Users/alice/project/config/...`) are not
+/// leaked into the database when using `--store-config`.
+fn compute_strip_prefix(paths: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
+    let dirs: Vec<std::path::PathBuf> = paths
+        .iter()
+        .filter_map(|p| p.parent().map(std::path::Path::to_path_buf))
+        .collect();
+    if dirs.is_empty() {
+        return None;
+    }
+    let components: Vec<Vec<std::path::Component<'_>>> =
+        dirs.iter().map(|d| d.components().collect()).collect();
+    let min_len = components.iter().map(Vec::len).min().unwrap_or(0);
+    let prefix_len = (0..min_len)
+        .take_while(|&i| components[1..].iter().all(|c| c[i] == components[0][i]))
+        .count();
+    if prefix_len == 0 {
+        return None;
+    }
+    let prefix: std::path::PathBuf = components[0][..prefix_len].iter().collect();
+    // Don't strip the filesystem root — that would be meaningless
+    if prefix == std::path::Path::new("/") || prefix.as_os_str().is_empty() {
+        return None;
+    }
+    Some(prefix)
 }
 
 #[expect(clippy::print_stdout)]
@@ -340,6 +421,55 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Failed to run optimization Postgres migrations.")?;
 
         tracing::info!("Postgres is ready.");
+        return Ok(());
+    }
+
+    if let Some(config_path) = args.early_exit_commands.store_config.as_ref() {
+        let glob = ConfigFileGlob::new_from_path(config_path)
+            .log_err_pretty("Failed to process config file glob")?;
+        print_configuration_info(Some(&glob));
+
+        // Parse the glob into UninitializedConfig (before load/initialization).
+        // Collect real file paths from the resolved TOML table *before* consuming it so
+        // we can compute the LCA prefix to strip from stored paths.
+        let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
+            .ok()
+            .log_err_pretty("Failed to parse config files")?;
+        let all_file_paths = globbed.collect_real_file_paths();
+        let path_prefix_to_strip = compute_strip_prefix(&all_file_paths);
+        let uninitialized_config =
+            tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
+                .ok()
+                .log_err_pretty("Failed to deserialize config")?;
+
+        if uninitialized_config
+            .gateway
+            .as_ref()
+            .and_then(|g| g.template_filesystem_access.as_ref())
+            .is_some_and(|tfa| tfa.is_active())
+        {
+            tracing::error!(
+                "`template_filesystem_access` is set in the gateway config, but \
+                 `--store-config` does not support filesystem-based template access. \
+                 Remove or disable `gateway.template_filesystem_access` and modify your \
+                 templates to remove file imports before storing config."
+            );
+            return Err(ExitCode::FAILURE);
+        }
+
+        // Validate by running the full load pipeline (ensures the config is valid before storing).
+        // Also extracts extra templates discovered from the filesystem — all prompts, whether
+        // explicitly specified or dynamically included, must be stored in the database.
+        let validated = Config::load_and_verify_from_path(&glob)
+            .await
+            .ok()
+            .log_err_pretty("Config validation failed")?;
+        let extra_templates = validated.extra_templates().clone();
+
+        store_config_in_database(uninitialized_config, &extra_templates, path_prefix_to_strip)
+            .await
+            .log_err_pretty("Failed to store configuration in the database")?;
+        tracing::info!("Configuration stored in the database.");
         return Ok(());
     }
 
