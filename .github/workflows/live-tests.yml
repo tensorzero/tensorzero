@@ -124,7 +124,7 @@ jobs:
 
       - name: Run live tests container via Docker Compose
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+          PROVIDER_PROXY_CACHE_MODE=read-only-require-hit DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }} \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
@@ -242,7 +242,7 @@ jobs:
 
       - name: Run evaluation tests
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
+          PROVIDER_PROXY_CACHE_MODE=read-only-require-hit DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
