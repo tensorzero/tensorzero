@@ -15,7 +15,10 @@ use rust_decimal::Decimal;
 use crate::config::snapshot::SnapshotHash;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::query_helpers::uuid_to_datetime;
-use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{
+    CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
+    VariantUsageTimePoint,
+};
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::inference::types::{
     ContentBlockOutput, FinishReason, StoredModelInference, StoredRequestMessage,
@@ -193,6 +196,16 @@ impl ModelInferenceQueries for PostgresConnectionInfo {
             model_provider_name,
         )
         .await
+    }
+
+    async fn get_variant_usage_timeseries(
+        &self,
+        function_name: &str,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<VariantUsageTimePoint>, Error> {
+        let pool = self.get_pool_result().map_err(|e| e.log())?;
+        get_variant_usage_timeseries_impl(pool, function_name, time_window, max_periods).await
     }
 }
 
@@ -404,6 +417,90 @@ async fn get_model_usage_cumulative(pool: &PgPool) -> Result<Vec<ModelUsageTimeP
         ORDER BY model_name
         ",
     )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+async fn get_variant_usage_timeseries_impl(
+    pool: &PgPool,
+    function_name: &str,
+    time_window: TimeWindow,
+    max_periods: u32,
+) -> Result<Vec<VariantUsageTimePoint>, Error> {
+    if time_window == TimeWindow::Cumulative {
+        return get_variant_usage_cumulative(pool, function_name).await;
+    }
+
+    let mut qb = build_variant_usage_timeseries_query(function_name, &time_window, max_periods);
+    let rows: Vec<VariantUsageTimePoint> = qb.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
+fn build_variant_usage_timeseries_query(
+    function_name: &str,
+    time_window: &TimeWindow,
+    max_periods: u32,
+) -> QueryBuilder<sqlx::Postgres> {
+    let time_unit = time_window.to_postgres_time_unit();
+
+    let mut qb: QueryBuilder<sqlx::Postgres> = QueryBuilder::new("SELECT date_trunc('");
+    qb.push(time_unit);
+    qb.push(
+        "', minute) as period_start,
+            variant_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_output_tokens)::BIGINT as output_tokens,
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(count_with_cost)::BIGINT as count_with_cost
+        FROM tensorzero.variant_statistics
+        WHERE function_name = ",
+    );
+    qb.push_bind(function_name.to_string());
+    qb.push(" AND minute >= (SELECT COALESCE(MAX(date_trunc('");
+    qb.push(time_unit);
+    qb.push(
+        "', minute)), '1970-01-01'::TIMESTAMPTZ)
+            FROM tensorzero.variant_statistics
+            WHERE function_name = ",
+    );
+    qb.push_bind(function_name.to_string());
+    qb.push(") - INTERVAL '");
+    qb.push(max_periods.to_string());
+    qb.push(" ");
+    qb.push(time_unit);
+    qb.push(
+        "s'
+        GROUP BY period_start, variant_name
+        ORDER BY period_start DESC, variant_name",
+    );
+
+    qb
+}
+
+async fn get_variant_usage_cumulative(
+    pool: &PgPool,
+    function_name: &str,
+) -> Result<Vec<VariantUsageTimePoint>, Error> {
+    let rows: Vec<VariantUsageTimePoint> = sqlx::query_as(
+        r"
+        SELECT
+            '1970-01-01'::TIMESTAMPTZ as period_start,
+            variant_name,
+            SUM(total_input_tokens)::BIGINT as input_tokens,
+            SUM(total_output_tokens)::BIGINT as output_tokens,
+            SUM(inference_count)::BIGINT as count,
+            SUM(total_cost)::NUMERIC as cost,
+            SUM(count_with_cost)::BIGINT as count_with_cost
+        FROM tensorzero.variant_statistics
+        WHERE function_name = $1
+        GROUP BY variant_name
+        ORDER BY variant_name
+        ",
+    )
+    .bind(function_name)
     .fetch_all(pool)
     .await?;
 
@@ -849,6 +946,30 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for ModelUsageTimePoint {
             count: count.map(|v| v as u64),
             cost,
             count_with_cost: count_with_cost.map(|v| v as u64),
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for VariantUsageTimePoint {
+    fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        let period_start: DateTime<Utc> = row.try_get("period_start")?;
+        let input_tokens: Option<i64> = row.try_get("input_tokens")?;
+        let output_tokens: Option<i64> = row.try_get("output_tokens")?;
+        let count: Option<i64> = row.try_get("count")?;
+        let cost: Option<Decimal> = row.try_get("cost")?;
+        let count_with_cost: Option<i64> = row.try_get("count_with_cost")?;
+
+        Ok(VariantUsageTimePoint {
+            period_start,
+            variant_name: row.try_get("variant_name")?,
+            input_tokens: input_tokens.map(|v| v as u64),
+            output_tokens: output_tokens.map(|v| v as u64),
+            count: count.map(|v| v as u64),
+            cost,
+            count_with_cost: count_with_cost.map(|v| v as u64),
+            // Latency quantiles are not available from Postgres rollup tables
+            processing_time_ms_quantiles: None,
+            ttft_ms_quantiles: None,
         })
     }
 }
