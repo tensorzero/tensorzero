@@ -2396,13 +2396,11 @@ async fn test_missing_json_mode_chat() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
-        .scope(
-            (),
-            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
-        )
-        .await
-        .unwrap_err();
+    let err = with_skip_credential_validation(Box::pin(Config::load_unwritten_config(
+        ConfigInput::Fresh(config),
+    )))
+    .await
+    .unwrap_err();
 
     assert_eq!(
         err.to_string(),
@@ -2440,13 +2438,11 @@ async fn test_missing_json_mode_dicl() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
-        .scope(
-            (),
-            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
-        )
-        .await
-        .unwrap_err();
+    let err = with_skip_credential_validation(Box::pin(Config::load_unwritten_config(
+        ConfigInput::Fresh(config),
+    )))
+    .await
+    .unwrap_err();
 
     assert_eq!(
         err.to_string(),
@@ -2485,13 +2481,11 @@ async fn test_missing_json_mode_mixture_of_n() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
-        .scope(
-            (),
-            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
-        )
-        .await
-        .unwrap_err();
+    let err = with_skip_credential_validation(Box::pin(Config::load_unwritten_config(
+        ConfigInput::Fresh(config),
+    )))
+    .await
+    .unwrap_err();
 
     assert_eq!(
         err.to_string(),
@@ -2532,13 +2526,11 @@ async fn test_missing_json_mode_best_of_n() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     // This should succeed (evaluator's `json_mode` is optional)
-    SKIP_CREDENTIAL_VALIDATION
-        .scope(
-            (),
-            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
-        )
-        .await
-        .expect("Config should load successfully with missing evaluator json_mode");
+    with_skip_credential_validation(Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(
+        config,
+    ))))
+    .await
+    .expect("Config should load successfully with missing evaluator json_mode");
 }
 
 #[tokio::test]
@@ -2598,13 +2590,11 @@ async fn test_gcp_no_endpoint_and_model() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
-        .scope(
-            (),
-            Box::pin(Config::load_unwritten_config(ConfigInput::Fresh(config))),
-        )
-        .await
-        .unwrap_err();
+    let err = with_skip_credential_validation(Box::pin(Config::load_unwritten_config(
+        ConfigInput::Fresh(config),
+    )))
+    .await
+    .unwrap_err();
 
     let err_msg = err.to_string();
     assert!(

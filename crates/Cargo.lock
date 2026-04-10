@@ -8253,6 +8253,7 @@ dependencies = [
  "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",
+ "tokio",
  "tracing",
  "ts-rs",
  "url",

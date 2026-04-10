@@ -18,6 +18,7 @@ serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
+tokio.workspace = true
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
 tensorzero-http = { path = "../tensorzero-http" }
