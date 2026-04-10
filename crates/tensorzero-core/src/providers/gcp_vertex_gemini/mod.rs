@@ -67,7 +67,7 @@ use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultC
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
-use crate::tool::{FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{FunctionTool, ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::mock::get_mock_provider_api_base;
 
 use super::helpers::{JsonlBatchFileInfo, convert_stream_error, parse_jsonl_batch_file};
@@ -1752,16 +1752,6 @@ pub enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
-impl<'a> From<&'a FunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        GCPVertexGeminiFunctionDeclaration {
-            name: tool.name(),
-            description: Some(tool.description()),
-            parameters: Some(process_jsonschema_for_gcp_vertex_gemini(tool.parameters())),
-        }
-    }
-}
-
 impl<'a> From<&'a FunctionToolDef> for GCPVertexGeminiFunctionDeclaration<'a> {
     fn from(tool: &'a FunctionToolDef) -> Self {
         GCPVertexGeminiFunctionDeclaration {
@@ -1769,14 +1759,6 @@ impl<'a> From<&'a FunctionToolDef> for GCPVertexGeminiFunctionDeclaration<'a> {
             description: Some(&tool.description),
             parameters: Some(process_jsonschema_for_gcp_vertex_gemini(&tool.parameters)),
         }
-    }
-}
-
-impl<'a> From<&'a Vec<FunctionToolConfig>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<FunctionToolConfig>) -> Self {
-        let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
-            tools.iter().map(Into::into).collect();
-        GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
     }
 }
 
@@ -3260,12 +3242,13 @@ mod tests {
     use crate::jsonschema_util::JSONSchema;
     use tensorzero_inference_types::ProviderToolCallConfig;
 
-    use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{StaticToolConfig, ToolResult};
+    use crate::providers::test_helpers::{
+        MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL,
+    };
+    use crate::tool::ToolResult;
     use googletest::prelude::*;
     use serde_json::json;
     use std::borrow::Cow;
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_gcp_vertex_content_try_from() {
@@ -3370,23 +3353,28 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&FunctionToolConfig> =
-            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
-        let tools_vec_owned: Vec<FunctionToolConfig> =
-            tools_vec.iter().map(|&t| t.clone()).collect();
-        let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
+        let tools_vec: Vec<&FunctionToolDef> = MULTI_PROVIDER_TOOL_CONFIG
+            .tools_available()
+            .unwrap()
+            .collect();
+        let tool = GCPVertexGeminiTool::FunctionDeclarations(
+            tools_vec
+                .iter()
+                .map(|&t| GCPVertexGeminiFunctionDeclaration::from(t))
+                .collect(),
+        );
         assert_eq!(
             tool,
             GCPVertexGeminiTool::FunctionDeclarations(vec![
                 GCPVertexGeminiFunctionDeclaration {
                     name: "get_temperature",
                     description: Some("Get the current temperature in a given location"),
-                    parameters: Some(tools_vec[0].parameters().clone()),
+                    parameters: Some(tools_vec[0].parameters.clone()),
                 },
                 GCPVertexGeminiFunctionDeclaration {
                     name: "query_articles",
                     description: Some("Query articles from Wikipedia"),
-                    parameters: Some(tools_vec[1].parameters().clone()),
+                    parameters: Some(tools_vec[1].parameters.clone()),
                 }
             ])
         );
@@ -4612,18 +4600,15 @@ mod tests {
 
         let tool_schema = JSONSchema::from_value(tool_schema_value).unwrap();
 
-        let static_tool = StaticToolConfig {
+        let tool_def = FunctionToolDef {
             name: "test_tool".to_string(),
-            key: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: tool_schema,
+            parameters: tool_schema.value,
             strict: false,
         };
 
-        let tool_config = FunctionToolConfig::Static(Arc::new(static_tool));
-
-        // Convert the tool config to GCPVertexGeminiFunctionDeclaration
-        let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_config);
+        // Convert the tool def to GCPVertexGeminiFunctionDeclaration
+        let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_def);
 
         // The parameters should have all $schema and additionalProperties removed recursively
         let expected_parameters = json!({
