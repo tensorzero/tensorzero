@@ -5,6 +5,10 @@ metadata:
   labels:
     {{- include "tensorzero.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.gateway.replicaCount }}
   selector:
@@ -55,6 +59,11 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /app/config
+            {{- if .Values.configFromExternalSecret.enabled }}
+            - name: config-secret-volume
+              mountPath: {{ .Values.configFromExternalSecret.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: storage-volume
               mountPath: {{ .Values.persistence.mountPath }}
@@ -69,6 +78,11 @@ spec:
         - name: config-volume
           configMap:
             name: {{ include "tensorzero.fullname" . }}
+        {{- if .Values.configFromExternalSecret.enabled }}
+        - name: config-secret-volume
+          secret:
+            secretName: {{ .Values.configFromExternalSecret.secretName }}
+        {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: storage-volume
           persistentVolumeClaim:
