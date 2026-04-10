@@ -83,7 +83,7 @@ jobs:
 
       - name: Send Slack notification for new issue
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -123,7 +123,7 @@ jobs:
 
       - name: Send Slack notification for issue comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issue_comment'
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -163,7 +163,7 @@ jobs:
 
       - name: Send Slack notification for new pull request
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_target' && github.event.action == 'opened'
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -205,7 +205,7 @@ jobs:
       - name: Send Slack notification for pull request review
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.event.review.user.login == 'dependabot[bot]')
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -245,7 +245,7 @@ jobs:
 
       - name: Send Slack notification for new discussion
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion' && github.event.action == 'created'
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -285,7 +285,7 @@ jobs:
 
       - name: Send Slack notification for discussion comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion_comment'
-        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
