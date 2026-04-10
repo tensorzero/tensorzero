@@ -1,0 +1,34 @@
+---
+title: Integrate with your coding agents
+description: Learn how to set up your coding agents (e.g. Claude Code, Codex, Cursor) to build effectively with TensorZero.
+---
+
+TensorZero provides a Claude Code plugin with skills that help your coding agent build, configure, and deploy TensorZero projects.
+
+<Tip>
+
+Support other agents like Codex and Cursor is coming very soon.
+
+</Tip>
+
+## Install our Claude Code plugin
+
+Install the TensorZero plugin for Claude Code:
+
+```bash title="Terminal" icon="terminal"
+claude plugin marketplace add tensorzero/for-agents
+claude plugin install tensorzero@tensorzero
+```
+
+You can optionally pin the plugin to your TensorZero version to ensure Claude Code doesn't try to use features unavailable in your deployment.
+For example, if your deployment version is `2026.4.0`:
+
+```bash title="Terminal" highlight={1} icon="terminal"
+claude plugin marketplace add tensorzero/for-agents#2026.4.0
+claude plugin install tensorzero@tensorzero
+```
+
+If you upgrade your TensorZero deployment, re-run the two commands above with the updated version.
+
+Claude Code will automatically load the relevant TensorZero skills when appropriate.
+You can also invoke a skill directly (e.g. `/tensorzero:deploy`).

@@ -122,6 +122,10 @@
             ]
           },
           {
+            "group": "Development",
+            "pages": ["development/integrate-with-your-coding-agents"]
+          },
+          {
             "group": "Deployment",
             "pages": [
               "deployment/tensorzero-gateway",
