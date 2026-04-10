@@ -1,7 +1,4 @@
-use crate::model::{
-    CredentialLocation, CredentialLocationOrHardcoded, CredentialLocationWithFallback,
-    EndpointLocation,
-};
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use crate::model_table::load_tensorzero_relay_credential;
 use crate::relay::RelayCredentials;
 use crate::{
@@ -17,9 +14,8 @@ use crate::{
 use chrono::Duration;
 use serde::{Deserialize, Deserializer, Serialize};
 use tensorzero_stored_config::{
-    StoredAuthConfig, StoredBatchWritesConfig, StoredCredentialLocation,
-    StoredCredentialLocationOrHardcoded, StoredCredentialLocationWithFallback,
-    StoredEndpointLocation, StoredExportConfig, StoredGatewayAuthCacheConfig, StoredGatewayConfig,
+    StoredAuthConfig, StoredBatchWritesConfig, StoredCredentialLocationWithFallback,
+    StoredExportConfig, StoredGatewayAuthCacheConfig, StoredGatewayConfig,
     StoredGatewayMetricsConfig, StoredInferenceCacheBackend, StoredModelInferenceCacheConfig,
     StoredObservabilityBackend, StoredObservabilityConfig, StoredOtlpConfig,
     StoredOtlpTracesConfig, StoredOtlpTracesFormat, StoredRelayConfig,
@@ -388,122 +384,6 @@ impl From<StoredModelInferenceCacheConfig> for ModelInferenceCacheConfig {
     }
 }
 
-impl From<StoredCredentialLocation> for CredentialLocation {
-    fn from(stored: StoredCredentialLocation) -> Self {
-        match stored {
-            StoredCredentialLocation::Env { value } => Self::Env(value),
-            StoredCredentialLocation::PathFromEnv { value } => Self::PathFromEnv(value),
-            StoredCredentialLocation::Dynamic { value } => Self::Dynamic(value),
-            StoredCredentialLocation::Path { value } => Self::Path(value),
-            StoredCredentialLocation::Sdk => Self::Sdk,
-            StoredCredentialLocation::None => Self::None,
-        }
-    }
-}
-
-impl From<StoredCredentialLocationWithFallback> for CredentialLocationWithFallback {
-    fn from(stored: StoredCredentialLocationWithFallback) -> Self {
-        match stored {
-            StoredCredentialLocationWithFallback::Single { location } => {
-                Self::Single(location.into())
-            }
-            StoredCredentialLocationWithFallback::WithFallback { default, fallback } => {
-                Self::WithFallback {
-                    default: default.into(),
-                    fallback: fallback.into(),
-                }
-            }
-        }
-    }
-}
-
-impl From<StoredCredentialLocationOrHardcoded> for CredentialLocationOrHardcoded {
-    fn from(stored: StoredCredentialLocationOrHardcoded) -> Self {
-        match stored {
-            StoredCredentialLocationOrHardcoded::Hardcoded { value } => Self::Hardcoded(value),
-            StoredCredentialLocationOrHardcoded::Location { location } => {
-                Self::Location(location.into())
-            }
-        }
-    }
-}
-
-impl From<StoredEndpointLocation> for EndpointLocation {
-    fn from(stored: StoredEndpointLocation) -> Self {
-        match stored {
-            StoredEndpointLocation::Env { value } => Self::Env(value),
-            StoredEndpointLocation::Dynamic { value } => Self::Dynamic(value),
-            StoredEndpointLocation::Static { value } => Self::Static(value),
-        }
-    }
-}
-
-impl From<&CredentialLocation> for StoredCredentialLocation {
-    fn from(loc: &CredentialLocation) -> Self {
-        match loc {
-            CredentialLocation::Env(inner) => Self::Env {
-                value: inner.clone(),
-            },
-            CredentialLocation::PathFromEnv(inner) => Self::PathFromEnv {
-                value: inner.clone(),
-            },
-            CredentialLocation::Dynamic(inner) => Self::Dynamic {
-                value: inner.clone(),
-            },
-            CredentialLocation::Path(inner) => Self::Path {
-                value: inner.clone(),
-            },
-            CredentialLocation::Sdk => Self::Sdk,
-            CredentialLocation::None => Self::None,
-        }
-    }
-}
-
-impl From<&CredentialLocationWithFallback> for StoredCredentialLocationWithFallback {
-    fn from(loc: &CredentialLocationWithFallback) -> Self {
-        match loc {
-            CredentialLocationWithFallback::Single(inner) => Self::Single {
-                location: inner.into(),
-            },
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
-                Self::WithFallback {
-                    default: default.into(),
-                    fallback: fallback.into(),
-                }
-            }
-        }
-    }
-}
-
-impl From<&CredentialLocationOrHardcoded> for StoredCredentialLocationOrHardcoded {
-    fn from(loc: &CredentialLocationOrHardcoded) -> Self {
-        match loc {
-            CredentialLocationOrHardcoded::Hardcoded(value) => Self::Hardcoded {
-                value: value.clone(),
-            },
-            CredentialLocationOrHardcoded::Location(inner) => Self::Location {
-                location: inner.into(),
-            },
-        }
-    }
-}
-
-impl From<&EndpointLocation> for StoredEndpointLocation {
-    fn from(loc: &EndpointLocation) -> Self {
-        match loc {
-            EndpointLocation::Env(value) => Self::Env {
-                value: value.clone(),
-            },
-            EndpointLocation::Dynamic(value) => Self::Dynamic {
-                value: value.clone(),
-            },
-            EndpointLocation::Static(value) => Self::Static {
-                value: value.clone(),
-            },
-        }
-    }
-}
-
 impl TryFrom<StoredRelayConfig> for UninitializedRelayConfig {
     type Error = Error;
 
@@ -520,7 +400,9 @@ impl TryFrom<StoredRelayConfig> for UninitializedRelayConfig {
             .transpose()?;
         Ok(Self {
             gateway_url,
-            api_key_location: stored.api_key_location.map(Into::into),
+            api_key_location: stored
+                .api_key_location
+                .map(CredentialLocationWithFallback::from),
         })
     }
 }
@@ -791,8 +673,8 @@ mod tests {
     fn test_credential_location_with_fallback_single_round_trip() {
         for loc in credential_location_variants() {
             let original = CredentialLocationWithFallback::Single(loc);
-            let stored: StoredCredentialLocationWithFallback = (&original).into();
-            let restored: CredentialLocationWithFallback = stored.into();
+            let stored = StoredCredentialLocationWithFallback::from(&original);
+            let restored = CredentialLocationWithFallback::from(stored);
             expect_that!(restored, eq(&original));
         }
     }
@@ -803,8 +685,8 @@ mod tests {
             default: CredentialLocation::Env("PRIMARY".to_string()),
             fallback: CredentialLocation::PathFromEnv("BACKUP_PATH".to_string()),
         };
-        let stored: StoredCredentialLocationWithFallback = (&original).into();
-        let restored: CredentialLocationWithFallback = stored.into();
+        let stored = StoredCredentialLocationWithFallback::from(&original);
+        let restored = CredentialLocationWithFallback::from(stored);
         expect_that!(restored, eq(&original));
     }
 
@@ -818,8 +700,8 @@ mod tests {
                     default: default.clone(),
                     fallback: fallback.clone(),
                 };
-                let stored: StoredCredentialLocationWithFallback = (&original).into();
-                let restored: CredentialLocationWithFallback = stored.into();
+                let stored = StoredCredentialLocationWithFallback::from(&original);
+                let restored = CredentialLocationWithFallback::from(stored);
                 expect_that!(restored, eq(&original));
             }
         }
@@ -829,13 +711,15 @@ mod tests {
 
     #[gtest]
     fn test_endpoint_location_round_trip() {
+        use crate::model::EndpointLocation;
+        use tensorzero_stored_config::StoredEndpointLocation;
         for variant in [
             EndpointLocation::Env("MY_ENDPOINT".to_string()),
             EndpointLocation::Dynamic("dyn_endpoint".to_string()),
             EndpointLocation::Static("https://api.example.com".to_string()),
         ] {
-            let stored: StoredEndpointLocation = (&variant).into();
-            let restored: EndpointLocation = stored.into();
+            let stored = StoredEndpointLocation::from(&variant);
+            let restored = EndpointLocation::from(stored);
             expect_that!(restored, eq(&variant));
         }
     }

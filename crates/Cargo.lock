@@ -8145,6 +8145,7 @@ dependencies = [
  "tensorzero-config-paths",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-http",
  "tensorzero-inference-types",
  "tensorzero-stored-config",
  "tensorzero-types",
@@ -8205,6 +8206,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-http"
+version = "2026.4.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "futures",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "once_cell",
+ "opentelemetry",
+ "opentelemetry-http",
+ "pin-project",
+ "reqwest 0.13.2",
+ "reqwest-sse-stream",
+ "serde",
+ "serde_json",
+ "tensorzero-error",
+ "tensorzero-types",
+ "tokio",
+ "tracing",
+ "tracing-futures",
+]
+
+[[package]]
 name = "tensorzero-inference-types"
 version = "2026.4.0"
 dependencies = [
@@ -8215,12 +8241,14 @@ dependencies = [
  "pyo3",
  "rust_decimal",
  "schemars 1.2.1",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_path_to_error",
  "sqlx",
  "tensorzero-derive",
  "tensorzero-error",
+ "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",
  "tracing",

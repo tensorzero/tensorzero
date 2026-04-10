@@ -77,8 +77,6 @@ export * from "./CreateEventPayloadToolCallAuthorization";
 export * from "./CreateEventPayloadToolResult";
 export * from "./CreateEventResponse";
 export * from "./CreateJsonDatapointRequest";
-export * from "./CredentialLocation";
-export * from "./CredentialLocationOrHardcoded";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointFilter";
