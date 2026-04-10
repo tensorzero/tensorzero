@@ -38,6 +38,7 @@ pub mod resolve_uuid;
 pub mod stored_datapoint;
 pub mod test_helpers;
 pub mod valkey;
+pub mod variant_statistics;
 pub mod workflow_evaluation_queries;
 
 // For backcompat, re-export everything from the rate_limiting module

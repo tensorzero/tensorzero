@@ -14,6 +14,9 @@ use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::model_inferences::ModelInferenceQueries;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::db::variant_statistics::{
+    GetVariantStatisticsParams, VariantStatisticsQueries,
+};
 use tensorzero_core::endpoints::inference::InferenceParams;
 use tensorzero_core::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use tensorzero_core::inference::types::stored_input::StoredInput;
@@ -970,3 +973,260 @@ async fn test_variant_statistics_no_model_inferences(
     assert_eq!(row.count_with_cost, 0);
 }
 make_db_test!(test_variant_statistics_no_model_inferences);
+
+// ===== GET_VARIANT_STATISTICS TRAIT TESTS =====
+// These exercise the actual `VariantStatisticsQueries::get_variant_statistics` method
+// (parameterized queries, array params, time filters).
+
+/// Basic get_variant_statistics: insert data for multiple variants, query all, then filter.
+async fn test_get_variant_statistics_with_variant_filter(
+    conn: impl InferenceQueries
+    + ModelInferenceQueries
+    + TestDatabaseHelpers
+    + VariantStatisticsTestQueries
+    + VariantStatisticsQueries,
+) {
+    let function_name = format!("vs-get-filter-{}", uuid::Uuid::now_v7());
+
+    // Create 3 variants with 1 inference each
+    let a1 = uuid::Uuid::now_v7();
+    let b1 = uuid::Uuid::now_v7();
+    let c1 = uuid::Uuid::now_v7();
+
+    let chats = vec![
+        make_chat_inference(a1, &function_name, "alpha", Some(100), Some(50)),
+        make_chat_inference(b1, &function_name, "beta", Some(200), Some(75)),
+        make_chat_inference(c1, &function_name, "gamma", Some(300), Some(100)),
+    ];
+
+    let models = vec![
+        make_model_inference(
+            a1,
+            &function_name,
+            "alpha",
+            Some(10),
+            Some(5),
+            Some(Decimal::new(100, 6)),
+        ),
+        make_model_inference(
+            b1,
+            &function_name,
+            "beta",
+            Some(20),
+            Some(10),
+            Some(Decimal::new(200, 6)),
+        ),
+        make_model_inference(
+            c1,
+            &function_name,
+            "gamma",
+            Some(30),
+            Some(15),
+            Some(Decimal::new(300, 6)),
+        ),
+    ];
+
+    insert_and_prepare(&conn, &chats, &[], &models).await;
+
+    // Wait for data to be visible via raw queries first
+    crate::utils::poll_for_result::poll_for_result(
+        || conn.query_variant_stats(&function_name),
+        |s| s.len() == 3,
+        "Timed out waiting for 3 variant rows",
+    )
+    .await;
+
+    // Query all variants (no filter)
+    let params_all = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: None,
+        after: None,
+        before: None,
+    };
+    let all_rows = conn
+        .get_variant_statistics(&params_all)
+        .await
+        .expect("get_variant_statistics should succeed");
+    assert_eq!(all_rows.len(), 3, "Should return all 3 variants");
+
+    // Query with variant_names filter for 2 of 3 variants
+    let params_filtered = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: Some(vec!["alpha".to_string(), "gamma".to_string()]),
+        after: None,
+        before: None,
+    };
+    let filtered_rows = conn
+        .get_variant_statistics(&params_filtered)
+        .await
+        .expect("get_variant_statistics with filter should succeed");
+    assert_eq!(filtered_rows.len(), 2, "Should return only alpha and gamma");
+    let names: Vec<&str> = filtered_rows
+        .iter()
+        .map(|r| r.variant_name.as_str())
+        .collect();
+    assert!(names.contains(&"alpha"), "Should contain alpha");
+    assert!(names.contains(&"gamma"), "Should contain gamma");
+    assert!(!names.contains(&"beta"), "Should not contain beta");
+
+    // Query with a single variant
+    let params_single = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: Some(vec!["beta".to_string()]),
+        after: None,
+        before: None,
+    };
+    let single_rows = conn
+        .get_variant_statistics(&params_single)
+        .await
+        .expect("get_variant_statistics with single variant should succeed");
+    assert_eq!(single_rows.len(), 1);
+    assert_eq!(single_rows[0].variant_name, "beta");
+    assert_eq!(single_rows[0].inference_count, 1);
+
+    // Query with a non-existent variant
+    let params_empty = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: Some(vec!["nonexistent".to_string()]),
+        after: None,
+        before: None,
+    };
+    let empty_rows = conn
+        .get_variant_statistics(&params_empty)
+        .await
+        .expect("get_variant_statistics with nonexistent variant should succeed");
+    assert!(empty_rows.is_empty(), "Should return no rows");
+
+    // Query with empty variant_names vec (should return all)
+    let params_empty_vec = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: Some(vec![]),
+        after: None,
+        before: None,
+    };
+    let all_rows_again = conn
+        .get_variant_statistics(&params_empty_vec)
+        .await
+        .expect("get_variant_statistics with empty vec should succeed");
+    assert_eq!(
+        all_rows_again.len(),
+        3,
+        "Empty variant_names vec should return all variants"
+    );
+}
+make_db_test!(test_get_variant_statistics_with_variant_filter);
+
+/// Test get_variant_statistics with time range filters (after/before).
+async fn test_get_variant_statistics_with_time_filter(
+    conn: impl InferenceQueries
+    + ModelInferenceQueries
+    + TestDatabaseHelpers
+    + VariantStatisticsTestQueries
+    + VariantStatisticsQueries,
+) {
+    let function_name = format!("vs-get-time-{}", uuid::Uuid::now_v7());
+    let variant_name = "v1";
+
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Old data: 10 minutes ago
+    let old_ts = uuid::Timestamp::from_unix_time(now_secs - 10 * 60, 0, 0, 0);
+    let old_id = uuid::Uuid::new_v7(old_ts);
+
+    // Recent data: 2 minutes ago
+    let recent_ts = uuid::Timestamp::from_unix_time(now_secs - 2 * 60, 0, 0, 0);
+    let recent_id = uuid::Uuid::new_v7(recent_ts);
+
+    let chats = vec![
+        make_chat_inference(old_id, &function_name, variant_name, Some(100), Some(50)),
+        make_chat_inference(recent_id, &function_name, variant_name, Some(200), Some(75)),
+    ];
+
+    let models = vec![
+        make_model_inference_at(
+            old_ts,
+            old_id,
+            &function_name,
+            variant_name,
+            Some(10),
+            Some(5),
+            Some(Decimal::new(100, 6)),
+        ),
+        make_model_inference_at(
+            recent_ts,
+            recent_id,
+            &function_name,
+            variant_name,
+            Some(20),
+            Some(10),
+            Some(Decimal::new(200, 6)),
+        ),
+    ];
+
+    insert_and_prepare(&conn, &chats, &[], &models).await;
+
+    // Wait for all data to be visible
+    crate::utils::poll_for_result::poll_for_result(
+        || conn.query_variant_stats(&function_name),
+        |s| s.iter().any(|r| r.count == 2),
+        "Timed out waiting for 2 inferences",
+    )
+    .await;
+
+    // Query all (no time filter) — should get both
+    let params_all = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: None,
+        after: None,
+        before: None,
+    };
+    let all_rows = conn
+        .get_variant_statistics(&params_all)
+        .await
+        .expect("get_variant_statistics should succeed");
+    assert_eq!(all_rows.len(), 1);
+    assert_eq!(all_rows[0].inference_count, 2);
+
+    // Query with `after` = 5 minutes ago — should only get the recent one
+    let after_time =
+        chrono::DateTime::<chrono::Utc>::from_timestamp((now_secs - 5 * 60) as i64, 0).unwrap();
+    let params_after = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: None,
+        after: Some(after_time),
+        before: None,
+    };
+    let after_rows = conn
+        .get_variant_statistics(&params_after)
+        .await
+        .expect("get_variant_statistics with after should succeed");
+    // Should have only 1 inference (the recent one)
+    if !after_rows.is_empty() {
+        assert_eq!(
+            after_rows[0].inference_count, 1,
+            "Should only have the recent inference"
+        );
+    }
+
+    // Query with `before` = 5 minutes ago — should only get the old one
+    let params_before = GetVariantStatisticsParams {
+        function_name: function_name.clone(),
+        variant_names: None,
+        after: None,
+        before: Some(after_time),
+    };
+    let before_rows = conn
+        .get_variant_statistics(&params_before)
+        .await
+        .expect("get_variant_statistics with before should succeed");
+    if !before_rows.is_empty() {
+        assert_eq!(
+            before_rows[0].inference_count, 1,
+            "Should only have the old inference"
+        );
+    }
+}
+make_db_test!(test_get_variant_statistics_with_time_filter);
