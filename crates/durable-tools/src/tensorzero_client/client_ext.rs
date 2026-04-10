@@ -209,7 +209,7 @@ impl TensorZeroClient for Client {
                 // Construct the full request with deployment_id from app state
                 // If starting a new session (nil session_id), include the current config hash
                 let config_snapshot_hash = if session_id.is_nil() {
-                    Some(gateway.handle.app_state.config.load().hash.to_string())
+                    Some(gateway.handle.app_state.config().load().hash.to_string())
                 } else {
                     None
                 };
@@ -643,9 +643,10 @@ impl TensorZeroClient for Client {
             } => {
                 let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                     Arc::new(gateway.handle.app_state.get_delegating_database());
+                let http_client = gateway.handle.app_state.http_client();
                 launch_optimization_workflow(
-                    &gateway.handle.app_state.http_client,
-                    gateway.handle.app_state.config.load(),
+                    &http_client,
+                    gateway.handle.app_state.config().load(),
                     &db,
                     params,
                 )
@@ -682,9 +683,10 @@ impl TensorZeroClient for Client {
                 gateway,
                 timeout: _,
             } => {
-                let config = gateway.handle.app_state.config.load();
+                let config = gateway.handle.app_state.config().load();
+                let http_client = gateway.handle.app_state.http_client();
                 poll_optimization(
-                    &gateway.handle.app_state.http_client,
+                    &http_client,
                     job_handle,
                     &config.models.default_credentials,
                     &config.provider_types,

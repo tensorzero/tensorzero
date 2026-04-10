@@ -5,7 +5,9 @@ use std::{
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tensorzero_config_paths::{PathComponent, TARGET_PATH_COMPONENTS};
+use tensorzero_config_paths::{
+    DATA_KEY, REMAPPED_PATH_KEY, WalkError, is_directory_path, walk_target_paths,
+};
 use toml::{
     Spanned, Table,
     de::{DeTable, DeValue},
@@ -230,16 +232,129 @@ pub(super) fn de_value_to_value(value: DeValue<'_>) -> Result<toml::Value, Error
     Ok(value)
 }
 
-struct TargetData<'a, 'b> {
-    /// The current PathComponent we're visiting
-    component: PathComponent,
-    /// The remaining components in our path
-    tail: &'b [PathComponent],
-    /// The entry we're visiting
-    entry: &'b mut DeValue<'a>,
-    /// The path in the user-specified config that we visited to reach `entry`
-    /// We use this when reporting errors
-    error_path: Vec<String>,
+struct VisitorError(Error);
+
+impl From<WalkError> for VisitorError {
+    fn from(err: WalkError) -> Self {
+        let inner = match err {
+            WalkError::ExpectedTable { .. } => Error::new(ErrorDetails::Config {
+                message: err.to_string(),
+            }),
+            WalkError::WildcardAtEnd { path } => Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "`{path}`: Path cannot end with a wildcard. {IMPOSSIBLE_ERROR_MESSAGE}"
+                ),
+            }),
+        };
+        VisitorError(inner)
+    }
+}
+
+impl From<Error> for VisitorError {
+    fn from(err: Error) -> Self {
+        VisitorError(err)
+    }
+}
+
+struct ResolveRelativePathsVisitor<'a> {
+    span_map: &'a SpanMap,
+}
+
+impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
+    for ResolveRelativePathsVisitor<'_>
+{
+    type Error = VisitorError;
+
+    fn visit_leaf(
+        &mut self,
+        value: &mut Spanned<DeValue<'_>>,
+        error_path: &[String],
+    ) -> Result<(), Self::Error> {
+        let span = value.span();
+        let DeValue::String(target_string) = value.get_mut() else {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`{}`: Expected a string, found {}",
+                    error_path.join("."),
+                    value.get_ref().type_str()
+                ),
+            })
+            .into());
+        };
+
+        let base_path = self
+            .span_map
+            .lookup_range(span)
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Failed to determine original TOML source file",
+                        error_path.join(".")
+                    ),
+                })
+            })?
+            .base_path();
+
+        let target_path = Path::new(&**target_string);
+        let resolved_path = base_path.join(target_path).canonicalize().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`{}`: Failed to resolve path `{}` (base: `{}`): {e}",
+                    error_path.join("."),
+                    target_path.display(),
+                    base_path.display(),
+                ),
+            })
+        })?;
+        let resolved_path_str = resolved_path
+            .to_str()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Path was not valid utf-8: base_path={base_path:?}, target_path={target_path:?}",
+                        error_path.join(".")
+                    ),
+                })
+            })?
+            .to_string();
+
+        let mut inner_table = DeTable::new();
+        inner_table.insert(
+            Spanned::new(0..0, Cow::Owned(REMAPPED_PATH_KEY.to_string())),
+            Spanned::new(0..0, DeValue::String(Cow::Owned(resolved_path_str.clone()))),
+        );
+
+        if resolved_path.is_dir() {
+            if !is_directory_path(error_path) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Expected a file path, but '{}' is a directory. Please provide a path to a file.",
+                        error_path.join("."),
+                        resolved_path.display()
+                    ),
+                })
+                .into());
+            }
+        } else {
+            let file_contents = std::fs::read_to_string(&resolved_path).map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Failed to read file at {}: {}",
+                        error_path.join("."),
+                        resolved_path.display(),
+                        e
+                    ),
+                })
+            })?;
+            inner_table.insert(
+                Spanned::new(0..0, Cow::Owned(DATA_KEY.to_string())),
+                Spanned::new(0..0, DeValue::String(Cow::Owned(file_contents))),
+            );
+        }
+
+        *value = Spanned::new(0..0, DeValue::Table(inner_table));
+        Ok(())
+    }
 }
 
 /// Visits all of the entries declared in `TARGET_PATH_COMPONENTS`, and resolves relative paths into
@@ -256,215 +371,10 @@ pub(super) fn resolve_toml_relative_paths(
     table: DeTable<'_>,
     span_map: &SpanMap,
 ) -> Result<Table, Error> {
-    let mut root = DeValue::Table(table);
-    for path in TARGET_PATH_COMPONENTS {
-        let mut targets = vec![TargetData {
-            component: path[0],
-            tail: &path[1..],
-            entry: &mut root,
-            error_path: vec![],
-        }];
-        while let Some(target_data) = targets.pop() {
-            let mut error_path = target_data.error_path.clone();
-            // We're reached the last component in our path - look up the key, and replace the value with
-            // the `__tensorzero_remapped_path` table expected by the `ResolvedTomlPath` deserializer
-            if target_data.tail.is_empty() {
-                match target_data.component {
-                    PathComponent::Literal(literal) => {
-                        error_path.push(literal.to_string());
-                        let DeValue::Table(entry) = target_data.entry else {
-                            return Err(ErrorDetails::Config {
-                                message: format!(
-                                    "`{}`: Expected a table, found {}",
-                                    error_path.join("."),
-                                    target_data.entry.type_str()
-                                ),
-                            }
-                            .into());
-                        };
-                        // Spanned ignores the span for Hash/PartialEq, so we can use a dummy span for the lookup
-                        if let Some(entry) = entry.get_mut(literal) {
-                            let span = entry.span();
-                            if let DeValue::String(target_string) = entry.get_mut() {
-                                let base_path = span_map
-                                    .lookup_range(span)
-                                    .ok_or_else(|| {
-                                        Error::new(ErrorDetails::Config {
-                                            message: format!(
-                                            "`{}`: Failed to determine original TOML source file",
-                                            error_path.join(".")
-                                        ),
-                                        })
-                                    })?
-                                    .base_path();
-
-                                let target_path = Path::new(&**target_string);
-                                let mut inner_table = DeTable::new();
-
-                                // Resolve the path and normalize `.` / `..` components
-                                let resolved_path = base_path.join(target_path).canonicalize().map_err(|e| {
-                                    Error::new(ErrorDetails::Config {
-                                        message: format!(
-                                            "`{}`: Failed to resolve path `{}` (base: `{}`): {e}",
-                                            error_path.join("."),
-                                            target_path.display(),
-                                            base_path.display(),
-                                        ),
-                                    })
-                                })?;
-                                let resolved_path_str = resolved_path
-                                    .to_str()
-                                    .ok_or_else(|| {
-                                        Error::new(ErrorDetails::Config {
-                                            message: format!(
-                                                "`{}`: Path was not valid utf-8: base_path={base_path:?}, target_path={target_path:?}",
-                                                error_path.join(".")
-                                            ),
-                                        })
-                                    })?
-                                    .to_string();
-
-                                // Check if this is a directory or file
-                                let is_directory_path = error_path.as_slice()
-                                    == ["gateway", "template_filesystem_access", "base_path"];
-
-                                if resolved_path.is_dir() {
-                                    if !is_directory_path {
-                                        // All other paths should be files, not directories
-                                        return Err(Error::new(ErrorDetails::Config {
-                                            message: format!(
-                                                "`{}`: Expected a file path, but '{}' is a directory. Please provide a path to a file.",
-                                                error_path.join("."),
-                                                resolved_path.display()
-                                            ),
-                                        }));
-                                    }
-                                    // For the directory path (gateway.template_filesystem_access.base_path),
-                                    // create a table with only __tensorzero_remapped_path (no __data)
-                                    inner_table.insert(
-                                        Spanned::new(
-                                            0..0,
-                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
-                                        ),
-                                        Spanned::new(
-                                            0..0,
-                                            DeValue::String(Cow::Owned(resolved_path_str)),
-                                        ),
-                                    );
-                                } else {
-                                    // For file paths, eagerly read the file contents
-                                    let file_contents = std::fs::read_to_string(&resolved_path)
-                                        .map_err(|e| {
-                                            Error::new(ErrorDetails::Config {
-                                                message: format!(
-                                                    "`{}`: Failed to read file at {}: {}",
-                                                    error_path.join("."),
-                                                    resolved_path.display(),
-                                                    e
-                                                ),
-                                            })
-                                        })?;
-
-                                    // We use dummy spans for now - this may change when we implement globbing
-                                    inner_table.insert(
-                                        Spanned::new(
-                                            0..0,
-                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
-                                        ),
-                                        Spanned::new(
-                                            0..0,
-                                            DeValue::String(Cow::Owned(resolved_path_str)),
-                                        ),
-                                    );
-                                    inner_table.insert(
-                                        Spanned::new(0..0, Cow::Owned("__data".to_string())),
-                                        Spanned::new(
-                                            0..0,
-                                            DeValue::String(Cow::Owned(file_contents)),
-                                        ),
-                                    );
-                                }
-                                // Overwrite the original path value with the appropriate table structure
-                                // For files: `{"__tensorzero_remapped_path": "...", "__data": "..."}`
-                                // For directories: `{"__tensorzero_remapped_path": "..."}`
-                                *entry = Spanned::new(0..0, DeValue::Table(inner_table));
-                            } else {
-                                return Err(ErrorDetails::Config {
-                                    message: format!(
-                                        "`{}`: Expected a string, found {}",
-                                        error_path.join("."),
-                                        entry.get_ref().type_str()
-                                    ),
-                                }
-                                .into());
-                            }
-                        }
-                    }
-                    PathComponent::Wildcard => {
-                        return Err(ErrorDetails::InternalError {
-                            message: format!(
-                                "`{}`: Path cannot end with a wildcard. {IMPOSSIBLE_ERROR_MESSAGE}",
-                                error_path.join(".")
-                            ),
-                        }
-                        .into());
-                    }
-                }
-            } else {
-                // We're not at the end of the path, so we push new entries to our 'targets' stack
-                match target_data.component {
-                    PathComponent::Literal(literal) => {
-                        error_path.push(literal.to_string());
-                        let DeValue::Table(entry) = target_data.entry else {
-                            return Err(ErrorDetails::Config {
-                                message: format!(
-                                    "`{}`: Expected a table, found {}",
-                                    error_path.join("."),
-                                    target_data.entry.type_str()
-                                ),
-                            }
-                            .into());
-                        };
-                        // If the literal is present in the user-provided table, traverse into the value
-                        if let Some(entry) = entry.get_mut(literal) {
-                            targets.push(TargetData {
-                                component: target_data.tail[0],
-                                tail: &target_data.tail[1..],
-                                entry: entry.get_mut(),
-                                error_path,
-                            });
-                        }
-                    }
-                    // For wildcards, push all of the table values onto our stack. This is used to process
-                    // all entries within a table (e.g. `[functions.first_function]`, `[functions.second_function]`, etc.)
-                    PathComponent::Wildcard => {
-                        if let DeValue::Table(table) = target_data.entry {
-                            for (key, value) in table.iter_mut() {
-                                let mut error_path = error_path.clone();
-                                error_path.push(key.get_ref().to_string());
-                                targets.push(TargetData {
-                                    component: target_data.tail[0],
-                                    tail: &target_data.tail[1..],
-                                    entry: value.get_mut(),
-                                    error_path,
-                                });
-                            }
-                        } else {
-                            return Err(ErrorDetails::Config {
-                                message: format!(
-                                    "`{}`: Expected a table, found {}",
-                                    target_data.error_path.join("."),
-                                    target_data.entry.type_str()
-                                ),
-                            }
-                            .into());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let value = de_value_to_value(root)?;
+    let mut root = Spanned::new(0..0, DeValue::Table(table));
+    let mut visitor = ResolveRelativePathsVisitor { span_map };
+    walk_target_paths(&mut root, &mut visitor).map_err(|VisitorError(error)| error)?;
+    let value = de_value_to_value(root.into_inner())?;
     match value {
         toml::Value::Table(table) => Ok(table),
         _ => Err(ErrorDetails::InternalError {

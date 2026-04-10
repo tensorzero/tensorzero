@@ -6,15 +6,16 @@ use tensorzero_stored_config::{
     StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
     StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredChatFunctionConfig,
     StoredDiclVariantConfig, StoredEvaluatorConfig, StoredExactMatchConfig,
-    StoredExperimentationConfig, StoredExperimentationConfigWithNamespaces, StoredFunctionConfig,
-    StoredInputWrappers, StoredJsonFunctionConfig, StoredLLMJudgeBestOfNVariantConfig,
-    StoredLLMJudgeChainOfThoughtVariantConfig, StoredLLMJudgeChatCompletionVariantConfig,
-    StoredLLMJudgeConfig, StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig,
-    StoredLLMJudgeInputFormat, StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize,
-    StoredLLMJudgeOutputType, StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo,
-    StoredMixtureOfNVariantConfig, StoredPromptRef, StoredRegexConfig, StoredRetryConfig,
-    StoredStaticExperimentationConfig, StoredTimeoutsConfig, StoredToolChoice, StoredToolUseConfig,
-    StoredVariantConfig, StoredVariantRef, StoredVariantVersionConfig,
+    StoredExperimentationConfig, StoredExperimentationConfigWithNamespaces, StoredFileRef,
+    StoredFunctionConfig, StoredInputWrappers, StoredJsonFunctionConfig,
+    StoredLLMJudgeBestOfNVariantConfig, StoredLLMJudgeChainOfThoughtVariantConfig,
+    StoredLLMJudgeChatCompletionVariantConfig, StoredLLMJudgeConfig,
+    StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat,
+    StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
+    StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
+    StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig, StoredTimeoutsConfig,
+    StoredToolChoice, StoredToolUseConfig, StoredVariantConfig, StoredVariantRef,
+    StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -43,14 +44,24 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use super::PostgresConnectionInfo;
-use super::prompt_template_writes::{
-    CollectedPromptTemplate, add_prompt_template, write_collected_prompt_templates,
-};
+use super::file_writes::{CollectedFile, add_file, write_collected_files};
 
+/// Parameters for the public, single-function write API
+/// (`PostgresConnectionInfo::write_function_config`).
+///
+/// This API always performs a per-function compare-and-swap check against the
+/// caller-supplied `expected_current_version_id`. The only way to bypass that
+/// check is via `write_function_config_in_tx_skipping_cas`, which is
+/// crate-private and only usable by the full-config bulk write path.
 #[derive(Debug)]
 pub struct WriteFunctionConfigParams<'a> {
     pub function_name: &'a str,
     pub config: &'a UninitializedFunctionConfig,
+    /// Expected current latest version ID for this function. The write fails
+    /// with a CAS error if the actual latest row doesn't match.
+    ///
+    /// `None` means the caller expects no existing row for this function
+    /// (first write).
     pub expected_current_version_id: Option<Uuid>,
     pub creation_source: &'a str,
     pub source_autopilot_session_id: Option<Uuid>,
@@ -61,10 +72,24 @@ pub struct WriteFunctionConfigParams<'a> {
     pub extra_templates: &'a HashMap<String, String>,
 }
 
+/// Compare-and-swap mode for the internal `write_function_config_in_tx_impl`.
+#[derive(Debug, Clone, Copy)]
+enum FunctionVersionCas {
+    /// Check that the current latest version ID matches this expected value.
+    /// `None` means "expect no existing row" (first write for this function).
+    Expected(Option<Uuid>),
+    /// Skip the per-function CAS check entirely.
+    ///
+    /// **Invariant:** this variant must only be used by the full-config bulk
+    /// write path (`write_stored_config_in_tx`). See
+    /// `write_function_config_in_tx_skipping_cas` for the full rationale.
+    SkipForFullConfigWrite,
+}
+
 #[derive(Debug)]
 pub struct WriteFunctionConfigResult {
     pub function_version_id: Uuid,
-    pub prompt_template_version_ids: HashMap<String, Uuid>,
+    pub file_version_ids: HashMap<String, Uuid>,
     pub variant_version_ids: HashMap<String, Uuid>,
 }
 
@@ -102,56 +127,132 @@ pub(super) async fn write_function_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteFunctionConfigParams<'_>,
 ) -> Result<WriteFunctionConfigResult, Error> {
-    // Acquire an advisory lock on the function name to serialize concurrent writes,
-    // including first writes where there is no existing row to lock via FOR UPDATE.
-    acquire_function_advisory_lock(tx, params.function_name).await?;
-
-    // With the advisory lock held, read the latest version for the CAS check.
-    let actual_latest_id = fetch_latest_function_version(tx, params.function_name).await?;
-
-    // Compare-and-swap: verify the caller's expected version matches the current row.
-    if actual_latest_id != params.expected_current_version_id {
-        return Err(Error::new(ErrorDetails::Config {
-            message: format!(
-                "Function `{}` was updated during your edit; please refresh before retrying.",
-                params.function_name
-            ),
-        }));
-    }
-
-    let prompt_template_version_ids = write_prompt_template_versions(
+    write_function_config_in_tx_impl(
         tx,
+        params.function_name,
         params.config,
-        params.extra_templates,
+        FunctionVersionCas::Expected(params.expected_current_version_id),
         params.creation_source,
         params.source_autopilot_session_id,
+        params.extra_templates,
+    )
+    .await
+}
+
+/// Writes a function config version **without** the per-function CAS check.
+///
+/// # Invariant: full-config bulk write path only
+///
+/// This entry point must only ever be called from
+/// `write_stored_config_in_tx`, the bulk "apply a full editable TOML" path.
+/// That path provides equivalent protection at a higher level:
+///
+/// 1. It holds the global `config_editor` transaction-level advisory lock
+///    (`acquire_config_editor_lock` in `endpoints/internal/config.rs`), which
+///    serializes all config-editor writes — no other bulk or single-function
+///    UI-driven write can interleave.
+/// 2. It verifies the full editable-TOML signature against the `base_signature`
+///    the UI was editing from (see `apply_config_toml_handler`). If anything
+///    in the config has changed between the read and the write, the apply
+///    is rejected before we get here.
+///
+/// Together, those guarantees make the per-function CAS redundant: every
+/// function row we append is guaranteed to sit on top of the same state the
+/// caller snapshotted. Dropping the per-function CAS is also *necessary* in
+/// the bulk path because the bulk writer never reads the current function
+/// version IDs — it only has the `UninitializedConfig` — and there is no
+/// safe value to pass for `expected_current_version_id` on an existing row.
+///
+/// # Do not call from anywhere else
+///
+/// Any single-function edit path (UI function editor, API) must go through
+/// `write_function_config` / `write_function_config_in_tx`, which enforces
+/// the CAS against a caller-supplied `expected_current_version_id`. Calling
+/// this skipping-CAS variant from such a path would allow concurrent writers
+/// to silently clobber each other's edits.
+pub(crate) async fn write_function_config_in_tx_skipping_cas(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
+    write_function_config_in_tx_impl(
+        tx,
+        function_name,
+        config,
+        FunctionVersionCas::SkipForFullConfigWrite,
+        creation_source,
+        source_autopilot_session_id,
+        extra_templates,
+    )
+    .await
+}
+
+async fn write_function_config_in_tx_impl(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    cas: FunctionVersionCas,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
+    // Acquire an advisory lock on the function name to serialize concurrent writes,
+    // including first writes where there is no existing row to lock via FOR UPDATE.
+    acquire_function_advisory_lock(tx, function_name).await?;
+
+    match cas {
+        FunctionVersionCas::Expected(expected) => {
+            // With the advisory lock held, read the latest version for the CAS check.
+            let actual_latest_id = fetch_latest_function_version(tx, function_name).await?;
+            if actual_latest_id != expected {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Function `{function_name}` was updated during your edit; please refresh before retrying.",
+                    ),
+                }));
+            }
+        }
+        FunctionVersionCas::SkipForFullConfigWrite => {
+            // Intentionally no CAS — see `write_function_config_in_tx_skipping_cas`.
+        }
+    }
+
+    let file_version_ids = write_file_versions(
+        tx,
+        config,
+        extra_templates,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let variant_version_ids = write_variant_versions(
         tx,
-        params.function_name,
-        params.config,
-        &prompt_template_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        function_name,
+        config,
+        &file_version_ids,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let function_version_id = write_function_version(
         tx,
-        params.function_name,
-        params.config,
-        &prompt_template_version_ids,
+        function_name,
+        config,
+        &file_version_ids,
         &variant_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     Ok(WriteFunctionConfigResult {
         function_version_id,
-        prompt_template_version_ids,
+        file_version_ids,
         variant_version_ids,
     })
 }
@@ -211,14 +312,14 @@ async fn fetch_latest_function_version(
     .map_err(|e| postgres_query_error("Failed to fetch latest function config version", e))
 }
 
-async fn write_prompt_template_versions(
+async fn write_file_versions(
     tx: &mut Transaction<'_, Postgres>,
     config: &UninitializedFunctionConfig,
     extra_templates: &HashMap<String, String>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
-    let mut templates = collect_prompt_templates(config)?;
+    let mut templates = collect_files(config)?;
 
     // Merge extra templates. All prompts (directly or transitively included) must be stored
     // in the database for the config to be self-contained.
@@ -226,22 +327,21 @@ async fn write_prompt_template_versions(
         if !templates.contains_key(key) {
             templates.insert(
                 key.clone(),
-                CollectedPromptTemplate {
+                CollectedFile {
                     source_body: body.clone(),
                 },
             );
         }
     }
 
-    write_collected_prompt_templates(tx, &templates, creation_source, source_autopilot_session_id)
-        .await
+    write_collected_files(tx, &templates, creation_source, source_autopilot_session_id).await
 }
 
 async fn write_variant_versions(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
     config: &UninitializedFunctionConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
@@ -249,7 +349,7 @@ async fn write_variant_versions(
     let mut variant_names: Vec<_> = variants.keys().cloned().collect();
     variant_names.sort();
 
-    let valid_prompt_ids: HashSet<Uuid> = prompt_template_version_ids.values().copied().collect();
+    let valid_file_ids: HashSet<Uuid> = file_version_ids.values().copied().collect();
 
     // Convert, validate, and serialize each variant, computing a content hash for dedup.
     struct PreparedVariant {
@@ -267,8 +367,8 @@ async fn write_variant_versions(
                     "Variant `{variant_name}` was missing while serializing function config. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
                 }))?;
-        let stored_config = convert_variant_info(variant_info, prompt_template_version_ids)?;
-        validate_variant_version_config_refs(&stored_config, &valid_prompt_ids)?;
+        let stored_config = convert_variant_info(variant_info, file_version_ids)?;
+        validate_variant_version_config_refs(&stored_config, &valid_file_ids)?;
         let config_json = serde_json::to_value(&stored_config)
             .map_err(|e| serialization_error("Failed to serialize stored variant config", e))?;
         let content_hash = blake3::hash(config_json.to_string().as_bytes())
@@ -353,17 +453,16 @@ async fn write_function_version(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
     config: &UninitializedFunctionConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
     variant_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<Uuid, Error> {
     let function_version_id = Uuid::now_v7();
-    let stored_config =
-        convert_function_config(config, prompt_template_version_ids, variant_version_ids)?;
-    let valid_prompt_ids: HashSet<Uuid> = prompt_template_version_ids.values().copied().collect();
+    let stored_config = convert_function_config(config, file_version_ids, variant_version_ids)?;
+    let valid_file_ids: HashSet<Uuid> = file_version_ids.values().copied().collect();
     let valid_variant_ids: HashSet<Uuid> = variant_version_ids.values().copied().collect();
-    validate_function_config_refs(&stored_config, &valid_variant_ids, &valid_prompt_ids)?;
+    validate_function_config_refs(&stored_config, &valid_variant_ids, &valid_file_ids)?;
     let config_json = serde_json::to_value(&stored_config)
         .map_err(|e| serialization_error("Failed to serialize stored function config", e))?;
     sqlx::query(
@@ -394,13 +493,13 @@ fn function_variants(
     }
 }
 
-fn collect_prompt_templates(
+fn collect_files(
     config: &UninitializedFunctionConfig,
-) -> Result<BTreeMap<String, CollectedPromptTemplate>, Error> {
+) -> Result<BTreeMap<String, CollectedFile>, Error> {
     let mut templates = BTreeMap::new();
     match config {
         UninitializedFunctionConfig::Chat(config) => {
-            collect_function_common_prompt_templates(
+            collect_function_common_files(
                 &mut templates,
                 config.system_schema.as_ref(),
                 config.user_schema.as_ref(),
@@ -408,14 +507,14 @@ fn collect_prompt_templates(
                 &config.schemas,
             )?;
             for variant in config.variants.values() {
-                collect_variant_prompt_templates(&mut templates, &variant.inner)?;
+                collect_variant_files(&mut templates, &variant.inner)?;
             }
             for evaluator in config.evaluators.values() {
-                collect_evaluator_prompt_templates(&mut templates, evaluator)?;
+                collect_evaluator_files(&mut templates, evaluator)?;
             }
         }
         UninitializedFunctionConfig::Json(config) => {
-            collect_function_common_prompt_templates(
+            collect_function_common_files(
                 &mut templates,
                 config.system_schema.as_ref(),
                 config.user_schema.as_ref(),
@@ -423,13 +522,13 @@ fn collect_prompt_templates(
                 &config.schemas,
             )?;
             if let Some(output_schema) = &config.output_schema {
-                add_prompt_template(&mut templates, output_schema)?;
+                add_file(&mut templates, output_schema)?;
             }
             for variant in config.variants.values() {
-                collect_variant_prompt_templates(&mut templates, &variant.inner)?;
+                collect_variant_files(&mut templates, &variant.inner)?;
             }
             for evaluator in config.evaluators.values() {
-                collect_evaluator_prompt_templates(&mut templates, evaluator)?;
+                collect_evaluator_files(&mut templates, evaluator)?;
             }
         }
     }
@@ -437,66 +536,66 @@ fn collect_prompt_templates(
     Ok(templates)
 }
 
-fn collect_function_common_prompt_templates(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+fn collect_function_common_files(
+    templates: &mut BTreeMap<String, CollectedFile>,
     system_schema: Option<&ResolvedTomlPathData>,
     user_schema: Option<&ResolvedTomlPathData>,
     assistant_schema: Option<&ResolvedTomlPathData>,
     schemas: &UninitializedSchemas,
 ) -> Result<(), Error> {
     if let Some(system_schema) = system_schema {
-        add_prompt_template(templates, system_schema)?;
+        add_file(templates, system_schema)?;
     }
     if let Some(user_schema) = user_schema {
-        add_prompt_template(templates, user_schema)?;
+        add_file(templates, user_schema)?;
     }
     if let Some(assistant_schema) = assistant_schema {
-        add_prompt_template(templates, assistant_schema)?;
+        add_file(templates, assistant_schema)?;
     }
     for (_, schema) in schemas.iter() {
-        add_prompt_template(templates, schema)?;
+        add_file(templates, schema)?;
     }
     Ok(())
 }
 
-fn collect_variant_prompt_templates(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+fn collect_variant_files(
+    templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedVariantConfig,
 ) -> Result<(), Error> {
     match config {
         UninitializedVariantConfig::ChatCompletion(config) => {
-            collect_chat_completion_prompt_templates(templates, config)
+            collect_chat_completion_files(templates, config)
         }
         UninitializedVariantConfig::BestOfNSampling(config) => {
-            collect_chat_completion_prompt_templates(templates, &config.evaluator.inner)
+            collect_chat_completion_files(templates, &config.evaluator.inner)
         }
         UninitializedVariantConfig::MixtureOfN(config) => {
-            collect_chat_completion_prompt_templates(templates, &config.fuser.inner)
+            collect_chat_completion_files(templates, &config.fuser.inner)
         }
         UninitializedVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                add_prompt_template(templates, system_instructions)?;
+                add_file(templates, system_instructions)?;
             }
             Ok(())
         }
         UninitializedVariantConfig::ChainOfThought(config) => {
-            collect_chat_completion_prompt_templates(templates, &config.inner)
+            collect_chat_completion_files(templates, &config.inner)
         }
     }
 }
 
-fn collect_chat_completion_prompt_templates(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+fn collect_chat_completion_files(
+    templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedChatCompletionConfig,
 ) -> Result<(), Error> {
     if let Some(system_template) = &config.system_template {
-        add_prompt_template(templates, system_template)?;
+        add_file(templates, system_template)?;
     }
     if let Some(user_template) = &config.user_template {
-        add_prompt_template(templates, user_template)?;
+        add_file(templates, user_template)?;
     }
     if let Some(assistant_template) = &config.assistant_template {
-        add_prompt_template(templates, assistant_template)?;
+        add_file(templates, assistant_template)?;
     }
     if let Some(UninitializedInputWrappers {
         user,
@@ -505,62 +604,62 @@ fn collect_chat_completion_prompt_templates(
     }) = &config.input_wrappers
     {
         if let Some(user) = user {
-            add_prompt_template(templates, user)?;
+            add_file(templates, user)?;
         }
         if let Some(assistant) = assistant {
-            add_prompt_template(templates, assistant)?;
+            add_file(templates, assistant)?;
         }
         if let Some(system) = system {
-            add_prompt_template(templates, system)?;
+            add_file(templates, system)?;
         }
     }
     for template in config.templates.inner.values() {
-        add_prompt_template(templates, &template.path)?;
+        add_file(templates, &template.path)?;
     }
     Ok(())
 }
 
-fn collect_evaluator_prompt_templates(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+fn collect_evaluator_files(
+    templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedEvaluatorConfig,
 ) -> Result<(), Error> {
     if let UninitializedEvaluatorConfig::LLMJudge(config) = config {
         for variant in config.variants.values() {
-            collect_llm_judge_prompt_templates(templates, &variant.inner)?;
+            collect_llm_judge_files(templates, &variant.inner)?;
         }
     }
     Ok(())
 }
 
-fn collect_llm_judge_prompt_templates(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+fn collect_llm_judge_files(
+    templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedLLMJudgeVariantConfig,
 ) -> Result<(), Error> {
     match config {
         UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
-            add_prompt_template(templates, &config.system_instructions)
+            add_file(templates, &config.system_instructions)
         }
         UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
-            add_prompt_template(templates, &config.evaluator.system_instructions)
+            add_file(templates, &config.evaluator.system_instructions)
         }
         UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
-            add_prompt_template(templates, &config.fuser.system_instructions)
+            add_file(templates, &config.fuser.system_instructions)
         }
         UninitializedLLMJudgeVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                add_prompt_template(templates, system_instructions)?;
+                add_file(templates, system_instructions)?;
             }
             Ok(())
         }
         UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
-            add_prompt_template(templates, &config.inner.system_instructions)
+            add_file(templates, &config.inner.system_instructions)
         }
     }
 }
 
 fn convert_function_config(
     config: &UninitializedFunctionConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
     variant_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredFunctionConfig, Error> {
     match config {
@@ -570,21 +669,21 @@ fn convert_function_config(
                 system_schema: config
                     .system_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 user_schema: config
                     .user_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 assistant_schema: config
                     .assistant_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
-                schemas: Some(convert_named_prompt_refs(
+                schemas: Some(convert_named_file_refs(
                     config.schemas.iter(),
-                    prompt_template_version_ids,
+                    file_version_ids,
                 )?),
                 tools: Some(config.tools.clone()),
                 tool_choice: Some(StoredToolChoice::from(&config.tool_choice)),
@@ -594,10 +693,7 @@ fn convert_function_config(
                     .experimentation
                     .as_ref()
                     .map(StoredExperimentationConfigWithNamespaces::from),
-                evaluators: Some(convert_evaluators(
-                    &config.evaluators,
-                    prompt_template_version_ids,
-                )?),
+                evaluators: Some(convert_evaluators(&config.evaluators, file_version_ids)?),
             }))
         }
         UninitializedFunctionConfig::Json(config) => {
@@ -606,36 +702,33 @@ fn convert_function_config(
                 system_schema: config
                     .system_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 user_schema: config
                     .user_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 assistant_schema: config
                     .assistant_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
-                schemas: Some(convert_named_prompt_refs(
+                schemas: Some(convert_named_file_refs(
                     config.schemas.iter(),
-                    prompt_template_version_ids,
+                    file_version_ids,
                 )?),
                 output_schema: config
                     .output_schema
                     .as_ref()
-                    .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 description: config.description.clone(),
                 experimentation: config
                     .experimentation
                     .as_ref()
                     .map(StoredExperimentationConfigWithNamespaces::from),
-                evaluators: Some(convert_evaluators(
-                    &config.evaluators,
-                    prompt_template_version_ids,
-                )?),
+                evaluators: Some(convert_evaluators(&config.evaluators, file_version_ids)?),
             }))
         }
     }
@@ -664,46 +757,43 @@ fn convert_variant_refs(
     Ok(stored_variants)
 }
 
-fn convert_named_prompt_refs<'a>(
+fn convert_named_file_refs<'a>(
     entries: impl Iterator<Item = (&'a String, &'a ResolvedTomlPathData)>,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
-) -> Result<BTreeMap<String, StoredPromptRef>, Error> {
+    file_version_ids: &HashMap<String, Uuid>,
+) -> Result<BTreeMap<String, StoredFileRef>, Error> {
     let mut refs = BTreeMap::new();
     for (name, path) in entries {
-        refs.insert(
-            name.clone(),
-            prompt_ref_for(path, prompt_template_version_ids)?,
-        );
+        refs.insert(name.clone(), file_ref_for(path, file_version_ids)?);
     }
     Ok(refs)
 }
 
-fn prompt_ref_for(
+fn file_ref_for(
     path: &ResolvedTomlPathData,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
-) -> Result<StoredPromptRef, Error> {
-    let template_key = path.get_template_key();
-    let prompt_template_version_id = prompt_template_version_ids
-        .get(&template_key)
+    file_version_ids: &HashMap<String, Uuid>,
+) -> Result<StoredFileRef, Error> {
+    let file_path = path.get_template_key();
+    let file_version_id = file_version_ids
+        .get(&file_path)
         .copied()
-        .ok_or_else(|| missing_prompt_template_error(&template_key))?;
-    Ok(StoredPromptRef {
-        prompt_template_version_id,
-        template_key,
+        .ok_or_else(|| missing_file_error(&file_path))?;
+    Ok(StoredFileRef {
+        file_version_id,
+        file_path,
     })
 }
 
 #[expect(deprecated)]
 fn convert_variant_info(
     variant_info: &UninitializedVariantInfo,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredVariantVersionConfig, Error> {
     Ok(StoredVariantVersionConfig {
         variant: match &variant_info.inner {
             UninitializedVariantConfig::ChatCompletion(config) => {
                 StoredVariantConfig::ChatCompletion(convert_chat_completion_variant(
                     config,
-                    prompt_template_version_ids,
+                    file_version_ids,
                 )?)
             }
             UninitializedVariantConfig::BestOfNSampling(config) => {
@@ -713,7 +803,7 @@ fn convert_variant_info(
                     candidates: Some(config.candidates.clone()),
                     evaluator: convert_chat_completion_variant(
                         &config.evaluator.inner,
-                        prompt_template_version_ids,
+                        file_version_ids,
                     )?,
                 })
             }
@@ -722,19 +812,16 @@ fn convert_variant_info(
                     weight: config.weight,
                     timeout_s: config.timeout_s,
                     candidates: Some(config.candidates.clone()),
-                    fuser: convert_chat_completion_variant(
-                        &config.fuser.inner,
-                        prompt_template_version_ids,
-                    )?,
+                    fuser: convert_chat_completion_variant(&config.fuser.inner, file_version_ids)?,
                 })
             }
-            UninitializedVariantConfig::Dicl(config) => StoredVariantConfig::Dicl(
-                convert_dicl_variant(config, prompt_template_version_ids)?,
-            ),
+            UninitializedVariantConfig::Dicl(config) => {
+                StoredVariantConfig::Dicl(convert_dicl_variant(config, file_version_ids)?)
+            }
             UninitializedVariantConfig::ChainOfThought(config) => {
                 StoredVariantConfig::ChainOfThought(convert_chat_completion_variant(
                     &config.inner,
-                    prompt_template_version_ids,
+                    file_version_ids,
                 )?)
             }
         },
@@ -751,7 +838,7 @@ fn convert_variant_info(
 
 fn convert_chat_completion_variant(
     config: &UninitializedChatCompletionConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredChatCompletionVariantConfig, Error> {
     Ok(StoredChatCompletionVariantConfig {
         weight: config.weight,
@@ -759,22 +846,22 @@ fn convert_chat_completion_variant(
         system_template: config
             .system_template
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         user_template: config
             .user_template
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         assistant_template: config
             .assistant_template
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         input_wrappers: config
             .input_wrappers
             .as_ref()
-            .map(|wrappers| convert_input_wrappers(wrappers, prompt_template_version_ids))
+            .map(|wrappers| convert_input_wrappers(wrappers, file_version_ids))
             .transpose()?,
         templates: Some(
             config
@@ -782,7 +869,7 @@ fn convert_chat_completion_variant(
                 .inner
                 .iter()
                 .map(|(name, template)| {
-                    prompt_ref_for(&template.path, prompt_template_version_ids)
+                    file_ref_for(&template.path, file_version_ids)
                         .map(|template_ref| (name.clone(), template_ref))
                 })
                 .collect::<Result<BTreeMap<_, _>, Error>>()?,
@@ -810,30 +897,30 @@ fn convert_chat_completion_variant(
 
 fn convert_input_wrappers(
     wrappers: &crate::variant::chat_completion::UninitializedInputWrappers,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredInputWrappers, Error> {
     Ok(StoredInputWrappers {
         user: wrappers
             .user
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         assistant: wrappers
             .assistant
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         system: wrappers
             .system
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
     })
 }
 
 fn convert_dicl_variant(
     config: &UninitializedDiclConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredDiclVariantConfig, Error> {
     Ok(StoredDiclVariantConfig {
         weight: config.weight,
@@ -843,7 +930,7 @@ fn convert_dicl_variant(
         system_instructions: config
             .system_instructions
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         temperature: config.temperature,
         top_p: config.top_p,
@@ -869,7 +956,7 @@ fn convert_dicl_variant(
 #[expect(deprecated)]
 pub(crate) fn convert_evaluators(
     evaluators: &HashMap<String, UninitializedEvaluatorConfig>,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<BTreeMap<String, StoredEvaluatorConfig>, Error> {
     let mut stored = BTreeMap::new();
     for (name, evaluator) in evaluators {
@@ -882,7 +969,7 @@ pub(crate) fn convert_evaluators(
                     })
                 }
                 UninitializedEvaluatorConfig::LLMJudge(config) => StoredEvaluatorConfig::LLMJudge(
-                    convert_llm_judge_config(config, prompt_template_version_ids)?,
+                    convert_llm_judge_config(config, file_version_ids)?,
                 ),
                 UninitializedEvaluatorConfig::ToolUse(config) => {
                     StoredEvaluatorConfig::ToolUse(StoredToolUseConfig::from(config))
@@ -901,13 +988,13 @@ pub(crate) fn convert_evaluators(
 
 fn convert_llm_judge_config(
     config: &UninitializedLLMJudgeConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeConfig, Error> {
     let mut variants = BTreeMap::new();
     for (name, variant) in &config.variants {
         variants.insert(
             name.clone(),
-            convert_llm_judge_variant_info(variant, prompt_template_version_ids)?,
+            convert_llm_judge_variant_info(variant, file_version_ids)?,
         );
     }
 
@@ -933,35 +1020,35 @@ fn convert_llm_judge_config(
 
 fn convert_llm_judge_variant_info(
     config: &UninitializedLLMJudgeVariantInfo,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeVariantInfo, Error> {
     Ok(StoredLLMJudgeVariantInfo {
         variant: match &config.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
                 StoredLLMJudgeVariantConfig::ChatCompletion(
-                    convert_llm_judge_chat_completion_variant(config, prompt_template_version_ids)?,
+                    convert_llm_judge_chat_completion_variant(config, file_version_ids)?,
                 )
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
                 StoredLLMJudgeVariantConfig::BestOfNSampling(convert_llm_judge_best_of_n_variant(
                     config,
-                    prompt_template_version_ids,
+                    file_version_ids,
                 )?)
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
                 StoredLLMJudgeVariantConfig::MixtureOfNSampling(
-                    convert_llm_judge_mixture_of_n_variant(config, prompt_template_version_ids)?,
+                    convert_llm_judge_mixture_of_n_variant(config, file_version_ids)?,
                 )
             }
             UninitializedLLMJudgeVariantConfig::Dicl(config) => StoredLLMJudgeVariantConfig::Dicl(
-                convert_llm_judge_dicl_variant(config, prompt_template_version_ids)?,
+                convert_llm_judge_dicl_variant(config, file_version_ids)?,
             ),
             UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
                 StoredLLMJudgeVariantConfig::ChainOfThought(
                     StoredLLMJudgeChainOfThoughtVariantConfig {
                         inner: convert_llm_judge_chat_completion_variant(
                             &config.inner,
-                            prompt_template_version_ids,
+                            file_version_ids,
                         )?,
                     },
                 )
@@ -973,15 +1060,12 @@ fn convert_llm_judge_variant_info(
 
 fn convert_llm_judge_chat_completion_variant(
     config: &UninitializedLLMJudgeChatCompletionVariantConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeChatCompletionVariantConfig, Error> {
     Ok(StoredLLMJudgeChatCompletionVariantConfig {
         active: config.active,
         model: config.model.clone(),
-        system_instructions: prompt_ref_for(
-            &config.system_instructions,
-            prompt_template_version_ids,
-        )?,
+        system_instructions: file_ref_for(&config.system_instructions, file_version_ids)?,
         temperature: config.temperature,
         top_p: config.top_p,
         max_tokens: config.max_tokens,
@@ -1006,38 +1090,32 @@ fn convert_llm_judge_chat_completion_variant(
 #[expect(deprecated)]
 fn convert_llm_judge_best_of_n_variant(
     config: &UninitializedLLMJudgeBestOfNVariantConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeBestOfNVariantConfig, Error> {
     Ok(StoredLLMJudgeBestOfNVariantConfig {
         active: config.active,
         timeout_s: config.timeout_s,
         candidates: Some(config.candidates.clone()),
-        evaluator: convert_llm_judge_chat_completion_variant(
-            &config.evaluator,
-            prompt_template_version_ids,
-        )?,
+        evaluator: convert_llm_judge_chat_completion_variant(&config.evaluator, file_version_ids)?,
     })
 }
 
 #[expect(deprecated)]
 fn convert_llm_judge_mixture_of_n_variant(
     config: &UninitializedLLMJudgeMixtureOfNVariantConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeMixtureOfNVariantConfig, Error> {
     Ok(StoredLLMJudgeMixtureOfNVariantConfig {
         active: config.active,
         timeout_s: config.timeout_s,
         candidates: Some(config.candidates.clone()),
-        fuser: convert_llm_judge_chat_completion_variant(
-            &config.fuser,
-            prompt_template_version_ids,
-        )?,
+        fuser: convert_llm_judge_chat_completion_variant(&config.fuser, file_version_ids)?,
     })
 }
 
 fn convert_llm_judge_dicl_variant(
     config: &UninitializedLLMJudgeDiclVariantConfig,
-    prompt_template_version_ids: &HashMap<String, Uuid>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeDiclVariantConfig, Error> {
     Ok(StoredLLMJudgeDiclVariantConfig {
         active: config.active,
@@ -1047,7 +1125,7 @@ fn convert_llm_judge_dicl_variant(
         system_instructions: config
             .system_instructions
             .as_ref()
-            .map(|path| prompt_ref_for(path, prompt_template_version_ids))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         temperature: config.temperature,
         top_p: config.top_p,
@@ -1225,40 +1303,40 @@ impl From<RetryConfig> for StoredRetryConfig {
 
 fn validate_variant_version_config_refs(
     config: &StoredVariantVersionConfig,
-    valid_prompt_ids: &HashSet<Uuid>,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
     match &config.variant {
         StoredVariantConfig::ChatCompletion(config)
         | StoredVariantConfig::ChainOfThought(config) => {
-            validate_chat_completion_prompt_refs(config, valid_prompt_ids)?;
+            validate_chat_completion_file_refs(config, valid_file_ids)?;
         }
         StoredVariantConfig::BestOfNSampling(config) => {
-            validate_chat_completion_prompt_refs(&config.evaluator, valid_prompt_ids)?;
+            validate_chat_completion_file_refs(&config.evaluator, valid_file_ids)?;
         }
         StoredVariantConfig::MixtureOfN(config) => {
-            validate_chat_completion_prompt_refs(&config.fuser, valid_prompt_ids)?;
+            validate_chat_completion_file_refs(&config.fuser, valid_file_ids)?;
         }
         StoredVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                validate_prompt_ref(system_instructions, valid_prompt_ids)?;
+                validate_file_ref(system_instructions, valid_file_ids)?;
             }
         }
     }
     Ok(())
 }
 
-fn validate_chat_completion_prompt_refs(
+fn validate_chat_completion_file_refs(
     config: &StoredChatCompletionVariantConfig,
-    valid_prompt_ids: &HashSet<Uuid>,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
     if let Some(system_template) = &config.system_template {
-        validate_prompt_ref(system_template, valid_prompt_ids)?;
+        validate_file_ref(system_template, valid_file_ids)?;
     }
     if let Some(user_template) = &config.user_template {
-        validate_prompt_ref(user_template, valid_prompt_ids)?;
+        validate_file_ref(user_template, valid_file_ids)?;
     }
     if let Some(assistant_template) = &config.assistant_template {
-        validate_prompt_ref(assistant_template, valid_prompt_ids)?;
+        validate_file_ref(assistant_template, valid_file_ids)?;
     }
     if let Some(StoredInputWrappers {
         user,
@@ -1267,18 +1345,18 @@ fn validate_chat_completion_prompt_refs(
     }) = &config.input_wrappers
     {
         if let Some(user) = user {
-            validate_prompt_ref(user, valid_prompt_ids)?;
+            validate_file_ref(user, valid_file_ids)?;
         }
         if let Some(assistant) = assistant {
-            validate_prompt_ref(assistant, valid_prompt_ids)?;
+            validate_file_ref(assistant, valid_file_ids)?;
         }
         if let Some(system) = system {
-            validate_prompt_ref(system, valid_prompt_ids)?;
+            validate_file_ref(system, valid_file_ids)?;
         }
     }
     if let Some(templates) = &config.templates {
         for prompt_ref in templates.values() {
-            validate_prompt_ref(prompt_ref, valid_prompt_ids)?;
+            validate_file_ref(prompt_ref, valid_file_ids)?;
         }
     }
     Ok(())
@@ -1286,17 +1364,17 @@ fn validate_chat_completion_prompt_refs(
 
 struct RefValidationContext<'a> {
     valid_variant_ids: &'a HashSet<Uuid>,
-    valid_prompt_ids: &'a HashSet<Uuid>,
+    valid_file_ids: &'a HashSet<Uuid>,
 }
 
 fn validate_function_config_refs(
     config: &StoredFunctionConfig,
     valid_variant_ids: &HashSet<Uuid>,
-    valid_prompt_ids: &HashSet<Uuid>,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
     let ctx = RefValidationContext {
         valid_variant_ids,
-        valid_prompt_ids,
+        valid_file_ids,
     };
     match config {
         StoredFunctionConfig::Chat(config) => {
@@ -1321,7 +1399,7 @@ fn validate_function_config_refs(
                 &ctx,
             )?;
             if let Some(output_schema) = &config.output_schema {
-                validate_prompt_ref(output_schema, ctx.valid_prompt_ids)?;
+                validate_file_ref(output_schema, ctx.valid_file_ids)?;
             }
         }
     }
@@ -1330,10 +1408,10 @@ fn validate_function_config_refs(
 
 fn validate_common_function_refs(
     variants: Option<&BTreeMap<String, StoredVariantRef>>,
-    system_schema: Option<&StoredPromptRef>,
-    user_schema: Option<&StoredPromptRef>,
-    assistant_schema: Option<&StoredPromptRef>,
-    schemas: Option<&BTreeMap<String, StoredPromptRef>>,
+    system_schema: Option<&StoredFileRef>,
+    user_schema: Option<&StoredFileRef>,
+    assistant_schema: Option<&StoredFileRef>,
+    schemas: Option<&BTreeMap<String, StoredFileRef>>,
     evaluators: Option<&BTreeMap<String, StoredEvaluatorConfig>>,
     ctx: &RefValidationContext<'_>,
 ) -> Result<(), Error> {
@@ -1343,22 +1421,22 @@ fn validate_common_function_refs(
         }
     }
     if let Some(system_schema) = system_schema {
-        validate_prompt_ref(system_schema, ctx.valid_prompt_ids)?;
+        validate_file_ref(system_schema, ctx.valid_file_ids)?;
     }
     if let Some(user_schema) = user_schema {
-        validate_prompt_ref(user_schema, ctx.valid_prompt_ids)?;
+        validate_file_ref(user_schema, ctx.valid_file_ids)?;
     }
     if let Some(assistant_schema) = assistant_schema {
-        validate_prompt_ref(assistant_schema, ctx.valid_prompt_ids)?;
+        validate_file_ref(assistant_schema, ctx.valid_file_ids)?;
     }
     if let Some(schemas) = schemas {
         for prompt_ref in schemas.values() {
-            validate_prompt_ref(prompt_ref, ctx.valid_prompt_ids)?;
+            validate_file_ref(prompt_ref, ctx.valid_file_ids)?;
         }
     }
     if let Some(evaluators) = evaluators {
         for evaluator in evaluators.values() {
-            validate_evaluator_refs(evaluator, ctx.valid_prompt_ids)?;
+            validate_evaluator_refs(evaluator, ctx.valid_file_ids)?;
         }
     }
     Ok(())
@@ -1366,13 +1444,13 @@ fn validate_common_function_refs(
 
 fn validate_evaluator_refs(
     config: &StoredEvaluatorConfig,
-    valid_prompt_ids: &HashSet<Uuid>,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
     if let StoredEvaluatorConfig::LLMJudge(config) = config
         && let Some(variants) = &config.variants
     {
         for variant in variants.values() {
-            validate_llm_judge_variant_refs(variant, valid_prompt_ids)?;
+            validate_llm_judge_variant_refs(variant, valid_file_ids)?;
         }
     }
     Ok(())
@@ -1380,25 +1458,25 @@ fn validate_evaluator_refs(
 
 fn validate_llm_judge_variant_refs(
     config: &StoredLLMJudgeVariantInfo,
-    valid_prompt_ids: &HashSet<Uuid>,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
     match &config.variant {
         StoredLLMJudgeVariantConfig::ChatCompletion(config) => {
-            validate_prompt_ref(&config.system_instructions, valid_prompt_ids)?;
+            validate_file_ref(&config.system_instructions, valid_file_ids)?;
         }
         StoredLLMJudgeVariantConfig::BestOfNSampling(config) => {
-            validate_prompt_ref(&config.evaluator.system_instructions, valid_prompt_ids)?;
+            validate_file_ref(&config.evaluator.system_instructions, valid_file_ids)?;
         }
         StoredLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
-            validate_prompt_ref(&config.fuser.system_instructions, valid_prompt_ids)?;
+            validate_file_ref(&config.fuser.system_instructions, valid_file_ids)?;
         }
         StoredLLMJudgeVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                validate_prompt_ref(system_instructions, valid_prompt_ids)?;
+                validate_file_ref(system_instructions, valid_file_ids)?;
             }
         }
         StoredLLMJudgeVariantConfig::ChainOfThought(config) => {
-            validate_prompt_ref(&config.inner.system_instructions, valid_prompt_ids)?;
+            validate_file_ref(&config.inner.system_instructions, valid_file_ids)?;
         }
     }
     Ok(())
@@ -1420,17 +1498,17 @@ fn validate_variant_ref(
     }
 }
 
-fn validate_prompt_ref(
-    prompt_ref: &StoredPromptRef,
-    valid_prompt_ids: &HashSet<Uuid>,
+fn validate_file_ref(
+    prompt_ref: &StoredFileRef,
+    valid_file_ids: &HashSet<Uuid>,
 ) -> Result<(), Error> {
-    if valid_prompt_ids.contains(&prompt_ref.prompt_template_version_id) {
+    if valid_file_ids.contains(&prompt_ref.file_version_id) {
         Ok(())
     } else {
         Err(Error::new(ErrorDetails::Config {
             message: format!(
-                "Stored config references unknown prompt template version `{}` for template key `{}`.",
-                prompt_ref.prompt_template_version_id, prompt_ref.template_key
+                "Stored config references unknown stored file version `{}` for file path `{}`.",
+                prompt_ref.file_version_id, prompt_ref.file_path
             ),
         }))
     }
@@ -1465,9 +1543,9 @@ fn serialization_error(context: &str, error: impl std::fmt::Display) -> Error {
     })
 }
 
-fn missing_prompt_template_error(template_key: &str) -> Error {
+fn missing_file_error(file_path: &str) -> Error {
     Error::new(ErrorDetails::Config {
-        message: format!("Missing prompt template version ID for template key `{template_key}`."),
+        message: format!("Missing stored file version ID for file path `{file_path}`."),
     })
 }
 

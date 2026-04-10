@@ -1396,6 +1396,10 @@ pub enum InferenceDatabaseInsert {
 pub struct StoredModelInference {
     pub id: Uuid,
     pub inference_id: Uuid,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub function_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub variant_name: String,
     pub raw_request: Option<String>,
     pub raw_response: Option<String>,
     pub system: Option<String>,
@@ -1547,10 +1551,12 @@ impl ModelInferenceResponseWithMetadata {
 
 impl StoredModelInference {
     /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
-    /// Used when inserting into ClickHouse.
+    /// Used when inserting into the database.
     pub async fn new(
         result: ModelInferenceResponseWithMetadata,
         inference_id: Uuid,
+        function_name: String,
+        variant_name: String,
         snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         let (latency_ms, ttft_ms) = match result.latency {
@@ -1607,6 +1613,8 @@ impl StoredModelInference {
         Ok(Self {
             id: Uuid::now_v7(),
             inference_id,
+            function_name,
+            variant_name,
             raw_request: Some(result.raw_request),
             raw_response: Some(result.raw_response),
             system: result.system,
@@ -1642,6 +1650,8 @@ impl InferenceResult {
     /// Any errors during construction are logged and the result is skipped.
     pub async fn get_model_inferences(
         &self,
+        function_name: &str,
+        variant_name: &str,
         snapshot_hash: SnapshotHash,
     ) -> Vec<StoredModelInference> {
         let model_inference_responses = self.model_inference_results();
@@ -1649,10 +1659,22 @@ impl InferenceResult {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
         };
+        let function_name = function_name.to_string();
+        let variant_name = variant_name.to_string();
         join_all(model_inference_responses.iter().map(|r| {
             let snapshot_hash = snapshot_hash.clone();
+            let function_name = function_name.clone();
+            let variant_name = variant_name.clone();
             async move {
-                match StoredModelInference::new(r.clone(), inference_id, snapshot_hash).await {
+                match StoredModelInference::new(
+                    r.clone(),
+                    inference_id,
+                    function_name,
+                    variant_name,
+                    snapshot_hash,
+                )
+                .await
+                {
                     Ok(model_inference) => Some(model_inference),
                     Err(e) => {
                         ErrorDetails::Serialization {

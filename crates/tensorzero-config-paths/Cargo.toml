@@ -7,6 +7,12 @@ license.workspace = true
 
 [dependencies]
 # Minimal - no tensorzero deps to avoid cycles
+thiserror = { workspace = true }
+toml = { workspace = true }
+toml_edit = { workspace = true }
+
+[dev-dependencies]
+googletest = { workspace = true }
 
 [lints]
 workspace = true

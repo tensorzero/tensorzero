@@ -1,4 +1,3 @@
-use arc_swap::ArcSwap;
 use googletest::prelude::*;
 use googletest_matchers::matches_json_literal;
 use reqwest::{Client, StatusCode};
@@ -10,7 +9,7 @@ use std::{
 use tensorzero_core::{
     config::{
         Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
-        RuntimeOverlay, UninitializedConfig,
+        RuntimeOverlay,
     },
     db::{postgres::PostgresConnectionInfo, valkey::ValkeyConnectionInfo},
     endpoints::feedback::{Params, feedback},
@@ -285,7 +284,6 @@ async fn test_comment_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
-        Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
         Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
@@ -1664,7 +1662,6 @@ async fn test_float_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
-        Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
         Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
@@ -2010,7 +2007,6 @@ async fn test_boolean_feedback_validation_disabled() {
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
-        Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
         Arc::new(RuntimeOverlay::default()),
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,

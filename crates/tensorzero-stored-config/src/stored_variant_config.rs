@@ -6,7 +6,7 @@ use tensorzero_types::inference_params::{JsonMode, ServiceTier};
 use uuid::Uuid;
 
 use crate::{
-    StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredPromptRef, StoredRetryConfig,
+    StoredExtraBodyConfig, StoredExtraHeadersConfig, StoredFileRef, StoredRetryConfig,
     StoredTimeoutsConfig,
 };
 
@@ -50,11 +50,11 @@ pub enum StoredVariantConfig {
 pub struct StoredChatCompletionVariantConfig {
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<StoredPromptRef>,
-    pub user_template: Option<StoredPromptRef>,
-    pub assistant_template: Option<StoredPromptRef>,
+    pub system_template: Option<StoredFileRef>,
+    pub user_template: Option<StoredFileRef>,
+    pub assistant_template: Option<StoredFileRef>,
     pub input_wrappers: Option<StoredInputWrappers>,
-    pub templates: Option<BTreeMap<String, StoredPromptRef>>,
+    pub templates: Option<BTreeMap<String, StoredFileRef>>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
@@ -75,9 +75,9 @@ pub struct StoredChatCompletionVariantConfig {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredInputWrappers {
-    pub user: Option<StoredPromptRef>,
-    pub assistant: Option<StoredPromptRef>,
-    pub system: Option<StoredPromptRef>,
+    pub user: Option<StoredFileRef>,
+    pub assistant: Option<StoredFileRef>,
+    pub system: Option<StoredFileRef>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -105,7 +105,7 @@ pub struct StoredDiclVariantConfig {
     pub embedding_model: String,
     pub k: u32,
     pub model: String,
-    pub system_instructions: Option<StoredPromptRef>,
+    pub system_instructions: Option<StoredFileRef>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,

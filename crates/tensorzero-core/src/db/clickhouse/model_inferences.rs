@@ -23,6 +23,8 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
             SELECT
                 id,
                 inference_id,
+                function_name,
+                variant_name,
                 raw_request,
                 raw_response,
                 system,
@@ -403,6 +405,8 @@ mod tests {
                 SELECT
                     id,
                     inference_id,
+                    function_name,
+                    variant_name,
                     raw_request,
                     raw_response,
                     system,
@@ -431,7 +435,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"id":"0196ee9c-d808-74f3-8000-039e871ca8a5","inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","raw_request":"raw request","raw_response":"{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}","system":"You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \"person\": [\"person1\", \"person2\", ...],\n    \"organization\": [\"organization1\", \"organization2\", ...],\n    \"location\": [\"location1\", \"location2\", ...],\n    \"miscellaneous\": [\"miscellaneous1\", \"miscellaneous2\", ...]\n}","input_messages":"[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My input prefix : Random 0196ee9c-d808-74f3-8000-02d9b57169b5\"}]}]","output":"[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]","input_tokens":10,"output_tokens":10,"response_time_ms":100,"model_name":"dummy::good","model_provider_name":"dummy","ttft_ms":null,"cached":false,"finish_reason":"stop","snapshot_hash":null,"timestamp":"2025-05-20T16:52:58Z"}"#),
+                    response: String::from(r#"{"id":"0196ee9c-d808-74f3-8000-039e871ca8a5","inference_id":"0196ee9c-d808-74f3-8000-02ec7409b95d","function_name":"test_function","variant_name":"test_variant","raw_request":"raw request","raw_response":"{\n  \"id\": \"id\",\n  \"object\": \"text.completion\",\n  \"created\": 1618870400,\n  \"model\": \"text-davinci-002\",\n  \"choices\": [\n    {\n      \"text\": \"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\",\n      \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": null\n    }\n  ]\n}","system":"You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \"person\": [\"person1\", \"person2\", ...],\n    \"organization\": [\"organization1\", \"organization2\", ...],\n    \"location\": [\"location1\", \"location2\", ...],\n    \"miscellaneous\": [\"miscellaneous1\", \"miscellaneous2\", ...]\n}","input_messages":"[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My input prefix : Random 0196ee9c-d808-74f3-8000-02d9b57169b5\"}]}]","output":"[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]","input_tokens":10,"output_tokens":10,"response_time_ms":100,"model_name":"dummy::good","model_provider_name":"dummy","ttft_ms":null,"cached":false,"finish_reason":"stop","snapshot_hash":null,"timestamp":"2025-05-20T16:52:58Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,

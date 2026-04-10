@@ -47,7 +47,7 @@ use tensorzero_core::{
             tensorzero_to_fireworks_assistant_message,
         },
         helpers::UrlParseErrExt,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage},
+        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, ReasoningFieldName},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
     utils::mock::get_mock_provider_api_base,
@@ -413,6 +413,7 @@ impl<'a> FireworksSupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
@@ -437,6 +438,7 @@ impl<'a> FireworksSupervisedRow<'a> {
                 // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
                 fetch_and_encode_input_files_before_inference: true,
                 content_type_overrides: None,
+                reasoning_field_name: ReasoningFieldName::ReasoningContent,
             },
         )
         .await?;
