@@ -5,16 +5,16 @@
 //! parameter parsing, inference execution, and response formatting for both streaming
 //! and non-streaming requests.
 
+use axum::Extension;
 use axum::Json;
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::Sse;
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, debug_handler};
 
 use crate::endpoints::inference::{InferenceOutput, Params, inference};
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, AppStateData, SwappableAppStateData};
+use crate::utils::gateway::{AppState, AppStateData};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
 use super::types::chat_completions::{OpenAICompatibleParams, OpenAICompatibleResponse};
@@ -22,7 +22,6 @@ use super::types::streaming::prepare_serialized_openai_compatible_events;
 use super::{OpenAICompatibleError, OpenAIStructuredJson};
 
 /// A handler for the OpenAI-compatible inference endpoint
-#[debug_handler(state = SwappableAppStateData)]
 pub async fn chat_completions_handler(
     State(AppStateData {
         config,

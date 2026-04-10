@@ -2,18 +2,17 @@
 
 use std::sync::Arc;
 
+use axum::Json;
 use axum::extract::State;
-use axum::{Json, debug_handler};
 use durable_tools::action::{ActionInputInfo, ActionResponse, action};
 use durable_tools::{Heartbeater, NoopHeartbeater};
 use tensorzero_core::error::Error;
-use tensorzero_core::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use tensorzero_core::utils::gateway::{AppState, StructuredJson};
 use tracing::instrument;
 
 /// Handler for `POST /internal/action`
 ///
 /// Executes an inference, feedback, or evaluation action using a historical config snapshot.
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "action", skip_all, fields(snapshot_hash = %params.snapshot_hash))]
 pub async fn action_handler(
     State(app_state): AppState,

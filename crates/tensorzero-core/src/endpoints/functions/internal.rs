@@ -1,7 +1,7 @@
 //! Functions endpoint for querying function-level information
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -13,7 +13,7 @@ use crate::db::feedback::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::get_function;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for the metrics endpoint
 #[derive(Debug, Deserialize)]
@@ -32,7 +32,6 @@ pub struct MetricsWithFeedbackResponse {
 }
 
 /// HTTP handler for getting metrics with feedback for a function
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_function_metrics_handler",
     skip_all,
@@ -113,7 +112,6 @@ pub struct VariantPerformancesResponse {
 }
 
 /// HTTP handler for getting variant performance statistics for a function and metric
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_variant_performances_handler",
     skip_all,

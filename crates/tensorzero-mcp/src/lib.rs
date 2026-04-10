@@ -4,6 +4,10 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use tokio_util::sync::CancellationToken;
 
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP router is initialized from GatewayHandle and needs SwappableAppStateData to load the latest config"
+)]
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 mod handler;
@@ -14,6 +18,10 @@ use handler::TensorZeroMcpServer;
 ///
 /// The returned `Router<()>` is intended to be nested on the gateway router
 /// (e.g. via `nest_service("/mcp", ...)`) so MCP is served on the same port.
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP router is initialized from GatewayHandle and needs SwappableAppStateData to load the latest config"
+)]
 pub async fn build_mcp_router(
     app_state: Arc<SwappableAppStateData>,
     shutdown_token: CancellationToken,

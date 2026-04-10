@@ -9,8 +9,16 @@ use axum::{
 };
 use tensorzero_core::endpoints;
 use tensorzero_core::feature_flags;
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
 pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData> {
     let router = Router::new()
         .route(

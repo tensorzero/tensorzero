@@ -6,7 +6,7 @@ use tracing::instrument;
 use crate::db::datasets::DatasetQueries;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::types::{DeleteDatapointsRequest, DeleteDatapointsResponse};
 
@@ -14,8 +14,6 @@ use super::types::{DeleteDatapointsRequest, DeleteDatapointsResponse};
 pub struct DeleteDatapointsPathParams {
     pub dataset_name: String,
 }
-
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.delete_datapoints", skip(app_state, request))]
 pub async fn delete_datapoints_handler(
     State(app_state): AppState,
@@ -26,8 +24,6 @@ pub async fn delete_datapoints_handler(
     let response = delete_datapoints(&database, &path_params.dataset_name, request).await?;
     Ok(Json(response))
 }
-
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.delete_dataset", skip(app_state))]
 pub async fn delete_dataset_handler(
     State(app_state): AppState,
