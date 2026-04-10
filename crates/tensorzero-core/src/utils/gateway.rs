@@ -91,19 +91,23 @@ impl Drop for GatewayHandle {
             let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
             let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
 
-            // Return unused rate limit tokens while Postgres is still active.
-            if !app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            }
-
             // Move the deferred task tracker out before dropping app state so we can
             // still close/wait on it below.
             let deferred_tasks =
                 std::mem::replace(&mut app_state.deferred_tasks, TaskTracker::new());
+
+            let rate_limiting_manager = std::mem::replace(
+                &mut app_state.rate_limiting_manager,
+                Arc::new(RateLimitingManager::new(
+                    Arc::new(RateLimitingConfig::default()),
+                    Arc::new(DisabledRateLimitQueries),
+                )),
+            );
+
+            // Return unused rate limit tokens while Postgres is still active.
+            if !rate_limiting_manager.is_empty() {
+                deferred_tasks.spawn(async move { rate_limiting_manager.shutdown().await });
+            }
 
             // Drop all remaining state before waiting on batch writers. This releases
             // all sender/reference holders (cache backends, rate-limit backends, and any
@@ -111,34 +115,22 @@ impl Drop for GatewayHandle {
             // calls for each one.
             drop(app_state);
             if let Some(clickhouse_handle) = clickhouse_handle {
-                tracing::info!("Waiting for ClickHouse batch writer to finish");
-                // This could block forever if:
-                // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
-                //   and isn't using our `CancellationToken` to exit.
-                // * The `GatewayHandle` is dropped from a task that's running other futures
-                //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
-                //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
-                //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
-                //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
-                //   and embedded client), and drop it when we're exiting.
-                //
-                // We err on the side of hanging the server on shutdown, rather than potentially exiting while
-                // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(clickhouse_handle) {
+                deferred_tasks.spawn(async move {
+                    tracing::info!("Waiting for ClickHouse batch writer to finish");
+                    if let Err(e) = clickhouse_handle.await {
                         tracing::error!("Error in batch writer: {e}");
                     }
+                    tracing::info!("ClickHouse batch writer finished");
                 });
-                tracing::info!("ClickHouse batch writer finished");
             }
             if let Some(pg_handle) = pg_handle {
-                tracing::info!("Waiting for Postgres batch writer to finish");
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(pg_handle) {
+                deferred_tasks.spawn(async move {
+                    tracing::info!("Waiting for Postgres batch writer to finish");
+                    if let Err(e) = pg_handle.await {
                         tracing::error!("Error in Postgres batch writer: {e}");
                     }
+                    tracing::info!("Postgres batch writer finished");
                 });
-                tracing::info!("Postgres batch writer finished");
             }
 
             deferred_tasks.close();
