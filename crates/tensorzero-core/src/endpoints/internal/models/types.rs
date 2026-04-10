@@ -75,8 +75,12 @@ pub struct GetVariantUsageQueryParams {
 /// Response containing variant usage timeseries data.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetVariantUsageResponse {
+    /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
+    /// is the backend, None on Postgres.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantiles: Option<Vec<f64>>,
     /// The variant usage data points.
     pub data: Vec<VariantUsageTimePoint>,
 }

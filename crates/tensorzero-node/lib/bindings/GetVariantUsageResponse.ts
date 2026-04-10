@@ -6,6 +6,11 @@ import type { VariantUsageTimePoint } from "./VariantUsageTimePoint";
  */
 export type GetVariantUsageResponse = {
   /**
+   * The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
+   * is the backend, None on Postgres.
+   */
+  quantiles?: Array<number>;
+  /**
    * The variant usage data points.
    */
   data: Array<VariantUsageTimePoint>;

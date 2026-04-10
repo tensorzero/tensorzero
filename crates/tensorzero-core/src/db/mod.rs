@@ -148,6 +148,12 @@ pub struct VariantUsageTimePoint {
     pub cost: Option<Decimal>,
     #[serde(default, deserialize_with = "deserialize_option_u64")]
     pub count_with_cost: Option<u64>,
+    /// Latency quantiles — only populated from ClickHouse, None on Postgres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms_quantiles: Option<Vec<Option<f32>>>,
+    /// TTFT quantiles — only populated from ClickHouse, None on Postgres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttft_ms_quantiles: Option<Vec<Option<f32>>>,
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]

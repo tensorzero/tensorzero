@@ -114,5 +114,12 @@ pub async fn get_variant_usage_handler(
         .get_variant_usage_timeseries(&function_name, params.time_window, params.max_periods)
         .await?;
 
-    Ok(Json(GetVariantUsageResponse { data }))
+    let quantile_inputs = database.get_model_latency_quantile_function_inputs();
+    let quantiles = if quantile_inputs.is_empty() {
+        None
+    } else {
+        Some(quantile_inputs.to_vec())
+    };
+
+    Ok(Json(GetVariantUsageResponse { quantiles, data }))
 }

@@ -418,6 +418,7 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
             TimeWindow::Cumulative => ("toDateTime('1970-01-01 00:00:00')", "1 = 1".to_string()),
         };
 
+        let qs = quantiles_sql_args();
         let query = format!(
             r"
             SELECT
@@ -427,7 +428,9 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
                 sumMerge(total_output_tokens) as output_tokens,
                 countMerge(count) as count,
                 sumMerge(total_cost) as cost,
-                countMerge(count_with_cost) as count_with_cost
+                countMerge(count_with_cost) as count_with_cost,
+                quantilesTDigestMerge({qs})(processing_time_ms_quantiles) as processing_time_ms_quantiles,
+                quantilesTDigestMerge({qs})(ttft_ms_quantiles) as ttft_ms_quantiles
             FROM VariantStatistics
             WHERE function_name = {{function_name:String}}
                 AND {time_filter}

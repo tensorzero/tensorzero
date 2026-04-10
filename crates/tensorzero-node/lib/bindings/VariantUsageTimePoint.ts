@@ -8,4 +8,12 @@ export type VariantUsageTimePoint = {
   count: bigint | null;
   cost: number | null;
   count_with_cost: bigint | null;
+  /**
+   * Latency quantiles — only populated from ClickHouse, None on Postgres.
+   */
+  processing_time_ms_quantiles?: Array<number | null> | null;
+  /**
+   * TTFT quantiles — only populated from ClickHouse, None on Postgres.
+   */
+  ttft_ms_quantiles?: Array<number | null> | null;
 };

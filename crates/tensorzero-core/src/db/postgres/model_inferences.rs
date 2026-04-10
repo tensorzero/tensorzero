@@ -967,6 +967,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for VariantUsageTimePoint {
             count: count.map(|v| v as u64),
             cost,
             count_with_cost: count_with_cost.map(|v| v as u64),
+            // Latency quantiles are not available from Postgres rollup tables
+            processing_time_ms_quantiles: None,
+            ttft_ms_quantiles: None,
         })
     }
 }
