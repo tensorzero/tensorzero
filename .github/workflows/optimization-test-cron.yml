@@ -19,6 +19,8 @@ permissions:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  NEXTEST_EXPERIMENTAL_RECORD: 1
+  NEXTEST_USER_CONFIG_FILE: ${{ github.workspace }}/ci/nextest-record.toml
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
@@ -65,7 +67,7 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest
 
@@ -81,6 +83,18 @@ jobs:
         working-directory: crates
         if: github.event.schedule == '0 2 * * 0'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
+
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-optimization-tests
+          path: crates/trace.json
 
       - name: Print ClickHouse container logs
         if: always()
