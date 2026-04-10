@@ -9,6 +9,7 @@ license.workspace = true
 derive_builder.workspace = true
 futures.workspace = true
 mime.workspace = true
+mime_guess = "2.0.5"
 rust_decimal = { workspace = true }
 schemars.workspace = true
 secrecy.workspace = true

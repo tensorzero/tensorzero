@@ -486,13 +486,7 @@ pub struct EmbeddingProviderRequest<'request> {
     pub provider_name: &'request str,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum EmbeddingEncodingFormat {
-    #[default]
-    Float,
-    Base64,
-}
+pub use tensorzero_inference_types::EmbeddingEncodingFormat;
 
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingProviderResponse {
