@@ -567,7 +567,7 @@ async fn run() -> Result<(), ExitCode> {
     } else {
         tracing::info!("├ Batch Writes: disabled");
     }
-    if config.gateway.observability.async_writes.unwrap_or(false) {
+    if config.gateway.observability.async_writes() {
         tracing::info!("├ Async Writes: enabled");
     } else {
         tracing::info!("├ Async Writes: disabled");
