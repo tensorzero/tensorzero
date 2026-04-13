@@ -105,9 +105,24 @@ pub enum GenAiRole {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GenAiChoice {
-    pub index: Option<i64>,
+    /// Per the OTel GenAI spec, choice index is an unsigned integer.
+    pub index: Option<u32>,
     pub finish_reason: Option<String>,
     pub message: Option<String>,
+}
+
+impl GenAiRole {
+    /// Bridge to TensorZero's `Role`. Returns `None` for `System` and `Tool`
+    /// since TensorZero doesn't model those as message roles (system prompts
+    /// live on the request itself; tool messages are routed differently).
+    #[must_use]
+    pub fn to_tensorzero_role(&self) -> Option<tensorzero_types::Role> {
+        match self {
+            Self::User => Some(tensorzero_types::Role::User),
+            Self::Assistant => Some(tensorzero_types::Role::Assistant),
+            Self::System | Self::Tool => None,
+        }
+    }
 }
 
 /// Parse an OTel GenAI span into a `GenAiInference`.
@@ -208,14 +223,19 @@ fn role_from_event_name(name: &str) -> Option<GenAiRole> {
 fn parse_csv_or_array(value: Option<&String>) -> Vec<String> {
     let Some(raw) = value else { return vec![] };
     let trimmed = raw.trim();
-    if let Ok(parsed) = serde_json::from_str::<Vec<String>>(trimmed) {
-        return parsed;
+    match serde_json::from_str::<Vec<String>>(trimmed) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            tracing::trace!(
+                "parse_csv_or_array: JSON array parse failed ({e}); falling back to CSV split"
+            );
+            trimmed
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        }
     }
-    trimmed
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
 }
 
 // =============================================================================
@@ -232,6 +252,20 @@ pub fn finish_reason_to_otel_str(reason: FinishReason) -> &'static str {
         FinishReason::ToolCall => "tool_calls",
         FinishReason::ContentFilter => "content_filter",
         FinishReason::Unknown => "error",
+    }
+}
+
+/// Inverse of [`finish_reason_to_otel_str`]: parse an OTel GenAI finish-reason
+/// string back into a `FinishReason`. Unknown values map to `FinishReason::Unknown`.
+#[must_use]
+pub fn parse_finish_reason(s: &str) -> FinishReason {
+    match s {
+        "stop" => FinishReason::Stop,
+        "stop_sequence" => FinishReason::StopSequence,
+        "length" => FinishReason::Length,
+        "tool_calls" => FinishReason::ToolCall,
+        "content_filter" => FinishReason::ContentFilter,
+        _ => FinishReason::Unknown,
     }
 }
 
@@ -489,5 +523,51 @@ mod tests {
         assert_eq!(parsed.messages.len(), 1);
         assert_eq!(parsed.choices.len(), 1);
         assert_eq!(parsed.finish_reason.as_deref(), Some("stop"));
+    }
+
+    #[test]
+    fn finish_reason_round_trips() {
+        for reason in [
+            FinishReason::Stop,
+            FinishReason::StopSequence,
+            FinishReason::Length,
+            FinishReason::ToolCall,
+            FinishReason::ContentFilter,
+            FinishReason::Unknown,
+        ] {
+            let s = finish_reason_to_otel_str(reason);
+            let back = parse_finish_reason(s);
+            // Unknown round-trips to itself via the "error" string going
+            // back to Unknown — that's intentional.
+            if matches!(reason, FinishReason::Unknown) {
+                assert_eq!(back, FinishReason::Unknown);
+            } else {
+                assert_eq!(back, reason, "round-trip failed for {reason:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_finish_reason_handles_unknown_strings() {
+        assert_eq!(
+            parse_finish_reason("totally_made_up"),
+            FinishReason::Unknown
+        );
+        assert_eq!(parse_finish_reason(""), FinishReason::Unknown);
+    }
+
+    #[test]
+    fn genai_role_bridges_to_tensorzero_role() {
+        assert_eq!(
+            GenAiRole::User.to_tensorzero_role(),
+            Some(tensorzero_types::Role::User)
+        );
+        assert_eq!(
+            GenAiRole::Assistant.to_tensorzero_role(),
+            Some(tensorzero_types::Role::Assistant)
+        );
+        // System and Tool don't have a TensorZero `Role` equivalent.
+        assert_eq!(GenAiRole::System.to_tensorzero_role(), None);
+        assert_eq!(GenAiRole::Tool.to_tensorzero_role(), None);
     }
 }
