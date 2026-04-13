@@ -323,6 +323,8 @@ async fn write_file_versions(
 
     // Merge extra templates. All prompts (directly or transitively included) must be stored
     // in the database for the config to be self-contained.
+    // Note: extra_templates keys are already relative paths (discovered via MiniJinja
+    // include traversal from template_filesystem_access), so no prefix stripping is needed.
     for (key, body) in extra_templates {
         if !templates.contains_key(key) {
             templates.insert(

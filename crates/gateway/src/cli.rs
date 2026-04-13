@@ -61,6 +61,10 @@ pub struct EarlyExitCommands {
     /// Validate the config file then exit.
     #[arg(long)]
     pub validate_and_exit: bool,
+
+    /// Load config files matching the specified glob pattern, store the config in the database, then exit.
+    #[arg(long, value_name = "CONFIG_GLOB", conflicts_with_all = ["config_file", "default_config"])]
+    pub migrate_config: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -69,4 +73,48 @@ pub struct EarlyExitCommandArguments {
     /// be set.
     #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
     pub expiration: Option<DateTime<Utc>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    #[gtest]
+    fn test_migrate_config_accepts_a_glob_argument() {
+        let args = GatewayArgs::try_parse_from(["gateway", "--migrate-config", "config/*.toml"])
+            .expect("`--migrate-config` should parse with a path argument");
+
+        expect_that!(
+            args.early_exit_commands.migrate_config,
+            some(eq(&PathBuf::from("config/*.toml")))
+        );
+    }
+
+    #[gtest]
+    fn test_migrate_config_conflicts_with_config_file() {
+        let error = GatewayArgs::try_parse_from([
+            "gateway",
+            "--migrate-config",
+            "config/*.toml",
+            "--config-file",
+            "other.toml",
+        ])
+        .expect_err("`--migrate-config` should conflict with `--config-file`");
+
+        expect_that!(error.kind(), eq(clap::error::ErrorKind::ArgumentConflict));
+    }
+
+    #[gtest]
+    fn test_migrate_config_conflicts_with_default_config() {
+        let error = GatewayArgs::try_parse_from([
+            "gateway",
+            "--migrate-config",
+            "config/*.toml",
+            "--default-config",
+        ])
+        .expect_err("`--migrate-config` should conflict with `--default-config`");
+
+        expect_that!(error.kind(), eq(clap::error::ErrorKind::ArgumentConflict));
+    }
 }

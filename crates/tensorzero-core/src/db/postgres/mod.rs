@@ -32,6 +32,7 @@ pub mod rate_limiting;
 mod resolve_uuid;
 pub mod stored_config_queries;
 pub mod stored_config_writes;
+mod variant_statistics;
 pub mod workflow_evaluation_queries;
 
 mod episode_queries;

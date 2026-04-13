@@ -48,6 +48,9 @@ use crate::db::model_inferences::ModelInferenceQueries;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::db::resolve_uuid::{ResolveUuidQueries, ResolvedObject};
 use crate::db::stored_datapoint::StoredDatapoint;
+use crate::db::variant_statistics::{
+    GetVariantStatisticsParams, VariantStatisticsQueries, VariantStatisticsRow,
+};
 use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationProjectRow,
     WorkflowEvaluationQueries, WorkflowEvaluationRunEpisodeWithFeedbackRow,
@@ -187,6 +190,7 @@ pub trait DelegatingDatabaseQueries:
     + ResolveUuidQueries
     + EpisodeQueries
     + DICLQueries
+    + VariantStatisticsQueries
 {
     fn batcher_join_handles(&self) -> Vec<BatchWriterHandle>;
 }
@@ -1101,6 +1105,20 @@ impl DICLQueries for DelegatingDatabaseConnection {
         self.get_database()
             .delete_dicl_examples(function_name, variant_name)
             .await
+    }
+}
+
+#[async_trait]
+impl VariantStatisticsQueries for DelegatingDatabaseConnection {
+    async fn get_variant_statistics(
+        &self,
+        params: &GetVariantStatisticsParams,
+    ) -> Result<Vec<VariantStatisticsRow>, Error> {
+        self.get_database().get_variant_statistics(params).await
+    }
+
+    fn get_variant_statistics_quantiles(&self) -> Option<&[f64]> {
+        self.get_database().get_variant_statistics_quantiles()
     }
 }
 

@@ -268,7 +268,7 @@ pub(crate) async fn write_stored_config_in_tx(
     for (name, tool_config) in tools.as_ref().into_iter().flat_map(|m| m.iter()) {
         let file_version_ids = write_files_in_tx(
             tx,
-            tool_config.files_for_db().into_iter(),
+            std::iter::once(&tool_config.parameters),
             creation_source,
             source_autopilot_session_id,
         )

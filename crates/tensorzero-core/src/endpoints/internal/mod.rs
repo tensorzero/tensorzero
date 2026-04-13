@@ -8,3 +8,4 @@ pub mod inference_metadata;
 pub mod model_inferences;
 pub mod models;
 pub mod resolve_uuid;
+pub mod variant_statistics;
