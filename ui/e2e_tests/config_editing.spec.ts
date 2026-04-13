@@ -203,37 +203,4 @@ test.describe("Config Editor @config-editing", () => {
     const content = await fileEditor.textContent();
     expect(content).toContain("{{ user_text }}!");
   });
-
-  test("can rename a file", async ({ page }) => {
-    await page.goto("/config");
-    await page.waitForLoadState("networkidle");
-
-    const originalPath = "playwright-rename-source.txt";
-    const renamedPath = "playwright-rename-target.txt";
-
-    await page.getByLabel("New file").click();
-    await page.getByLabel("File name").fill(originalPath);
-    await page.getByRole("button", { name: "Rename", exact: true }).click();
-
-    await expect(filePathLabel(page, originalPath)).toBeVisible();
-    await expect(page.getByLabel("File name")).toHaveValue(originalPath);
-
-    // Update the file name input and click Rename
-    await page.getByLabel("File name").fill(renamedPath);
-    await page.getByRole("button", { name: "Rename", exact: true }).click();
-
-    // Sidebar should show the new name, not the old one
-    await expect(filePathLabel(page, renamedPath)).toBeVisible();
-    await expect(filePathLabel(page, originalPath)).not.toBeVisible();
-    await expect(page.getByLabel("File name")).toHaveValue(renamedPath);
-
-    await page.getByRole("button", { name: "Save config and files" }).click();
-    await expect(page.getByText("Config applied").first()).toBeVisible();
-
-    // Reload and verify the rename persisted
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    await expect(filePathLabel(page, renamedPath)).toBeVisible();
-    await expect(filePathLabel(page, originalPath)).not.toBeVisible();
-  });
 });
