@@ -358,10 +358,15 @@ impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
 
         let resolved_path =
             resolve_target_path(self.span_map, span, target_string.as_ref(), error_path)?;
-        let remapped_path = self
-            .shared_path_prefix_to_strip
-            .and_then(|prefix| resolved_path.strip_prefix(prefix).ok())
-            .unwrap_or(resolved_path.as_path());
+        let remapped_path = if resolved_path.is_dir() {
+            resolved_path.as_path()
+        } else {
+            // Normalize file-backed template keys by stripping the shared path
+            // prefix across all template files loaded from this config glob.
+            self.shared_path_prefix_to_strip
+                .and_then(|prefix| resolved_path.strip_prefix(prefix).ok())
+                .unwrap_or(resolved_path.as_path())
+        };
         let remapped_path_str = path_to_utf8_string(remapped_path, error_path)?;
 
         let mut inner_table = DeTable::new();

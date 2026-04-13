@@ -158,7 +158,7 @@ mod tests {
 
     use googletest::prelude::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+    use tempfile::{NamedTempFile, TempDir};
     use toml::{Spanned, de::DeValue};
 
     use super::*;
@@ -207,6 +207,29 @@ mod tests {
                 .to_string(),
         };
         expect_that!(*err.get_details(), eq(&expected));
+    }
+
+    #[gtest]
+    fn test_resolve_toml_relative_paths_keeps_directory_paths_absolute() {
+        let temp_dir = TempDir::new().expect("temp dir should be created");
+        let config_str = format!(
+            r#"gateway.template_filesystem_access.base_path = "{}""#,
+            temp_dir.path().display()
+        );
+        let table = DeTable::parse(&config_str).expect("config should parse");
+
+        let config_path = temp_dir.path().join("fake_config.toml");
+        let resolved =
+            resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_single_file(config_path))
+                .expect("path resolution should succeed");
+
+        let base_path = resolved["gateway"]["template_filesystem_access"]["base_path"]
+            .as_table()
+            .expect("base path should be remapped to a table");
+        expect_that!(
+            base_path["__tensorzero_remapped_path"].as_str().unwrap(),
+            eq(temp_dir.path().canonicalize().unwrap().to_str().unwrap())
+        );
     }
 
     #[gtest]

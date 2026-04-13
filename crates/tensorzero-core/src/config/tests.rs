@@ -1377,10 +1377,7 @@ async fn test_get_all_templates() {
     // Check if all expected templates are present
     assert_eq!(
         *templates
-            .get(&format!(
-                "{}/fixtures/config/functions/generate_draft/promptA/system_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            .get("functions/generate_draft/promptA/system_template.minijinja")
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
@@ -1389,10 +1386,7 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get(&format!(
-                "{}/fixtures/config/functions/generate_draft/promptA/system_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            .get("functions/generate_draft/promptA/system_template.minijinja")
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
@@ -1401,10 +1395,7 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get(&format!(
-                "{}/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            .get("functions/json_with_schemas/promptA/system_template.minijinja")
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
@@ -1413,10 +1404,7 @@ async fn test_get_all_templates() {
     );
     assert_eq!(
         *templates
-            .get(&format!(
-                "{}/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            .get("functions/json_with_schemas/promptB/system_template.minijinja")
             .unwrap(),
         include_str!(
             "../../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
@@ -1424,65 +1412,53 @@ async fn test_get_all_templates() {
         .to_string()
     );
     assert_eq!(
-            *templates.get(&format!(
-                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            *templates.get("functions/templates_without_variables/variant_without_templates/system_template.minijinja")
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get(&format!(
-                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            *templates.get("functions/templates_without_variables/variant_without_templates/user_template.minijinja")
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get(&format!(
-                "{}/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+            *templates.get("functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
             .unwrap(),
             include_str!(
                 "../../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
             ).to_string()
         );
     assert_eq!(
-            *templates.get(&format!(
-                "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+        *templates
+            .get("functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
             .unwrap(),
-            include_str!(
-                "../../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-            ).to_string()
-        );
+        include_str!(
+            "../../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+        )
+        .to_string()
+    );
     assert_eq!(
-            *templates.get(&format!(
-                "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja",
-                env!("CARGO_MANIFEST_DIR")
-            ))
+        *templates
+            .get("functions/templates_with_variables/variant_with_variables/user_template.minijinja")
             .unwrap(),
-            include_str!(
-                "../../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-            ).to_string()
-        );
+        include_str!(
+            "../../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+        )
+        .to_string()
+    );
     assert_eq!(
-                    *templates.get(&format!(
-                        "{}/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja",
-                        env!("CARGO_MANIFEST_DIR")
-                    ))
-                    .unwrap(),
-                    include_str!(
-                        "../../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-                    ).to_string()
-                );
+        *templates
+            .get("functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+            .unwrap(),
+        include_str!(
+            "../../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+        )
+        .to_string()
+    );
 
     assert_eq!(
         *templates
@@ -3076,7 +3052,6 @@ async fn test_glob_relative_path() {
     let VariantConfig::ChatCompletion(variant) = &function.variants["my_variant"].inner else {
         panic!("Variant should be a chat completion variant");
     };
-    let canonical_temp_dir = temp_dir.path().canonicalize().unwrap();
     assert_eq!(
         variant
             .templates()
@@ -3085,10 +3060,7 @@ async fn test_glob_relative_path() {
             .template
             .path
             .get_template_key(),
-        format!(
-            "{}/second/second_template.minijinja",
-            canonical_temp_dir.display()
-        )
+        "second/second_template.minijinja"
     );
     assert_eq!(
         variant
@@ -3108,10 +3080,7 @@ async fn test_glob_relative_path() {
             .template
             .path
             .get_template_key(),
-        format!(
-            "{}/first/first_template.minijinja",
-            canonical_temp_dir.display()
-        )
+        "first/first_template.minijinja"
     );
 
     assert_eq!(
