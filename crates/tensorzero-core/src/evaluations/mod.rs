@@ -1294,10 +1294,17 @@ impl UninitializedEvaluatorConfig {
                     variant.inner.collect_files(templates);
                 }
             }
+            UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                let UninitializedTypescriptJudgeConfig {
+                    typescript_file,
+                    output_type: _,
+                    optimize: _,
+                } = config;
+                templates.push(typescript_file);
+            }
             UninitializedEvaluatorConfig::ExactMatch(_)
             | UninitializedEvaluatorConfig::ToolUse(_)
-            | UninitializedEvaluatorConfig::Regex(_)
-            | UninitializedEvaluatorConfig::TypescriptJudge(_) => {}
+            | UninitializedEvaluatorConfig::Regex(_) => {}
         }
     }
 }
