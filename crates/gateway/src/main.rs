@@ -175,7 +175,7 @@ async fn store_config_in_database(
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
         Error::new(ErrorDetails::AppState {
             message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
-                      `--store-config` requires a Postgres connection."
+                      `--migrate-config` requires a Postgres connection."
                 .to_string(),
         })
     })?;
@@ -194,7 +194,7 @@ async fn store_config_in_database(
         .write_stored_config(
             tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
                 config: &uninitialized_config,
-                creation_source: "store-config-cli",
+                creation_source: "migrate-config-cli",
                 source_autopilot_session_id: None,
                 extra_templates,
             },
@@ -393,7 +393,7 @@ async fn run() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    if let Some(config_path) = args.early_exit_commands.store_config.as_ref() {
+    if let Some(config_path) = args.early_exit_commands.migrate_config.as_ref() {
         let glob = ConfigFileGlob::new_from_path(config_path)
             .log_err_pretty("Failed to process config file glob")?;
         print_configuration_info(Some(&glob));
@@ -417,9 +417,9 @@ async fn run() -> Result<(), ExitCode> {
         {
             tracing::error!(
                 "`template_filesystem_access` is set in the gateway config, but \
-                 `--store-config` does not support filesystem-based template access. \
+                 `--migrate-config` does not support filesystem-based template access. \
                  Remove or disable `gateway.template_filesystem_access` and modify your \
-                 templates to remove file imports before storing config."
+                 templates to remove file imports before migrating config."
             );
             return Err(ExitCode::FAILURE);
         }
