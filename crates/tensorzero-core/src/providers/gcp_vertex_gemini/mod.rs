@@ -30,10 +30,6 @@ use super::helpers::check_new_tool_call_name;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::config::provider_types::{
-    GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPVertexGeminiProviderTypeConfig,
-    ProviderTypesConfig,
-};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE,
@@ -60,9 +56,9 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     RequestMessage, Usage, batch::StartBatchProviderInferenceResponse, serialize_or_log,
 };
-use crate::model::{Credential, CredentialLocationWithFallback};
+use crate::model::Credential;
 use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
+use crate::model_table::ProviderType;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
@@ -109,10 +105,39 @@ pub struct GCPVertexGeminiProvider {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
-struct BatchConfig {
+pub struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
     batch_request_url: String,
+}
+
+impl BatchConfig {
+    /// Construct a `BatchConfig` from the user-provided URI prefixes plus the project / location.
+    /// Lives here so that the URL-building logic stays close to the rest of the GCP code,
+    /// while letting credential / config resolution happen in `crate::model`.
+    pub fn new(
+        project_id: &str,
+        location: &str,
+        input_uri_prefix: String,
+        output_uri_prefix: String,
+    ) -> Self {
+        let location_prefix = location_subdomain_prefix(location);
+        let batch_request_url = if let Some(api_base) = get_mock_provider_api_base("") {
+            format!(
+                "{}/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
+                api_base.as_str().trim_end_matches('/')
+            )
+        } else {
+            format!(
+                "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
+            )
+        };
+        Self {
+            input_uri_prefix,
+            output_uri_prefix,
+            batch_request_url,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -474,14 +499,13 @@ impl GCPVertexGeminiProvider {
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(
+    /// Constructor that takes pre-resolved credentials directly.
+    /// Credential resolution lives in `crate::model` so this file can stay
+    /// independent of core's credential infrastructure.
+    pub fn new_shorthand(
         project_url_path: String,
-        default_credentials: &ProviderTypeDefaultCredentials,
+        credentials: GCPVertexCredentials,
     ) -> Result<Self, Error> {
-        let credentials = GCPVertexGeminiKind
-            .get_defaulted_credential(None, default_credentials)
-            .await?;
-
         let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
         let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
             ShorthandUrl::Publisher { location, model_id } => (
@@ -532,19 +556,14 @@ impl GCPVertexGeminiProvider {
         })
     }
 
-    pub async fn new(
+    pub fn new(
         model_id: Option<String>,
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        api_key_location: Option<CredentialLocationWithFallback>,
-        provider_types: &ProviderTypesConfig,
-        default_credentials: &ProviderTypeDefaultCredentials,
+        credentials: GCPVertexCredentials,
+        batch_config: Option<BatchConfig>,
     ) -> Result<Self, Error> {
-        let credentials = GCPVertexGeminiKind
-            .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
-            .await?;
-
         let location_prefix = location_subdomain_prefix(&location);
 
         // Use mock API base for testing if set, otherwise default API base
@@ -598,35 +617,6 @@ impl GCPVertexGeminiProvider {
 
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
-        let batch_config = match &provider_types.gcp_vertex_gemini {
-            Some(GCPVertexGeminiProviderTypeConfig {
-                batch:
-                    Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
-                        input_uri_prefix,
-                        output_uri_prefix,
-                    })),
-                ..
-            }) => {
-                // Use mock API base for testing if set, otherwise default API base
-                let batch_request_url = if let Some(api_base) = get_mock_provider_api_base("") {
-                    format!(
-                        "{}/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
-                        api_base.as_str().trim_end_matches('/')
-                    )
-                } else {
-                    format!(
-                        "https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"
-                    )
-                };
-
-                Some(BatchConfig {
-                    input_uri_prefix: input_uri_prefix.clone(),
-                    output_uri_prefix: output_uri_prefix.clone(),
-                    batch_request_url,
-                })
-            }
-            _ => None,
-        };
         Ok(GCPVertexGeminiProvider {
             api_v1_base_url,
             request_url,

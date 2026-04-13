@@ -2323,17 +2323,21 @@ impl UninitializedProviderConfig {
                 project_id,
                 credential_location: api_key_location,
                 provider_tools,
-            } => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new(
+            } => {
+                let credentials = crate::model_table::GCPVertexAnthropicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?;
+                ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new(
                     model_id,
                     location,
                     project_id,
-                    api_key_location,
-                    provider_type_default_credentials,
+                    credentials,
                     provider_tools,
-                )
-                .await?,
-            ),
+                ))
+            }
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
                 endpoint_id,
@@ -2341,16 +2345,38 @@ impl UninitializedProviderConfig {
                 project_id,
                 credential_location: api_key_location,
             } => {
+                let credentials = crate::model_table::GCPVertexGeminiKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?;
+                let batch_config = match &provider_types.gcp_vertex_gemini {
+                    Some(crate::config::provider_types::GCPVertexGeminiProviderTypeConfig {
+                        batch:
+                            Some(crate::config::provider_types::GCPBatchConfigType::CloudStorage(
+                                crate::config::provider_types::GCPBatchConfigCloudStorage {
+                                    input_uri_prefix,
+                                    output_uri_prefix,
+                                },
+                            )),
+                        ..
+                    }) => Some(crate::providers::gcp_vertex_gemini::BatchConfig::new(
+                        &project_id,
+                        &location,
+                        input_uri_prefix.clone(),
+                        output_uri_prefix.clone(),
+                    )),
+                    _ => None,
+                };
                 let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
                     project_id,
-                    api_key_location,
-                    provider_types,
-                    provider_type_default_credentials,
-                )
-                .await?;
+                    credentials,
+                    batch_config,
+                )?;
 
                 ProviderConfig::GCPVertexGemini(provider)
             }
@@ -3462,12 +3488,24 @@ impl ShorthandModelConfig for ModelConfig {
                         .await?,
                 )?)
             }
-            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
-            ),
-            "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new_shorthand(model_name, default_credentials).await?,
-            ),
+            "gcp_vertex_gemini" => {
+                let credentials = crate::model_table::GCPVertexGeminiKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?;
+                ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider::new_shorthand(
+                    model_name,
+                    credentials,
+                )?)
+            }
+            "gcp_vertex_anthropic" => {
+                let credentials = crate::model_table::GCPVertexAnthropicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?;
+                ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider::new_shorthand(
+                    model_name,
+                    credentials,
+                )?)
+            }
             "groq" => ProviderConfig::Groq(GroqProvider::new(
                 model_name,
                 GroqKind
