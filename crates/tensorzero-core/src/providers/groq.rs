@@ -35,7 +35,8 @@ use crate::inference::types::{
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::Credential;
 use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
+use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
@@ -965,16 +966,16 @@ pub(super) struct GroqTool<'a> {
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a FunctionToolConfig> for GroqTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolDef> for GroqTool<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
         GroqTool {
             r#type: GroqToolType::Function,
             function: GroqFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: &tool.parameters,
             },
-            strict: tool.strict(),
+            strict: tool.strict,
         }
     }
 }

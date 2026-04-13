@@ -7,12 +7,11 @@ use super::types::{
 };
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/evaluations/runs/search`
 ///
 /// Searches evaluation runs by ID or variant name.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.search_runs", skip_all)]
 pub async fn search_evaluation_runs_handler(
     State(app_state): AppState,

@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfigType, get_function};
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting evaluation run infos by IDs.
 #[derive(Debug, Deserialize)]
@@ -46,7 +46,6 @@ pub struct GetEvaluationRunInfosResponse {
 /// Handler for `GET /internal/evaluations/run_infos`
 ///
 /// Returns information about specific evaluation runs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_run_infos", skip_all)]
 pub async fn get_evaluation_run_infos_handler(
     State(app_state): AppState,
@@ -98,7 +97,6 @@ pub async fn get_evaluation_run_infos(
 /// Handler for `GET /internal/evaluations/datapoints/{datapoint_id}/run_infos`
 ///
 /// Returns information about evaluation runs associated with a specific datapoint.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_run_infos_for_datapoint", skip_all)]
 pub async fn get_evaluation_run_infos_for_datapoint_handler(
     State(app_state): AppState,

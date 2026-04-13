@@ -7,12 +7,11 @@ use tracing::instrument;
 use super::types::CountWorkflowEvaluationRunsResponse;
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/workflow_evaluations/runs/count`
 ///
 /// Returns the total count of workflow evaluation runs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.count_runs", skip_all)]
 pub async fn count_workflow_evaluation_runs_handler(
     State(app_state): AppState,

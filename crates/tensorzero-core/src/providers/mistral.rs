@@ -45,7 +45,7 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
+    tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
@@ -651,19 +651,6 @@ impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
 pub(super) struct MistralTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
-}
-
-impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        MistralTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
-            },
-        }
-    }
 }
 
 impl<'a> From<&'a FunctionToolDef> for MistralTool<'a> {

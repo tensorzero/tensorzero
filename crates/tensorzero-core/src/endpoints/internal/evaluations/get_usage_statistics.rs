@@ -12,13 +12,12 @@ use super::types::{
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/evaluations/usage_statistics`
 ///
 /// Returns aggregated usage statistics (tokens, cost, processing time) for the specified
 /// evaluation runs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_usage_statistics", skip_all)]
 pub async fn get_evaluation_usage_statistics_handler(
     State(app_state): AppState,

@@ -67,8 +67,7 @@ use crate::providers::openai::responses::{
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::tool::{
-    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice,
-    ToolConfigRef,
+    FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfigRef,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -2402,19 +2401,6 @@ pub enum OpenAITool<'a> {
     Custom {
         custom: &'a OpenAICustomTool,
     },
-}
-
-impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        OpenAITool::Function {
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
-            },
-            strict: tool.strict(),
-        }
-    }
 }
 
 impl<'a> From<&'a FunctionToolDef> for OpenAITool<'a> {

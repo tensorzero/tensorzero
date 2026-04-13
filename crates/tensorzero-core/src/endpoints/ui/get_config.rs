@@ -17,7 +17,7 @@ use crate::{
     evaluations::EvaluationConfig,
     function::FunctionConfig,
     tool::StaticToolConfig,
-    utils::gateway::{AppState, SwappableAppStateData},
+    utils::gateway::AppState,
 };
 
 /// Response type for GET /internal/ui_config
@@ -149,7 +149,6 @@ pub async fn ui_config_handler(State(app_state): AppState) -> Json<UiConfig> {
 /// Handler for GET /internal/ui_config/{hash}
 ///
 /// Returns a UI-safe subset of the Config for a historical config snapshot.
-#[axum::debug_handler(state = SwappableAppStateData)]
 pub async fn ui_config_by_hash_handler(
     State(app_state): AppState,
     Path(hash): Path<String>,
