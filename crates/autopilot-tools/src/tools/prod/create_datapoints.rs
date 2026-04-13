@@ -35,23 +35,15 @@ impl ToolMetadata for CreateDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsToolParams;
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_TOOL_PARAMS
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "CreateDatapointsToolParams".to_string()
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_RESPONSE
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "CreateDatapointsResponse".to_string()
     }

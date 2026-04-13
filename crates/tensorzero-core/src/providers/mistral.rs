@@ -21,7 +21,6 @@ use url::Url;
 
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
-    cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
@@ -41,12 +40,12 @@ use crate::{
             },
         },
     },
-    model::{Credential, ModelProvider},
+    model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
     providers::helpers::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
+    tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
@@ -172,16 +171,15 @@ impl MistralCredentials {
 impl InferenceProvider for MistralProvider {
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
             MistralRequest::new(&self.model_name, request, self.prompt_mode.as_deref()).await?,
@@ -276,16 +274,15 @@ impl InferenceProvider for MistralProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
             MistralRequest::new(&self.model_name, request, self.prompt_mode.as_deref()).await?,
@@ -654,19 +651,6 @@ impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
 pub(super) struct MistralTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
-}
-
-impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        MistralTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
-            },
-        }
-    }
 }
 
 impl<'a> From<&'a FunctionToolDef> for MistralTool<'a> {

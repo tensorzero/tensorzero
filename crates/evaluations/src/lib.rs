@@ -241,7 +241,7 @@ pub async fn run_evaluation(
         postgres_connection.clone(),
         primary_datastore,
     );
-    let config = Box::pin(unwritten_config.into_config(&database))
+    let (config, _) = Box::pin(unwritten_config.into_config(&database))
         .await
         .map_err(|e| e.log())?;
     let config = Arc::new(config);

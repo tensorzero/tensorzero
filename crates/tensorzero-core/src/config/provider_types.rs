@@ -40,22 +40,6 @@ fn convert_simple_provider_type_config(
     }
 }
 
-impl From<&CredentialLocationWithFallback> for StoredApiKeyDefaults {
-    fn from(api_key_location: &CredentialLocationWithFallback) -> Self {
-        StoredApiKeyDefaults {
-            api_key_location: Some(api_key_location.into()),
-        }
-    }
-}
-
-impl From<&CredentialLocationWithFallback> for StoredGCPCredentialDefaults {
-    fn from(credential_location: &CredentialLocationWithFallback) -> Self {
-        StoredGCPCredentialDefaults {
-            credential_location: Some(credential_location.into()),
-        }
-    }
-}
-
 impl From<&GCPBatchConfigType> for StoredGCPBatchConfigType {
     fn from(batch: &GCPBatchConfigType) -> Self {
         match batch {
@@ -580,7 +564,7 @@ fn resolve_stored_api_key_defaults(
     Some(
         defaults
             .api_key_location
-            .map(Into::into)
+            .map(CredentialLocationWithFallback::from)
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "Stored provider type config for `{provider_type}` has `defaults` set but \
@@ -601,7 +585,7 @@ fn resolve_stored_gcp_credential_defaults(
     Some(
         defaults
             .credential_location
-            .map(Into::into)
+            .map(CredentialLocationWithFallback::from)
             .unwrap_or_else(|| {
                 tracing::warn!(
                     "Stored provider type config for `{provider_type}` has `defaults` set but \

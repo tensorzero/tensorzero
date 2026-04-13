@@ -1,7 +1,7 @@
 //! Model inferences endpoint for getting model inference details by inference ID.
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::{Json, debug_handler};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockOutput, StoredRequestMessage};
-use crate::utils::gateway::{AppState, ResolvedAppStateData, SwappableAppStateData};
+use crate::utils::gateway::{AppState, ResolvedAppStateData};
 
 /// Response containing model inferences
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -101,7 +101,6 @@ pub struct ModelInference {
 }
 
 /// HTTP handler for getting model inferences by inference ID
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_model_inferences_handler",
     skip_all,

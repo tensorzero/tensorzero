@@ -10,13 +10,12 @@ use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::FetchContext;
-use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse};
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/datapoints` endpoint.
 /// Creates manual datapoints in a dataset.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.create_datapoints", skip(app_state, request))]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,

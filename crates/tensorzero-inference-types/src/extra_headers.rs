@@ -178,3 +178,61 @@ pub mod dynamic {
 }
 
 pub use dynamic::ExtraHeader as DynamicExtraHeader;
+
+// ─── Stored ↔ ExtraHeaders conversions ──────────────────────────────────────
+
+use tensorzero_stored_config::{
+    StoredExtraHeader, StoredExtraHeaderKind, StoredExtraHeadersConfig,
+};
+
+impl From<StoredExtraHeadersConfig> for ExtraHeadersConfig {
+    fn from(stored: StoredExtraHeadersConfig) -> Self {
+        ExtraHeadersConfig {
+            data: stored.data.into_iter().map(ExtraHeader::from).collect(),
+        }
+    }
+}
+
+impl From<StoredExtraHeader> for ExtraHeader {
+    fn from(stored: StoredExtraHeader) -> Self {
+        ExtraHeader {
+            name: stored.name,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraHeaderKind> for ExtraHeaderKind {
+    fn from(stored: StoredExtraHeaderKind) -> Self {
+        match stored {
+            StoredExtraHeaderKind::Value(v) => ExtraHeaderKind::Value(v),
+            StoredExtraHeaderKind::Delete => ExtraHeaderKind::Delete,
+        }
+    }
+}
+
+impl From<&ExtraHeadersConfig> for StoredExtraHeadersConfig {
+    fn from(config: &ExtraHeadersConfig) -> Self {
+        StoredExtraHeadersConfig {
+            data: config.data.iter().map(StoredExtraHeader::from).collect(),
+        }
+    }
+}
+
+impl From<&ExtraHeader> for StoredExtraHeader {
+    fn from(header: &ExtraHeader) -> Self {
+        StoredExtraHeader {
+            name: header.name.clone(),
+            kind: (&header.kind).into(),
+        }
+    }
+}
+
+impl From<&ExtraHeaderKind> for StoredExtraHeaderKind {
+    fn from(kind: &ExtraHeaderKind) -> Self {
+        match kind {
+            ExtraHeaderKind::Value(v) => StoredExtraHeaderKind::Value(v.clone()),
+            ExtraHeaderKind::Delete => StoredExtraHeaderKind::Delete,
+        }
+    }
+}

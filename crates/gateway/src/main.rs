@@ -66,20 +66,7 @@ async fn load_startup_config(
     }
 
     if let Some(path) = args.config_file.as_ref() {
-        let glob = ConfigFileGlob::new_from_path(path)
-            .log_err_pretty("Failed to process config file glob")?;
-        let unwritten_config = Config::load_and_verify_from_path(&glob)
-            .await
-            .ok() // Don't print the error here, since it was already printed when it was constructed
-            .log_err_pretty(&format!(
-                "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                glob.glob,
-                glob.paths
-                    .iter()
-                    .map(|p| p.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ))?;
+        let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
         return Ok((unwritten_config, Some(glob)));
     }
 
@@ -152,6 +139,69 @@ async fn load_startup_config_from_database()
     Config::load_from_db(&pool, true)
         .await
         .map_err(merge_db_config_load_errors)
+}
+
+async fn load_config_from_path_glob(
+    path: &std::path::Path,
+) -> Result<
+    (
+        tensorzero_core::config::unwritten::UnwrittenConfig,
+        ConfigFileGlob,
+    ),
+    ExitCode,
+> {
+    let glob =
+        ConfigFileGlob::new_from_path(path).log_err_pretty("Failed to process config file glob")?;
+    let glob_display = glob.glob.clone();
+    let resolved_paths = glob
+        .paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let config = Config::load_and_verify_from_path(&glob)
+        .await
+        .ok()
+        .log_err_pretty(&format!(
+            "Failed to load config. Config file glob `{glob_display}` resolved to the following files:\n{resolved_paths}"
+        ))?;
+    Ok((config, glob))
+}
+
+async fn store_config_in_database(
+    uninitialized_config: tensorzero_core::config::UninitializedConfig,
+    extra_templates: &std::collections::HashMap<String, String>,
+) -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::AppState {
+            message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
+                      `--migrate-config` requires a Postgres connection."
+                .to_string(),
+        })
+    })?;
+
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::AppState {
+                message: format!("Failed to connect to Postgres: {e}"),
+            })
+        })?;
+
+    let postgres = PostgresConnectionInfo::new_with_pool(pool);
+    postgres
+        .write_stored_config(
+            tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
+                config: &uninitialized_config,
+                creation_source: "migrate-config-cli",
+                source_autopilot_session_id: None,
+                extra_templates,
+            },
+        )
+        .await?;
+
+    Ok(())
 }
 
 #[expect(clippy::print_stdout)]
@@ -247,10 +297,11 @@ async fn handle_disable_api_key(public_id: &str) -> Result<(), Box<dyn std::erro
 async fn validate_postgres_extensions_for_postgres_primary(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<(), ExitCode> {
-    if gateway_handle.app_state.primary_datastore != PrimaryDatastore::Postgres {
+    if gateway_handle.app_state.primary_datastore() != PrimaryDatastore::Postgres {
         return Ok(());
     }
-    let Some(pgpool) = gateway_handle.app_state.postgres_connection_info.get_pool() else {
+    let postgres = gateway_handle.app_state.postgres_connection_info();
+    let Some(pgpool) = postgres.get_pool() else {
         tracing::error!(
             "Postgres is configured to be the primary observability backend, but cannot establish a postgres connection."
         );
@@ -339,6 +390,53 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Failed to run optimization Postgres migrations.")?;
 
         tracing::info!("Postgres is ready.");
+        return Ok(());
+    }
+
+    if let Some(config_path) = args.early_exit_commands.migrate_config.as_ref() {
+        let glob = ConfigFileGlob::new_from_path(config_path)
+            .log_err_pretty("Failed to process config file glob")?;
+        print_configuration_info(Some(&glob));
+
+        // Parse the glob into UninitializedConfig (before load/initialization).
+        // TOML path resolution already strips the shared filesystem prefix from
+        // template keys while retaining the absolute path separately for runtime use.
+        let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
+            .ok()
+            .log_err_pretty("Failed to parse config files")?;
+        let uninitialized_config =
+            tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
+                .ok()
+                .log_err_pretty("Failed to deserialize config")?;
+
+        if uninitialized_config
+            .gateway
+            .as_ref()
+            .and_then(|g| g.template_filesystem_access.as_ref())
+            .is_some_and(|tfa| tfa.is_active())
+        {
+            tracing::error!(
+                "`template_filesystem_access` is set in the gateway config, but \
+                 `--migrate-config` does not support filesystem-based template access. \
+                 Remove or disable `gateway.template_filesystem_access` and modify your \
+                 templates to remove file imports before migrating config."
+            );
+            return Err(ExitCode::FAILURE);
+        }
+
+        // Validate by running the full load pipeline (ensures the config is valid before storing).
+        // Also extracts extra templates discovered from the filesystem — all prompts, whether
+        // explicitly specified or dynamically included, must be stored in the database.
+        let validated = Config::load_and_verify_from_path(&glob)
+            .await
+            .ok()
+            .log_err_pretty("Config validation failed")?;
+        let extra_templates = validated.extra_templates().clone();
+
+        store_config_in_database(uninitialized_config, &extra_templates)
+            .await
+            .log_err_pretty("Failed to store configuration in the database")?;
+        tracing::info!("Configuration stored in the database.");
         return Ok(());
     }
 
@@ -458,9 +556,9 @@ async fn run() -> Result<(), ExitCode> {
 
     // Create a new observability_enabled_pretty string for the log message below
     let postgres_enabled_pretty =
-        get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
+        get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info());
 
-    let config = gateway_handle.app_state.config.load();
+    let config = gateway_handle.app_state.config().load();
 
     // Set debug mode
     error::set_debug(config.gateway.debug).log_err_pretty("Failed to set debug mode")?;
@@ -539,7 +637,7 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     // Print observability backend and ClickHouse status
-    let observability_backend = match gateway_handle.app_state.primary_datastore {
+    let observability_backend = match gateway_handle.app_state.primary_datastore() {
         PrimaryDatastore::ClickHouse => "ClickHouse",
         PrimaryDatastore::Postgres => "Postgres",
         PrimaryDatastore::Disabled => "disabled",
@@ -547,7 +645,7 @@ async fn run() -> Result<(), ExitCode> {
     tracing::info!("├ Observability Backend: {observability_backend}");
     tracing::info!(
         "├ ClickHouse: {}",
-        gateway_handle.app_state.clickhouse_connection_info
+        gateway_handle.app_state.clickhouse_connection_info()
     );
     let batch_writes = config
         .gateway
@@ -577,11 +675,11 @@ async fn run() -> Result<(), ExitCode> {
 
     // Print whether valkey is enabled
     let valkey_enabled_pretty =
-        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info);
+        get_valkey_status_string(&gateway_handle.app_state.valkey_connection_info());
     tracing::info!("├ Valkey: {valkey_enabled_pretty}");
     if std::env::var("TENSORZERO_VALKEY_CACHE_URL").is_ok() {
         let valkey_cache_enabled_pretty =
-            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info);
+            get_valkey_status_string(&gateway_handle.app_state.valkey_cache_connection_info());
         tracing::info!("├ Valkey (cache): {valkey_cache_enabled_pretty}");
     }
 
@@ -795,7 +893,7 @@ async fn spawn_autopilot_worker_if_configured(
     gateway_handle: &gateway::GatewayHandle,
 ) -> Result<Option<AutopilotWorkerHandle>, ExitCode> {
     // Only start if Postgres is enabled (needed for durable task queue)
-    let pool = match &gateway_handle.app_state.postgres_connection_info {
+    let pool = match gateway_handle.app_state.postgres_connection_info() {
         PostgresConnectionInfo::Enabled { pool, .. } => pool.clone(),
         PostgresConnectionInfo::Disabled => {
             if std::env::var("TENSORZERO_AUTOPILOT_API_KEY").is_ok() {

@@ -1,0 +1,45 @@
+[package]
+name = "ts-executor-pool"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+bip39-uuid-substitution = { path = "../bip39-uuid-substitution" }
+durable.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+regex.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tensorzero-core.workspace = true
+tensorzero-ts-types = { path = "../tensorzero-ts-types" }
+tensorzero-types = { path = "../tensorzero-types" }
+deno_error = "0.7"
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+futures.workspace = true
+v8 = "147.0.0"
+# Work around https://github.com/denoland/rusty_v8/issues/1952
+icu_calendar = ">=2.1, <2.2"
+bb8 = "0.9.1"
+deno_core.workspace = true
+aws-sdk-s3 = "1.129.0"
+
+[build-dependencies]
+blake3.workspace = true
+ureq = "3"
+# note: this must be the same as the deno_core dependency in the
+# [dependencies] section because we need to save / load the same version of V8
+deno_core.workspace = true
+
+[dev-dependencies]
+mockall = "0.14.0"
+proptest = "1"
+
+[lints]
+workspace = true

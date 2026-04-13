@@ -6,6 +6,9 @@
 //! - Isolated serde derive expansion
 //! - Tighter incremental compilation boundaries
 
+pub mod credential_validation;
+pub mod credentials;
+pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
 pub(crate) mod serde_helpers;
@@ -194,6 +197,105 @@ pub enum ModelInferenceRequestJsonMode {
     Off,
     On,
     Strict,
+}
+
+// =============================================================================
+// EmbeddingEncodingFormat
+// =============================================================================
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+    #[default]
+    Float,
+    Base64,
+}
+
+// =============================================================================
+// MIME type helpers
+// =============================================================================
+
+/// Tries to convert a mime type to a file extension, picking an arbitrary extension if there are multiple
+/// extensions for the mime type.
+/// This is used when writing a file input to object storage, and when determining the file name
+/// to provide to OpenAI (which doesn't accept mime types for file input)
+pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
+    Ok(match mime_type {
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
+        _ if mime_type == "image/webp" => Some("webp"),
+        _ if mime_type == "text/plain" => Some("txt"),
+        _ if mime_type == "audio/midi" => Some("mid"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
+        _ if mime_type == "audio/ogg" => Some("ogg"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
+        _ if mime_type == "audio/amr" => Some("amr"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
+        _ if mime_type == "audio/x-dsf" => Some("dsf"),
+        _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
+        _ => {
+            let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
+                .and_then(|types| types.last());
+            if guess.is_some() {
+                tracing::warn!(
+                    "Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct."
+                );
+            }
+            guess.copied()
+        }
+    })
+}
+
+/// Converts audio MIME types to OpenAI's audio format strings.
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(tensorzero_error::ErrorDetails::InvalidMessage {
+            message: format!("Expected audio MIME type, got: {mime_type}"),
+        }));
+    }
+
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(tensorzero_error::ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/mp4, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
+    })
+}
+
+// =============================================================================
+// LazyFileExt
+// =============================================================================
+
+pub trait LazyFileExt {
+    fn resolve(
+        &self,
+    ) -> impl Future<Output = Result<Cow<'_, tensorzero_types::ObjectStorageFile>, Error>> + Send;
+}
+
+impl LazyFileExt for LazyFile {
+    async fn resolve(&self) -> Result<Cow<'_, tensorzero_types::ObjectStorageFile>, Error> {
+        match self {
+            LazyFile::Url {
+                future,
+                file_url: _,
+            } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::Base64(pending) => Ok(Cow::Borrowed(&pending.0)),
+            LazyFile::ObjectStoragePointer { future, .. } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::ObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
+        }
+    }
 }
 
 // =============================================================================

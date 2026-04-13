@@ -36,23 +36,15 @@ impl ToolMetadata for GetFeedbackByTargetIdTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetFeedbackByTargetIdResponse;
     type LlmParams = GetFeedbackByTargetIdToolParams;
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_TOOL_PARAMS
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdToolParams".to_string()
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_RESPONSE
     }
-
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdResponse".to_string()
     }

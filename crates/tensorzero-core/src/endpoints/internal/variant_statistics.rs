@@ -10,13 +10,12 @@ use crate::db::variant_statistics::{
     GetVariantStatisticsParams, GetVariantStatisticsResponse, VariantStatisticsQueries,
 };
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/variant_statistics`
 ///
 /// Returns aggregated variant statistics for a function, optionally filtered
 /// by variant names and a lower time bound.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "variant_statistics", skip_all)]
 pub async fn get_variant_statistics_handler(
     State(app_state): AppState,

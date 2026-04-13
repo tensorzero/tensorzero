@@ -1,13 +1,13 @@
 //! Datapoint statistics endpoint for getting datapoint counts.
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for the datapoint count endpoint
 #[derive(Debug, Deserialize)]
@@ -39,7 +39,6 @@ pub async fn get_datapoint_count(
 }
 
 /// HTTP handler for the datapoint count endpoint
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_datapoint_count_handler",
     skip_all,

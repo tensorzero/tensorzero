@@ -1,19 +1,19 @@
-//! Shared helpers for persisting prompt templates to
-//! `tensorzero.prompt_template_configs`.
+//! Shared helpers for persisting stored files to
+//! `tensorzero.stored_files`.
 //!
 //! Both the function-config write path (`function_config_writes`) and the
 //! whole-config stored-config write path (`stored_config_writes`) need to
-//! insert prompt templates with the same semantics:
+//! insert files with the same semantics:
 //!
 //! 1. Collect templates into a `BTreeMap` keyed by template key, erroring on
 //!    conflicting bodies for the same key.
-//! 2. Reuse existing rows that already match `(template_key, content_hash)`
+//! 2. Reuse existing rows that already match `(file_path, content_hash)`
 //!    so that idempotent rewrites produce stable version IDs.
 //! 3. Batch-insert only the genuinely new rows.
 //!
 //! The file-specific logic (walking a function config tree, merging
 //! filesystem-discovered extra templates, or iterating a tool/evaluation's
-//! `prompt_templates_for_db()`) lives in the callers; this module only owns
+//! file references) lives in the callers; this module only owns
 //! the collection and SQL dedup.
 
 use std::collections::{BTreeMap, HashMap};
@@ -25,46 +25,47 @@ use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug)]
-pub(super) struct CollectedPromptTemplate {
+pub(super) struct CollectedFile {
     pub source_body: String,
 }
 
 #[derive(Debug, FromRow)]
 struct ExistingTemplateRow {
-    template_key: String,
+    file_path: String,
     id: Uuid,
 }
 
 /// Insert `template` into `templates`, erroring if a different body was
 /// already recorded under the same key.
-pub(super) fn add_prompt_template(
-    templates: &mut BTreeMap<String, CollectedPromptTemplate>,
+///
+pub(super) fn add_file(
+    templates: &mut BTreeMap<String, CollectedFile>,
     template: &ResolvedTomlPathData,
 ) -> Result<(), Error> {
-    let template_key = template.get_template_key();
+    let file_path = template.get_template_key();
     let source_body = template.data().to_string();
-    match templates.get(&template_key) {
+    match templates.get(&file_path) {
         Some(existing) if existing.source_body != source_body => {
             Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Template key `{template_key}` was provided with conflicting source bodies."
+                    "Template key `{file_path}` was provided with conflicting source bodies."
                 ),
             }))
         }
         Some(_) => Ok(()),
         None => {
-            templates.insert(template_key, CollectedPromptTemplate { source_body });
+            templates.insert(file_path, CollectedFile { source_body });
             Ok(())
         }
     }
 }
 
-/// Persist a collected set of prompt templates, reusing any existing rows
-/// that already match `(template_key, content_hash)` and batch-inserting
-/// only the genuinely new ones. Returns `template_key -> version_id`.
-pub(super) async fn write_collected_prompt_templates(
+/// Persist a collected set of stored files, reusing any existing rows
+/// that already match `(file_path, content_hash)` and batch-inserting
+/// only the genuinely new ones. Returns `file_path -> version_id`.
+pub(super) async fn write_collected_files(
     tx: &mut Transaction<'_, Postgres>,
-    templates: &BTreeMap<String, CollectedPromptTemplate>,
+    templates: &BTreeMap<String, CollectedFile>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
@@ -84,49 +85,46 @@ pub(super) async fn write_collected_prompt_templates(
         .collect();
 
     // Batch lookup: find existing template versions with matching
-    // `(template_key, content_hash)`.
-    let template_keys: Vec<&str> = templates.keys().map(String::as_str).collect();
-    let content_hashes: Vec<&[u8]> = template_keys
-        .iter()
-        .map(|k| hashes[*k].as_slice())
-        .collect();
+    // `(file_path, content_hash)`.
+    let file_paths: Vec<&str> = templates.keys().map(String::as_str).collect();
+    let content_hashes: Vec<&[u8]> = file_paths.iter().map(|k| hashes[*k].as_slice()).collect();
     let existing_rows: Vec<ExistingTemplateRow> = sqlx::query_as(
-        "SELECT input.template_key, t.id \
-         FROM UNNEST($1::text[], $2::bytea[]) AS input(template_key, content_hash) \
-         JOIN tensorzero.prompt_template_configs t \
-           ON t.template_key = input.template_key AND t.content_hash = input.content_hash",
+        "SELECT input.file_path, t.id \
+         FROM UNNEST($1::text[], $2::bytea[]) AS input(file_path, content_hash) \
+         JOIN tensorzero.stored_files t \
+           ON t.file_path = input.file_path AND t.content_hash = input.content_hash",
     )
-    .bind(&template_keys)
+    .bind(&file_paths)
     .bind(&content_hashes)
     .fetch_all(&mut **tx)
     .await
-    .map_err(|e| postgres_query_error("Failed to look up existing prompt template versions", e))?;
+    .map_err(|e| postgres_query_error("Failed to look up existing stored file versions", e))?;
 
     let existing: HashMap<String, Uuid> = existing_rows
         .into_iter()
-        .map(|row| (row.template_key, row.id))
+        .map(|row| (row.file_path, row.id))
         .collect();
 
     // Partition into reused vs. new templates.
     let mut template_version_ids = HashMap::with_capacity(templates.len());
-    let mut new_template_keys = Vec::new();
-    for template_key in templates.keys() {
-        if let Some(&existing_id) = existing.get(template_key) {
-            template_version_ids.insert(template_key.clone(), existing_id);
+    let mut new_file_paths = Vec::new();
+    for file_path in templates.keys() {
+        if let Some(&existing_id) = existing.get(file_path) {
+            template_version_ids.insert(file_path.clone(), existing_id);
         } else {
             let id = Uuid::now_v7();
-            template_version_ids.insert(template_key.clone(), id);
-            new_template_keys.push(template_key.clone());
+            template_version_ids.insert(file_path.clone(), id);
+            new_file_paths.push(file_path.clone());
         }
     }
 
     // Batch insert only new templates.
-    if !new_template_keys.is_empty() {
+    if !new_file_paths.is_empty() {
         let mut qb = QueryBuilder::new(
-            "INSERT INTO tensorzero.prompt_template_configs \
-             (id, template_key, source_body, content_hash, creation_source, source_autopilot_session_id) ",
+            "INSERT INTO tensorzero.stored_files \
+             (id, file_path, source_body, content_hash, creation_source, source_autopilot_session_id) ",
         );
-        qb.push_values(&new_template_keys, |mut b, key| {
+        qb.push_values(&new_file_paths, |mut b, key| {
             let template = &templates[key];
             let id = template_version_ids[key];
             b.push_bind(id)
@@ -139,7 +137,7 @@ pub(super) async fn write_collected_prompt_templates(
         qb.build()
             .execute(&mut **tx)
             .await
-            .map_err(|e| postgres_query_error("Failed to insert prompt template versions", e))?;
+            .map_err(|e| postgres_query_error("Failed to insert stored file versions", e))?;
     }
 
     Ok(template_version_ids)

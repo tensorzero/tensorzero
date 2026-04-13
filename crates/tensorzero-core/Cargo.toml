@@ -10,9 +10,9 @@ exclude = ["tests/", "fixtures/"]
 [features]
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
-e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests", "tensorzero-stored-config/e2e_tests"]
+e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests", "tensorzero-stored-config/e2e_tests", "tensorzero-http/e2e_tests"]
 optimization_tests = ["e2e_tests"]
-pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3", "tensorzero-http/pyo3"]
 ts-bindings = [
     "dep:ts-rs",
     "tensorzero-types/ts-bindings",
@@ -93,6 +93,7 @@ tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
+tensorzero-http = { path = "../tensorzero-http" }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 minijinja-utils = { path = "../minijinja-utils" }
