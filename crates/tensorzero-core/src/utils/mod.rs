@@ -44,12 +44,7 @@ pub async fn unbounded_recursion_wrapper<R: Send + 'static>(
         })?
 }
 
-/// A helper function that emits a deprecation warning.
-/// All deprecation warnings should be emitted using this function,
-/// so that we can detect unintentional use of deprecated behavior in our e2e tests.
-pub fn deprecation_warning(message: &str) {
-    tracing::warn!("Deprecation Warning: {message}");
-}
+pub use tensorzero_inference_types::utils::deprecation_warning;
 
 /// Spawns a background task that does not interact with gateway shutdown -
 /// it will be cancelled at some arbitrary `.await` point when the gateway shuts down.
