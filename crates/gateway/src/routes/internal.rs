@@ -281,6 +281,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
             "/internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload",
             post(endpoints::internal::autopilot::s3_initiate_upload_handler),
         )
+        // Variant statistics endpoint
+        .route(
+            "/internal/variant_statistics",
+            get(endpoints::internal::variant_statistics::get_variant_statistics_handler),
+        )
         // Resolve UUID endpoint
         .route(
             "/internal/resolve_uuid/{id}",
