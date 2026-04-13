@@ -66,6 +66,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         None,
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     )
     .await
     .map_err(|e| e.log())

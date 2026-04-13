@@ -316,6 +316,9 @@ pub struct AppStateData {
     /// Which database backend is the primary datastore for observability data.
     /// Derived from config (`observability.backend`) at startup.
     pub primary_datastore: PrimaryDatastore,
+    /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
+    /// Used by the UI to decide whether to show the config editor.
+    pub config_in_database: bool,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -349,6 +352,9 @@ pub struct SwappableAppStateData {
     /// The deployment ID from ClickHouse (64-char hex string)
     pub deployment_id: Option<String>,
     pub shutdown_token: CancellationToken,
+    /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
+    /// Used by the UI to decide whether to show the config editor.
+    pub config_in_database: bool,
 }
 
 /// `AppStateData` with a concrete config snapshot, used by route handlers and business logic.
@@ -453,6 +459,7 @@ impl SwappableAppStateData {
             rate_limiting_manager: self.rate_limiting_manager.clone(),
             shutdown_token: self.shutdown_token.clone(),
             primary_datastore: runtime_dependencies.primary_datastore,
+            config_in_database: self.config_in_database,
             _private: (),
         }
     }
@@ -538,6 +545,7 @@ impl GatewayHandle {
         config: UnwrittenConfig,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
@@ -551,10 +559,12 @@ impl GatewayHandle {
             valkey_cache_url,
             available_tools,
             tool_whitelist,
+            config_in_database,
         ))
         .await
     }
 
+    #[expect(clippy::too_many_arguments)]
     async fn new_with_databases(
         config: UnwrittenConfig,
         clickhouse_url: Option<String>,
@@ -563,6 +573,7 @@ impl GatewayHandle {
         valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone()).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
@@ -599,6 +610,7 @@ impl GatewayHandle {
             None,
             available_tools,
             tool_whitelist,
+            config_in_database,
         )
         .await
     }
@@ -659,6 +671,7 @@ impl GatewayHandle {
                 spawn_client: None,
                 deployment_id: None,
                 shutdown_token: cancel_token,
+                config_in_database: false,
             },
             drop_wrapper: None,
             _private: (),
@@ -677,6 +690,7 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
         Self::new_with_database_and_http_client_and_urls(
             config,
@@ -690,6 +704,7 @@ impl GatewayHandle {
             drop_wrapper,
             available_tools,
             tool_whitelist,
+            config_in_database,
         )
         .await
     }
@@ -707,6 +722,7 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
@@ -856,6 +872,7 @@ impl GatewayHandle {
                 spawn_client,
                 deployment_id,
                 shutdown_token: cancel_token,
+                config_in_database,
             },
             drop_wrapper,
             _private: (),
@@ -896,6 +913,7 @@ impl SwappableAppStateData {
             spawn_client: None,
             deployment_id: None,
             shutdown_token: CancellationToken::new(),
+            config_in_database: self.config_in_database,
         }
     }
 
@@ -989,6 +1007,7 @@ impl AppStateData {
             rate_limiting_manager,
             shutdown_token,
             primary_datastore,
+            config_in_database: false,
             _private: (),
         })
     }
@@ -1437,6 +1456,7 @@ pub async fn start_openai_compatible_gateway(
         None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     ))
     .await
     .map_err(|e| e.log())?;
@@ -1828,6 +1848,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1865,6 +1886,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1900,6 +1922,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when observability is disabled");
@@ -1929,6 +1952,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when observability is default (not explicitly enabled)");
@@ -1961,6 +1985,7 @@ mod tests {
             None,
             HashSet::new(), // available_tools
             HashSet::new(), // tool_whitelist
+            false,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
@@ -1990,6 +2015,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -2025,6 +2051,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when cache is explicitly disabled");
@@ -2054,6 +2081,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when cache.enabled is default (null)");
@@ -2150,6 +2178,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -2183,6 +2212,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when auth is disabled even without Postgres");
