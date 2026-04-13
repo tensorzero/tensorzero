@@ -84,9 +84,7 @@ use crate::{
     error::{Error, ErrorDetails, TimeoutKind},
     inference::{
         InferenceProvider,
-        types::{
-            FinishReason, ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
-        },
+        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
 use metrics::counter;
@@ -2570,55 +2568,6 @@ pub struct StreamResponseAndMessages {
     pub messages: Vec<RequestMessage>,
 }
 
-/// Emit `gen_ai.{role}.message` events for each input message.
-/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
-fn emit_input_message_events(span: &Span, request: &ModelInferenceRequest<'_>) {
-    use opentelemetry::KeyValue;
-    use tensorzero_types::Role;
-
-    if let Some(system) = &request.system {
-        span.add_event(
-            "gen_ai.system.message",
-            vec![KeyValue::new("content", system.clone())],
-        );
-    }
-
-    for message in &request.messages {
-        let event_name = match message.role {
-            Role::User => "gen_ai.user.message",
-            Role::Assistant => "gen_ai.assistant.message",
-        };
-        let content_json = serde_json::to_string(&message.content)
-            .unwrap_or_else(|_| "<serialization error>".to_string());
-        span.add_event(event_name, vec![KeyValue::new("content", content_json)]);
-    }
-}
-
-/// Emit a `gen_ai.choice` event with the response content.
-/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
-fn emit_choice_event(span: &Span, response: &ProviderInferenceResponse) {
-    use opentelemetry::KeyValue;
-
-    let content_json = serde_json::to_string(&response.output)
-        .unwrap_or_else(|_| "<serialization error>".to_string());
-    let mut attributes = vec![
-        KeyValue::new("index", 0_i64),
-        KeyValue::new("message", content_json),
-    ];
-    if let Some(finish_reason) = &response.finish_reason {
-        let reason_str: &'static str = match finish_reason {
-            FinishReason::Stop => "stop",
-            FinishReason::StopSequence => "stop_sequence",
-            FinishReason::Length => "length",
-            FinishReason::ToolCall => "tool_calls",
-            FinishReason::ContentFilter => "content_filter",
-            FinishReason::Unknown => "error",
-        };
-        attributes.push(KeyValue::new("finish_reason", reason_str));
-    }
-    span.add_event("gen_ai.choice", attributes);
-}
-
 impl ModelProvider {
     fn apply_otlp_span_fields_input(
         &self,
@@ -2626,74 +2575,74 @@ impl ModelProvider {
         span: &Span,
         request: &ModelInferenceRequest<'_>,
     ) {
-        let traces = match &otlp_config.traces {
-            Some(t) => t,
-            None => return,
+        let Some(traces) = &otlp_config.traces else {
+            return;
         };
-        if traces.enabled.unwrap_or(false) {
-            match &traces.format {
-                None | Some(OtlpTracesFormat::OpenTelemetry) => {
-                    span.set_attribute("gen_ai.operation.name", "chat");
-                    span.set_attribute("gen_ai.system", self.genai_system_name());
+        if !traces.enabled.unwrap_or(false) {
+            return;
+        }
+        match &traces.format {
+            None | Some(OtlpTracesFormat::OpenTelemetry) => {
+                span.set_attribute("gen_ai.operation.name", "chat");
+                span.set_attribute("gen_ai.system", self.genai_system_name());
 
-                    if let Some(model_name) = self.genai_model_name() {
-                        span.set_attribute("gen_ai.request.model", model_name.to_string());
-                    }
-
-                    // OTel GenAI request parameters.
-                    // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
-                    if let Some(max_tokens) = request.max_tokens {
-                        span.set_attribute("gen_ai.request.max_tokens", i64::from(max_tokens));
-                    }
-                    if let Some(temperature) = request.temperature {
-                        span.set_attribute("gen_ai.request.temperature", f64::from(temperature));
-                    }
-                    if let Some(top_p) = request.top_p {
-                        span.set_attribute("gen_ai.request.top_p", f64::from(top_p));
-                    }
-                    if let Some(frequency_penalty) = request.frequency_penalty {
-                        span.set_attribute(
-                            "gen_ai.request.frequency_penalty",
-                            f64::from(frequency_penalty),
-                        );
-                    }
-                    if let Some(presence_penalty) = request.presence_penalty {
-                        span.set_attribute(
-                            "gen_ai.request.presence_penalty",
-                            f64::from(presence_penalty),
-                        );
-                    }
-                    if let Some(seed) = request.seed {
-                        span.set_attribute("gen_ai.request.seed", i64::from(seed));
-                    }
-                    if let Some(stop_sequences) = request.stop_sequences.as_ref()
-                        && !stop_sequences.is_empty()
-                    {
-                        span.set_attribute(
-                            "gen_ai.request.stop_sequences",
-                            opentelemetry::Value::Array(
-                                stop_sequences
-                                    .iter()
-                                    .map(|s| opentelemetry::StringValue::from(s.clone()))
-                                    .collect::<Vec<_>>()
-                                    .into(),
-                            ),
-                        );
-                    }
-
-                    // Message content events (opt-in).
-                    // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
-                    if traces.include_message_content.unwrap_or(false) {
-                        emit_input_message_events(span, request);
-                    }
+                if let Some(model_name) = self.genai_model_name() {
+                    span.set_attribute("gen_ai.request.model", model_name.to_string());
                 }
-                Some(OtlpTracesFormat::OpenInference) => {
-                    span.set_attribute("openinference.span.kind", "LLM");
-                    span.set_attribute("llm.system", self.genai_system_name());
 
-                    if let Some(model_name) = self.genai_model_name() {
-                        span.set_attribute("llm.model_name", model_name.to_string());
-                    }
+                // OTel GenAI request parameters.
+                // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+                if let Some(max_tokens) = request.max_tokens {
+                    span.set_attribute("gen_ai.request.max_tokens", i64::from(max_tokens));
+                }
+                if let Some(temperature) = request.temperature {
+                    span.set_attribute("gen_ai.request.temperature", f64::from(temperature));
+                }
+                if let Some(top_p) = request.top_p {
+                    span.set_attribute("gen_ai.request.top_p", f64::from(top_p));
+                }
+                if let Some(frequency_penalty) = request.frequency_penalty {
+                    span.set_attribute(
+                        "gen_ai.request.frequency_penalty",
+                        f64::from(frequency_penalty),
+                    );
+                }
+                if let Some(presence_penalty) = request.presence_penalty {
+                    span.set_attribute(
+                        "gen_ai.request.presence_penalty",
+                        f64::from(presence_penalty),
+                    );
+                }
+                if let Some(seed) = request.seed {
+                    span.set_attribute("gen_ai.request.seed", i64::from(seed));
+                }
+                if let Some(stop_sequences) = request.stop_sequences.as_ref()
+                    && !stop_sequences.is_empty()
+                {
+                    span.set_attribute(
+                        "gen_ai.request.stop_sequences",
+                        opentelemetry::Value::Array(
+                            stop_sequences
+                                .iter()
+                                .map(|s| opentelemetry::StringValue::from(s.clone()))
+                                .collect::<Vec<_>>()
+                                .into(),
+                        ),
+                    );
+                }
+
+                // Message content events (opt-in).
+                // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+                if traces.include_message_content.unwrap_or(false) {
+                    crate::observability::genai_otel::emit_input_message_events(span, request);
+                }
+            }
+            Some(OtlpTracesFormat::OpenInference) => {
+                span.set_attribute("openinference.span.kind", "LLM");
+                span.set_attribute("llm.system", self.genai_system_name());
+
+                if let Some(model_name) = self.genai_model_name() {
+                    span.set_attribute("llm.model_name", model_name.to_string());
                 }
             }
         }
@@ -2715,21 +2664,16 @@ impl ModelProvider {
                         // OTel GenAI response attributes.
                         // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
                         span.set_attribute("gen_ai.response.id", response.id.to_string());
-                        if let Some(finish_reason) = &response.finish_reason {
-                            // Map to OTel GenAI standard finish_reason values where possible.
-                            // https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
-                            let reason_str: &'static str = match finish_reason {
-                                FinishReason::Stop => "stop",
-                                FinishReason::StopSequence => "stop_sequence",
-                                FinishReason::Length => "length",
-                                FinishReason::ToolCall => "tool_calls",
-                                FinishReason::ContentFilter => "content_filter",
-                                FinishReason::Unknown => "error",
-                            };
+                        if let Some(finish_reason) = response.finish_reason {
                             span.set_attribute(
                                 "gen_ai.response.finish_reasons",
                                 opentelemetry::Value::Array(
-                                    vec![opentelemetry::StringValue::from(reason_str)].into(),
+                                    vec![opentelemetry::StringValue::from(
+                                        crate::observability::genai_otel::finish_reason_to_otel_str(
+                                            finish_reason,
+                                        ),
+                                    )]
+                                    .into(),
                                 ),
                             );
                         }
@@ -2742,7 +2686,7 @@ impl ModelProvider {
                             .and_then(|t| t.include_message_content)
                             .unwrap_or(false);
                         if include_content {
-                            emit_choice_event(span, response);
+                            crate::observability::genai_otel::emit_choice_event(span, response);
                         }
                     }
                     Some(OtlpTracesFormat::OpenInference) => {

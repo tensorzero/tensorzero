@@ -13,12 +13,21 @@
 
 use std::collections::HashMap;
 
+use opentelemetry::KeyValue;
+use tensorzero_inference_types::{FinishReason, ProviderInferenceResponse};
+use tensorzero_types::Role;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+use crate::inference::types::ModelInferenceRequest;
+
 /// A logical OpenTelemetry GenAI span as we receive it: a flat attribute map
 /// plus an ordered list of named events with their own attributes.
 ///
 /// This is intentionally untyped to tolerate slightly older or non-standard
 /// emitters — every field is optional and unknowns are ignored.
 #[derive(Debug, Default, Clone)]
+#[non_exhaustive]
 pub struct GenAiSpan {
     /// Span attributes such as `gen_ai.request.model`, `gen_ai.system`, etc.
     pub attributes: HashMap<String, String>,
@@ -192,12 +201,14 @@ fn role_from_event_name(name: &str) -> Option<GenAiRole> {
 /// Stop sequences and finish reasons may arrive as either a JSON array (when
 /// the emitter sent an OTel array attribute) or a comma-separated string
 /// (some collectors flatten arrays this way).
+///
+/// **Caveat:** the CSV fallback is lossy — a sequence containing a literal
+/// comma (e.g. `"1, 2, 3"`) will be split incorrectly. JSON array form is
+/// preferred and tried first.
 fn parse_csv_or_array(value: Option<&String>) -> Vec<String> {
     let Some(raw) = value else { return vec![] };
     let trimmed = raw.trim();
-    if trimmed.starts_with('[')
-        && let Ok(parsed) = serde_json::from_str::<Vec<String>>(trimmed)
-    {
+    if let Ok(parsed) = serde_json::from_str::<Vec<String>>(trimmed) {
         return parsed;
     }
     trimmed
@@ -205,6 +216,62 @@ fn parse_csv_or_array(value: Option<&String>) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
+}
+
+// =============================================================================
+// Emission helpers (TensorZero → OTel GenAI)
+// =============================================================================
+
+/// Map a TensorZero `FinishReason` to its OTel GenAI standard string.
+/// https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
+pub fn finish_reason_to_otel_str(reason: FinishReason) -> &'static str {
+    match reason {
+        FinishReason::Stop => "stop",
+        FinishReason::StopSequence => "stop_sequence",
+        FinishReason::Length => "length",
+        FinishReason::ToolCall => "tool_calls",
+        FinishReason::ContentFilter => "content_filter",
+        FinishReason::Unknown => "error",
+    }
+}
+
+/// Emit `gen_ai.{role}.message` events for each input message on the current span.
+/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+pub fn emit_input_message_events(span: &Span, request: &ModelInferenceRequest<'_>) {
+    if let Some(system) = &request.system {
+        span.add_event(
+            "gen_ai.system.message",
+            vec![KeyValue::new("content", system.clone())],
+        );
+    }
+
+    for message in &request.messages {
+        let event_name = match message.role {
+            Role::User => "gen_ai.user.message",
+            Role::Assistant => "gen_ai.assistant.message",
+        };
+        let content_json = serde_json::to_string(&message.content)
+            .unwrap_or_else(|_| "<serialization error>".to_string());
+        span.add_event(event_name, vec![KeyValue::new("content", content_json)]);
+    }
+}
+
+/// Emit a `gen_ai.choice` event with the response content on the current span.
+/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+pub fn emit_choice_event(span: &Span, response: &ProviderInferenceResponse) {
+    let content_json = serde_json::to_string(&response.output)
+        .unwrap_or_else(|_| "<serialization error>".to_string());
+    let mut attributes = vec![
+        KeyValue::new("index", 0_i64),
+        KeyValue::new("message", content_json),
+    ];
+    if let Some(finish_reason) = response.finish_reason {
+        attributes.push(KeyValue::new(
+            "finish_reason",
+            finish_reason_to_otel_str(finish_reason),
+        ));
+    }
+    span.add_event("gen_ai.choice", attributes);
 }
 
 #[cfg(test)]
