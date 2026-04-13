@@ -309,6 +309,8 @@ impl From<StoredOtlpTracesConfig> for OtlpTracesConfig {
             enabled: stored.enabled,
             format: stored.format.map(Into::into),
             extra_headers: stored.extra_headers.map(|h| h.into_iter().collect()),
+            // include_message_content is a fresh-config-only setting; not persisted.
+            include_message_content: None,
         }
     }
 }
@@ -766,6 +768,7 @@ mod tests {
                             ("x-trace-header".to_string(), "value-1".to_string()),
                             ("x-other".to_string(), "value-2".to_string()),
                         ])),
+                        include_message_content: None,
                     }),
                 }),
             }),

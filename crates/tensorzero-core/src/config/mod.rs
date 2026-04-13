@@ -641,6 +641,11 @@ pub struct OtlpTracesConfig {
     pub format: Option<OtlpTracesFormat>,
     /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
     pub extra_headers: Option<HashMap<String, String>>,
+    /// If `true`, emit per-message span events (`gen_ai.user.message`, `gen_ai.assistant.message`,
+    /// `gen_ai.choice`, etc.) containing the actual message content. Defaults to `false` since
+    /// these events may contain sensitive user data (PII, prompts, model outputs).
+    /// Only applies when `format = OpenTelemetry`.
+    pub include_message_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

@@ -2570,6 +2570,55 @@ pub struct StreamResponseAndMessages {
     pub messages: Vec<RequestMessage>,
 }
 
+/// Emit `gen_ai.{role}.message` events for each input message.
+/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+fn emit_input_message_events(span: &Span, request: &ModelInferenceRequest<'_>) {
+    use opentelemetry::KeyValue;
+    use tensorzero_types::Role;
+
+    if let Some(system) = &request.system {
+        span.add_event(
+            "gen_ai.system.message",
+            vec![KeyValue::new("content", system.clone())],
+        );
+    }
+
+    for message in &request.messages {
+        let event_name = match message.role {
+            Role::User => "gen_ai.user.message",
+            Role::Assistant => "gen_ai.assistant.message",
+        };
+        let content_json = serde_json::to_string(&message.content)
+            .unwrap_or_else(|_| "<serialization error>".to_string());
+        span.add_event(event_name, vec![KeyValue::new("content", content_json)]);
+    }
+}
+
+/// Emit a `gen_ai.choice` event with the response content.
+/// https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+fn emit_choice_event(span: &Span, response: &ProviderInferenceResponse) {
+    use opentelemetry::KeyValue;
+
+    let content_json = serde_json::to_string(&response.output)
+        .unwrap_or_else(|_| "<serialization error>".to_string());
+    let mut attributes = vec![
+        KeyValue::new("index", 0_i64),
+        KeyValue::new("message", content_json),
+    ];
+    if let Some(finish_reason) = &response.finish_reason {
+        let reason_str: &'static str = match finish_reason {
+            FinishReason::Stop => "stop",
+            FinishReason::StopSequence => "stop_sequence",
+            FinishReason::Length => "length",
+            FinishReason::ToolCall => "tool_calls",
+            FinishReason::ContentFilter => "content_filter",
+            FinishReason::Unknown => "error",
+        };
+        attributes.push(KeyValue::new("finish_reason", reason_str));
+    }
+    span.add_event("gen_ai.choice", attributes);
+}
+
 impl ModelProvider {
     fn apply_otlp_span_fields_input(
         &self,
@@ -2631,6 +2680,12 @@ impl ModelProvider {
                             ),
                         );
                     }
+
+                    // Message content events (opt-in).
+                    // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+                    if traces.include_message_content.unwrap_or(false) {
+                        emit_input_message_events(span, request);
+                    }
                 }
                 Some(OtlpTracesFormat::OpenInference) => {
                     span.set_attribute("openinference.span.kind", "LLM");
@@ -2677,6 +2732,17 @@ impl ModelProvider {
                                     vec![opentelemetry::StringValue::from(reason_str)].into(),
                                 ),
                             );
+                        }
+
+                        // Choice event with output content (opt-in).
+                        // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-events/
+                        let include_content = otlp_config
+                            .traces
+                            .as_ref()
+                            .and_then(|t| t.include_message_content)
+                            .unwrap_or(false);
+                        if include_content {
+                            emit_choice_event(span, response);
                         }
                     }
                     Some(OtlpTracesFormat::OpenInference) => {
