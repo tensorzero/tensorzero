@@ -4,18 +4,21 @@
 //! TOML document, validate edits against the config-loading pipeline, and
 //! apply them back to the stored-config tables with compare-and-swap.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use axum::Json;
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::Postgres;
+use sqlx::{Postgres, QueryBuilder};
 use tracing::instrument;
+use uuid::Uuid;
 
 use crate::config::editable::{config_to_toml, toml_to_config};
 use crate::config::{Config, UninitializedConfig};
-use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
+use crate::db::postgres::stored_config_queries::{
+    load_config_from_db, load_editor_path_contents, merge_load_config_errors,
+};
 use crate::db::postgres::stored_config_writes::{
     WriteStoredConfigParams, write_stored_config_in_tx,
 };
@@ -53,8 +56,13 @@ impl GetConfigTomlResponse {
         config: UninitializedConfig,
         hash: String,
         tags: HashMap<String, String>,
+        free_files: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        let (toml, path_contents) = config_to_toml(&config)?;
+        let (toml, canonical_path_contents) = config_to_toml(&config)?;
+        // Merge free files with referenced files. Canonical (referenced) entries
+        // take precedence if a key appears in both.
+        let mut path_contents = free_files;
+        path_contents.extend(canonical_path_contents);
         let base_signature = editable_config_signature(&toml, &path_contents)?;
         Ok(Self {
             toml,
@@ -123,8 +131,20 @@ async fn load_db_authoritative_uninitialized_config(
 async fn load_db_authoritative_config_toml(
     app_state: &ResolvedAppStateData,
 ) -> Result<GetConfigTomlResponse, Error> {
-    let (uninitialized, hash) = load_db_authoritative_uninitialized_config(app_state).await?;
-    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new())
+    let pool = app_state
+        .postgres_connection_info
+        .get_pool_result()
+        .map_err(|e| e.log())?;
+    let ((uninitialized, hash), all_path_contents) = tokio::try_join!(
+        load_db_authoritative_uninitialized_config(app_state),
+        load_editor_path_contents(pool)
+    )?;
+    GetConfigTomlResponse::from_uninitialized(
+        uninitialized,
+        hash,
+        HashMap::new(),
+        all_path_contents,
+    )
 }
 
 async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) -> Result<(), Error> {
@@ -215,7 +235,6 @@ pub async fn apply_config_toml_handler(
     let app_state = swap_state.load_latest();
     let edited_config = toml_to_config(&request.toml, &request.path_contents)?;
     let (canonical_toml, canonical_path_contents) = config_to_toml(&edited_config)?;
-    let canonical_signature = editable_config_signature(&canonical_toml, &canonical_path_contents)?;
 
     let pool = app_state
         .postgres_connection_info
@@ -234,17 +253,42 @@ pub async fn apply_config_toml_handler(
     // observe uncommitted state on `tx` — but that is fine here: at this
     // point `tx` has only acquired the lock, not written anything, so the
     // committed baseline is exactly what we want to CAS against.
-    let current_uninitialized = load_config_from_db(pool)
-        .await
-        .map_err(merge_load_config_errors)?;
-    let (current_toml, current_path_contents) = config_to_toml(&current_uninitialized)?;
-    let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
+    let (current_uninitialized, current_all_path_contents) = tokio::try_join!(
+        async {
+            load_config_from_db(pool)
+                .await
+                .map_err(merge_load_config_errors)
+        },
+        load_editor_path_contents(pool)
+    )?;
+    let (current_toml, current_canonical_path_contents) = config_to_toml(&current_uninitialized)?;
+    // Compute the CAS signature the same way from_uninitialized does: start
+    // with all editor files, then let canonical entries overwrite. This ensures
+    // referenced files always use the version the config was built from, not a
+    // newer row for the same path that a content-addressed write may have left
+    // in stored_files.
+    let mut current_effective_path_contents = current_all_path_contents;
+    current_effective_path_contents.extend(current_canonical_path_contents.clone());
+    let current_signature =
+        editable_config_signature(&current_toml, &current_effective_path_contents)?;
 
     if current_signature != request.base_signature {
         return Err(Error::new(ErrorDetails::ConfigCompareAndSwapConflict {
             message: "Config changed underneath you, reload the latest snapshot before applying your edits.".to_string(),
         }));
     }
+
+    // Files in the request that are not referenced by the canonical config are
+    // "free files" — they live in the UI editor but are not yet wired up to any
+    // config entry. Persist them into stored_files so they survive the
+    // normalize round-trip.
+    let new_free_files: HashMap<String, String> = request
+        .path_contents
+        .iter()
+        .filter(|(k, _)| !canonical_path_contents.contains_key(k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let all_new_paths: HashSet<String> = request.path_contents.keys().cloned().collect();
 
     // `write_stored_config_in_tx` validates `edited_config` internally and
     // returns the resulting `UnwrittenConfig`, so we can hot-swap the live
@@ -261,6 +305,8 @@ pub async fn apply_config_toml_handler(
         },
     ))
     .await?;
+
+    write_free_files_in_tx(&mut tx, &new_free_files, &all_new_paths, "ui-config-editor").await?;
 
     // Write the config snapshot and build new runtime dependencies **before**
     // committing the transaction, so a runtime-dependency failure (e.g. bad
@@ -283,12 +329,73 @@ pub async fn apply_config_toml_handler(
     // Infallible: all fallible work was done in `prepare_config_swap` above.
     swap_state.swap_config(prepared);
 
+    // Build the response path_contents: merge free files over canonical so
+    // the client sees all files. Canonical entries take precedence.
+    let mut response_path_contents = new_free_files.clone();
+    response_path_contents.extend(canonical_path_contents);
+    let response_signature = editable_config_signature(&canonical_toml, &response_path_contents)?;
+
     Ok(Json(ApplyConfigTomlResponse {
         toml: canonical_toml,
-        path_contents: canonical_path_contents,
+        path_contents: response_path_contents,
         hash: written_hash,
-        base_signature: canonical_signature,
+        base_signature: response_signature,
     }))
+}
+
+/// Inserts free files (files in `path_contents` not referenced by the TOML)
+/// into `tensorzero.stored_files` and tombstones files that were present in
+/// the editor but are absent from the new `path_contents`.
+///
+/// `stored_files` rows referenced by UUID from config tables are never
+/// queried with a `deleted_at` filter, so tombstoning only affects the
+/// editor view — it does not break any live config references.
+async fn write_free_files_in_tx(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    free_files: &HashMap<String, String>,
+    all_new_paths: &HashSet<String>,
+    creation_source: &str,
+) -> Result<(), Error> {
+    // Tombstone all non-deleted rows for file paths that the user removed
+    // from the editor (absent from the new path_contents entirely).
+    sqlx::query(
+        r"
+        UPDATE tensorzero.stored_files
+        SET deleted_at = NOW()
+        WHERE deleted_at IS NULL
+          AND file_path NOT IN (SELECT unnest($1::text[]))
+        ",
+    )
+    .bind(all_new_paths.iter().cloned().collect::<Vec<_>>())
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to tombstone removed files in stored_files: {e}"),
+        })
+    })?;
+
+    // Insert free files (not handled by write_stored_config_in_tx).
+    if !free_files.is_empty() {
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO tensorzero.stored_files (id, file_path, source_body, content_hash, creation_source) ",
+        );
+        qb.push_values(free_files, |mut b, (path, body)| {
+            let hash = blake3::hash(body.as_bytes()).as_bytes().to_vec();
+            b.push_bind(Uuid::now_v7())
+                .push_bind(path)
+                .push_bind(body)
+                .push_bind(hash)
+                .push_bind(creation_source);
+        });
+        qb.build().execute(&mut **tx).await.map_err(|e| {
+            Error::new(ErrorDetails::PostgresQuery {
+                message: format!("Failed to insert free files into stored_files: {e}"),
+            })
+        })?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -340,6 +447,7 @@ mod tests {
         let response = GetConfigTomlResponse::from_uninitialized(
             config,
             "test-hash".to_string(),
+            HashMap::new(),
             HashMap::new(),
         )
         .expect("TOML response generation should succeed");

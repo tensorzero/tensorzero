@@ -965,3 +965,37 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
 
     Ok(config)
 }
+
+/// Loads the latest non-tombstoned version of every file in `stored_files`,
+/// keyed by `file_path`.
+///
+/// Used by the config editor to build the full `path_contents` map — both
+/// files referenced in the TOML and "free" files the user added but has not
+/// yet referenced. The `DISTINCT ON … ORDER BY created_at DESC` pattern
+/// relies on `idx_stored_files_editor_latest`.
+pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, String>, Error> {
+    #[derive(FromRow)]
+    struct EditorFileRow {
+        file_path: String,
+        source_body: String,
+    }
+    let rows = sqlx::query_as::<_, EditorFileRow>(
+        r"
+        SELECT DISTINCT ON (file_path) file_path, source_body
+        FROM tensorzero.stored_files
+        WHERE deleted_at IS NULL
+        ORDER BY file_path, created_at DESC
+        ",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to load editor path contents: {e}"),
+        })
+    })?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.file_path, r.source_body))
+        .collect())
+}
