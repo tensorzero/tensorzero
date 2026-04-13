@@ -43,8 +43,6 @@ use crate::providers::gcp_vertex_gemini::GCPVertexGeminiRole;
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 #[cfg(test)]
-use crate::tool::FunctionToolConfig;
-#[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
 
@@ -429,17 +427,6 @@ struct GeminiTool<'a> {
 }
 
 impl<'a> GeminiFunctionDeclaration<'a> {
-    #[cfg(test)]
-    fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
-        let parameters = process_jsonschema_for_gcp_vertex_gemini(tool.parameters());
-
-        GeminiFunctionDeclaration {
-            name: tool.name(),
-            description: tool.description(),
-            parameters,
-        }
-    }
-
     fn from_function_tool_def(tool: &'a FunctionToolDef) -> Self {
         let parameters = process_jsonschema_for_gcp_vertex_gemini(&tool.parameters);
 
@@ -1294,9 +1281,7 @@ mod tests {
     };
     use tensorzero_inference_types::ProviderToolCallConfig;
 
-    use crate::providers::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL,
-    };
+    use crate::providers::test_helpers::{MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -1355,12 +1340,14 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&FunctionToolConfig> =
-            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
+        let tools_vec: Vec<&FunctionToolDef> = MULTI_PROVIDER_TOOL_CONFIG
+            .tools_available()
+            .unwrap()
+            .collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()
-                .map(|&t| GeminiFunctionDeclaration::from_tool_config(t))
+                .map(|&t| GeminiFunctionDeclaration::from_function_tool_def(t))
                 .collect(),
         };
         assert_eq!(
@@ -1370,12 +1357,12 @@ mod tests {
                     GeminiFunctionDeclaration {
                         name: "get_temperature",
                         description: "Get the current temperature in a given location",
-                        parameters: tools_vec[0].parameters().clone(),
+                        parameters: tools_vec[0].parameters.clone(),
                     },
                     GeminiFunctionDeclaration {
                         name: "query_articles",
                         description: "Query articles from Wikipedia",
-                        parameters: tools_vec[1].parameters().clone(),
+                        parameters: tools_vec[1].parameters.clone(),
                     }
                 ]
             }

@@ -44,7 +44,7 @@ use crate::{
         },
     },
     model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
-    tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
+    tool::{ToolCall, ToolCallChunk},
 };
 use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
@@ -801,19 +801,6 @@ impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
                 name: &tool.name,
                 description: Some(&tool.description),
                 parameters: &tool.parameters,
-            },
-        }
-    }
-}
-
-impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        FireworksTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
             },
         }
     }

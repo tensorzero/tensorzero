@@ -82,52 +82,7 @@ pub trait ProviderKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ProviderType {
-    Anthropic,
-    Azure,
-    Deepseek,
-    Fireworks,
-    AWSBedrock,
-    GCPVertexAnthropic,
-    GCPVertexGemini,
-    GoogleAIStudioGemini,
-    Groq,
-    Hyperbolic,
-    Mistral,
-    OpenAI,
-    OpenRouter,
-    SGLang,
-    TGI,
-    Together,
-    VLLM,
-    XAI,
-}
-
-impl Display for ProviderType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProviderType::Anthropic => write!(f, "Anthropic"),
-            ProviderType::Azure => write!(f, "Azure"),
-            ProviderType::Deepseek => write!(f, "Deepseek"),
-            ProviderType::Fireworks => write!(f, "Fireworks"),
-            ProviderType::AWSBedrock => write!(f, "AWSBedrock"),
-            ProviderType::GCPVertexAnthropic => write!(f, "GCPVertexAnthropic"),
-            ProviderType::GCPVertexGemini => write!(f, "GCPVertexGemini"),
-            ProviderType::GoogleAIStudioGemini => write!(f, "GoogleAIStudioGemini"),
-            ProviderType::Groq => write!(f, "Groq"),
-            ProviderType::Hyperbolic => write!(f, "Hyperbolic"),
-            ProviderType::Mistral => write!(f, "Mistral"),
-            ProviderType::OpenAI => write!(f, "OpenAI"),
-            ProviderType::OpenRouter => write!(f, "OpenRouter"),
-            ProviderType::SGLang => write!(f, "SGLang"),
-            ProviderType::TGI => write!(f, "TGI"),
-            ProviderType::Together => write!(f, "Together"),
-            ProviderType::VLLM => write!(f, "VLLM"),
-            ProviderType::XAI => write!(f, "XAI"),
-        }
-    }
-}
+pub use tensorzero_inference_types::credentials::ProviderType;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Serialize, Debug)]
