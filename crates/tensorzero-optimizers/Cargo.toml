@@ -15,7 +15,11 @@ ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
-evaluations = { path = "../evaluations" }
+# default-features disabled so that consumers (notably `tensorzero-python`)
+# can opt out of the `ts-executor-pool` / v8 stack. Direct callers that need
+# TypeScript judge support — the gateway, autopilot-tools, durable-tools —
+# enable it via their own `evaluations` dep with default features.
+evaluations = { path = "../evaluations", default-features = false }
 durable-tools-spawn = { path = "../durable-tools-spawn" }
 schemars = { workspace = true }
 

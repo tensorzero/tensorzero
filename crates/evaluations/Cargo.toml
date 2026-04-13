@@ -13,8 +13,8 @@ required-features = ["e2e_tests"]
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
 tensorzero-derive = { path = "../tensorzero-derive" }
-tensorzero-ts-types = { path = "../tensorzero-ts-types" }
-ts-executor-pool = { path = "../ts-executor-pool" }
+tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+ts-executor-pool = { path = "../ts-executor-pool", optional = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 url = { workspace = true }
@@ -45,8 +45,13 @@ tempfile = { workspace = true }
 workspace = true
 
 [features]
-default = []
+default = ["ts-executor-pool"]
 # Forward this feature to 'tensorzero-core', so that our
 # tests can recognize things like the `dummy` provider
-e2e_tests = ["tensorzero-core/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests", "ts-executor-pool"]
 ts-bindings = ["dep:ts-rs"]
+# Enables the TypeScript judge evaluator. When disabled, attempts to run
+# a TypeScript judge evaluator at runtime return an error and the v8/deno
+# stack is not pulled into the build (relevant for builds that target
+# platforms without a prebuilt `rusty_v8`, e.g. manylinux2014/musllinux).
+ts-executor-pool = ["dep:ts-executor-pool", "dep:tensorzero-ts-types"]
