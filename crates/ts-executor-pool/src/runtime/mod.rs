@@ -1467,7 +1467,7 @@ mod tests {
         );
         assert_eq!(
             eval_to_string(&mut runtime, "typeof FINAL").await,
-            "undefined"
+            "function"
         );
         assert_eq!(
             eval_to_string(&mut runtime, "typeof llm_query").await,
