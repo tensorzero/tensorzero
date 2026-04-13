@@ -13,7 +13,7 @@
 //!
 //! The file-specific logic (walking a function config tree, merging
 //! filesystem-discovered extra templates, or iterating a tool/evaluation's
-//! `files_for_db()`) lives in the callers; this module only owns
+//! file references) lives in the callers; this module only owns
 //! the collection and SQL dedup.
 
 use std::collections::{BTreeMap, HashMap};
@@ -37,6 +37,7 @@ struct ExistingTemplateRow {
 
 /// Insert `template` into `templates`, erroring if a different body was
 /// already recorded under the same key.
+///
 pub(super) fn add_file(
     templates: &mut BTreeMap<String, CollectedFile>,
     template: &ResolvedTomlPathData,
