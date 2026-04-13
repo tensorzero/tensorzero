@@ -554,7 +554,7 @@ const TRANSITIVE_INCLUDE_FS_TEMPLATE: &str = "extra_templates/foo.minijinja";
 /// `creation_source` value the apply-TOML handler uses when writing stored
 /// config rows. We query `stored_files` with this filter so the regression
 /// test only counts rows written by `apply_config_toml_handler` (and not rows
-/// left behind by other test fixtures, `--store-config`, or the single-
+/// left behind by other test fixtures, `--migrate-config`, or the single-
 /// function edit path).
 const APPLY_TOML_CREATION_SOURCE: &str = "ui-config-editor";
 
@@ -628,7 +628,7 @@ system_template = "{top_template_path}"
     );
 
     // Query `stored_files` directly. Filter by `creation_source` so we only
-    // see rows written by `apply_config_toml_handler` — the `--store-config`
+    // see rows written by `apply_config_toml_handler` — the `--migrate-config`
     // CLI that bootstraps the e2e gateway uses a different creation source,
     // so a hit here can only come from the apply path under test.
     let postgres = get_postgres().await;
