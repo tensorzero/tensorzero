@@ -27,7 +27,7 @@ export function YoloModeToggle({
             )}
           >
             {checked && <AlertTriangle className="h-3.5 w-3.5" />}
-            YOLO Mode
+            Auto-Approve
           </span>
           <Switch
             checked={checked}

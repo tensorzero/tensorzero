@@ -6,7 +6,7 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { StreamLanguage } from "@codemirror/language";
 import { jinja2 } from "@codemirror/legacy-modes/mode/jinja2";
-import { githubLightInit } from "@uiw/codemirror-theme-github";
+import { githubLightInit, githubDarkInit } from "@uiw/codemirror-theme-github";
 import { EditorView } from "@codemirror/view";
 import { search } from "@codemirror/search";
 import type { Extension } from "@codemirror/state";
@@ -116,7 +116,7 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
 // causing all tokens to render in the default foreground color (no colors).
 // Fix: add `"@lezer/highlight": "<version>"` to `pnpm.overrides` in the
 // workspace-root `package.json` to deduplicate.
-const THEME_MONO = githubLightInit({
+const THEME_MONO_LIGHT = githubLightInit({
   settings: {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--text-xs)",
@@ -124,6 +124,32 @@ const THEME_MONO = githubLightInit({
     background: "transparent",
   },
 });
+
+const THEME_MONO_DARK = githubDarkInit({
+  settings: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    gutterBorder: "transparent",
+    background: "transparent",
+    gutterBackground: "transparent",
+  },
+});
+
+function useIsDarkMode() {
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const check = () =>
+      setIsDark(document.documentElement.classList.contains("dark"));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+  return isDark;
+}
 
 // Cache for extension combinations (max 16 combinations: 4 languages × 2 wordWrap × 2 readOnly)
 const extensionCache = new Map<string, Extension[]>();
@@ -336,7 +362,8 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
-  const theme = THEME_MONO;
+  const isDark = useIsDarkMode();
+  const theme = isDark ? THEME_MONO_DARK : THEME_MONO_LIGHT;
 
   // Use cached basicSetup (shared across all CodeEditor instances)
   const basicSetup = getBasicSetup(showLineNumbers, readOnly);
@@ -415,7 +442,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
       <div
         className={cn(
-          "overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500",
+          "bg-bg-secondary overflow-clip rounded-sm transition focus-within:ring-2 focus-within:ring-blue-500",
           height && "h-full",
         )}
       >

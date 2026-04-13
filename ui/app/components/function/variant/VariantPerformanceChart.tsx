@@ -5,7 +5,7 @@ import {
   formatDetailedNumber,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
-  CHART_COLORS,
+  getChartColor,
 } from "~/utils/chart";
 import {
   ChartContainer,
@@ -38,9 +38,7 @@ export function VariantPerformanceChart({
         ...config,
         [variantName]: {
           label: variantName,
-          color: singleVariantMode
-            ? CHART_COLORS[0]
-            : CHART_COLORS[index % CHART_COLORS.length],
+          color: singleVariantMode ? getChartColor(0) : getChartColor(index),
         },
       }),
       {},
@@ -98,7 +96,7 @@ export function VariantPerformanceChart({
               key={variantNames[0]}
               dataKey={variantNames[0]}
               name={variantNames[0]}
-              fill={CHART_COLORS[0]}
+              fill={getChartColor(0)}
               radius={4}
               maxBarSize={100}
             >
@@ -127,9 +125,9 @@ export function VariantPerformanceChart({
         items={variantNames}
         colors={
           singleVariantMode
-            ? [CHART_COLORS[0]]
+            ? [getChartColor(0)]
             : variantNames.map(
-                (name) => chartConfig[name]?.color ?? CHART_COLORS[0],
+                (name) => chartConfig[name]?.color ?? getChartColor(0),
               )
         }
       />

@@ -1,7 +1,11 @@
 import { Skeleton } from "~/components/ui/skeleton";
 
 export function BasicInfoLayout({ children }: React.PropsWithChildren) {
-  return <div className="flex flex-col gap-4 md:gap-2">{children}</div>;
+  return (
+    <div className="bg-bg-secondary border-border flex flex-col gap-4 rounded-lg border px-5 py-4 md:gap-2">
+      {children}
+    </div>
+  );
 }
 
 export function BasicInfoItem({ children }: React.PropsWithChildren) {

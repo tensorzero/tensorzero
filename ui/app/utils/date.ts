@@ -90,6 +90,25 @@ export const getTimestampTooltipData = (timestamp: string | number | Date) => {
 };
 
 /**
+ * Format a timestamp as a compact relative time string.
+ * Returns "just now", "2m ago", "3h ago", "5d ago" for recent times,
+ * or a short date (e.g. "Mar 30") for timestamps older than a week.
+ */
+export function formatRelativeTime(timestamp: string): string {
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  const diffMs = now - then;
+  if (diffMs < 60_000) return "just now";
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
+  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
+  if (diffMs < 604_800_000) return `${Math.floor(diffMs / 86_400_000)}d ago`;
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
  * Time window units for time series granularity
  */
 export type TimeWindow =

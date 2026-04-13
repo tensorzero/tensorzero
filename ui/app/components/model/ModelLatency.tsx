@@ -15,7 +15,7 @@ import React, { useState, useMemo } from "react";
 import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
 import { SectionErrorNotice } from "~/components/ui/error/ErrorContentPrimitives";
 import { AlertCircle } from "lucide-react";
-import { CHART_COLORS } from "~/utils/chart";
+import { getChartColor } from "~/utils/chart";
 import {
   Select,
   SelectItem,
@@ -153,7 +153,7 @@ export function LatencyQuantileChart({
           ...config,
           [modelName]: {
             label: modelName,
-            color: CHART_COLORS[index % CHART_COLORS.length],
+            color: getChartColor(index),
           },
         }),
         {},
@@ -201,7 +201,7 @@ export function LatencyQuantileChart({
               type="monotone"
               dataKey={name}
               name={name}
-              stroke={CHART_COLORS[index % CHART_COLORS.length]}
+              stroke={getChartColor(index)}
               strokeWidth={2}
               dot={false}
               connectNulls={false}
@@ -210,7 +210,7 @@ export function LatencyQuantileChart({
           ))}
         </LineChart>
       </ChartContainer>
-      <ChartLegend items={modelNames} colors={CHART_COLORS} />
+      <ChartLegend items={modelNames} colorFn={getChartColor} />
     </>
   );
 }

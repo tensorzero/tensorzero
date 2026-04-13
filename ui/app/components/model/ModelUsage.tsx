@@ -5,7 +5,7 @@ import {
   formatDetailedNumber,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
-  CHART_COLORS,
+  getChartColor,
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
 import { Await, useAsyncError, isRouteErrorResponse } from "react-router";
@@ -163,7 +163,7 @@ export function ModelUsage({
                   ...config,
                   [modelName]: {
                     label: modelName,
-                    color: CHART_COLORS[index % CHART_COLORS.length],
+                    color: getChartColor(index),
                   },
                 }),
                 {},
@@ -287,14 +287,14 @@ export function ModelUsage({
                           key={modelName}
                           dataKey={modelName}
                           name={modelName}
-                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          fill={getChartColor(index)}
                           radius={4}
                           maxBarSize={100}
                         />
                       ))}
                     </BarChart>
                   </ChartContainer>
-                  <ChartLegend items={modelNames} colors={CHART_COLORS} />
+                  <ChartLegend items={modelNames} colorFn={getChartColor} />
                 </>
               );
             }}

@@ -18,7 +18,7 @@ export function TryWithSelect({
   isDefaultFunction,
 }: TryWithSelectProps) {
   const isReadOnly = useReadOnly();
-  const isDisabled = isLoading || isReadOnly;
+  const isDisabled = isLoading || isReadOnly || options.length === 0;
 
   const label = isDefaultFunction ? "model" : "variant";
 
