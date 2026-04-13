@@ -87,19 +87,6 @@ impl Drop for GatewayHandle {
             let disabled_placeholder = self.app_state.disabled_for_shutdown_placeholder();
             let mut app_state = std::mem::replace(&mut self.app_state, disabled_placeholder);
 
-            // Grab batch writer handles so we can wait on them later.
-            let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
-            let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
-
-            // Return unused rate limit tokens while Postgres is still active.
-            if !app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            }
-
             // Move the deferred task tracker out before dropping app state so we can
             // still close/wait on it below.
             let deferred_tasks =
@@ -110,36 +97,6 @@ impl Drop for GatewayHandle {
             // future fields added to `AppStateData`) without requiring manual `drop(...)`
             // calls for each one.
             drop(app_state);
-            if let Some(clickhouse_handle) = clickhouse_handle {
-                tracing::info!("Waiting for ClickHouse batch writer to finish");
-                // This could block forever if:
-                // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
-                //   and isn't using our `CancellationToken` to exit.
-                // * The `GatewayHandle` is dropped from a task that's running other futures
-                //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
-                //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
-                //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
-                //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
-                //   and embedded client), and drop it when we're exiting.
-                //
-                // We err on the side of hanging the server on shutdown, rather than potentially exiting while
-                // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(clickhouse_handle) {
-                        tracing::error!("Error in batch writer: {e}");
-                    }
-                });
-                tracing::info!("ClickHouse batch writer finished");
-            }
-            if let Some(pg_handle) = pg_handle {
-                tracing::info!("Waiting for Postgres batch writer to finish");
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(pg_handle) {
-                        tracing::error!("Error in Postgres batch writer: {e}");
-                    }
-                });
-                tracing::info!("Postgres batch writer finished");
-            }
 
             deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
@@ -280,6 +237,43 @@ impl SwappableConfig {
     }
 }
 
+/// Holds state that needs to have tasks spawned onto `deferred_tasks`
+/// when dropped.
+/// Currently, we use this to ensure that we wait for the batch writer handles to finish
+/// when the gateway shuts down.
+/// This only spawns tasks that *wait* for shutdown - the shutdown happens automatically
+/// once all outstanding `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles are dropped.
+/// It's therefore safe for us to hand out cloned `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles
+/// from this struct.
+struct DeferredShutdown {
+    deferred_tasks: TaskTracker,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
+}
+
+impl Drop for DeferredShutdown {
+    fn drop(&mut self) {
+        if let Some(clickhouse_handle) = self.clickhouse_connection_info.batcher_join_handle() {
+            self.deferred_tasks.spawn(async move {
+                tracing::info!("Waiting for ClickHouse batch writer to finish");
+                if let Err(e) = clickhouse_handle.await {
+                    tracing::error!("Error in batch writer: {e}");
+                }
+                tracing::info!("ClickHouse batch writer finished");
+            });
+        }
+        if let Some(postgres_handle) = self.postgres_connection_info.batcher_join_handle() {
+            self.deferred_tasks.spawn(async move {
+                tracing::info!("Waiting for Postgres batch writer to finish");
+                if let Err(e) = postgres_handle.await {
+                    tracing::error!("Error in batch writer: {e}");
+                }
+                tracing::info!("Postgres batch writer finished");
+            });
+        }
+    }
+}
+
 #[derive(Clone)]
 // `#[non_exhaustive]` only affects downstream crates, so we can't use it here
 #[expect(clippy::manual_non_exhaustive)]
@@ -326,14 +320,13 @@ pub struct AppStateData {
 pub struct SwappableAppStateData {
     live_state: Arc<ArcSwap<LiveState>>,
     connection_urls: Arc<ConnectionUrls>,
-    // TODO(#7255): These are intentionally excluded from the swappable LiveState bundle.
+    // TODO(#7255): This holds clickhouse and postgres handles, which are intentionally excluded from the swappable LiveState bundle.
     // - clickhouse_connection_info / postgres_connection_info: hot-swapping them would
     //   interfere with the batch-writer drain logic in GatewayHandle::drop.
     // - rate_limiting_manager: it pre-borrows tokens and requires a shutdown() call to
     //   return them to the database; recreating it on each swap would lose those tokens.
     // Support for hot-swapping them is tracked in https://github.com/tensorzero/tensorzero/issues/7255.
-    pub clickhouse_connection_info: ClickHouseConnectionInfo,
-    pub postgres_connection_info: PostgresConnectionInfo,
+    deferred_shutdown: Arc<DeferredShutdown>,
     /// Token pool manager for rate limiting pre-borrowing
     pub rate_limiting_manager: Arc<RateLimitingManager>,
     /// Holds any background tasks that we want to wait on during shutdown
@@ -404,8 +397,8 @@ impl SwappableAppStateData {
             build_runtime_dependencies(
                 &config,
                 self.connection_urls.as_ref(),
-                &self.clickhouse_connection_info,
-                &self.postgres_connection_info,
+                &self.deferred_shutdown.clickhouse_connection_info,
+                &self.deferred_shutdown.postgres_connection_info,
             )
             .await?,
         );
@@ -440,8 +433,8 @@ impl SwappableAppStateData {
             config: live_state.config.clone(),
             runtime_overlay: live_state.runtime_overlay.clone(),
             http_client: runtime_dependencies.http_client.clone(),
-            clickhouse_connection_info: self.clickhouse_connection_info.clone(),
-            postgres_connection_info: self.postgres_connection_info.clone(),
+            clickhouse_connection_info: self.deferred_shutdown.clickhouse_connection_info.clone(),
+            postgres_connection_info: self.deferred_shutdown.postgres_connection_info.clone(),
             valkey_connection_info: runtime_dependencies.valkey_connection_info.clone(),
             valkey_cache_connection_info: runtime_dependencies.valkey_cache_connection_info.clone(),
             cache_manager: runtime_dependencies.cache_manager.clone(),
@@ -467,11 +460,11 @@ impl SwappableAppStateData {
     }
 
     pub fn postgres_connection_info(&self) -> PostgresConnectionInfo {
-        self.postgres_connection_info.clone()
+        self.deferred_shutdown.postgres_connection_info.clone()
     }
 
     pub fn clickhouse_connection_info(&self) -> ClickHouseConnectionInfo {
-        self.clickhouse_connection_info.clone()
+        self.deferred_shutdown.clickhouse_connection_info.clone()
     }
 
     pub fn valkey_connection_info(&self) -> ValkeyConnectionInfo {
@@ -642,14 +635,18 @@ impl GatewayHandle {
                 primary_datastore: PrimaryDatastore::ClickHouse,
             }),
         }));
+        let deferred_tasks = TaskTracker::new();
         Self {
             app_state: SwappableAppStateData {
                 live_state,
                 connection_urls: Arc::new(ConnectionUrls::default()),
-                clickhouse_connection_info,
-                postgres_connection_info,
+                deferred_shutdown: Arc::new(DeferredShutdown {
+                    deferred_tasks: deferred_tasks.clone(),
+                    clickhouse_connection_info,
+                    postgres_connection_info,
+                }),
+                deferred_tasks,
                 rate_limiting_manager,
-                deferred_tasks: TaskTracker::new(),
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
@@ -835,14 +832,18 @@ impl GatewayHandle {
             runtime_overlay,
             runtime_dependencies: Arc::new(runtime_dependencies),
         }));
+        let deferred_tasks = TaskTracker::new();
         Ok(Self {
             app_state: SwappableAppStateData {
                 live_state,
                 connection_urls: Arc::new(connection_urls),
-                clickhouse_connection_info,
-                postgres_connection_info,
+                deferred_shutdown: Arc::new(DeferredShutdown {
+                    deferred_tasks: deferred_tasks.clone(),
+                    clickhouse_connection_info,
+                    postgres_connection_info,
+                }),
                 rate_limiting_manager,
-                deferred_tasks: TaskTracker::new(),
+                deferred_tasks,
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
@@ -873,8 +874,11 @@ impl SwappableAppStateData {
         Self {
             live_state,
             connection_urls: Arc::new(ConnectionUrls::default()),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            deferred_shutdown: Arc::new(DeferredShutdown {
+                deferred_tasks: TaskTracker::new(),
+                clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            }),
             rate_limiting_manager: Arc::new(RateLimitingManager::new(
                 Arc::new(RateLimitingConfig::default()),
                 Arc::new(DisabledRateLimitQueries),
@@ -892,8 +896,8 @@ impl SwappableAppStateData {
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
         let runtime_dependencies = self.load_runtime_dependencies();
         DelegatingDatabaseConnection::new(
-            self.clickhouse_connection_info.clone(),
-            self.postgres_connection_info.clone(),
+            self.deferred_shutdown.clickhouse_connection_info.clone(),
+            self.deferred_shutdown.postgres_connection_info.clone(),
             runtime_dependencies.primary_datastore,
         )
     }
@@ -965,12 +969,12 @@ impl AppStateData {
             config,
             runtime_overlay,
             http_client,
-            clickhouse_connection_info,
-            postgres_connection_info,
             valkey_connection_info,
             valkey_cache_connection_info,
             cache_manager,
             deferred_tasks,
+            clickhouse_connection_info,
+            postgres_connection_info,
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
