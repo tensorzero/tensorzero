@@ -59,9 +59,11 @@ mod imp {
         /// from `pool`. Call once at process startup and clone the result into
         /// `Clients` for reuse across evaluations.
         pub fn new(pool: RlmPool, ts_checker: Arc<TsCheckerPool>) -> anyhow::Result<Self> {
-            let pool = pool.with_heap_limit_mib(TYPESCRIPT_JUDGE_HEAP_LIMIT_MIB).map_err(|e| {
-                anyhow::anyhow!("Failed to configure TypeScript judge heap limit: {e}")
-            })?;
+            let pool = pool
+                .with_heap_limit_mib(TYPESCRIPT_JUDGE_HEAP_LIMIT_MIB)
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to configure TypeScript judge heap limit: {e}")
+                })?;
             Ok(Self { pool, ts_checker })
         }
 
@@ -73,11 +75,10 @@ mod imp {
         pub async fn with_defaults() -> anyhow::Result<Self> {
             let pool = RlmPool::new(1)
                 .map_err(|e| anyhow::anyhow!("Failed to build RlmPool for TS judge: {e}"))?;
-            let ts_checker = Arc::new(
-                TsCheckerPool::new(1).await.map_err(|e| {
+            let ts_checker =
+                Arc::new(TsCheckerPool::new(1).await.map_err(|e| {
                     anyhow::anyhow!("Failed to build TsCheckerPool for TS judge: {e}")
-                })?,
-            );
+                })?);
             Self::new(pool, ts_checker)
         }
     }
@@ -282,10 +283,8 @@ mod imp {
 
         #[gtest]
         fn test_boolean_true_result() {
-            let result = parse_evaluator_result(
-                Some("true".to_string()),
-                make_boolean_config().output_type,
-            );
+            let result =
+                parse_evaluator_result(Some("true".to_string()), make_boolean_config().output_type);
             let value = result.expect("should succeed").expect("should have value");
             assert_eq!(value, json!(true));
         }
@@ -310,10 +309,8 @@ mod imp {
 
         #[gtest]
         fn test_type_mismatch_float_for_boolean() {
-            let result = parse_evaluator_result(
-                Some("0.5".to_string()),
-                make_boolean_config().output_type,
-            );
+            let result =
+                parse_evaluator_result(Some("0.5".to_string()), make_boolean_config().output_type);
             assert_that!(result, err(displays_as(contains_substring("output_type"))));
         }
 
