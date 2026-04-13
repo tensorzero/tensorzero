@@ -12,25 +12,13 @@ use tensorzero_core::cache::CacheParamsOptions;
 use tensorzero_core::embeddings::{EmbeddingEncodingFormat, EmbeddingInput};
 use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::inference::InferenceCredentials;
+pub use tensorzero_types::ToolHandle;
 use uuid::Uuid;
 
 use crate::error::{NonControlToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
-
-/// Handle returned by `spawn_tool`, can be joined later with `join_tool`.
-///
-/// This enum allows a uniform API for both `TaskTool` and `SimpleTool`:
-/// - `TaskTool`: spawns as a background subtask, `join_tool` waits for completion
-/// - `SimpleTool`: executes immediately (still checkpointed), `join_tool` returns stored result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ToolHandle {
-    /// TaskTool - runs in background, join waits for completion
-    Async(TaskHandle<JsonValue>),
-    /// SimpleTool - already executed, result stored inline
-    Sync(JsonValue),
-}
 
 /// Type alias for the Durable client with `ToolAppState`.
 pub type DurableClient<S> = Durable<ToolAppState<S>>;
@@ -570,6 +558,37 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         };
 
         self.step(&step_name, serializable, embeddings_step).await
+    }
+}
+
+#[async_trait::async_trait]
+impl<S: Clone + Send + Sync> tensorzero_core::client::ToolContextHelper for ToolContext<S> {
+    fn episode_id(&self) -> Uuid {
+        ToolContext::episode_id(self)
+    }
+    async fn join_tool(
+        &mut self,
+        handle: tensorzero_types::ToolHandle,
+    ) -> ToolResult<serde_json::Value> {
+        ToolContext::join_tool(self, handle).await
+    }
+    async fn uuid7(&mut self) -> ToolResult<Uuid> {
+        ToolContext::uuid7(self).await
+    }
+    async fn heartbeat(&mut self) -> ToolResult<()> {
+        ToolContext::heartbeat(self, None).await
+    }
+    async fn spawn_tool(
+        &mut self,
+        tool_name: &str,
+        llm_params: serde_json::Value,
+        side_info: serde_json::Value,
+        options: durable::SpawnOptions,
+    ) -> ToolResult<tensorzero_types::ToolHandle> {
+        ToolContext::spawn_tool(self, tool_name, llm_params, side_info, options).await
+    }
+    async fn inference(&mut self, params: ClientInferenceParams) -> ToolResult<InferenceResponse> {
+        ToolContext::inference(self, params).await
     }
 }
 

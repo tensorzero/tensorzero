@@ -11,6 +11,7 @@ futures.workspace = true
 mime.workspace = true
 rust_decimal = { workspace = true }
 schemars.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
@@ -18,6 +19,7 @@ sqlx.workspace = true
 tensorzero-derive = { path = "../tensorzero-derive" }
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
+tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 url = { workspace = true, features = ["serde"] }

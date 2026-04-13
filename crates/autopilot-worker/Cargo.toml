@@ -7,11 +7,11 @@ rust-version.workspace = true
 
 [features]
 e2e_tests = ["autopilot-tools/e2e_tests"]
-ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings", "dep:tensorzero-ts-types"]
+ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings"]
 
 [dependencies]
 # Internal crates
-durable-tools = { path = "../durable-tools" }
+durable-tools = { path = "../durable-tools", features = ["ts-bindings"] }
 tensorzero-core = { path = "../tensorzero-core" }
 autopilot-client = { path = "../autopilot-client" }
 autopilot-tools = { path = "../autopilot-tools" }
@@ -35,7 +35,7 @@ anyhow.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 schemars.workspace = true
-tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
+tensorzero-ts-types = { path = "../tensorzero-ts-types" }
 
 [dev-dependencies]
 mockall = "0.14"

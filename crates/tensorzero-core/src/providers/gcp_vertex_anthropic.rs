@@ -12,7 +12,6 @@ use tokio::time::Instant;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::cache::ModelProviderRequest;
 use crate::config::{e2e_skip_credential_validation, skip_credential_validation};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
@@ -34,7 +33,8 @@ use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse,
 };
 use crate::model::CredentialLocationWithFallback;
-use crate::model::ModelProvider;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::providers::anthropic::{
     AnthropicStreamMessage, AnthropicToolChoice, anthropic_to_tensorzero_stream_message,
@@ -199,16 +199,15 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -298,16 +297,15 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -388,7 +386,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    model_provider: &ModelProvider,
+    model_provider: &ModelProviderRequestInfo,
     model_name: &str,
     provider_name: &str,
     raw_request: &str,

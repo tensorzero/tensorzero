@@ -21,12 +21,16 @@ jobs:
     steps:
       - name: Find workflows to cancel
         id: find-workflows
+        env:
+          EVENT_SHA: ${{ github.event.sha }}
+          EVENT_STATE: ${{ github.event.state }}
+          EVENT_CONTEXT: ${{ github.event.context }}
         run: |
-          SHA="${{ github.event.sha }}"
+          SHA="$EVENT_SHA"
           echo "Status event details:"
           echo "SHA: $SHA"
-          echo "State: ${{ github.event.state }}"
-          echo "Context: ${{ github.event.context }}"
+          echo "State: $EVENT_STATE"
+          echo "Context: $EVENT_CONTEXT"
 
           # Get all workflow runs for the specific SHA
           workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
@@ -49,8 +53,10 @@ jobs:
 
       - name: Cancel workflows
         if: steps.find-workflows.outputs.workflows != ''
+        env:
+          EVENT_SHA: ${{ github.event.sha }}
         run: |
-          SHA="${{ github.event.sha }}"
+          SHA="$EVENT_SHA"
 
           echo "Cancelling workflows..."
           echo "${{ steps.find-workflows.outputs.workflows }}" | while read -r run_id branch; do

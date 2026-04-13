@@ -8,10 +8,11 @@ use axum::{
     routing::{get, post},
 };
 use tensorzero_core::endpoints;
+use tensorzero_core::feature_flags;
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData> {
-    Router::new()
+    let router = Router::new()
         .route(
             "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
@@ -286,5 +287,26 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
         .route(
             "/internal/autopilot/status",
             get(endpoints::internal::autopilot::autopilot_status_handler),
-        )
+        );
+
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        router
+            .route(
+                "/internal/config_toml",
+                get(endpoints::internal::config_toml::get_latest_config_toml_handler),
+            )
+            // `apply` and `validate` accept the full editable config document in the request
+            // body, which can be large — we use `POST` instead of `GET` so callers don't have
+            // to URL-encode the entire TOML + referenced file contents into the query string.
+            .route(
+                "/internal/config_toml/apply",
+                post(endpoints::internal::config_toml::apply_config_toml_handler),
+            )
+            .route(
+                "/internal/config_toml/validate",
+                post(endpoints::internal::config_toml::validate_config_toml_handler),
+            )
+    } else {
+        router
+    }
 }

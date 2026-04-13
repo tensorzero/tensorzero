@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::StoredPromptRef;
+use crate::StoredFileRef;
 
 pub const STORED_TOOL_CONFIG_SCHEMA_REVISION: i32 = 1;
 
@@ -8,7 +8,7 @@ pub const STORED_TOOL_CONFIG_SCHEMA_REVISION: i32 = 1;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredToolConfig {
     pub description: String,
-    pub parameters: StoredPromptRef,
+    pub parameters: StoredFileRef,
     pub name: Option<String>,
     pub strict: bool,
 }
