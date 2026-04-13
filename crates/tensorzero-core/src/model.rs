@@ -84,7 +84,9 @@ use crate::{
     error::{Error, ErrorDetails, TimeoutKind},
     inference::{
         InferenceProvider,
-        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
+        types::{
+            FinishReason, ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
+        },
     },
 };
 use metrics::counter;
@@ -2569,7 +2571,12 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
+    fn apply_otlp_span_fields_input(
+        &self,
+        otlp_config: &OtlpConfig,
+        span: &Span,
+        request: &ModelInferenceRequest<'_>,
+    ) {
         let traces = match &otlp_config.traces {
             Some(t) => t,
             None => return,
@@ -2582,6 +2589,47 @@ impl ModelProvider {
 
                     if let Some(model_name) = self.genai_model_name() {
                         span.set_attribute("gen_ai.request.model", model_name.to_string());
+                    }
+
+                    // OTel GenAI request parameters.
+                    // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+                    if let Some(max_tokens) = request.max_tokens {
+                        span.set_attribute("gen_ai.request.max_tokens", i64::from(max_tokens));
+                    }
+                    if let Some(temperature) = request.temperature {
+                        span.set_attribute("gen_ai.request.temperature", f64::from(temperature));
+                    }
+                    if let Some(top_p) = request.top_p {
+                        span.set_attribute("gen_ai.request.top_p", f64::from(top_p));
+                    }
+                    if let Some(frequency_penalty) = request.frequency_penalty {
+                        span.set_attribute(
+                            "gen_ai.request.frequency_penalty",
+                            f64::from(frequency_penalty),
+                        );
+                    }
+                    if let Some(presence_penalty) = request.presence_penalty {
+                        span.set_attribute(
+                            "gen_ai.request.presence_penalty",
+                            f64::from(presence_penalty),
+                        );
+                    }
+                    if let Some(seed) = request.seed {
+                        span.set_attribute("gen_ai.request.seed", i64::from(seed));
+                    }
+                    if let Some(stop_sequences) = request.stop_sequences.as_ref()
+                        && !stop_sequences.is_empty()
+                    {
+                        span.set_attribute(
+                            "gen_ai.request.stop_sequences",
+                            opentelemetry::Value::Array(
+                                stop_sequences
+                                    .iter()
+                                    .map(|s| opentelemetry::StringValue::from(s.clone()))
+                                    .collect::<Vec<_>>()
+                                    .into(),
+                            ),
+                        );
                     }
                 }
                 Some(OtlpTracesFormat::OpenInference) => {
@@ -2608,7 +2656,29 @@ impl ModelProvider {
             Ok(response) => {
                 otlp_config.apply_usage_to_model_provider_span(span, &response.usage);
                 match traces_format {
-                    None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                    None | Some(OtlpTracesFormat::OpenTelemetry) => {
+                        // OTel GenAI response attributes.
+                        // https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+                        span.set_attribute("gen_ai.response.id", response.id.to_string());
+                        if let Some(finish_reason) = &response.finish_reason {
+                            // Map to OTel GenAI standard finish_reason values where possible.
+                            // https://opentelemetry.io/docs/specs/semconv/attributes-registry/gen-ai/
+                            let reason_str: &'static str = match finish_reason {
+                                FinishReason::Stop => "stop",
+                                FinishReason::StopSequence => "stop_sequence",
+                                FinishReason::Length => "length",
+                                FinishReason::ToolCall => "tool_calls",
+                                FinishReason::ContentFilter => "content_filter",
+                                FinishReason::Unknown => "error",
+                            };
+                            span.set_attribute(
+                                "gen_ai.response.finish_reasons",
+                                opentelemetry::Value::Array(
+                                    vec![opentelemetry::StringValue::from(reason_str)].into(),
+                                ),
+                            );
+                        }
+                    }
                     Some(OtlpTracesFormat::OpenInference) => {
                         // If we ever add providers that don't use JSON, we'll need to update this.
                         span.set_attribute("input.mime_type", "application/json");
@@ -2619,6 +2689,16 @@ impl ModelProvider {
                 }
             }
             Err(e) => {
+                // OTel GenAI: capture error type on the OpenTelemetry format.
+                // https://opentelemetry.io/docs/specs/semconv/attributes-registry/error/
+                if matches!(traces_format, None | Some(OtlpTracesFormat::OpenTelemetry)) {
+                    let error_type = match e.get_details() {
+                        ErrorDetails::InferenceClient { .. } => "InferenceClient",
+                        ErrorDetails::InferenceServer { .. } => "InferenceServer",
+                        _ => "Unknown",
+                    };
+                    span.set_attribute("error.type", error_type);
+                }
                 // If an error occurs, try to extract the raw request/response to attach to the OpenTelemetry span
                 match e.get_details() {
                     ErrorDetails::InferenceClient {
@@ -2691,7 +2771,7 @@ impl ModelProvider {
         clients: &InferenceClients,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
-        self.apply_otlp_span_fields_input(request.otlp_config, &span);
+        self.apply_otlp_span_fields_input(request.otlp_config, &span, request.request);
 
         let provider_request = ProviderInferenceRequest {
             request: request.request,
@@ -2934,7 +3014,7 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
     ) -> Result<StreamAndRawRequest, Error> {
-        self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
+        self.apply_otlp_span_fields_input(request.otlp_config, &Span::current(), request.request);
 
         let provider_request = ProviderInferenceRequest {
             request: request.request,
