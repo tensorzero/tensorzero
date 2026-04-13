@@ -11,7 +11,9 @@ pub mod credentials;
 pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
-pub(crate) mod serde_helpers;
+pub mod provider_trait;
+pub mod serde_helpers;
+pub mod utils;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -842,6 +844,113 @@ pub enum BatchStatus {
     Pending,
     Completed,
     Failed,
+}
+
+/// Data retrieved from the BatchRequest table.
+/// In Postgres, `raw_request` and `raw_response` live in a separate
+/// `batch_request_data` table with daily partitions. They may be `None`
+/// if the data was dropped due to retention policy.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatchRequestRow<'a> {
+    pub batch_id: Uuid,
+    pub id: Uuid,
+    #[serde(deserialize_with = "crate::serde_helpers::deserialize_json_string")]
+    pub batch_params: Cow<'a, Value>,
+    pub model_name: std::sync::Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Cow<'a, str>>,
+    pub model_provider_name: Cow<'a, str>,
+    pub status: BatchStatus,
+    pub function_name: Cow<'a, str>,
+    pub variant_name: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash>,
+}
+
+pub struct UnparsedBatchRequestRow<'a> {
+    pub batch_id: Uuid,
+    pub batch_params: &'a Value,
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub model_name: &'a str,
+    pub raw_request: &'a str,
+    pub raw_response: &'a str,
+    pub model_provider_name: &'a str,
+    pub status: BatchStatus,
+    pub errors: Vec<Value>,
+    pub snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash>,
+}
+
+/// Manual implementation of FromRow for BatchRequestRow.
+/// raw_request and raw_response come from LEFT JOIN with batch_request_data
+/// and may be NULL if the data was dropped due to retention policy.
+impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchRequestRow<'static> {
+    fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+        use sqlx::types::Json;
+        let batch_params: Json<Value> = row.try_get("batch_params")?;
+        let status: BatchStatus = row.try_get("status")?;
+        let errors: Option<Json<Vec<Value>>> = row.try_get("errors")?;
+        let model_name: String = row.try_get("model_name")?;
+
+        let snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash> =
+            row.try_get("snapshot_hash")?;
+
+        let raw_request: Option<String> = row.try_get("raw_request")?;
+        let raw_response: Option<String> = row.try_get("raw_response")?;
+
+        Ok(BatchRequestRow {
+            batch_id: row.try_get("batch_id")?,
+            id: row.try_get("id")?,
+            batch_params: Cow::Owned(batch_params.0),
+            model_name: std::sync::Arc::from(model_name.as_str()),
+            model_provider_name: Cow::Owned(row.try_get("model_provider_name")?),
+            status,
+            function_name: Cow::Owned(row.try_get("function_name")?),
+            variant_name: Cow::Owned(row.try_get("variant_name")?),
+            raw_request: raw_request.map(Cow::Owned),
+            raw_response: raw_response.map(Cow::Owned),
+            errors: errors.map(|e| e.0).unwrap_or_default(),
+            snapshot_hash,
+        })
+    }
+}
+
+impl<'a> BatchRequestRow<'a> {
+    pub fn new(unparsed: UnparsedBatchRequestRow<'a>) -> Self {
+        let UnparsedBatchRequestRow {
+            batch_id,
+            batch_params,
+            function_name,
+            variant_name,
+            model_name,
+            raw_request,
+            raw_response,
+            model_provider_name,
+            status,
+            errors,
+            snapshot_hash,
+        } = unparsed;
+        let id = Uuid::now_v7();
+        Self {
+            batch_id,
+            id,
+            batch_params: Cow::Borrowed(batch_params),
+            function_name: Cow::Borrowed(function_name),
+            variant_name: Cow::Borrowed(variant_name),
+            model_name: std::sync::Arc::from(model_name),
+            raw_request: Some(Cow::Borrowed(raw_request)),
+            raw_response: Some(Cow::Borrowed(raw_response)),
+            model_provider_name: Cow::Borrowed(model_provider_name),
+            status,
+            errors,
+            snapshot_hash,
+        }
+    }
 }
 
 /// Returned from start_batch_inference from an InferenceProvider
