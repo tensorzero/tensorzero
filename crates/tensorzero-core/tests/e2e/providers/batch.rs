@@ -66,7 +66,8 @@ fn expected_batch_max_tokens(provider: &E2ETestProvider, function_name: &str) ->
 }
 
 fn should_skip_gemini_2_5_batch_poll(provider: &E2ETestProvider) -> bool {
-    provider.model_provider_name == "gcp_vertex_gemini" && provider.model_name.contains("gemini-2.5")
+    provider.model_provider_name == "gcp_vertex_gemini"
+        && provider.model_name.contains("gemini-2.5")
 }
 
 #[macro_export]
