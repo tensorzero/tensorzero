@@ -581,6 +581,10 @@ pub trait ClientExt {
     ) -> Result<ClientEvaluationStreamResult, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "e2e/pyo3 test helper that exposes the embedded gateway's SwappableAppStateData"
+    )]
     fn get_app_state_data(&self)
     -> Option<&tensorzero_core::utils::gateway::SwappableAppStateData>;
 }
@@ -1709,6 +1713,10 @@ impl ClientExt for Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "e2e/pyo3 test helper that exposes the embedded gateway's SwappableAppStateData"
+    )]
     fn get_app_state_data(
         &self,
     ) -> Option<&tensorzero_core::utils::gateway::SwappableAppStateData> {

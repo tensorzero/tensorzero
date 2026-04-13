@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json, debug_handler};
+use axum::{Extension, Json};
 use futures::FutureExt;
 use futures::stream::Stream;
 use futures_core::FusedStream;
@@ -65,7 +65,7 @@ use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::utils::gateway::{AppState, AppStateData, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, Variant, VariantConfig, VariantInfo};
@@ -202,7 +202,6 @@ pub use tensorzero_types::inference_params::{
 };
 
 /// A handler for the inference endpoint
-#[debug_handler(state = SwappableAppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
         config,

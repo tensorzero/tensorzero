@@ -321,12 +321,6 @@ impl RateLimitingManager {
 
         Ok(())
     }
-
-    /// Shutdown the rate limiting manager.
-    /// This is a no-op in direct mode (no tokens to return).
-    pub fn shutdown(&self) -> Result<(), Error> {
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -360,13 +354,6 @@ mod tests {
         }
     }
 
-    fn make_dummy_manager() -> RateLimitingManager {
-        RateLimitingManager::new(
-            Arc::new(RateLimitingConfig::default()),
-            Arc::new(PostgresConnectionInfo::Disabled),
-        )
-    }
-
     #[test]
     fn test_manager_is_empty_with_rules() {
         let rule = RateLimitingConfigRule {
@@ -385,13 +372,6 @@ mod tests {
             !manager.is_empty(),
             "Manager with rules should not be empty"
         );
-    }
-
-    #[test]
-    fn test_shutdown_returns_ok() {
-        let manager = make_dummy_manager();
-        let result = manager.shutdown();
-        assert!(result.is_ok(), "Shutdown should return Ok");
     }
 
     // Tests for consume_tickets and return_tickets with mock client

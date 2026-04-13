@@ -1,7 +1,7 @@
 //! Inference metadata endpoint for listing inference metadata from the InferenceById table.
 
+use axum::Json;
 use axum::extract::{Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
@@ -11,7 +11,7 @@ use crate::db::inferences::{
     ListInferenceMetadataParams, PaginationParams,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for the inference_metadata endpoint
 #[derive(Debug, Deserialize)]
@@ -39,7 +39,6 @@ pub struct ListInferenceMetadataResponse {
 }
 
 /// HTTP handler for listing inference metadata
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "get_inference_metadata_handler", skip_all)]
 pub async fn get_inference_metadata_handler(
     State(app_state): AppState,

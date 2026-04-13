@@ -11,7 +11,7 @@ use crate::db::workflow_evaluation_queries::{
     GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow, WorkflowEvaluationQueries,
 };
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for listing workflow evaluation run episodes by task name.
 #[derive(Debug, Deserialize)]
@@ -29,7 +29,6 @@ const DEFAULT_OFFSET: u32 = 0;
 ///
 /// Returns a list of workflow evaluation run episodes grouped by task_name.
 /// Episodes with NULL task_name are grouped individually.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.list_episodes_by_task_name", skip_all)]
 pub async fn list_workflow_evaluation_run_episodes_by_task_name_handler(
     State(app_state): AppState,

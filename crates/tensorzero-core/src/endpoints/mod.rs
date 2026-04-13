@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
+#[expect(
+    clippy::disallowed_types,
+    reason = "RouteHandlers carries MethodRouter<SwappableAppStateData> as router infrastructure"
+)]
 use crate::utils::gateway::SwappableAppStateData;
 use axum::routing::MethodRouter;
 use std::convert::Infallible;
@@ -28,6 +32,10 @@ pub mod workflow_evaluations;
 /// Helper struct to hold the data needed for a call to `Router.route`
 /// We use this to pass the route names to middleware before they register the routes
 /// (since axum doesn't let you list the registered routes in a `Router`)
+#[expect(
+    clippy::disallowed_types,
+    reason = "RouteHandlers carries MethodRouter<SwappableAppStateData> as router infrastructure"
+)]
 pub struct RouteHandlers {
     pub routes: Vec<(
         &'static str,
