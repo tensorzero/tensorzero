@@ -8234,12 +8234,14 @@ dependencies = [
 name = "tensorzero-inference-types"
 version = "2026.4.0"
 dependencies = [
+ "async-trait",
  "derive_builder 0.20.2",
  "futures",
  "googletest",
  "mime 0.4.0-a.0",
  "mime_guess",
  "pyo3",
+ "reqwest-sse-stream",
  "rust_decimal",
  "schemars 1.2.1",
  "secrecy",

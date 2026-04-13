@@ -44,6 +44,17 @@ where
     Ok(())
 }
 
+/// Deserializes a doubly-serialized JSON string field. The wire representation
+/// is a JSON string whose contents are themselves JSON.
+pub fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let json_str = String::deserialize(deserializer)?;
+    serde_json::from_str(&json_str).map_err(D::Error::custom)
+}
+
 pub(crate) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
     let mut map = Map::new();
     map.insert("type".to_owned(), Value::String("boolean".to_owned()));
