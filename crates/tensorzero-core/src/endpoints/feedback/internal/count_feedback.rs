@@ -1,14 +1,14 @@
 //! Feedback endpoint for counting feedback by target ID
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,7 +18,6 @@ pub struct CountFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for counting feedback by target ID
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "count_feedback_by_target_id_handler",
     skip_all,

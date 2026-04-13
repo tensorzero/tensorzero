@@ -1,3 +1,9 @@
+// This module defines and implements SwappableAppStateData and GatewayHandle.
+#![expect(
+    clippy::disallowed_types,
+    reason = "definition and implementation module for SwappableAppStateData"
+)]
+
 use std::collections::HashSet;
 use std::future::IntoFuture;
 use std::net::SocketAddr;

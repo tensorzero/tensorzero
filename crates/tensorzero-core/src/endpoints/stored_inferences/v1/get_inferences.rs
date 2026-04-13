@@ -6,13 +6,12 @@ use crate::config::Config;
 use crate::db::inferences::{InferenceQueries, ListInferencesParams};
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
-use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
 /// Retrieves specific inferences by their IDs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "inferences.v1.get_inferences", skip(app_state, request))]
 pub async fn get_inferences_handler(
     State(app_state): AppState,
@@ -54,7 +53,6 @@ pub async fn get_inferences(
 
 /// Handler for the POST `/v1/inferences/list_inferences` endpoint.
 /// Lists inferences with optional filtering, pagination, and sorting.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "inferences.v1.list_inferences", skip(app_state, request))]
 pub async fn list_inferences_handler(
     State(app_state): AppState,

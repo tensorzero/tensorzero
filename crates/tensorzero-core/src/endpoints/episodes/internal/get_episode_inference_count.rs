@@ -2,10 +2,10 @@ use crate::{
     config::Config,
     db::inferences::{CountInferencesParams, InferenceQueries},
     error::Error,
-    utils::gateway::{AppState, SwappableAppStateData},
+    utils::gateway::AppState,
 };
 use axum::{
-    Json, debug_handler,
+    Json,
     extract::{Path, State},
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,6 @@ pub struct GetEpisodeInferenceCountResponse {
 }
 
 /// HTTP handler for getting inference counts for an episode
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_episode_inference_count_handler",
     skip_all,

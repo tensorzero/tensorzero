@@ -9,8 +9,16 @@ use axum::Router;
 use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use tensorzero_core::observability::{RouterExt as _, TracerWrapper};
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
 pub fn build_api_routes(
     otel_tracer: Option<Arc<TracerWrapper>>,
     metrics_handle: PrometheusHandle,

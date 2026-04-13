@@ -16,6 +16,10 @@ use std::sync::Arc;
 use tensorzero_auth::middleware::TensorzeroAuthMiddlewareStateInner;
 use tensorzero_core::observability::TracerWrapper;
 use tensorzero_core::observability::request_logging::InFlightRequestsData;
+#[expect(
+    clippy::disallowed_types,
+    reason = "gateway router construction holds SwappableAppStateData as root axum state"
+)]
 use tensorzero_core::{endpoints, utils::gateway::SwappableAppStateData};
 use tensorzero_core::{
     endpoints::TensorzeroAuthMiddlewareState,
@@ -28,6 +32,10 @@ use tracing::Instrument;
 
 /// Builds the final Axum router for the gateway,
 /// which can be passed to `axum::serve` to start the server.
+#[expect(
+    clippy::disallowed_types,
+    reason = "router construction receives SwappableAppStateData from GatewayHandle"
+)]
 pub async fn build_axum_router(
     base_path: &str,
     otel_tracer: Option<Arc<TracerWrapper>>,
@@ -113,6 +121,10 @@ const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health", "/internal/autop
 /// (e.g. it doesn't write all of the headers or body).
 /// We guarantee that if we *start* processing a request, we will run our handler/stream logic to completion,
 /// including all our side effects (writing to the database, handling rate limiting, etc.).
+#[expect(
+    clippy::disallowed_types,
+    reason = "middleware needs SwappableAppStateData directly to access shutdown_token before FromRef resolves"
+)]
 async fn possibly_prevent_request_cancellation(
     State(state): State<SwappableAppStateData>,
     request: Request,

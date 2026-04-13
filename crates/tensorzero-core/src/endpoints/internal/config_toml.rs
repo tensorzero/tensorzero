@@ -21,6 +21,10 @@ use crate::db::postgres::stored_config_writes::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::feature_flags;
+#[expect(
+    clippy::disallowed_types,
+    reason = "apply_config_toml_handler needs SwappableAppStateData to hot-swap the config after applying"
+)]
 use crate::utils::gateway::{
     AppState, PreparedConfigSwap, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
 };
@@ -142,7 +146,6 @@ async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) ->
 /// when the `enable_config_in_database` feature flag is set — the editable-TOML
 /// pipeline assumes the stored-config tables are the source of truth, so
 /// serving it from a file-backed config would be misleading.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "config.get_latest_toml", skip_all)]
 pub async fn get_latest_config_toml_handler(
     State(app_state): AppState,
@@ -182,7 +185,6 @@ pub struct ValidateConfigTomlResponse {
 ///
 /// Validates editable TOML by parsing it back into `UninitializedConfig` and
 /// running the shared config-loading pipeline without persisting anything.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "config.validate_toml", skip_all)]
 pub async fn validate_config_toml_handler(
     StructuredJson(request): StructuredJson<ValidateConfigTomlRequest>,
@@ -201,7 +203,10 @@ async fn validate_config_toml_request(request: &ValidateConfigTomlRequest) -> Re
 ///
 /// Applies a full editable TOML document back to the stored-config tables using
 /// a compare-and-swap against the current DB-authoritative editable snapshot.
-#[axum::debug_handler(state = SwappableAppStateData)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "apply_config_toml_handler needs the swappable state to hot-swap the config after applying"
+)]
 #[instrument(name = "config.apply_toml", skip_all)]
 pub async fn apply_config_toml_handler(
     State(swap_state): State<SwappableAppStateData>,

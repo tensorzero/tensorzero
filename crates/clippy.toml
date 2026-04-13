@@ -5,6 +5,7 @@ doc-valid-idents = ["TensorZero", "ClickHouse", ".."]
 disallowed-types = [
     { path = "backon::Retryable", reason = "Use the retry functionality in tensorzero-core/src/utils/retries.rs instead" },
     { path = "backon::BackoffBuilder", reason = "Use the retry functionality in tensorzero-core/src/utils/retries.rs instead" },
+    { path = "tensorzero_core::utils::gateway::SwappableAppStateData", reason = "Route handlers must extract `AppState`/`AppStateData` via `FromRef`; only `apply_config_toml_handler` and router/gateway construction code are permitted to hold `SwappableAppStateData` directly" },
 ]
 disallowed-methods = [
     { path = "tracing_subscriber::layer::Layer::with_filter", reason = "Call `apply_filter_fixing_tracing_bug` instead" },

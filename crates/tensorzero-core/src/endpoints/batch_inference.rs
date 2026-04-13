@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json, debug_handler};
+use axum::{Extension, Json};
 use futures::future::{join_all, try_join_all};
 use indexmap::IndexMap;
 use itertools::izip;
@@ -58,9 +58,7 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
-use crate::utils::gateway::{
-    AppState, AppStateData, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
-};
+use crate::utils::gateway::{AppState, AppStateData, ResolvedAppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 
@@ -123,7 +121,7 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
         variant_name = ?params.variant_name,
     )
 )]
-#[debug_handler(state = SwappableAppStateData)]
+
 pub async fn start_batch_inference_handler(
     State(app_state): State<ResolvedAppStateData>,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
@@ -512,7 +510,6 @@ pub struct PollPathParams {
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
 /// If the batch is completed, it will return the appropriate response immediately from the database
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 pub async fn poll_batch_inference_handler(
     State(AppStateData {

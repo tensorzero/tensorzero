@@ -1,7 +1,7 @@
 //! Episodes endpoint for querying episode data.
 
+use axum::Json;
 use axum::extract::{Query, State};
-use axum::{Json, debug_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ use crate::config::Config;
 use crate::db::{EpisodeByIdRow, EpisodeQueries, TableBoundsWithCount};
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, StructuredJson};
 
 /// Query parameters for the GET episode table endpoint
 #[derive(Debug, Deserialize)]
@@ -58,7 +58,6 @@ pub struct ListEpisodesResponse {
 }
 
 /// HTTP handler for querying episodes (GET)
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "list_episodes_handler", skip_all)]
 pub async fn list_episodes_handler(
     State(app_state): AppState,
@@ -79,7 +78,6 @@ pub async fn list_episodes_handler(
 }
 
 /// HTTP handler for querying episodes (POST with filters)
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "list_episodes_post_handler", skip_all)]
 pub async fn list_episodes_post_handler(
     State(app_state): AppState,
@@ -127,7 +125,6 @@ pub async fn list_episodes(
 }
 
 /// HTTP handler for querying episode table bounds
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "query_episode_table_bounds_handler", skip_all)]
 pub async fn query_episode_table_bounds_handler(
     State(app_state): AppState,
