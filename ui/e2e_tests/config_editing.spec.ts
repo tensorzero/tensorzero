@@ -50,7 +50,7 @@ async function applyConfig(
   return response.json();
 }
 
-test.describe("Config Editor", () => {
+test.describe("Config Editor @config-editing", () => {
   test.describe.configure({ mode: "serial" });
 
   let originalConfig: EditableConfig;

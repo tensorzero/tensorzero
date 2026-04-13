@@ -1,0 +1,46 @@
+# Override for docker-compose.e2e.yml that boots the gateway from the
+# config-in-database read path instead of a --config-file glob.
+#
+# Usage (compose with docker-compose.e2e.yml and docker-compose.ui.yml):
+#   docker compose \
+#     -f fixtures/docker-compose.e2e.yml \
+#     -f fixtures/docker-compose.ui.yml \
+#     -f fixtures/docker-compose.config-in-db.yml \
+#     ...
+#
+# This override:
+#   1. Adds a one-shot `gateway-migrate-config` service that loads the UI fixtures
+#      config into the stored_config tables via `gateway --migrate-config`.
+#   2. Rewires the `gateway` service to boot from Postgres instead of a config
+#      file glob by clearing its command and setting the feature flag env var.
+
+services:
+  gateway-migrate-config:
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG}
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+    env_file:
+      - .env
+      - path: .env-gateway
+        required: false
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+    command: ["--migrate-config", "/app/config/tensorzero*.toml"]
+    restart: "no"
+
+  gateway:
+    image: tensorzero/gateway-e2e:${TENSORZERO_GATEWAY_E2E_TAG}
+    environment:
+      TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE: "true"
+    # Clear the --config-file args from docker-compose.e2e.yml so the gateway
+    # loads from Postgres instead. When no config flag is set and the feature
+    # flag is enabled, main.rs falls through to the DB load path.
+    command: []
+    depends_on:
+      gateway-migrate-config:
+        condition: service_completed_successfully
