@@ -699,7 +699,7 @@ jobs:
           # Using http://gateway:3000 here would fail with EAI_AGAIN because the
           # `gateway` hostname is only resolvable within the Docker network.
           TENSORZERO_GATEWAY_URL: "http://localhost:3000"
-        run: pnpm ui:test:e2e --grep "@config-editing"
+        run: pnpm ui:test:e2e --grep "@config-editing" --workers=1
 
       - name: Print docker compose logs
         if: always()
