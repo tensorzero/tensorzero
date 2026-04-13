@@ -255,7 +255,8 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "Think before responding. What is 34 * 57 + 21 / 3? Answer with just the number.".to_string(),
+            text: "Think before responding. What is 34 * 57 + 21 / 3? Answer with just the number."
+                .to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
