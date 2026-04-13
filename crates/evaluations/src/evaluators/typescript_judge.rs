@@ -115,14 +115,6 @@ mod imp {
     /// The `tensorzero-ts-types` bundles are generated at build time from the
     /// `ts-rs`-emitted `.ts` files under `crates/tensorzero-node/lib/bindings/`,
     /// so the declarations stay in sync with the Rust types automatically.
-    /// `declare const` is prepended so the generated `type ...` / `interface ...`
-    /// statements appear as ambient declarations to the typechecker. Bundles are
-    /// topologically sorted, which can cause duplicate declarations when two
-    /// root types share dependencies; wrapping each bundle in `declare global
-    /// { ... }` doesn't help, so we let the checker's implicit deduplication
-    /// handle the common case (identical declarations) — if that ever turns out
-    /// to conflict for a specific pair of bundles, we can split them across
-    /// separate input files to the checker.
     fn evaluator_ambient_declarations() -> String {
         let stdlib = build_code_execution_ambient_declarations(&[]);
         format!(
