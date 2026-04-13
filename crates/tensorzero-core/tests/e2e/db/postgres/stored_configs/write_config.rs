@@ -44,7 +44,6 @@ fn default_write_params(config: &UninitializedConfig) -> WriteStoredConfigParams
         creation_source: "ui",
         source_autopilot_session_id: None,
         extra_templates: EMPTY_TEMPLATES.get_or_init(HashMap::new),
-        path_prefix_to_strip: None,
     }
 }
 

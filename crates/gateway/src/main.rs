@@ -171,7 +171,6 @@ async fn load_config_from_path_glob(
 async fn store_config_in_database(
     uninitialized_config: tensorzero_core::config::UninitializedConfig,
     extra_templates: &std::collections::HashMap<String, String>,
-    path_prefix_to_strip: Option<std::path::PathBuf>,
 ) -> Result<(), Error> {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
         Error::new(ErrorDetails::AppState {
@@ -198,41 +197,11 @@ async fn store_config_in_database(
                 creation_source: "store-config-cli",
                 source_autopilot_session_id: None,
                 extra_templates,
-                path_prefix_to_strip,
             },
         )
         .await?;
 
     Ok(())
-}
-
-/// Computes the longest common ancestor directory of all provided paths.
-/// This is used to strip the local filesystem prefix from stored file paths
-/// so that absolute paths (e.g. `/Users/alice/project/config/...`) are not
-/// leaked into the database when using `--store-config`.
-fn compute_strip_prefix(paths: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
-    let dirs: Vec<std::path::PathBuf> = paths
-        .iter()
-        .filter_map(|p| p.parent().map(std::path::Path::to_path_buf))
-        .collect();
-    if dirs.is_empty() {
-        return None;
-    }
-    let components: Vec<Vec<std::path::Component<'_>>> =
-        dirs.iter().map(|d| d.components().collect()).collect();
-    let min_len = components.iter().map(Vec::len).min().unwrap_or(0);
-    let prefix_len = (0..min_len)
-        .take_while(|&i| components[1..].iter().all(|c| c[i] == components[0][i]))
-        .count();
-    if prefix_len == 0 {
-        return None;
-    }
-    let prefix: std::path::PathBuf = components[0][..prefix_len].iter().collect();
-    // Don't strip the filesystem root — that would be meaningless
-    if prefix == std::path::Path::new("/") || prefix.as_os_str().is_empty() {
-        return None;
-    }
-    Some(prefix)
 }
 
 #[expect(clippy::print_stdout)]
@@ -430,13 +399,11 @@ async fn run() -> Result<(), ExitCode> {
         print_configuration_info(Some(&glob));
 
         // Parse the glob into UninitializedConfig (before load/initialization).
-        // Collect real file paths from the resolved TOML table *before* consuming it so
-        // we can compute the LCA prefix to strip from stored paths.
+        // TOML path resolution already strips the shared filesystem prefix from
+        // template keys while retaining the absolute path separately for runtime use.
         let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
             .ok()
             .log_err_pretty("Failed to parse config files")?;
-        let all_file_paths = globbed.collect_real_file_paths();
-        let path_prefix_to_strip = compute_strip_prefix(&all_file_paths);
         let uninitialized_config =
             tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
                 .ok()
@@ -466,7 +433,7 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Config validation failed")?;
         let extra_templates = validated.extra_templates().clone();
 
-        store_config_in_database(uninitialized_config, &extra_templates, path_prefix_to_strip)
+        store_config_in_database(uninitialized_config, &extra_templates)
             .await
             .log_err_pretty("Failed to store configuration in the database")?;
         tracing::info!("Configuration stored in the database.");

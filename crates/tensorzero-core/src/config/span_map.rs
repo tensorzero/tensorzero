@@ -182,13 +182,14 @@ mod tests {
             resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_single_file(config_path))
                 .unwrap();
 
-        // After resolution, the remapped path should be the canonicalized path.
+        // After resolution, the template key should be stripped relative to the
+        // shared prefix.
         let schema_table = resolved["functions"]["my_function"]["system_schema"]
             .as_table()
             .unwrap();
         expect_that!(
             schema_table["__tensorzero_remapped_path"].as_str().unwrap(),
-            eq(temp_path.canonicalize().unwrap().to_str().unwrap())
+            eq(temp_path.file_name().unwrap().to_str().unwrap())
         );
         expect_that!(
             schema_table["__data"].as_str().unwrap(),

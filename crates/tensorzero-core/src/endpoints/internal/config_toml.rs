@@ -253,7 +253,6 @@ pub async fn apply_config_toml_handler(
             creation_source: "ui-config-editor",
             source_autopilot_session_id: None,
             extra_templates: &request.path_contents,
-            path_prefix_to_strip: None,
         },
     ))
     .await?;

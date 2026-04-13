@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::Path;
 
 use sqlx::{FromRow, Postgres, Transaction};
 use tensorzero_stored_config::{
@@ -46,33 +45,6 @@ use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use super::PostgresConnectionInfo;
 use super::file_writes::{CollectedFile, add_file, write_collected_files};
-
-/// Bundles the stored file version ID map together with an optional shared path
-/// prefix to strip. All convert functions accept a `&FileVersionContext` so they
-/// consistently look up version IDs and build `StoredFileRef`s with the same
-/// (possibly stripped) file path.
-///
-/// The `shared_path_prefix_to_strip` is only used when storing the initial set of files
-/// in the database. We don't rely on it during regular operations.
-pub(crate) struct FileVersionContext<'a> {
-    pub file_version_ids: &'a HashMap<String, Uuid>,
-    pub shared_path_prefix_to_strip: Option<&'a Path>,
-}
-
-impl FileVersionContext<'_> {
-    fn file_ref_for(&self, path: &ResolvedTomlPathData) -> Result<StoredFileRef, Error> {
-        let file_path = path.stripped_path_key(self.shared_path_prefix_to_strip);
-        let file_version_id = self
-            .file_version_ids
-            .get(&file_path)
-            .copied()
-            .ok_or_else(|| missing_file_error(&file_path))?;
-        Ok(StoredFileRef {
-            file_version_id,
-            file_path,
-        })
-    }
-}
 
 /// Parameters for the public, single-function write API
 /// (`PostgresConnectionInfo::write_function_config`).
@@ -163,7 +135,6 @@ pub(super) async fn write_function_config_in_tx(
         params.creation_source,
         params.source_autopilot_session_id,
         params.extra_templates,
-        None,
     )
     .await
 }
@@ -206,7 +177,6 @@ pub(crate) async fn write_function_config_in_tx_skipping_cas(
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
     extra_templates: &HashMap<String, String>,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<WriteFunctionConfigResult, Error> {
     write_function_config_in_tx_impl(
         tx,
@@ -216,12 +186,10 @@ pub(crate) async fn write_function_config_in_tx_skipping_cas(
         creation_source,
         source_autopilot_session_id,
         extra_templates,
-        shared_path_prefix_to_strip,
     )
     .await
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn write_function_config_in_tx_impl(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
@@ -230,7 +198,6 @@ async fn write_function_config_in_tx_impl(
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
     extra_templates: &HashMap<String, String>,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<WriteFunctionConfigResult, Error> {
     // Acquire an advisory lock on the function name to serialize concurrent writes,
     // including first writes where there is no existing row to lock via FOR UPDATE.
@@ -259,20 +226,14 @@ async fn write_function_config_in_tx_impl(
         extra_templates,
         creation_source,
         source_autopilot_session_id,
-        shared_path_prefix_to_strip,
     )
     .await?;
-
-    let ctx = FileVersionContext {
-        file_version_ids: &file_version_ids,
-        shared_path_prefix_to_strip,
-    };
 
     let variant_version_ids = write_variant_versions(
         tx,
         function_name,
         config,
-        &ctx,
+        &file_version_ids,
         creation_source,
         source_autopilot_session_id,
     )
@@ -282,7 +243,7 @@ async fn write_function_config_in_tx_impl(
         tx,
         function_name,
         config,
-        &ctx,
+        &file_version_ids,
         &variant_version_ids,
         creation_source,
         source_autopilot_session_id,
@@ -357,9 +318,8 @@ async fn write_file_versions(
     extra_templates: &HashMap<String, String>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<HashMap<String, Uuid>, Error> {
-    let mut templates = collect_files(config, shared_path_prefix_to_strip)?;
+    let mut templates = collect_files(config)?;
 
     // Merge extra templates. All prompts (directly or transitively included) must be stored
     // in the database for the config to be self-contained.
@@ -383,7 +343,7 @@ async fn write_variant_versions(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
     config: &UninitializedFunctionConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<HashMap<String, Uuid>, Error> {
@@ -391,7 +351,7 @@ async fn write_variant_versions(
     let mut variant_names: Vec<_> = variants.keys().cloned().collect();
     variant_names.sort();
 
-    let valid_file_ids: HashSet<Uuid> = ctx.file_version_ids.values().copied().collect();
+    let valid_file_ids: HashSet<Uuid> = file_version_ids.values().copied().collect();
 
     // Convert, validate, and serialize each variant, computing a content hash for dedup.
     struct PreparedVariant {
@@ -409,7 +369,7 @@ async fn write_variant_versions(
                     "Variant `{variant_name}` was missing while serializing function config. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
                 }))?;
-        let stored_config = convert_variant_info(variant_info, ctx)?;
+        let stored_config = convert_variant_info(variant_info, file_version_ids)?;
         validate_variant_version_config_refs(&stored_config, &valid_file_ids)?;
         let config_json = serde_json::to_value(&stored_config)
             .map_err(|e| serialization_error("Failed to serialize stored variant config", e))?;
@@ -495,14 +455,14 @@ async fn write_function_version(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
     config: &UninitializedFunctionConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
     variant_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
 ) -> Result<Uuid, Error> {
     let function_version_id = Uuid::now_v7();
-    let stored_config = convert_function_config(config, ctx, variant_version_ids)?;
-    let valid_file_ids: HashSet<Uuid> = ctx.file_version_ids.values().copied().collect();
+    let stored_config = convert_function_config(config, file_version_ids, variant_version_ids)?;
+    let valid_file_ids: HashSet<Uuid> = file_version_ids.values().copied().collect();
     let valid_variant_ids: HashSet<Uuid> = variant_version_ids.values().copied().collect();
     validate_function_config_refs(&stored_config, &valid_variant_ids, &valid_file_ids)?;
     let config_json = serde_json::to_value(&stored_config)
@@ -537,7 +497,6 @@ fn function_variants(
 
 fn collect_files(
     config: &UninitializedFunctionConfig,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<BTreeMap<String, CollectedFile>, Error> {
     let mut templates = BTreeMap::new();
     match config {
@@ -548,13 +507,12 @@ fn collect_files(
                 config.user_schema.as_ref(),
                 config.assistant_schema.as_ref(),
                 &config.schemas,
-                shared_path_prefix_to_strip,
             )?;
             for variant in config.variants.values() {
-                collect_variant_files(&mut templates, &variant.inner, shared_path_prefix_to_strip)?;
+                collect_variant_files(&mut templates, &variant.inner)?;
             }
             for evaluator in config.evaluators.values() {
-                collect_evaluator_files(&mut templates, evaluator, shared_path_prefix_to_strip)?;
+                collect_evaluator_files(&mut templates, evaluator)?;
             }
         }
         UninitializedFunctionConfig::Json(config) => {
@@ -564,16 +522,15 @@ fn collect_files(
                 config.user_schema.as_ref(),
                 config.assistant_schema.as_ref(),
                 &config.schemas,
-                shared_path_prefix_to_strip,
             )?;
             if let Some(output_schema) = &config.output_schema {
-                add_file(&mut templates, output_schema, shared_path_prefix_to_strip)?;
+                add_file(&mut templates, output_schema)?;
             }
             for variant in config.variants.values() {
-                collect_variant_files(&mut templates, &variant.inner, shared_path_prefix_to_strip)?;
+                collect_variant_files(&mut templates, &variant.inner)?;
             }
             for evaluator in config.evaluators.values() {
-                collect_evaluator_files(&mut templates, evaluator, shared_path_prefix_to_strip)?;
+                collect_evaluator_files(&mut templates, evaluator)?;
             }
         }
     }
@@ -587,19 +544,18 @@ fn collect_function_common_files(
     user_schema: Option<&ResolvedTomlPathData>,
     assistant_schema: Option<&ResolvedTomlPathData>,
     schemas: &UninitializedSchemas,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<(), Error> {
     if let Some(system_schema) = system_schema {
-        add_file(templates, system_schema, shared_path_prefix_to_strip)?;
+        add_file(templates, system_schema)?;
     }
     if let Some(user_schema) = user_schema {
-        add_file(templates, user_schema, shared_path_prefix_to_strip)?;
+        add_file(templates, user_schema)?;
     }
     if let Some(assistant_schema) = assistant_schema {
-        add_file(templates, assistant_schema, shared_path_prefix_to_strip)?;
+        add_file(templates, assistant_schema)?;
     }
     for (_, schema) in schemas.iter() {
-        add_file(templates, schema, shared_path_prefix_to_strip)?;
+        add_file(templates, schema)?;
     }
     Ok(())
 }
@@ -607,30 +563,25 @@ fn collect_function_common_files(
 fn collect_variant_files(
     templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedVariantConfig,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<(), Error> {
     match config {
         UninitializedVariantConfig::ChatCompletion(config) => {
-            collect_chat_completion_files(templates, config, shared_path_prefix_to_strip)
+            collect_chat_completion_files(templates, config)
         }
-        UninitializedVariantConfig::BestOfNSampling(config) => collect_chat_completion_files(
-            templates,
-            &config.evaluator.inner,
-            shared_path_prefix_to_strip,
-        ),
-        UninitializedVariantConfig::MixtureOfN(config) => collect_chat_completion_files(
-            templates,
-            &config.fuser.inner,
-            shared_path_prefix_to_strip,
-        ),
+        UninitializedVariantConfig::BestOfNSampling(config) => {
+            collect_chat_completion_files(templates, &config.evaluator.inner)
+        }
+        UninitializedVariantConfig::MixtureOfN(config) => {
+            collect_chat_completion_files(templates, &config.fuser.inner)
+        }
         UninitializedVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                add_file(templates, system_instructions, shared_path_prefix_to_strip)?;
+                add_file(templates, system_instructions)?;
             }
             Ok(())
         }
         UninitializedVariantConfig::ChainOfThought(config) => {
-            collect_chat_completion_files(templates, &config.inner, shared_path_prefix_to_strip)
+            collect_chat_completion_files(templates, &config.inner)
         }
     }
 }
@@ -638,16 +589,15 @@ fn collect_variant_files(
 fn collect_chat_completion_files(
     templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedChatCompletionConfig,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<(), Error> {
     if let Some(system_template) = &config.system_template {
-        add_file(templates, system_template, shared_path_prefix_to_strip)?;
+        add_file(templates, system_template)?;
     }
     if let Some(user_template) = &config.user_template {
-        add_file(templates, user_template, shared_path_prefix_to_strip)?;
+        add_file(templates, user_template)?;
     }
     if let Some(assistant_template) = &config.assistant_template {
-        add_file(templates, assistant_template, shared_path_prefix_to_strip)?;
+        add_file(templates, assistant_template)?;
     }
     if let Some(UninitializedInputWrappers {
         user,
@@ -656,17 +606,17 @@ fn collect_chat_completion_files(
     }) = &config.input_wrappers
     {
         if let Some(user) = user {
-            add_file(templates, user, shared_path_prefix_to_strip)?;
+            add_file(templates, user)?;
         }
         if let Some(assistant) = assistant {
-            add_file(templates, assistant, shared_path_prefix_to_strip)?;
+            add_file(templates, assistant)?;
         }
         if let Some(system) = system {
-            add_file(templates, system, shared_path_prefix_to_strip)?;
+            add_file(templates, system)?;
         }
     }
     for template in config.templates.inner.values() {
-        add_file(templates, &template.path, shared_path_prefix_to_strip)?;
+        add_file(templates, &template.path)?;
     }
     Ok(())
 }
@@ -674,11 +624,10 @@ fn collect_chat_completion_files(
 fn collect_evaluator_files(
     templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedEvaluatorConfig,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<(), Error> {
     if let UninitializedEvaluatorConfig::LLMJudge(config) = config {
         for variant in config.variants.values() {
-            collect_llm_judge_files(templates, &variant.inner, shared_path_prefix_to_strip)?;
+            collect_llm_judge_files(templates, &variant.inner)?;
         }
     }
     Ok(())
@@ -687,41 +636,32 @@ fn collect_evaluator_files(
 fn collect_llm_judge_files(
     templates: &mut BTreeMap<String, CollectedFile>,
     config: &UninitializedLLMJudgeVariantConfig,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<(), Error> {
     match config {
-        UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => add_file(
-            templates,
-            &config.system_instructions,
-            shared_path_prefix_to_strip,
-        ),
-        UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => add_file(
-            templates,
-            &config.evaluator.system_instructions,
-            shared_path_prefix_to_strip,
-        ),
-        UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => add_file(
-            templates,
-            &config.fuser.system_instructions,
-            shared_path_prefix_to_strip,
-        ),
+        UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
+            add_file(templates, &config.system_instructions)
+        }
+        UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
+            add_file(templates, &config.evaluator.system_instructions)
+        }
+        UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
+            add_file(templates, &config.fuser.system_instructions)
+        }
         UninitializedLLMJudgeVariantConfig::Dicl(config) => {
             if let Some(system_instructions) = &config.system_instructions {
-                add_file(templates, system_instructions, shared_path_prefix_to_strip)?;
+                add_file(templates, system_instructions)?;
             }
             Ok(())
         }
-        UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => add_file(
-            templates,
-            &config.inner.system_instructions,
-            shared_path_prefix_to_strip,
-        ),
+        UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
+            add_file(templates, &config.inner.system_instructions)
+        }
     }
 }
 
 fn convert_function_config(
     config: &UninitializedFunctionConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
     variant_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredFunctionConfig, Error> {
     match config {
@@ -731,19 +671,22 @@ fn convert_function_config(
                 system_schema: config
                     .system_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 user_schema: config
                     .user_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 assistant_schema: config
                     .assistant_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
-                schemas: Some(convert_named_file_refs(config.schemas.iter(), ctx)?),
+                schemas: Some(convert_named_file_refs(
+                    config.schemas.iter(),
+                    file_version_ids,
+                )?),
                 tools: Some(config.tools.clone()),
                 tool_choice: Some(StoredToolChoice::from(&config.tool_choice)),
                 parallel_tool_calls: config.parallel_tool_calls,
@@ -752,7 +695,7 @@ fn convert_function_config(
                     .experimentation
                     .as_ref()
                     .map(StoredExperimentationConfigWithNamespaces::from),
-                evaluators: Some(convert_evaluators(&config.evaluators, ctx)?),
+                evaluators: Some(convert_evaluators(&config.evaluators, file_version_ids)?),
             }))
         }
         UninitializedFunctionConfig::Json(config) => {
@@ -761,30 +704,33 @@ fn convert_function_config(
                 system_schema: config
                     .system_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 user_schema: config
                     .user_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 assistant_schema: config
                     .assistant_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
-                schemas: Some(convert_named_file_refs(config.schemas.iter(), ctx)?),
+                schemas: Some(convert_named_file_refs(
+                    config.schemas.iter(),
+                    file_version_ids,
+                )?),
                 output_schema: config
                     .output_schema
                     .as_ref()
-                    .map(|path| ctx.file_ref_for(path))
+                    .map(|path| file_ref_for(path, file_version_ids))
                     .transpose()?,
                 description: config.description.clone(),
                 experimentation: config
                     .experimentation
                     .as_ref()
                     .map(StoredExperimentationConfigWithNamespaces::from),
-                evaluators: Some(convert_evaluators(&config.evaluators, ctx)?),
+                evaluators: Some(convert_evaluators(&config.evaluators, file_version_ids)?),
             }))
         }
     }
@@ -815,31 +761,52 @@ fn convert_variant_refs(
 
 fn convert_named_file_refs<'a>(
     entries: impl Iterator<Item = (&'a String, &'a ResolvedTomlPathData)>,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<BTreeMap<String, StoredFileRef>, Error> {
     let mut refs = BTreeMap::new();
     for (name, path) in entries {
-        refs.insert(name.clone(), ctx.file_ref_for(path)?);
+        refs.insert(name.clone(), file_ref_for(path, file_version_ids)?);
     }
     Ok(refs)
+}
+
+fn file_ref_for(
+    path: &ResolvedTomlPathData,
+    file_version_ids: &HashMap<String, Uuid>,
+) -> Result<StoredFileRef, Error> {
+    let file_path = path.get_template_key();
+    let file_version_id = file_version_ids
+        .get(&file_path)
+        .copied()
+        .ok_or_else(|| missing_file_error(&file_path))?;
+    Ok(StoredFileRef {
+        file_version_id,
+        file_path,
+    })
 }
 
 #[expect(deprecated)]
 fn convert_variant_info(
     variant_info: &UninitializedVariantInfo,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredVariantVersionConfig, Error> {
     Ok(StoredVariantVersionConfig {
         variant: match &variant_info.inner {
             UninitializedVariantConfig::ChatCompletion(config) => {
-                StoredVariantConfig::ChatCompletion(convert_chat_completion_variant(config, ctx)?)
+                StoredVariantConfig::ChatCompletion(convert_chat_completion_variant(
+                    config,
+                    file_version_ids,
+                )?)
             }
             UninitializedVariantConfig::BestOfNSampling(config) => {
                 StoredVariantConfig::BestOfNSampling(StoredBestOfNVariantConfig {
                     weight: config.weight,
                     timeout_s: config.timeout_s,
                     candidates: Some(config.candidates.clone()),
-                    evaluator: convert_chat_completion_variant(&config.evaluator.inner, ctx)?,
+                    evaluator: convert_chat_completion_variant(
+                        &config.evaluator.inner,
+                        file_version_ids,
+                    )?,
                 })
             }
             UninitializedVariantConfig::MixtureOfN(config) => {
@@ -847,16 +814,16 @@ fn convert_variant_info(
                     weight: config.weight,
                     timeout_s: config.timeout_s,
                     candidates: Some(config.candidates.clone()),
-                    fuser: convert_chat_completion_variant(&config.fuser.inner, ctx)?,
+                    fuser: convert_chat_completion_variant(&config.fuser.inner, file_version_ids)?,
                 })
             }
             UninitializedVariantConfig::Dicl(config) => {
-                StoredVariantConfig::Dicl(convert_dicl_variant(config, ctx)?)
+                StoredVariantConfig::Dicl(convert_dicl_variant(config, file_version_ids)?)
             }
             UninitializedVariantConfig::ChainOfThought(config) => {
                 StoredVariantConfig::ChainOfThought(convert_chat_completion_variant(
                     &config.inner,
-                    ctx,
+                    file_version_ids,
                 )?)
             }
         },
@@ -873,7 +840,7 @@ fn convert_variant_info(
 
 fn convert_chat_completion_variant(
     config: &UninitializedChatCompletionConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredChatCompletionVariantConfig, Error> {
     Ok(StoredChatCompletionVariantConfig {
         weight: config.weight,
@@ -881,22 +848,22 @@ fn convert_chat_completion_variant(
         system_template: config
             .system_template
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         user_template: config
             .user_template
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         assistant_template: config
             .assistant_template
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         input_wrappers: config
             .input_wrappers
             .as_ref()
-            .map(|wrappers| convert_input_wrappers(wrappers, ctx))
+            .map(|wrappers| convert_input_wrappers(wrappers, file_version_ids))
             .transpose()?,
         templates: Some(
             config
@@ -904,7 +871,7 @@ fn convert_chat_completion_variant(
                 .inner
                 .iter()
                 .map(|(name, template)| {
-                    ctx.file_ref_for(&template.path)
+                    file_ref_for(&template.path, file_version_ids)
                         .map(|template_ref| (name.clone(), template_ref))
                 })
                 .collect::<Result<BTreeMap<_, _>, Error>>()?,
@@ -932,30 +899,30 @@ fn convert_chat_completion_variant(
 
 fn convert_input_wrappers(
     wrappers: &crate::variant::chat_completion::UninitializedInputWrappers,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredInputWrappers, Error> {
     Ok(StoredInputWrappers {
         user: wrappers
             .user
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         assistant: wrappers
             .assistant
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         system: wrappers
             .system
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
     })
 }
 
 fn convert_dicl_variant(
     config: &UninitializedDiclConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredDiclVariantConfig, Error> {
     Ok(StoredDiclVariantConfig {
         weight: config.weight,
@@ -965,7 +932,7 @@ fn convert_dicl_variant(
         system_instructions: config
             .system_instructions
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         temperature: config.temperature,
         top_p: config.top_p,
@@ -991,7 +958,7 @@ fn convert_dicl_variant(
 #[expect(deprecated)]
 pub(crate) fn convert_evaluators(
     evaluators: &HashMap<String, UninitializedEvaluatorConfig>,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<BTreeMap<String, StoredEvaluatorConfig>, Error> {
     let mut stored = BTreeMap::new();
     for (name, evaluator) in evaluators {
@@ -1003,9 +970,9 @@ pub(crate) fn convert_evaluators(
                         cutoff: config.cutoff,
                     })
                 }
-                UninitializedEvaluatorConfig::LLMJudge(config) => {
-                    StoredEvaluatorConfig::LLMJudge(convert_llm_judge_config(config, ctx)?)
-                }
+                UninitializedEvaluatorConfig::LLMJudge(config) => StoredEvaluatorConfig::LLMJudge(
+                    convert_llm_judge_config(config, file_version_ids)?,
+                ),
                 UninitializedEvaluatorConfig::ToolUse(config) => {
                     StoredEvaluatorConfig::ToolUse(StoredToolUseConfig::from(config))
                 }
@@ -1023,11 +990,14 @@ pub(crate) fn convert_evaluators(
 
 fn convert_llm_judge_config(
     config: &UninitializedLLMJudgeConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeConfig, Error> {
     let mut variants = BTreeMap::new();
     for (name, variant) in &config.variants {
-        variants.insert(name.clone(), convert_llm_judge_variant_info(variant, ctx)?);
+        variants.insert(
+            name.clone(),
+            convert_llm_judge_variant_info(variant, file_version_ids)?,
+        );
     }
 
     Ok(StoredLLMJudgeConfig {
@@ -1052,32 +1022,36 @@ fn convert_llm_judge_config(
 
 fn convert_llm_judge_variant_info(
     config: &UninitializedLLMJudgeVariantInfo,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeVariantInfo, Error> {
     Ok(StoredLLMJudgeVariantInfo {
         variant: match &config.inner {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
                 StoredLLMJudgeVariantConfig::ChatCompletion(
-                    convert_llm_judge_chat_completion_variant(config, ctx)?,
+                    convert_llm_judge_chat_completion_variant(config, file_version_ids)?,
                 )
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
                 StoredLLMJudgeVariantConfig::BestOfNSampling(convert_llm_judge_best_of_n_variant(
-                    config, ctx,
+                    config,
+                    file_version_ids,
                 )?)
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
                 StoredLLMJudgeVariantConfig::MixtureOfNSampling(
-                    convert_llm_judge_mixture_of_n_variant(config, ctx)?,
+                    convert_llm_judge_mixture_of_n_variant(config, file_version_ids)?,
                 )
             }
-            UninitializedLLMJudgeVariantConfig::Dicl(config) => {
-                StoredLLMJudgeVariantConfig::Dicl(convert_llm_judge_dicl_variant(config, ctx)?)
-            }
+            UninitializedLLMJudgeVariantConfig::Dicl(config) => StoredLLMJudgeVariantConfig::Dicl(
+                convert_llm_judge_dicl_variant(config, file_version_ids)?,
+            ),
             UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
                 StoredLLMJudgeVariantConfig::ChainOfThought(
                     StoredLLMJudgeChainOfThoughtVariantConfig {
-                        inner: convert_llm_judge_chat_completion_variant(&config.inner, ctx)?,
+                        inner: convert_llm_judge_chat_completion_variant(
+                            &config.inner,
+                            file_version_ids,
+                        )?,
                     },
                 )
             }
@@ -1088,12 +1062,12 @@ fn convert_llm_judge_variant_info(
 
 fn convert_llm_judge_chat_completion_variant(
     config: &UninitializedLLMJudgeChatCompletionVariantConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeChatCompletionVariantConfig, Error> {
     Ok(StoredLLMJudgeChatCompletionVariantConfig {
         active: config.active,
         model: config.model.clone(),
-        system_instructions: ctx.file_ref_for(&config.system_instructions)?,
+        system_instructions: file_ref_for(&config.system_instructions, file_version_ids)?,
         temperature: config.temperature,
         top_p: config.top_p,
         max_tokens: config.max_tokens,
@@ -1118,32 +1092,32 @@ fn convert_llm_judge_chat_completion_variant(
 #[expect(deprecated)]
 fn convert_llm_judge_best_of_n_variant(
     config: &UninitializedLLMJudgeBestOfNVariantConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeBestOfNVariantConfig, Error> {
     Ok(StoredLLMJudgeBestOfNVariantConfig {
         active: config.active,
         timeout_s: config.timeout_s,
         candidates: Some(config.candidates.clone()),
-        evaluator: convert_llm_judge_chat_completion_variant(&config.evaluator, ctx)?,
+        evaluator: convert_llm_judge_chat_completion_variant(&config.evaluator, file_version_ids)?,
     })
 }
 
 #[expect(deprecated)]
 fn convert_llm_judge_mixture_of_n_variant(
     config: &UninitializedLLMJudgeMixtureOfNVariantConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeMixtureOfNVariantConfig, Error> {
     Ok(StoredLLMJudgeMixtureOfNVariantConfig {
         active: config.active,
         timeout_s: config.timeout_s,
         candidates: Some(config.candidates.clone()),
-        fuser: convert_llm_judge_chat_completion_variant(&config.fuser, ctx)?,
+        fuser: convert_llm_judge_chat_completion_variant(&config.fuser, file_version_ids)?,
     })
 }
 
 fn convert_llm_judge_dicl_variant(
     config: &UninitializedLLMJudgeDiclVariantConfig,
-    ctx: &FileVersionContext<'_>,
+    file_version_ids: &HashMap<String, Uuid>,
 ) -> Result<StoredLLMJudgeDiclVariantConfig, Error> {
     Ok(StoredLLMJudgeDiclVariantConfig {
         active: config.active,
@@ -1153,7 +1127,7 @@ fn convert_llm_judge_dicl_variant(
         system_instructions: config
             .system_instructions
             .as_ref()
-            .map(|path| ctx.file_ref_for(path))
+            .map(|path| file_ref_for(path, file_version_ids))
             .transpose()?,
         temperature: config.temperature,
         top_p: config.top_p,

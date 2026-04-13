@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
 
 use sqlx::{Postgres, QueryBuilder, Transaction};
 use tensorzero_stored_config::{
@@ -36,10 +35,6 @@ pub struct WriteStoredConfigParams<'a> {
     /// MiniJinja `{% include %}` — must be stored in the database for the config to be
     /// self-contained.
     pub extra_templates: &'a HashMap<String, String>,
-    /// When set, this prefix is stripped from the front of every stored file path so that
-    /// absolute local filesystem paths are not persisted in the database. Only used by the
-    /// `--store-config` CLI path; the UI editor path always passes `None`.
-    pub path_prefix_to_strip: Option<PathBuf>,
 }
 
 impl PostgresConnectionInfo {
@@ -98,9 +93,7 @@ pub(crate) async fn write_stored_config_in_tx(
         creation_source,
         source_autopilot_session_id,
         extra_templates: caller_extra_templates,
-        path_prefix_to_strip,
     } = params;
-    let shared_path_prefix_to_strip: Option<&Path> = path_prefix_to_strip.as_deref();
 
     // Merge the caller-provided templates with the ones discovered during
     // validation (e.g. via MiniJinja `{% include %}` from
@@ -278,11 +271,9 @@ pub(crate) async fn write_stored_config_in_tx(
             std::iter::once(&tool_config.parameters),
             creation_source,
             source_autopilot_session_id,
-            shared_path_prefix_to_strip,
         )
         .await?;
-        let stored_tool =
-            tool_config.convert_for_db(&file_version_ids, shared_path_prefix_to_strip)?;
+        let stored_tool = tool_config.convert_for_db(&file_version_ids)?;
         let config_json = serde_json::to_value(&stored_tool).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize tool `{name}` for DB: {e}"),
@@ -309,11 +300,9 @@ pub(crate) async fn write_stored_config_in_tx(
             eval_config.files_for_db().into_iter(),
             creation_source,
             source_autopilot_session_id,
-            shared_path_prefix_to_strip,
         )
         .await?;
-        let stored_eval =
-            eval_config.to_stored_for_db(&file_version_ids, shared_path_prefix_to_strip)?;
+        let stored_eval = eval_config.to_stored_for_db(&file_version_ids)?;
         let config_json = serde_json::to_value(&stored_eval).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize evaluation `{name}` for DB: {e}"),
@@ -352,7 +341,6 @@ pub(crate) async fn write_stored_config_in_tx(
             creation_source,
             source_autopilot_session_id,
             extra_templates,
-            shared_path_prefix_to_strip,
         )
         .await?;
         functions_new_names.insert(function_name.clone());
@@ -621,11 +609,10 @@ async fn write_files_in_tx<'a>(
     templates: impl Iterator<Item = &'a ResolvedTomlPathData>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
-    shared_path_prefix_to_strip: Option<&Path>,
 ) -> Result<HashMap<String, Uuid>, Error> {
     let mut collected: BTreeMap<String, CollectedFile> = BTreeMap::new();
     for template in templates {
-        add_file(&mut collected, template, shared_path_prefix_to_strip)?;
+        add_file(&mut collected, template)?;
     }
     write_collected_files(tx, &collected, creation_source, source_autopilot_session_id).await
 }

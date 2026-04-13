@@ -33,6 +33,8 @@ pub struct ResolvedTomlPathData {
 /// Wrapper type for directory paths (as opposed to file paths).
 /// Currently only used for `gateway.template_filesystem_access.base_path`.
 /// Unlike `ResolvedTomlPathData`, this doesn't eagerly load file contents since directories don't have contents.
+/// This path is always stored as an absolute filesystem path because runtime
+/// code needs to read from that directory after config loading.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", ts(export))]
@@ -55,22 +57,8 @@ impl ResolvedTomlPathData {
         self.__tensorzero_remapped_path.display().to_string()
     }
 
-    /// Returns the template key with `shared_path_prefix_to_strip` stripped from the front.
-    /// If `None` or the path does not start with the prefix, returns the full key unchanged.
-    pub fn stripped_path_key(&self, shared_path_prefix_to_strip: Option<&Path>) -> String {
-        let key = self.get_template_key();
-        let Some(prefix) = shared_path_prefix_to_strip else {
-            return key;
-        };
-        Path::new(&key)
-            .strip_prefix(prefix)
-            .map(|p| p.to_string_lossy().into_owned())
-            .unwrap_or(key)
-    }
-
     /// Returns true if this is a real filesystem path (not a synthetic "fake path")
     pub fn is_real_path(&self) -> bool {
-        // Fake paths use a special prefix like "tensorzero::llm_judge"
         !self.get_template_key().starts_with("tensorzero::")
     }
 
@@ -271,6 +259,79 @@ impl From<Error> for VisitorError {
 
 struct ResolveRelativePathsVisitor<'a> {
     span_map: &'a SpanMap,
+    shared_path_prefix_to_strip: Option<&'a Path>,
+}
+
+struct CollectResolvedFilePathsVisitor<'a> {
+    span_map: &'a SpanMap,
+    resolved_file_paths: Vec<PathBuf>,
+}
+
+fn resolve_target_path(
+    span_map: &SpanMap,
+    span: std::ops::Range<usize>,
+    target_string: &str,
+    error_path: &[String],
+) -> Result<PathBuf, Error> {
+    let base_path = span_map
+        .lookup_range(span)
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`{}`: Failed to determine original TOML source file",
+                    error_path.join(".")
+                ),
+            })
+        })?
+        .base_path();
+
+    let target_path = Path::new(target_string);
+    base_path.join(target_path).canonicalize().map_err(|e| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "`{}`: Failed to resolve path `{}` (base: `{}`): {e}",
+                error_path.join("."),
+                target_path.display(),
+                base_path.display(),
+            ),
+        })
+    })
+}
+
+fn path_to_utf8_string(path: &Path, error_path: &[String]) -> Result<String, Error> {
+    path.to_str().map(ToOwned::to_owned).ok_or_else(|| {
+        Error::new(ErrorDetails::Config {
+            message: format!(
+                "`{}`: Path was not valid utf-8: {path:?}",
+                error_path.join(".")
+            ),
+        })
+    })
+}
+
+fn compute_shared_path_prefix(paths: &[PathBuf]) -> Option<PathBuf> {
+    let mut dirs = paths.iter().filter_map(|path| path.parent());
+    let first = dirs.next()?;
+    let mut components = first.components().collect::<Vec<_>>();
+
+    for dir in dirs {
+        let dir_components = dir.components().collect::<Vec<_>>();
+        let shared_len = components
+            .iter()
+            .zip(dir_components.iter())
+            .take_while(|(left, right)| left == right)
+            .count();
+        components.truncate(shared_len);
+        if components.is_empty() {
+            return None;
+        }
+    }
+
+    let prefix: PathBuf = components.iter().collect();
+    if prefix == Path::new("/") || prefix.as_os_str().is_empty() {
+        return None;
+    }
+    Some(prefix)
 }
 
 impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
@@ -295,46 +356,18 @@ impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
             .into());
         };
 
-        let base_path = self
-            .span_map
-            .lookup_range(span)
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`{}`: Failed to determine original TOML source file",
-                        error_path.join(".")
-                    ),
-                })
-            })?
-            .base_path();
-
-        let target_path = Path::new(&**target_string);
-        let resolved_path = base_path.join(target_path).canonicalize().map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "`{}`: Failed to resolve path `{}` (base: `{}`): {e}",
-                    error_path.join("."),
-                    target_path.display(),
-                    base_path.display(),
-                ),
-            })
-        })?;
-        let resolved_path_str = resolved_path
-            .to_str()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`{}`: Path was not valid utf-8: base_path={base_path:?}, target_path={target_path:?}",
-                        error_path.join(".")
-                    ),
-                })
-            })?
-            .to_string();
+        let resolved_path =
+            resolve_target_path(self.span_map, span, target_string.as_ref(), error_path)?;
+        let remapped_path = self
+            .shared_path_prefix_to_strip
+            .and_then(|prefix| resolved_path.strip_prefix(prefix).ok())
+            .unwrap_or(resolved_path.as_path());
+        let remapped_path_str = path_to_utf8_string(remapped_path, error_path)?;
 
         let mut inner_table = DeTable::new();
         inner_table.insert(
             Spanned::new(0..0, Cow::Owned(REMAPPED_PATH_KEY.to_string())),
-            Spanned::new(0..0, DeValue::String(Cow::Owned(resolved_path_str.clone()))),
+            Spanned::new(0..0, DeValue::String(Cow::Owned(remapped_path_str))),
         );
 
         if resolved_path.is_dir() {
@@ -370,6 +403,49 @@ impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
     }
 }
 
+impl tensorzero_config_paths::TomlPathVisitor<Spanned<DeValue<'_>>>
+    for CollectResolvedFilePathsVisitor<'_>
+{
+    type Error = VisitorError;
+
+    fn visit_leaf(
+        &mut self,
+        value: &mut Spanned<DeValue<'_>>,
+        error_path: &[String],
+    ) -> Result<(), Self::Error> {
+        let span = value.span();
+        let DeValue::String(target_string) = value.get_ref() else {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`{}`: Expected a string, found {}",
+                    error_path.join("."),
+                    value.get_ref().type_str()
+                ),
+            })
+            .into());
+        };
+
+        let resolved_path =
+            resolve_target_path(self.span_map, span, target_string.as_ref(), error_path)?;
+        if resolved_path.is_dir() {
+            if !is_directory_path(error_path) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`{}`: Expected a file path, but '{}' is a directory. Please provide a path to a file.",
+                        error_path.join("."),
+                        resolved_path.display()
+                    ),
+                })
+                .into());
+            }
+            return Ok(());
+        }
+
+        self.resolved_file_paths.push(resolved_path);
+        Ok(())
+    }
+}
+
 /// Visits all of the entries declared in `TARGET_PATH_COMPONENTS`, and resolves relative paths into
 /// absolute paths. The original entries held string paths written by the user
 /// (e.g. `functions.my_function.system_schema = "some/relative/schema_path.json"`),
@@ -385,7 +461,17 @@ pub(super) fn resolve_toml_relative_paths(
     span_map: &SpanMap,
 ) -> Result<Table, Error> {
     let mut root = Spanned::new(0..0, DeValue::Table(table));
-    let mut visitor = ResolveRelativePathsVisitor { span_map };
+    let mut collector = CollectResolvedFilePathsVisitor {
+        span_map,
+        resolved_file_paths: Vec::new(),
+    };
+    walk_target_paths(&mut root, &mut collector).map_err(|VisitorError(error)| error)?;
+
+    let shared_path_prefix_to_strip = compute_shared_path_prefix(&collector.resolved_file_paths);
+    let mut visitor = ResolveRelativePathsVisitor {
+        span_map,
+        shared_path_prefix_to_strip: shared_path_prefix_to_strip.as_deref(),
+    };
     walk_target_paths(&mut root, &mut visitor).map_err(|VisitorError(error)| error)?;
     let value = de_value_to_value(root.into_inner())?;
     match value {
