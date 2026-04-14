@@ -6,10 +6,8 @@ import type { AutoEvalLabeledExample } from "./AutoEvalLabeledExample";
  * Includes the full context blocks so the UI can render everything
  * without looking up the original labeling event.
  */
-export type EventPayloadAutoEvalExampleLabelingAnswers = {
-  examples: Array<AutoEvalLabeledExample>;
-  /**
-   * The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
-   */
-  auto_eval_example_labeling_event_id: string;
-};
+export type EventPayloadAutoEvalExampleLabelingAnswers = { examples: Array<AutoEvalLabeledExample>, 
+/**
+ * The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
+ */
+auto_eval_example_labeling_event_id: string, };

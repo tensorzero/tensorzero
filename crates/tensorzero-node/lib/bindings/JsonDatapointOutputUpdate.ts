@@ -5,12 +5,11 @@
  *
  * We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
  */
-export type JsonDatapointOutputUpdate = {
-  /**
-   * The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
-   *
-   * This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
-   * invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
-   */
-  raw: string | null;
-};
+export type JsonDatapointOutputUpdate = { 
+/**
+ * The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+ *
+ * This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
+ * invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
+ */
+raw: string | null, };

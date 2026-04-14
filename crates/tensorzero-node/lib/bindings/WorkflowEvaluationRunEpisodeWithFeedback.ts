@@ -3,18 +3,12 @@
 /**
  * Information about a single workflow evaluation run episode with feedback.
  */
-export type WorkflowEvaluationRunEpisodeWithFeedback = {
-  episode_id: string;
-  timestamp: string;
-  run_id: string;
-  tags: { [key in string]: string };
-  task_name?: string;
-  /**
-   * The feedback metric names, sorted alphabetically.
-   */
-  feedback_metric_names: Array<string>;
-  /**
-   * The feedback values, corresponding to the metric names.
-   */
-  feedback_values: Array<string>;
-};
+export type WorkflowEvaluationRunEpisodeWithFeedback = { episode_id: string, timestamp: string, run_id: string, tags: { [key in string]: string }, task_name?: string, 
+/**
+ * The feedback metric names, sorted alphabetically.
+ */
+feedback_metric_names: Array<string>, 
+/**
+ * The feedback values, corresponding to the metric names.
+ */
+feedback_values: Array<string>, };

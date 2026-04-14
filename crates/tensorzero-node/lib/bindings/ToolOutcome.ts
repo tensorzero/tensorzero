@@ -2,15 +2,8 @@
 import type { AutopilotToolResult } from "./AutopilotToolResult";
 import type { ToolFailure } from "./ToolFailure";
 
-export type ToolOutcome =
-  | ({ type: "success" } & AutopilotToolResult)
-  | { type: "rejected"; reason: string }
-  | {
-      type: "failure";
-      /**
-       * Structured error data from the tool.
-       */
-      error: ToolFailure;
-    }
-  | { type: "missing" }
-  | { type: "unknown" };
+export type ToolOutcome = { "type": "success" } & AutopilotToolResult | { "type": "rejected", reason: string, } | { "type": "failure", 
+/**
+ * Structured error data from the tool.
+ */
+error: ToolFailure, } | { "type": "missing" } | { "type": "unknown" };

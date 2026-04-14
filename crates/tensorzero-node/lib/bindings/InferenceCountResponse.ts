@@ -4,13 +4,12 @@ import type { InferenceCountByVariant } from "./InferenceCountByVariant";
 /**
  * Response containing inference count
  */
-export type InferenceCountResponse = {
-  /**
-   * The count of inferences for the function (and optionally variant)
-   */
-  inference_count: bigint;
-  /**
-   * Counts grouped by variant (only present when group_by=variant)
-   */
-  count_by_variant?: Array<InferenceCountByVariant>;
-};
+export type InferenceCountResponse = { 
+/**
+ * The count of inferences for the function (and optionally variant)
+ */
+inference_count: bigint, 
+/**
+ * Counts grouped by variant (only present when group_by=variant)
+ */
+count_by_variant?: Array<InferenceCountByVariant>, };

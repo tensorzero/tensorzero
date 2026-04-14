@@ -7,8 +7,4 @@ import type { Unknown } from "./Unknown";
 /**
  * Defines the types of content block that can come from a `chat` function
  */
-export type ContentBlockChatOutput =
-  | ({ type: "text" } & Text)
-  | ({ type: "tool_call" } & InferenceResponseToolCall)
-  | ({ type: "thought" } & Thought)
-  | ({ type: "unknown" } & Unknown);
+export type ContentBlockChatOutput = { "type": "text" } & Text | { "type": "tool_call" } & InferenceResponseToolCall | { "type": "thought" } & Thought | { "type": "unknown" } & Unknown;

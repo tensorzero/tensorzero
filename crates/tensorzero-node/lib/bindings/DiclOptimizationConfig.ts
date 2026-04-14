@@ -4,14 +4,4 @@
  * Initialized DICL optimization configuration (per-job settings only).
  * Credentials come from `provider_types.openai.defaults` in the gateway configuration.
  */
-export type DiclOptimizationConfig = {
-  embedding_model: string;
-  variant_name: string;
-  function_name: string;
-  dimensions: number | null;
-  batch_size: number;
-  max_concurrency: number;
-  k: number;
-  model: string;
-  append_to_existing_variants: boolean;
-};
+export type DiclOptimizationConfig = { embedding_model: string, variant_name: string, function_name: string, dimensions: number | null, batch_size: number, max_concurrency: number, k: number, model: string, append_to_existing_variants: boolean, };

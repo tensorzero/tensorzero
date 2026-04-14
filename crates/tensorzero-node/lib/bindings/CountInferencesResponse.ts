@@ -3,9 +3,8 @@
 /**
  * Response containing the count of matching inferences.
  */
-export type CountInferencesResponse = {
-  /**
-   * The count of inferences matching the query parameters.
-   */
-  count: bigint;
-};
+export type CountInferencesResponse = { 
+/**
+ * The count of inferences matching the query parameters.
+ */
+count: bigint, };

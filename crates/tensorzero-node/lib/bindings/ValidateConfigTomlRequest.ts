@@ -3,13 +3,12 @@
 /**
  * Request body for validating editable config TOML.
  */
-export type ValidateConfigTomlRequest = {
-  /**
-   * Human-readable TOML config with path strings.
-   */
-  toml: string;
-  /**
-   * File-backed content referenced by the TOML, keyed by the path string in the TOML body.
-   */
-  path_contents: { [key in string]: string };
-};
+export type ValidateConfigTomlRequest = { 
+/**
+ * Human-readable TOML config with path strings.
+ */
+toml: string, 
+/**
+ * File-backed content referenced by the TOML, keyed by the path string in the TOML body.
+ */
+path_contents: { [key in string]: string }, };

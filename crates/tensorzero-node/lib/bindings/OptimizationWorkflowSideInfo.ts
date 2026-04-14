@@ -3,13 +3,12 @@
 /**
  * Side info for optimization workflow tool (hidden from LLM).
  */
-export type OptimizationWorkflowSideInfo = {
-  /**
-   * Polling interval in seconds (default: 60).
-   */
-  poll_interval_secs: bigint;
-  /**
-   * Maximum time to wait for completion in seconds (default: 86400 = 24 hours).
-   */
-  max_wait_secs: bigint;
-};
+export type OptimizationWorkflowSideInfo = { 
+/**
+ * Polling interval in seconds (default: 60).
+ */
+poll_interval_secs: bigint, 
+/**
+ * Maximum time to wait for completion in seconds (default: 86400 = 24 hours).
+ */
+max_wait_secs: bigint, };

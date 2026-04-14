@@ -8,15 +8,4 @@ import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNCon
 /**
  * NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)
  */
-export type UninitializedVariantConfig =
-  | ({ type: "chat_completion" } & UninitializedChatCompletionConfig)
-  | ({
-      type: "experimental_best_of_n_sampling";
-    } & UninitializedBestOfNSamplingConfig)
-  | ({
-      type: "experimental_dynamic_in_context_learning";
-    } & UninitializedDiclConfig)
-  | ({ type: "experimental_mixture_of_n" } & UninitializedMixtureOfNConfig)
-  | ({
-      type: "experimental_chain_of_thought";
-    } & UninitializedChainOfThoughtConfig);
+export type UninitializedVariantConfig = { "type": "chat_completion" } & UninitializedChatCompletionConfig | { "type": "experimental_best_of_n_sampling" } & UninitializedBestOfNSamplingConfig | { "type": "experimental_dynamic_in_context_learning" } & UninitializedDiclConfig | { "type": "experimental_mixture_of_n" } & UninitializedMixtureOfNConfig | { "type": "experimental_chain_of_thought" } & UninitializedChainOfThoughtConfig;

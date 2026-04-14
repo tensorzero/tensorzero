@@ -3,9 +3,4 @@
 /**
  * Evaluator that checks whether an inference's tool calls match the expected behavior.
  */
-export type ToolUseConfig =
-  | { behavior: "none" }
-  | { behavior: "none_of"; tools: Array<string> }
-  | { behavior: "any" }
-  | { behavior: "any_of"; tools: Array<string> }
-  | { behavior: "all_of"; tools: Array<string> };
+export type ToolUseConfig = { "behavior": "none" } | { "behavior": "none_of", tools: Array<string>, } | { "behavior": "any" } | { "behavior": "any_of", tools: Array<string>, } | { "behavior": "all_of", tools: Array<string>, };

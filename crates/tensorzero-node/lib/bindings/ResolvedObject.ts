@@ -4,24 +4,4 @@ import type { FunctionType } from "./FunctionType";
 /**
  * A single resolved object type for a given UUID.
  */
-export type ResolvedObject =
-  | {
-      type: "inference";
-      function_name: string;
-      function_type: FunctionType;
-      variant_name: string;
-      episode_id: string;
-    }
-  | { type: "episode" }
-  | { type: "boolean_feedback" }
-  | { type: "float_feedback" }
-  | { type: "comment_feedback" }
-  | { type: "demonstration_feedback" }
-  | { type: "chat_datapoint"; dataset_name: string; function_name: string }
-  | { type: "json_datapoint"; dataset_name: string; function_name: string }
-  | {
-      type: "model_inference";
-      inference_id: string;
-      model_name: string;
-      model_provider_name: string;
-    };
+export type ResolvedObject = { "type": "inference", function_name: string, function_type: FunctionType, variant_name: string, episode_id: string, } | { "type": "episode" } | { "type": "boolean_feedback" } | { "type": "float_feedback" } | { "type": "comment_feedback" } | { "type": "demonstration_feedback" } | { "type": "chat_datapoint", dataset_name: string, function_name: string, } | { "type": "json_datapoint", dataset_name: string, function_name: string, } | { "type": "model_inference", inference_id: string, model_name: string, model_provider_name: string, };

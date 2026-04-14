@@ -3,11 +3,8 @@
 /**
  * Legacy struct for old get_datapoint clickhouse query. To be deprecated.
  */
-export type GetDatapointParams = {
-  dataset_name: string;
-  datapoint_id: string;
-  /**
-   * Whether to include stale datapoints in the query; false by default.
-   */
-  allow_stale?: boolean;
-};
+export type GetDatapointParams = { dataset_name: string, datapoint_id: string, 
+/**
+ * Whether to include stale datapoints in the query; false by default.
+ */
+allow_stale?: boolean, };

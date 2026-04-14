@@ -10,11 +10,4 @@ import type { UninitializedTrackAndStopExperimentationConfig } from "./Uninitial
  * The 3 legacy variants (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted
  * to the 2 new variants (`Static`, `Adaptive`) during `load()`.
  */
-export type UninitializedExperimentationConfig =
-  | ({ type: "static" } & StaticExperimentationConfig)
-  | ({ type: "adaptive" } & UninitializedAdaptiveExperimentationConfig)
-  | ({ type: "static_weights" } & LegacyStaticWeightsExperimentationConfig)
-  | ({ type: "uniform" } & LegacyUniformExperimentationConfig)
-  | ({
-      type: "track_and_stop";
-    } & UninitializedTrackAndStopExperimentationConfig);
+export type UninitializedExperimentationConfig = { "type": "static" } & StaticExperimentationConfig | { "type": "adaptive" } & UninitializedAdaptiveExperimentationConfig | { "type": "static_weights" } & LegacyStaticWeightsExperimentationConfig | { "type": "uniform" } & LegacyUniformExperimentationConfig | { "type": "track_and_stop" } & UninitializedTrackAndStopExperimentationConfig;

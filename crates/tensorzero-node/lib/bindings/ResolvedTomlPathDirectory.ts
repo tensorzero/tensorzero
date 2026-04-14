@@ -7,4 +7,4 @@
  * This path is always stored as an absolute filesystem path because runtime
  * code needs to read from that directory after config loading.
  */
-export type ResolvedTomlPathDirectory = { __tensorzero_remapped_path: string };
+export type ResolvedTomlPathDirectory = { __tensorzero_remapped_path: string, };

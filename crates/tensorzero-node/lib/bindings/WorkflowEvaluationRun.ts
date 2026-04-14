@@ -3,11 +3,4 @@
 /**
  * Information about a single workflow evaluation run.
  */
-export type WorkflowEvaluationRun = {
-  name?: string;
-  id: string;
-  variant_pins: { [key in string]: string };
-  tags: { [key in string]: string };
-  project_name?: string;
-  timestamp: string;
-};
+export type WorkflowEvaluationRun = { name?: string, id: string, variant_pins: { [key in string]: string }, tags: { [key in string]: string }, project_name?: string, timestamp: string, };

@@ -4,9 +4,8 @@ import type { CacheStatisticsTimePoint } from "./CacheStatisticsTimePoint";
 /**
  * Response containing cache statistics timeseries data.
  */
-export type GetCacheStatisticsResponse = {
-  /**
-   * The cache statistics data points.
-   */
-  data: Array<CacheStatisticsTimePoint>;
-};
+export type GetCacheStatisticsResponse = { 
+/**
+ * The cache statistics data points.
+ */
+data: Array<CacheStatisticsTimePoint>, };

@@ -6,23 +6,4 @@ import type { ResolvedTomlPathData } from "./ResolvedTomlPathData";
 import type { RetryConfig } from "./RetryConfig";
 import type { ServiceTier } from "./ServiceTier";
 
-export type UninitializedLLMJudgeChatCompletionVariantConfig = {
-  active?: boolean;
-  model: string;
-  system_instructions: ResolvedTomlPathData;
-  temperature?: number;
-  top_p?: number;
-  max_tokens?: number;
-  presence_penalty?: number;
-  frequency_penalty?: number;
-  seed?: number;
-  json_mode: JsonMode;
-  stop_sequences?: Array<string>;
-  reasoning_effort?: string;
-  service_tier?: ServiceTier;
-  thinking_budget_tokens?: number;
-  verbosity?: string;
-  retries: RetryConfig;
-  extra_body?: ExtraBodyConfig;
-  extra_headers?: ExtraHeadersConfig;
-};
+export type UninitializedLLMJudgeChatCompletionVariantConfig = { active?: boolean, model: string, system_instructions: ResolvedTomlPathData, temperature?: number, top_p?: number, max_tokens?: number, presence_penalty?: number, frequency_penalty?: number, seed?: number, json_mode: JsonMode, stop_sequences?: Array<string>, reasoning_effort?: string, service_tier?: ServiceTier, thinking_budget_tokens?: number, verbosity?: string, retries: RetryConfig, extra_body?: ExtraBodyConfig, extra_headers?: ExtraHeadersConfig, };

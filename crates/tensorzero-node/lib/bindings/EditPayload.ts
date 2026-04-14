@@ -7,8 +7,4 @@ import type { UpsertVariantPayload } from "./UpsertVariantPayload";
 /**
  * Represents a targeted edit operation to apply to a TensorZero config.
  */
-export type EditPayload =
-  | ({ operation: "upsert_variant" } & UpsertVariantPayload)
-  | ({ operation: "upsert_experimentation" } & UpsertExperimentationPayload)
-  | ({ operation: "upsert_evaluation" } & UpsertEvaluationPayload)
-  | ({ operation: "upsert_evaluator" } & UpsertEvaluatorPayload);
+export type EditPayload = { "operation": "upsert_variant" } & UpsertVariantPayload | { "operation": "upsert_experimentation" } & UpsertExperimentationPayload | { "operation": "upsert_evaluation" } & UpsertEvaluationPayload | { "operation": "upsert_evaluator" } & UpsertEvaluatorPayload;

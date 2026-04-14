@@ -3,21 +3,20 @@
 /**
  * Parameters for the get_variant_statistics tool (visible to LLM).
  */
-export type GetVariantStatisticsToolParams = {
-  /**
-   * The name of the function to query statistics for.
-   */
-  function_name: string;
-  /**
-   * Optional filter for specific variants. If not provided, all variants are included.
-   */
-  variant_names: Array<string> | null;
-  /**
-   * Optional lower bound on the time window (inclusive, RFC 3339 format).
-   */
-  after: string | null;
-  /**
-   * Optional upper bound on the time window (exclusive, RFC 3339 format).
-   */
-  before: string | null;
-};
+export type GetVariantStatisticsToolParams = { 
+/**
+ * The name of the function to query statistics for.
+ */
+function_name: string, 
+/**
+ * Optional filter for specific variants. If not provided, all variants are included.
+ */
+variant_names: Array<string> | null, 
+/**
+ * Optional lower bound on the time window (inclusive, RFC 3339 format).
+ */
+after: string | null, 
+/**
+ * Optional upper bound on the time window (exclusive, RFC 3339 format).
+ */
+before: string | null, };

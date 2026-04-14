@@ -10,12 +10,4 @@ import type { TimeFilter } from "./TimeFilter";
  * NOTE: This is stored in DB. Please do not make breaking changes.
  * If we have to, we should make a separate storage type and convert.
  */
-export type InferenceFilter =
-  | ({ type: "float_metric" } & FloatMetricFilter)
-  | ({ type: "boolean_metric" } & BooleanMetricFilter)
-  | ({ type: "demonstration_feedback" } & DemonstrationFeedbackFilter)
-  | ({ type: "tag" } & TagFilter)
-  | ({ type: "time" } & TimeFilter)
-  | { type: "and"; children: Array<InferenceFilter> }
-  | { type: "or"; children: Array<InferenceFilter> }
-  | { type: "not"; child: InferenceFilter };
+export type InferenceFilter = { "type": "float_metric" } & FloatMetricFilter | { "type": "boolean_metric" } & BooleanMetricFilter | { "type": "demonstration_feedback" } & DemonstrationFeedbackFilter | { "type": "tag" } & TagFilter | { "type": "time" } & TimeFilter | { "type": "and", children: Array<InferenceFilter>, } | { "type": "or", children: Array<InferenceFilter>, } | { "type": "not", child: InferenceFilter, };

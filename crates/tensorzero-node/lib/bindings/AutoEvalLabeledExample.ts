@@ -8,30 +8,28 @@ import type { UserQuestionAnswer } from "./UserQuestionAnswer";
 /**
  * A labeled example with its full context and submitted answers.
  */
-export type AutoEvalLabeledExample = {
-  /**
-   * Optional since some behaviors only depend on the response
-   */
-  maybe_excerpted_prompt: AutoEvalContentBlock | null;
-  /**
-   * Mandatory since we always need the response for evals
-   */
-  maybe_excerpted_response: AutoEvalContentBlock;
-  source: AutoEvalExampleSource;
-  /**
-   * The multiple-choice labeling question for this example.
-   */
-  label_question: AutoEvalLabelQuestion;
-  /**
-   * The user's answer to the label question.
-   */
-  label_answer: UserQuestionAnswer;
-  /**
-   * An optional free-response explanation question.
-   */
-  explanation_question?: AutoEvalExplanationQuestion;
-  /**
-   * The user's answer to the explanation question, if one was present.
-   */
-  explanation_answer?: UserQuestionAnswer;
-};
+export type AutoEvalLabeledExample = { 
+/**
+ * Optional since some behaviors only depend on the response
+ */
+maybe_excerpted_prompt: AutoEvalContentBlock | null, 
+/**
+ * Mandatory since we always need the response for evals
+ */
+maybe_excerpted_response: AutoEvalContentBlock, source: AutoEvalExampleSource, 
+/**
+ * The multiple-choice labeling question for this example.
+ */
+label_question: AutoEvalLabelQuestion, 
+/**
+ * The user's answer to the label question.
+ */
+label_answer: UserQuestionAnswer, 
+/**
+ * An optional free-response explanation question.
+ */
+explanation_question?: AutoEvalExplanationQuestion, 
+/**
+ * The user's answer to the explanation question, if one was present.
+ */
+explanation_answer?: UserQuestionAnswer, };

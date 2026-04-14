@@ -3,9 +3,8 @@
 /**
  * A free-response question with an optional pre-filled value.
  */
-export type FreeResponseQuestion = {
-  /**
-   * Pre-filled text shown in the input. The user can edit or submit as-is.
-   */
-  default_value?: string;
-};
+export type FreeResponseQuestion = { 
+/**
+ * Pre-filled text shown in the input. The user can edit or submit as-is.
+ */
+default_value?: string, };

@@ -3,4 +3,4 @@
 /**
  * AWS Bedrock provider using direct HTTP calls.
  */
-export type AWSBedrockProvider = { model_id: string };
+export type AWSBedrockProvider = { model_id: string, };

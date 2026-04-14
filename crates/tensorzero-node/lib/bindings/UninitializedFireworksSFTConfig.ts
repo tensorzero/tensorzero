@@ -5,22 +5,4 @@
  * Provider-level settings (account_id, credentials) come from
  * `provider_types.fireworks.sft` in the gateway config.
  */
-export type UninitializedFireworksSFTConfig = {
-  model: string;
-  early_stop?: boolean;
-  epochs?: number;
-  learning_rate?: number;
-  max_context_length?: number;
-  lora_rank?: number;
-  batch_size?: number;
-  display_name?: string;
-  output_model?: string;
-  warm_start_from?: string;
-  is_turbo?: boolean;
-  eval_auto_carveout?: boolean;
-  nodes?: number;
-  mtp_enabled?: boolean;
-  mtp_num_draft_tokens?: number;
-  mtp_freeze_base_model?: boolean;
-  deploy_after_training?: boolean;
-};
+export type UninitializedFireworksSFTConfig = { model: string, early_stop?: boolean, epochs?: number, learning_rate?: number, max_context_length?: number, lora_rank?: number, batch_size?: number, display_name?: string, output_model?: string, warm_start_from?: string, is_turbo?: boolean, eval_auto_carveout?: boolean, nodes?: number, mtp_enabled?: boolean, mtp_num_draft_tokens?: number, mtp_freeze_base_model?: boolean, deploy_after_training?: boolean, };

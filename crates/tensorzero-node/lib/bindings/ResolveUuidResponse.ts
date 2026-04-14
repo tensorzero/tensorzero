@@ -4,7 +4,4 @@ import type { ResolvedObject } from "./ResolvedObject";
 /**
  * Response type for the resolve_uuid endpoint.
  */
-export type ResolveUuidResponse = {
-  id: string;
-  object_types: Array<ResolvedObject>;
-};
+export type ResolveUuidResponse = { id: string, object_types: Array<ResolvedObject>, };

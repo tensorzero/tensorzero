@@ -5,18 +5,17 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Parameters for the write_config tool (visible to LLM).
  */
-export type WriteConfigToolParams = {
-  /**
-   * The config to write as a JSON object.
-   */
-  config: JsonValue;
-  /**
-   * Templates that should be stored with the config.
-   */
-  extra_templates: { [key in string]: string };
-  /**
-   * We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
-   * Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
-   */
-  edit?: Array<EditPayload>;
-};
+export type WriteConfigToolParams = { 
+/**
+ * The config to write as a JSON object.
+ */
+config: JsonValue, 
+/**
+ * Templates that should be stored with the config.
+ */
+extra_templates: { [key in string]: string }, 
+/**
+ * We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
+ * Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
+ */
+edit?: Array<EditPayload>, };

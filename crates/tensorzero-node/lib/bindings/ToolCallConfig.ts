@@ -10,12 +10,4 @@ import type { ToolChoice } from "./ToolChoice";
  * and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
  * Most inference providers can convert this into their desired tool format.
  */
-export type ToolCallConfig = {
-  static_tools_available: Array<FunctionToolConfig>;
-  dynamic_tools_available: Array<FunctionToolConfig>;
-  provider_tools: Array<ProviderTool>;
-  openai_custom_tools: Array<OpenAICustomTool>;
-  tool_choice: ToolChoice;
-  parallel_tool_calls: boolean | null;
-  allowed_tools: AllowedTools;
-};
+export type ToolCallConfig = { static_tools_available: Array<FunctionToolConfig>, dynamic_tools_available: Array<FunctionToolConfig>, provider_tools: Array<ProviderTool>, openai_custom_tools: Array<OpenAICustomTool>, tool_choice: ToolChoice, parallel_tool_calls: boolean | null, allowed_tools: AllowedTools, };

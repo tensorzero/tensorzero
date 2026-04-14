@@ -5,20 +5,4 @@ import type { JsonInferenceOutput } from "./JsonInferenceOutput";
 import type { StoredInput } from "./StoredInput";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type StoredJsonInference = {
-  function_name: string;
-  variant_name: string;
-  input?: StoredInput;
-  output?: JsonInferenceOutput;
-  dispreferred_outputs: Array<JsonInferenceOutput>;
-  timestamp: string;
-  episode_id: string;
-  inference_id: string;
-  output_schema?: JsonValue;
-  tags: { [key in string]: string };
-  extra_body?: Array<ExtraBody>;
-  inference_params?: InferenceParams;
-  processing_time_ms?: bigint;
-  ttft_ms?: bigint;
-  snapshot_hash?: string;
-};
+export type StoredJsonInference = { function_name: string, variant_name: string, input?: StoredInput, output?: JsonInferenceOutput, dispreferred_outputs: Array<JsonInferenceOutput>, timestamp: string, episode_id: string, inference_id: string, output_schema?: JsonValue, tags: { [key in string]: string }, extra_body?: Array<ExtraBody>, inference_params?: InferenceParams, processing_time_ms?: bigint, ttft_ms?: bigint, snapshot_hash?: string, };

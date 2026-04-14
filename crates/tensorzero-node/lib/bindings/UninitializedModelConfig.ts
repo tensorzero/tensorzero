@@ -3,10 +3,4 @@ import type { Namespace } from "./Namespace";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
 import type { UninitializedModelProvider } from "./UninitializedModelProvider";
 
-export type UninitializedModelConfig = {
-  routing: Array<string>;
-  providers: { [key in string]: UninitializedModelProvider };
-  timeouts: TimeoutsConfig;
-  skip_relay?: boolean;
-  namespace?: Namespace;
-};
+export type UninitializedModelConfig = { routing: Array<string>, providers: { [key in string]: UninitializedModelProvider }, timeouts: TimeoutsConfig, skip_relay?: boolean, namespace?: Namespace, };

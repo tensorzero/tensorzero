@@ -4,10 +4,8 @@
  * Minimal job handle for GCP Vertex Gemini SFT.
  * All configuration needed for polling comes from provider_types at poll time.
  */
-export type GCPVertexGeminiSFTJobHandle = {
-  job_url: string;
-  /**
-   * The API resource name (e.g., projects/{project}/locations/{region}/tuningJobs/{job_id})
-   */
-  job_name: string;
-};
+export type GCPVertexGeminiSFTJobHandle = { job_url: string, 
+/**
+ * The API resource name (e.g., projects/{project}/locations/{region}/tuningJobs/{job_id})
+ */
+job_name: string, };

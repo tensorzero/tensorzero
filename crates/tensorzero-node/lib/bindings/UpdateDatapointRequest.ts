@@ -5,6 +5,4 @@ import type { UpdateJsonDatapointRequest } from "./UpdateJsonDatapointRequest";
 /**
  * A tagged request to update a single datapoint in a dataset.
  */
-export type UpdateDatapointRequest =
-  | ({ type: "chat" } & UpdateChatDatapointRequest)
-  | ({ type: "json" } & UpdateJsonDatapointRequest);
+export type UpdateDatapointRequest = { "type": "chat" } & UpdateChatDatapointRequest | { "type": "json" } & UpdateJsonDatapointRequest;

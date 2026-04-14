@@ -4,6 +4,4 @@ import type { WorkflowEvaluationProject } from "./WorkflowEvaluationProject";
 /**
  * Response containing a list of workflow evaluation projects.
  */
-export type GetWorkflowEvaluationProjectsResponse = {
-  projects: Array<WorkflowEvaluationProject>;
-};
+export type GetWorkflowEvaluationProjectsResponse = { projects: Array<WorkflowEvaluationProject>, };

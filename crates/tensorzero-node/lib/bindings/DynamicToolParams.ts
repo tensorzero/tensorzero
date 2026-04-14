@@ -70,29 +70,28 @@ import type { ToolChoice } from "./ToolChoice";
  *
  * See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
  */
-export type DynamicToolParams = {
-  /**
-   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
-   * If not provided, all static tools are allowed.
-   */
-  allowed_tools?: Array<string>;
-  /**
-   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
-   * tools, that are also allowed.
-   */
-  additional_tools?: Array<Tool>;
-  /**
-   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-   * Optional.
-   */
-  tool_choice?: ToolChoice;
-  /**
-   * Whether to use parallel tool calls in the inference. Optional.
-   * If provided during inference, it will override the function-configured parallel tool calls.
-   */
-  parallel_tool_calls?: boolean;
-  /**
-   * Provider-specific tool configurations
-   */
-  provider_tools: Array<ProviderTool>;
-};
+export type DynamicToolParams = { 
+/**
+ * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+ * If not provided, all static tools are allowed.
+ */
+allowed_tools?: Array<string>, 
+/**
+ * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+ * tools, that are also allowed.
+ */
+additional_tools?: Array<Tool>, 
+/**
+ * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+ * Optional.
+ */
+tool_choice?: ToolChoice, 
+/**
+ * Whether to use parallel tool calls in the inference. Optional.
+ * If provided during inference, it will override the function-configured parallel tool calls.
+ */
+parallel_tool_calls?: boolean, 
+/**
+ * Provider-specific tool configurations
+ */
+provider_tools: Array<ProviderTool>, };

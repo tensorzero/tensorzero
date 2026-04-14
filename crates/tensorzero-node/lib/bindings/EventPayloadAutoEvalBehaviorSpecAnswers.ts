@@ -7,25 +7,24 @@ import type { UserQuestionAnswer } from "./UserQuestionAnswer";
  * Includes the full questions so the UI can render everything
  * without looking up the original event.
  */
-export type EventPayloadAutoEvalBehaviorSpecAnswers = {
-  /**
-   * The target behavior question.
-   */
-  target_behavior: AutoEvalBehaviorSpecQuestion;
-  /**
-   * The user's answer to the target behavior question.
-   */
-  target_behavior_answer: UserQuestionAnswer;
-  /**
-   * The additional context question.
-   */
-  additional_context: AutoEvalBehaviorSpecQuestion;
-  /**
-   * The user's answer to the additional context question.
-   */
-  additional_context_answer: UserQuestionAnswer;
-  /**
-   * The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
-   */
-  auto_eval_behavior_spec_event_id: string;
-};
+export type EventPayloadAutoEvalBehaviorSpecAnswers = { 
+/**
+ * The target behavior question.
+ */
+target_behavior: AutoEvalBehaviorSpecQuestion, 
+/**
+ * The user's answer to the target behavior question.
+ */
+target_behavior_answer: UserQuestionAnswer, 
+/**
+ * The additional context question.
+ */
+additional_context: AutoEvalBehaviorSpecQuestion, 
+/**
+ * The user's answer to the additional context question.
+ */
+additional_context_answer: UserQuestionAnswer, 
+/**
+ * The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
+ */
+auto_eval_behavior_spec_event_id: string, };

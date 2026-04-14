@@ -7,10 +7,4 @@ import type { StoragePath } from "./StoragePath";
  * This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
  * Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
  */
-export type ObjectStoragePointer = {
-  source_url?: string;
-  mime_type: string;
-  storage_path: StoragePath;
-  detail?: Detail;
-  filename?: string;
-};
+export type ObjectStoragePointer = { source_url?: string, mime_type: string, storage_path: StoragePath, detail?: Detail, filename?: string, };

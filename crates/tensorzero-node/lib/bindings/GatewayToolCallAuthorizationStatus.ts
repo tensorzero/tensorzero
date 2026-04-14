@@ -6,6 +6,4 @@
  * This is a narrower type than `ToolCallAuthorizationStatus` that excludes
  * `NotAvailable` since that status is filtered out before reaching consumers.
  */
-export type GatewayToolCallAuthorizationStatus =
-  | { type: "approved" }
-  | { type: "rejected"; reason: string };
+export type GatewayToolCallAuthorizationStatus = { "type": "approved" } | { "type": "rejected", reason: string, };

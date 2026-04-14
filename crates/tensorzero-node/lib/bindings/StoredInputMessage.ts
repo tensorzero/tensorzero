@@ -5,7 +5,4 @@ import type { StoredInputMessageContent } from "./StoredInputMessageContent";
 /**
  * `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
  */
-export type StoredInputMessage = {
-  role: Role;
-  content: Array<StoredInputMessageContent>;
-};
+export type StoredInputMessage = { role: Role, content: Array<StoredInputMessageContent>, };

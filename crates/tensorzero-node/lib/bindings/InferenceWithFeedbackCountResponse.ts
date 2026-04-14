@@ -3,13 +3,12 @@
 /**
  * Response containing inference count with feedback count
  */
-export type InferenceWithFeedbackCountResponse = {
-  /**
-   * Number of feedbacks for the metric
-   */
-  feedback_count: bigint;
-  /**
-   * Number of inferences matching the metric threshold criteria
-   */
-  inference_count: bigint;
-};
+export type InferenceWithFeedbackCountResponse = { 
+/**
+ * Number of feedbacks for the metric
+ */
+feedback_count: bigint, 
+/**
+ * Number of inferences matching the metric threshold criteria
+ */
+inference_count: bigint, };

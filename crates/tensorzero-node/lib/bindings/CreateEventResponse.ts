@@ -3,4 +3,4 @@
 /**
  * Response from creating an event.
  */
-export type CreateEventResponse = { event_id: string; session_id: string };
+export type CreateEventResponse = { event_id: string, session_id: string, };

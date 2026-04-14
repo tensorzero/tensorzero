@@ -3,9 +3,8 @@
 /**
  * Request to delete datapoints from a dataset.
  */
-export type DeleteDatapointsRequest = {
-  /**
-   * The IDs of the datapoints to delete.
-   */
-  ids: Array<string>;
-};
+export type DeleteDatapointsRequest = { 
+/**
+ * The IDs of the datapoints to delete.
+ */
+ids: Array<string>, };

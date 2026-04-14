@@ -4,9 +4,8 @@ import type { OrderDirection } from "./OrderDirection";
 /**
  * Order by clauses for querying datapoints.
  */
-export type DatapointOrderBy = {
-  /**
-   * The ordering direction.
-   */
-  direction: OrderDirection;
-} & ({ by: "timestamp" } | { by: "search_relevance" });
+export type DatapointOrderBy = { 
+/**
+ * The ordering direction.
+ */
+direction: OrderDirection, } & ({ "by": "timestamp" } | { "by": "search_relevance" });

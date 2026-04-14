@@ -7,13 +7,12 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * (metric_name, datapoint_id, output) combination, allowing the evaluation
  * system to use human feedback instead of running automated evaluators.
  */
-export type InferenceEvaluationHumanFeedbackRow = {
-  /**
-   * The human-provided evaluation value (JSON).
-   */
-  value: JsonValue;
-  /**
-   * The inference ID associated with this feedback.
-   */
-  evaluator_inference_id: string;
-};
+export type InferenceEvaluationHumanFeedbackRow = { 
+/**
+ * The human-provided evaluation value (JSON).
+ */
+value: JsonValue, 
+/**
+ * The inference ID associated with this feedback.
+ */
+evaluator_inference_id: string, };

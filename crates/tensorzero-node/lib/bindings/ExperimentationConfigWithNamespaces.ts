@@ -4,14 +4,13 @@ import type { ExperimentationConfig } from "./ExperimentationConfig";
 /**
  * Holds the base experimentation config plus namespace-specific configs (loaded version).
  */
-export type ExperimentationConfigWithNamespaces = {
-  /**
-   * The base experimentation config used when no namespace is provided
-   * or when the provided namespace doesn't have a specific config
-   */
-  base: ExperimentationConfig;
-  /**
-   * Namespace-specific experimentation configs
-   */
-  namespaces: { [key in string]: ExperimentationConfig };
-};
+export type ExperimentationConfigWithNamespaces = { 
+/**
+ * The base experimentation config used when no namespace is provided
+ * or when the provided namespace doesn't have a specific config
+ */
+base: ExperimentationConfig, 
+/**
+ * Namespace-specific experimentation configs
+ */
+namespaces: { [key in string]: ExperimentationConfig }, };

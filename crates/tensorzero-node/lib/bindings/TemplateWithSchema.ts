@@ -8,8 +8,4 @@ import type { PathWithContents } from "./PathWithContents";
  * kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
  * string contents of the input block.
  */
-export type TemplateWithSchema = {
-  template: PathWithContents;
-  schema: JSONSchema | null;
-  legacy_definition: boolean;
-};
+export type TemplateWithSchema = { template: PathWithContents, schema: JSONSchema | null, legacy_definition: boolean, };

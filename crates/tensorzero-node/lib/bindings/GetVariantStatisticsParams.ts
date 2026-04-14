@@ -3,21 +3,20 @@
 /**
  * Query parameters for variant statistics.
  */
-export type GetVariantStatisticsParams = {
-  /**
-   * The function name to query statistics for.
-   */
-  function_name: string;
-  /**
-   * Optional filter for specific variants. If not provided, all variants are included.
-   */
-  variant_names: Array<string> | null;
-  /**
-   * Optional lower bound on the time window (inclusive).
-   */
-  after: string | null;
-  /**
-   * Optional upper bound on the time window (exclusive).
-   */
-  before: string | null;
-};
+export type GetVariantStatisticsParams = { 
+/**
+ * The function name to query statistics for.
+ */
+function_name: string, 
+/**
+ * Optional filter for specific variants. If not provided, all variants are included.
+ */
+variant_names: Array<string> | null, 
+/**
+ * Optional lower bound on the time window (inclusive).
+ */
+after: string | null, 
+/**
+ * Optional upper bound on the time window (exclusive).
+ */
+before: string | null, };

@@ -6,10 +6,9 @@
  * This is the request type used by the HTTP handler. The `deployment_id` and
  * `tensorzero_version` are injected from the gateway's app state.
  */
-export type ApproveAllToolCallsGatewayRequest = {
-  /**
-   * Only approve tool calls with event IDs <= this value.
-   * Prevents race condition where new tool calls arrive after client fetched the list.
-   */
-  last_tool_call_event_id: string;
-};
+export type ApproveAllToolCallsGatewayRequest = { 
+/**
+ * Only approve tool calls with event IDs <= this value.
+ * Prevents race condition where new tool calls arrive after client fetched the list.
+ */
+last_tool_call_event_id: string, };

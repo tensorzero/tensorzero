@@ -7,11 +7,4 @@ import type { StoragePath } from "./StoragePath";
  * This struct can NOT be stored in the database.
  * Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
  */
-export type ObjectStorageFile = {
-  data: string;
-  source_url?: string;
-  mime_type: string;
-  storage_path: StoragePath;
-  detail?: Detail;
-  filename?: string;
-};
+export type ObjectStorageFile = { data: string, source_url?: string, mime_type: string, storage_path: StoragePath, detail?: Detail, filename?: string, };

@@ -3,10 +3,9 @@
 /**
  * A response to a request to update one or more datapoints in a dataset.
  */
-export type UpdateDatapointsResponse = {
-  /**
-   * The IDs of the datapoints that were updated.
-   * These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
-   */
-  ids: Array<string>;
-};
+export type UpdateDatapointsResponse = { 
+/**
+ * The IDs of the datapoints that were updated.
+ * These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
+ */
+ids: Array<string>, };

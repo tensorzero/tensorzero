@@ -4,11 +4,8 @@
  * Minimal job handle for OpenAI RFT.
  * All configuration needed for polling comes from provider_types at poll time.
  */
-export type OpenAIRFTJobHandle = {
-  job_id: string;
-  /**
-   * A url to a human-readable page for the job.
-   */
-  job_url: string;
-  job_api_url: string;
-};
+export type OpenAIRFTJobHandle = { job_id: string, 
+/**
+ * A url to a human-readable page for the job.
+ */
+job_url: string, job_api_url: string, };

@@ -4,16 +4,12 @@ import type { JSONSchema } from "./JSONSchema";
 /**
  * Contains the configuration information for a specific tool
  */
-export type StaticToolConfig = {
-  description: string;
-  parameters: JSONSchema;
-  /**
-   * The display name sent to the LLM (can be overridden via config)
-   */
-  name: string;
-  /**
-   * The key used to reference this tool in allowed_tools and function config
-   */
-  key: string;
-  strict: boolean;
-};
+export type StaticToolConfig = { description: string, parameters: JSONSchema, 
+/**
+ * The display name sent to the LLM (can be overridden via config)
+ */
+name: string, 
+/**
+ * The key used to reference this tool in allowed_tools and function config
+ */
+key: string, strict: boolean, };

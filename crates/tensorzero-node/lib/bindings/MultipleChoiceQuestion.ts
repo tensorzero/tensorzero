@@ -4,17 +4,16 @@ import type { MultipleChoiceOption } from "./MultipleChoiceOption";
 /**
  * A multiple choice question with options.
  */
-export type MultipleChoiceQuestion = {
-  /**
-   * Should be 2-4 options.
-   */
-  options: Array<MultipleChoiceOption>;
-  /**
-   * Set to true to allow the user to select multiple options instead of just one.
-   */
-  multi_select: boolean;
-  /**
-   * Set to true to show a free-text textarea below the options for additional context.
-   */
-  include_free_response?: boolean;
-};
+export type MultipleChoiceQuestion = { 
+/**
+ * Should be 2-4 options.
+ */
+options: Array<MultipleChoiceOption>, 
+/**
+ * Set to true to allow the user to select multiple options instead of just one.
+ */
+multi_select: boolean, 
+/**
+ * Set to true to show a free-text textarea below the options for additional context.
+ */
+include_free_response?: boolean, };

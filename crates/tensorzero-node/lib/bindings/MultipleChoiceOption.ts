@@ -3,14 +3,12 @@
 /**
  * An option in a multiple choice question.
  */
-export type MultipleChoiceOption = {
-  id: string;
-  /**
-   * The display text for this option that the user will see and select. Should be concise (1-5 words).
-   */
-  label: string;
-  /**
-   * Explanation of what this option means or what will happen if chosen.
-   */
-  description: string;
-};
+export type MultipleChoiceOption = { id: string, 
+/**
+ * The display text for this option that the user will see and select. Should be concise (1-5 words).
+ */
+label: string, 
+/**
+ * Explanation of what this option means or what will happen if chosen.
+ */
+description: string, };

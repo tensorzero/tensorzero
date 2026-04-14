@@ -5,4 +5,4 @@ import type { Text } from "./Text";
  * Content block types allowed in autopilot event messages.
  * Restricted to only Text blocks (no ToolCall, File, Template, etc.).
  */
-export type EventPayloadMessageContent = { type: "text" } & Text;
+export type EventPayloadMessageContent = { "type": "text" } & Text;

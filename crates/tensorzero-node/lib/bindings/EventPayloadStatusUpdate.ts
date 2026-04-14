@@ -4,4 +4,4 @@ import type { StatusUpdate } from "./StatusUpdate";
 /**
  * Status update payload for an event.
  */
-export type EventPayloadStatusUpdate = { status_update: StatusUpdate };
+export type EventPayloadStatusUpdate = { status_update: StatusUpdate, };

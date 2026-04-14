@@ -4,6 +4,4 @@ import type { InferenceMetadata } from "./InferenceMetadata";
 /**
  * Response containing a list of inference metadata
  */
-export type ListInferenceMetadataResponse = {
-  inference_metadata: Array<InferenceMetadata>;
-};
+export type ListInferenceMetadataResponse = { inference_metadata: Array<InferenceMetadata>, };

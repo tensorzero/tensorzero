@@ -10,23 +10,20 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Includes enriched fields from the originating tool call and authorization events,
  * making this payload self-contained for UI rendering.
  */
-export type EventPayloadToolResult = {
-  tool_call_event_id: string;
-  outcome: ToolOutcome;
-  /**
-   * Populated by the server from the originating tool call event.
-   */
-  tool_call_name: string;
-  /**
-   * Populated by the server from the originating tool call event.
-   */
-  tool_call_arguments: JsonValue;
-  /**
-   * Authorization source (Ui/Automatic/Whitelist).
-   */
-  tool_call_authorization_source: ToolCallDecisionSource;
-  /**
-   * Authorization status (Approved/Rejected/NotAvailable).
-   */
-  tool_call_authorization_status: ToolCallAuthorizationStatus;
-};
+export type EventPayloadToolResult = { tool_call_event_id: string, outcome: ToolOutcome, 
+/**
+ * Populated by the server from the originating tool call event.
+ */
+tool_call_name: string, 
+/**
+ * Populated by the server from the originating tool call event.
+ */
+tool_call_arguments: JsonValue, 
+/**
+ * Authorization source (Ui/Automatic/Whitelist).
+ */
+tool_call_authorization_source: ToolCallDecisionSource, 
+/**
+ * Authorization status (Approved/Rejected/NotAvailable).
+ */
+tool_call_authorization_status: ToolCallAuthorizationStatus, };

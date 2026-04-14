@@ -9,21 +9,20 @@ import type { OptimizationWorkflowSideInfo } from "./OptimizationWorkflowSideInf
  * We should implement this as a type that has optional or mandatory fields as needed
  * for each kind of tool
  */
-export type AutopilotSideInfo = {
-  /**
-   * The event ID of the ToolCall event (for correlating ToolResult).
-   */
-  tool_call_event_id: string;
-  /**
-   * The session ID for this autopilot session.
-   */
-  session_id: string;
-  /**
-   * A hash of the current configuration.
-   */
-  config_snapshot_hash: string;
-  /**
-   * Settings for optimization workflows run on the gateway by autopilot.
-   */
-  optimization: OptimizationWorkflowSideInfo;
-};
+export type AutopilotSideInfo = { 
+/**
+ * The event ID of the ToolCall event (for correlating ToolResult).
+ */
+tool_call_event_id: string, 
+/**
+ * The session ID for this autopilot session.
+ */
+session_id: string, 
+/**
+ * A hash of the current configuration.
+ */
+config_snapshot_hash: string, 
+/**
+ * Settings for optimization workflows run on the gateway by autopilot.
+ */
+optimization: OptimizationWorkflowSideInfo, };

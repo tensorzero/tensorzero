@@ -3,13 +3,12 @@
 /**
  * Parameters for the get_feedback_by_target_id tool (visible to LLM).
  */
-export type GetFeedbackByTargetIdToolParams = {
-  /**
-   * The target ID (inference or episode) to get feedback for.
-   */
-  target_id: string;
-  /**
-   * Maximum number of feedback entries to return.
-   */
-  limit: number | null;
-};
+export type GetFeedbackByTargetIdToolParams = { 
+/**
+ * The target ID (inference or episode) to get feedback for.
+ */
+target_id: string, 
+/**
+ * Maximum number of feedback entries to return.
+ */
+limit: number | null, };

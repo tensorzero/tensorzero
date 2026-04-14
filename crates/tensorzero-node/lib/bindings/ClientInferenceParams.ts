@@ -12,65 +12,49 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * The expected payload is a JSON object with the following fields:
  */
-export type ClientInferenceParams = {
-  function_name?: string;
-  model_name?: string;
-  episode_id?: string;
-  namespace?: Namespace;
-  input: Input;
-  stream?: boolean;
-  params: InferenceParams;
-  variant_name?: string;
-  dryrun?: boolean;
-  internal: boolean;
-  tags: { [key in string]: string };
-  output_schema?: JsonValue;
-  credentials: Map<string, string>;
-  cache_options: CacheParamsOptions;
-  /**
-   * DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
-   * If `true`, add an `original_response` field to the response, containing the raw string response from the model.
-   * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
-   * if the fuser/judge model failed.
-   */
-  include_original_response: boolean;
-  /**
-   * If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
-   * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
-   * if the fuser/judge model failed.
-   */
-  include_raw_response: boolean;
-  /**
-   * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
-   */
-  include_raw_usage: boolean;
-  /**
-   * If `true`, include an `aggregated_response` field in the final chunk in the stream
-   */
-  include_aggregated_response: boolean;
-  internal_dynamic_variant_config?: UninitializedVariantInfo;
-  /**
-   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
-   * If not provided, all static tools are allowed.
-   */
-  allowed_tools?: Array<string>;
-  /**
-   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
-   * tools, that are also allowed.
-   */
-  additional_tools?: Array<Tool>;
-  /**
-   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-   * Optional.
-   */
-  tool_choice?: ToolChoice;
-  /**
-   * Whether to use parallel tool calls in the inference. Optional.
-   * If provided during inference, it will override the function-configured parallel tool calls.
-   */
-  parallel_tool_calls?: boolean;
-  /**
-   * Provider-specific tool configurations
-   */
-  provider_tools: Array<ProviderTool>;
-};
+export type ClientInferenceParams = { function_name?: string, model_name?: string, episode_id?: string, namespace?: Namespace, input: Input, stream?: boolean, params: InferenceParams, variant_name?: string, dryrun?: boolean, internal: boolean, tags: { [key in string]: string }, output_schema?: JsonValue, credentials: Map<string, string>, cache_options: CacheParamsOptions, 
+/**
+ * DEPRECATED (#5697 / 2026.4+): Use `include_raw_response` instead.
+ * If `true`, add an `original_response` field to the response, containing the raw string response from the model.
+ * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
+ * if the fuser/judge model failed.
+ */
+include_original_response: boolean, 
+/**
+ * If `true`, add a `raw_response` field to the response, containing the raw string response from the model.
+ * Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `raw_response`
+ * if the fuser/judge model failed.
+ */
+include_raw_response: boolean, 
+/**
+ * If `true`, include `raw_usage` in the response's `usage` field, containing the raw usage data from each model inference.
+ */
+include_raw_usage: boolean, 
+/**
+ * If `true`, include an `aggregated_response` field in the final chunk in the stream
+ */
+include_aggregated_response: boolean, internal_dynamic_variant_config?: UninitializedVariantInfo, 
+/**
+ * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+ * If not provided, all static tools are allowed.
+ */
+allowed_tools?: Array<string>, 
+/**
+ * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+ * tools, that are also allowed.
+ */
+additional_tools?: Array<Tool>, 
+/**
+ * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+ * Optional.
+ */
+tool_choice?: ToolChoice, 
+/**
+ * Whether to use parallel tool calls in the inference. Optional.
+ * If provided during inference, it will override the function-configured parallel tool calls.
+ */
+parallel_tool_calls?: boolean, 
+/**
+ * Provider-specific tool configurations
+ */
+provider_tools: Array<ProviderTool>, };

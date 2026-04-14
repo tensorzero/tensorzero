@@ -14,7 +14,7 @@ use sqlx::Postgres;
 use tracing::instrument;
 
 use crate::config::editable::{config_to_toml, toml_to_config};
-use crate::config::{Config, UninitializedConfig};
+use crate::config::{Config, ConfigLoadingError, UninitializedConfig};
 use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
 use crate::db::postgres::stored_config_writes::{
     WriteStoredConfigParams, write_stored_config_in_tx,
@@ -46,6 +46,10 @@ pub struct GetConfigTomlResponse {
     pub base_signature: String,
     /// User-defined tags for categorizing or labeling this config.
     pub tags: HashMap<String, String>,
+    /// Non-fatal errors encountered while loading the config from the database.
+    /// Present when some config items failed to load but the gateway started anyway.
+    #[serde(skip_serializing_if = "Vec::is_empty", default, skip_deserializing)]
+    pub loading_errors: Vec<ConfigLoadingError>,
 }
 
 impl GetConfigTomlResponse {
@@ -53,6 +57,7 @@ impl GetConfigTomlResponse {
         config: UninitializedConfig,
         hash: String,
         tags: HashMap<String, String>,
+        loading_errors: Vec<ConfigLoadingError>,
     ) -> Result<Self, Error> {
         let (toml, path_contents) = config_to_toml(&config)?;
         let base_signature = editable_config_signature(&toml, &path_contents)?;
@@ -62,6 +67,7 @@ impl GetConfigTomlResponse {
             hash,
             base_signature,
             tags,
+            loading_errors,
         })
     }
 }
@@ -108,7 +114,7 @@ fn editable_config_signature(
 
 async fn load_db_authoritative_uninitialized_config(
     app_state: &ResolvedAppStateData,
-) -> Result<(UninitializedConfig, String), Error> {
+) -> Result<(UninitializedConfig, String, Vec<ConfigLoadingError>), Error> {
     let pool = app_state
         .postgres_connection_info
         .get_pool_result()
@@ -117,14 +123,19 @@ async fn load_db_authoritative_uninitialized_config(
         .await
         .map_err(merge_load_config_errors)?;
     let validated = Config::load_from_uninitialized(loaded.config.clone(), false).await?;
-    Ok((loaded.config, validated.hash.to_string()))
+    Ok((
+        loaded.config,
+        validated.hash.to_string(),
+        loaded.loading_errors,
+    ))
 }
 
 async fn load_db_authoritative_config_toml(
     app_state: &ResolvedAppStateData,
 ) -> Result<GetConfigTomlResponse, Error> {
-    let (uninitialized, hash) = load_db_authoritative_uninitialized_config(app_state).await?;
-    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new())
+    let (uninitialized, hash, loading_errors) =
+        load_db_authoritative_uninitialized_config(app_state).await?;
+    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new(), loading_errors)
 }
 
 async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) -> Result<(), Error> {
@@ -341,6 +352,7 @@ mod tests {
             config,
             "test-hash".to_string(),
             HashMap::new(),
+            vec![],
         )
         .expect("TOML response generation should succeed");
 

@@ -2,9 +2,4 @@
 import type { RateLimitInterval } from "./RateLimitInterval";
 import type { RateLimitResource } from "./RateLimitResource";
 
-export type RateLimit = {
-  resource: RateLimitResource;
-  interval: RateLimitInterval;
-  capacity: bigint;
-  refill_rate: bigint;
-};
+export type RateLimit = { resource: RateLimitResource, interval: RateLimitInterval, capacity: bigint, refill_rate: bigint, };

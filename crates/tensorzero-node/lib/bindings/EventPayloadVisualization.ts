@@ -4,15 +4,14 @@ import type { VisualizationType } from "./VisualizationType";
 /**
  * Visualization payload for an event.
  */
-export type EventPayloadVisualization = {
-  /**
-   * The ID of the tool execution that generated this visualization.
-   * For client-side tools, this is the ToolCall event ID.
-   * For server-side tools, this is the task ID.
-   */
-  tool_execution_id: string;
-  /**
-   * The visualization data.
-   */
-  visualization: VisualizationType;
-};
+export type EventPayloadVisualization = { 
+/**
+ * The ID of the tool execution that generated this visualization.
+ * For client-side tools, this is the ToolCall event ID.
+ * For server-side tools, this is the task ID.
+ */
+tool_execution_id: string, 
+/**
+ * The visualization data.
+ */
+visualization: VisualizationType, };

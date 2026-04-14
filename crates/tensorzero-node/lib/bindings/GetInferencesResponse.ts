@@ -4,9 +4,8 @@ import type { StoredInference } from "./StoredInference";
 /**
  * Response containing the requested inferences.
  */
-export type GetInferencesResponse = {
-  /**
-   * The retrieved inferences.
-   */
-  inferences: Array<StoredInference>;
-};
+export type GetInferencesResponse = { 
+/**
+ * The retrieved inferences.
+ */
+inferences: Array<StoredInference>, };

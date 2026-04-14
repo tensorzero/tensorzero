@@ -6,20 +6,4 @@ import type { Nursery } from "./Nursery";
  * This type exposes sampling probabilities but hides internal implementation details like
  * the `Nursery` struct and atomic counters.
  */
-export type TrackAndStopState =
-  | { type: "stopped"; winner_variant_name: string }
-  | ({ type: "nursery_only" } & Nursery)
-  | {
-      type: "bandits_only";
-      sampling_probabilities: { [key in string]: number };
-    }
-  | {
-      type: "nursery_and_bandits";
-      nursery: Nursery;
-      sampling_probabilities: { [key in string]: number };
-    }
-  | {
-      type: "nursery_and_stopped";
-      nursery: Nursery;
-      stopped_variant_name: string;
-    };
+export type TrackAndStopState = { "type": "stopped", winner_variant_name: string, } | { "type": "nursery_only" } & Nursery | { "type": "bandits_only", sampling_probabilities: { [key in string]: number }, } | { "type": "nursery_and_bandits", nursery: Nursery, sampling_probabilities: { [key in string]: number }, } | { "type": "nursery_and_stopped", nursery: Nursery, stopped_variant_name: string, };

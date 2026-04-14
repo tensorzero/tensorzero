@@ -4,10 +4,8 @@ import type { UserQuestionAnswer } from "./UserQuestionAnswer";
 /**
  * User responses payload for an event.
  */
-export type EventPayloadUserQuestionsAnswers = {
-  /**
-   * Map from question UUID to response.
-   */
-  responses: { [key in string]: UserQuestionAnswer };
-  user_questions_event_id: string;
-};
+export type EventPayloadUserQuestionsAnswers = { 
+/**
+ * Map from question UUID to response.
+ */
+responses: { [key in string]: UserQuestionAnswer }, user_questions_event_id: string, };

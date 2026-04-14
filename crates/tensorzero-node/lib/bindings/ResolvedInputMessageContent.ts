@@ -8,12 +8,4 @@ import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
 import type { Unknown } from "./Unknown";
 
-export type ResolvedInputMessageContent =
-  | ({ type: "text" } & Text)
-  | ({ type: "template" } & Template)
-  | ({ type: "tool_call" } & ToolCall)
-  | ({ type: "tool_result" } & ToolResult)
-  | ({ type: "raw_text" } & RawText)
-  | ({ type: "thought" } & Thought)
-  | ({ type: "file" } & ObjectStorageFile)
-  | ({ type: "unknown" } & Unknown);
+export type ResolvedInputMessageContent = { "type": "text" } & Text | { "type": "template" } & Template | { "type": "tool_call" } & ToolCall | { "type": "tool_result" } & ToolResult | { "type": "raw_text" } & RawText | { "type": "thought" } & Thought | { "type": "file" } & ObjectStorageFile | { "type": "unknown" } & Unknown;

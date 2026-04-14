@@ -4,8 +4,4 @@
  * Minimal job handle for Fireworks SFT.
  * All configuration needed for polling comes from provider_types at poll time.
  */
-export type FireworksSFTJobHandle = {
-  job_url: string;
-  job_path: string;
-  deploy_after_training: boolean;
-};
+export type FireworksSFTJobHandle = { job_url: string, job_path: string, deploy_after_training: boolean, };

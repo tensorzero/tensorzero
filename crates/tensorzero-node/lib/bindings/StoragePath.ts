@@ -7,4 +7,4 @@ import type { StorageKind } from "./StorageKind";
  * unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
  * file data first.
  */
-export type StoragePath = { kind: StorageKind; path: string };
+export type StoragePath = { kind: StorageKind, path: string, };

@@ -6,13 +6,9 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Tool call payload as seen by gateway consumers.
  * Includes `requires_approval` which is set by the gateway based on tool whitelist config.
  */
-export type GatewayEventPayloadToolCall = {
-  name: string;
-  arguments: JsonValue;
-  side_info: AutopilotSideInfo;
-  /**
-   * Whether this tool call requires manual user approval.
-   * `false` for whitelisted tools (auto-approved by gateway).
-   */
-  requires_approval: boolean;
-};
+export type GatewayEventPayloadToolCall = { name: string, arguments: JsonValue, side_info: AutopilotSideInfo, 
+/**
+ * Whether this tool call requires manual user approval.
+ * `false` for whitelisted tools (auto-approved by gateway).
+ */
+requires_approval: boolean, };

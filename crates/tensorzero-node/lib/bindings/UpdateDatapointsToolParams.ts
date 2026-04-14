@@ -4,13 +4,12 @@ import type { UpdateDatapointRequest } from "./UpdateDatapointRequest";
 /**
  * Parameters for the update_datapoints tool (visible to LLM).
  */
-export type UpdateDatapointsToolParams = {
-  /**
-   * The name of the dataset containing the datapoints.
-   */
-  dataset_name: string;
-  /**
-   * The datapoints to update. Can be Chat or Json type.
-   */
-  datapoints: Array<UpdateDatapointRequest>;
-};
+export type UpdateDatapointsToolParams = { 
+/**
+ * The name of the dataset containing the datapoints.
+ */
+dataset_name: string, 
+/**
+ * The datapoints to update. Can be Chat or Json type.
+ */
+datapoints: Array<UpdateDatapointRequest>, };

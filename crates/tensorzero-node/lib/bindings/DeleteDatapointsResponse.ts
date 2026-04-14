@@ -3,9 +3,8 @@
 /**
  * Response containing the number of deleted datapoints.
  */
-export type DeleteDatapointsResponse = {
-  /**
-   * The number of deleted datapoints.
-   */
-  num_deleted_datapoints: bigint;
-};
+export type DeleteDatapointsResponse = { 
+/**
+ * The number of deleted datapoints.
+ */
+num_deleted_datapoints: bigint, };

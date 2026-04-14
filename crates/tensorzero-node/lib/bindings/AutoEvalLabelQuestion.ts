@@ -4,9 +4,4 @@ import type { MultipleChoiceOption } from "./MultipleChoiceOption";
 /**
  * A multiple-choice labeling question within an autoeval example.
  */
-export type AutoEvalLabelQuestion = {
-  id: string;
-  header: string;
-  question: string;
-  options: Array<MultipleChoiceOption>;
-};
+export type AutoEvalLabelQuestion = { id: string, header: string, question: string, options: Array<MultipleChoiceOption>, };

@@ -2,9 +2,4 @@
 import type { EmbeddingProviderConfig } from "./EmbeddingProviderConfig";
 import type { ExtraHeadersConfig } from "./ExtraHeadersConfig";
 
-export type EmbeddingProviderInfo = {
-  inner: EmbeddingProviderConfig;
-  timeout_ms: bigint | null;
-  provider_name: string;
-  extra_headers: ExtraHeadersConfig | null;
-};
+export type EmbeddingProviderInfo = { inner: EmbeddingProviderConfig, timeout_ms: bigint | null, provider_name: string, extra_headers: ExtraHeadersConfig | null, };

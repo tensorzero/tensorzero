@@ -6,11 +6,4 @@ import type { StoragePath } from "./StoragePath";
  * A file that we failed to read from object storage.
  * This struct can NOT be stored in the database.
  */
-export type ObjectStorageError = {
-  error?: string;
-  source_url?: string;
-  mime_type: string;
-  storage_path: StoragePath;
-  detail?: Detail;
-  filename?: string;
-};
+export type ObjectStorageError = { error?: string, source_url?: string, mime_type: string, storage_path: StoragePath, detail?: Detail, filename?: string, };

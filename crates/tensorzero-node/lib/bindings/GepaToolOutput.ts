@@ -5,13 +5,12 @@ import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompl
 /**
  * Output of the durable GEPA tool.
  */
-export type GepaToolOutput = {
-  /**
-   * Map of variant_name to its configuration (the Pareto frontier).
-   */
-  variants: { [key in string]: UninitializedChatCompletionConfig };
-  /**
-   * Map of variant_name to { evaluator_name to stats }.
-   */
-  statistics: { [key in string]: { [key in string]: GepaEvaluatorStats } };
-};
+export type GepaToolOutput = { 
+/**
+ * Map of variant_name to its configuration (the Pareto frontier).
+ */
+variants: { [key in string]: UninitializedChatCompletionConfig }, 
+/**
+ * Map of variant_name to { evaluator_name to stats }.
+ */
+statistics: { [key in string]: { [key in string]: GepaEvaluatorStats } }, };

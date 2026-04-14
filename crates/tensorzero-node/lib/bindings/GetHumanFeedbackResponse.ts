@@ -4,9 +4,8 @@ import type { InferenceEvaluationHumanFeedbackRow } from "./InferenceEvaluationH
 /**
  * Response for the check human feedback endpoint.
  */
-export type GetHumanFeedbackResponse = {
-  /**
-   * The human feedback result, if it exists.
-   */
-  feedback?: InferenceEvaluationHumanFeedbackRow;
-};
+export type GetHumanFeedbackResponse = { 
+/**
+ * The human feedback result, if it exists.
+ */
+feedback?: InferenceEvaluationHumanFeedbackRow, };

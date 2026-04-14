@@ -3,13 +3,12 @@
 /**
  * Parameters for the get_datapoints tool (visible to LLM).
  */
-export type GetDatapointsToolParams = {
-  /**
-   * The name of the dataset (optional, but recommended for performance).
-   */
-  dataset_name: string | null;
-  /**
-   * The IDs of the datapoints to retrieve.
-   */
-  ids: Array<string>;
-};
+export type GetDatapointsToolParams = { 
+/**
+ * The name of the dataset (optional, but recommended for performance).
+ */
+dataset_name: string | null, 
+/**
+ * The IDs of the datapoints to retrieve.
+ */
+ids: Array<string>, };

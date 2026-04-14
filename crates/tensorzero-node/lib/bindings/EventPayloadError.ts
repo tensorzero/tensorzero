@@ -3,4 +3,4 @@
 /**
  * Error payload for an event.
  */
-export type EventPayloadError = { message: string };
+export type EventPayloadError = { message: string, };

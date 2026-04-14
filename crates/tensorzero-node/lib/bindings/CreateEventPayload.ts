@@ -13,16 +13,4 @@ import type { EventPayloadUserQuestionsAnswers } from "./EventPayloadUserQuestio
  * to create. Server-enriched fields (e.g. `tool_call_name`, `tool_call_arguments`)
  * are omitted from the inner structs.
  */
-export type CreateEventPayload =
-  | ({ type: "message" } & EventPayloadMessage)
-  | ({
-      type: "tool_call_authorization";
-    } & CreateEventPayloadToolCallAuthorization)
-  | ({ type: "tool_result" } & CreateEventPayloadToolResult)
-  | ({ type: "user_questions_answers" } & EventPayloadUserQuestionsAnswers)
-  | ({
-      type: "auto_eval_example_labeling_answers";
-    } & CreateEventPayloadAutoEvalExampleLabelingAnswers)
-  | ({
-      type: "auto_eval_behavior_spec_answers";
-    } & CreateEventPayloadAutoEvalBehaviorSpecAnswers);
+export type CreateEventPayload = { "type": "message" } & EventPayloadMessage | { "type": "tool_call_authorization" } & CreateEventPayloadToolCallAuthorization | { "type": "tool_result" } & CreateEventPayloadToolResult | { "type": "user_questions_answers" } & EventPayloadUserQuestionsAnswers | { "type": "auto_eval_example_labeling_answers" } & CreateEventPayloadAutoEvalExampleLabelingAnswers | { "type": "auto_eval_behavior_spec_answers" } & CreateEventPayloadAutoEvalBehaviorSpecAnswers;

@@ -7,51 +7,50 @@ import type { UninitializedOptimizerInfo } from "./UninitializedOptimizerInfo";
 /**
  * Parameters for the launch_optimization_workflow tool (visible to LLM).
  */
-export type LaunchOptimizationWorkflowToolParams = {
-  /**
-   * The function name to optimize.
-   */
-  function_name: string;
-  /**
-   * The variant name to use as a template for rendering inferences.
-   */
-  template_variant_name: string;
-  /**
-   * Optional variant name to filter inferences by (defaults to all variants).
-   */
-  query_variant_name?: string;
-  /**
-   * Optional filters to apply when querying inferences.
-   */
-  filters?: InferenceFilter;
-  /**
-   * Source of the output data (inference output, demonstration, etc.).
-   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
-   */
-  output_source?: InferenceOutputSource;
-  /**
-   * Name of the dataset to use as training data.
-   * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
-   */
-  dataset_name?: string;
-  /**
-   * Optional ordering for the inferences.
-   */
-  order_by?: Array<OrderBy>;
-  /**
-   * Maximum number of inferences to use.
-   */
-  limit?: number;
-  /**
-   * Offset for pagination.
-   */
-  offset?: number;
-  /**
-   * Fraction of data to use for validation (0.0 to 1.0, exclusive).
-   */
-  val_fraction?: number;
-  /**
-   * The optimizer configuration (e.g., SFT, DICL).
-   */
-  optimizer_config: UninitializedOptimizerInfo;
-};
+export type LaunchOptimizationWorkflowToolParams = { 
+/**
+ * The function name to optimize.
+ */
+function_name: string, 
+/**
+ * The variant name to use as a template for rendering inferences.
+ */
+template_variant_name: string, 
+/**
+ * Optional variant name to filter inferences by (defaults to all variants).
+ */
+query_variant_name?: string, 
+/**
+ * Optional filters to apply when querying inferences.
+ */
+filters?: InferenceFilter, 
+/**
+ * Source of the output data (inference output, demonstration, etc.).
+ * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+ */
+output_source?: InferenceOutputSource, 
+/**
+ * Name of the dataset to use as training data.
+ * Provide either an inference query (e.g. `output_source`, `filters`) or `dataset_name`, not both.
+ */
+dataset_name?: string, 
+/**
+ * Optional ordering for the inferences.
+ */
+order_by?: Array<OrderBy>, 
+/**
+ * Maximum number of inferences to use.
+ */
+limit?: number, 
+/**
+ * Offset for pagination.
+ */
+offset?: number, 
+/**
+ * Fraction of data to use for validation (0.0 to 1.0, exclusive).
+ */
+val_fraction?: number, 
+/**
+ * The optimizer configuration (e.g., SFT, DICL).
+ */
+optimizer_config: UninitializedOptimizerInfo, };

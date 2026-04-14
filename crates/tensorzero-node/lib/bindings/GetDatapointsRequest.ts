@@ -4,9 +4,8 @@
  * Request to get specific datapoints by their IDs.
  * Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
  */
-export type GetDatapointsRequest = {
-  /**
-   * The IDs of the datapoints to retrieve. Required.
-   */
-  ids: Array<string>;
-};
+export type GetDatapointsRequest = { 
+/**
+ * The IDs of the datapoints to retrieve. Required.
+ */
+ids: Array<string>, };

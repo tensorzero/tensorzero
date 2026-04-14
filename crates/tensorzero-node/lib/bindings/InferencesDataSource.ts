@@ -3,11 +3,4 @@ import type { InferenceFilter } from "./InferenceFilter";
 import type { InferenceOutputSource } from "./InferenceOutputSource";
 import type { OrderBy } from "./OrderBy";
 
-export type InferencesDataSource = {
-  output_source: InferenceOutputSource;
-  query_variant_name?: string;
-  filters?: InferenceFilter;
-  order_by?: Array<OrderBy>;
-  limit?: number;
-  offset?: number;
-};
+export type InferencesDataSource = { output_source: InferenceOutputSource, query_variant_name?: string, filters?: InferenceFilter, order_by?: Array<OrderBy>, limit?: number, offset?: number, };

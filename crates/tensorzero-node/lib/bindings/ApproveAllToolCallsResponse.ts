@@ -3,17 +3,16 @@
 /**
  * Response from approving all pending tool calls.
  */
-export type ApproveAllToolCallsResponse = {
-  /**
-   * Number of tool calls that were approved.
-   */
-  approved_count: number;
-  /**
-   * Event IDs of the newly created ToolCallAuthorization events.
-   */
-  event_ids: Array<string>;
-  /**
-   * Event IDs of the tool calls that were approved.
-   */
-  tool_call_event_ids: Array<string>;
-};
+export type ApproveAllToolCallsResponse = { 
+/**
+ * Number of tool calls that were approved.
+ */
+approved_count: number, 
+/**
+ * Event IDs of the newly created ToolCallAuthorization events.
+ */
+event_ids: Array<string>, 
+/**
+ * Event IDs of the tool calls that were approved.
+ */
+tool_call_event_ids: Array<string>, };

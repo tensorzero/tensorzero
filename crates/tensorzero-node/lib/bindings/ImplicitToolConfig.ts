@@ -5,4 +5,4 @@ import type { JSONSchema } from "./JSONSchema";
  * Contains the configuration information for a tool used in implicit tool calling for
  * JSON schema enforcement
  */
-export type ImplicitToolConfig = { parameters: JSONSchema };
+export type ImplicitToolConfig = { parameters: JSONSchema, };

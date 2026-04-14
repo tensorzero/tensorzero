@@ -3,33 +3,32 @@
 /**
  * A single workflow evaluation run episode with its associated feedback.
  */
-export type WorkflowEvaluationRunEpisodeWithFeedbackRow = {
-  /**
-   * The episode ID
-   */
-  episode_id: string;
-  /**
-   * When the episode started (RFC 3339 format)
-   */
-  timestamp: string;
-  /**
-   * The run ID this episode belongs to
-   */
-  run_id: string;
-  /**
-   * Tags associated with this episode
-   */
-  tags: { [key in string]: string };
-  /**
-   * The task name (datapoint_name). NULL for episodes without a task name.
-   */
-  task_name?: string;
-  /**
-   * Metric names for feedback, sorted alphabetically
-   */
-  feedback_metric_names: Array<string>;
-  /**
-   * Feedback values corresponding to feedback_metric_names
-   */
-  feedback_values: Array<string>;
-};
+export type WorkflowEvaluationRunEpisodeWithFeedbackRow = { 
+/**
+ * The episode ID
+ */
+episode_id: string, 
+/**
+ * When the episode started (RFC 3339 format)
+ */
+timestamp: string, 
+/**
+ * The run ID this episode belongs to
+ */
+run_id: string, 
+/**
+ * Tags associated with this episode
+ */
+tags: { [key in string]: string }, 
+/**
+ * The task name (datapoint_name). NULL for episodes without a task name.
+ */
+task_name?: string, 
+/**
+ * Metric names for feedback, sorted alphabetically
+ */
+feedback_metric_names: Array<string>, 
+/**
+ * Feedback values corresponding to feedback_metric_names
+ */
+feedback_values: Array<string>, };

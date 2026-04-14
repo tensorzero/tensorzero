@@ -4,6 +4,4 @@ import type { SearchEvaluationRunResult } from "./SearchEvaluationRunResult";
 /**
  * Response containing search results for evaluation runs.
  */
-export type SearchEvaluationRunsResponse = {
-  results: Array<SearchEvaluationRunResult>;
-};
+export type SearchEvaluationRunsResponse = { results: Array<SearchEvaluationRunResult>, };

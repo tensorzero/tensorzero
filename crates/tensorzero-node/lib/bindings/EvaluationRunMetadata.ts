@@ -4,12 +4,8 @@ import type { RunMetricMetadata } from "./RunMetricMetadata";
 /**
  * Metadata for a single evaluation run.
  */
-export type EvaluationRunMetadata = {
-  evaluation_name: string;
-  function_name: string;
-  /**
-   * `chat` or `json`
-   */
-  function_type: string;
-  metrics: Array<RunMetricMetadata>;
-};
+export type EvaluationRunMetadata = { evaluation_name: string, function_name: string, 
+/**
+ * `chat` or `json`
+ */
+function_type: string, metrics: Array<RunMetricMetadata>, };

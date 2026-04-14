@@ -2,17 +2,4 @@
 import type { JsonMode } from "./JsonMode";
 import type { ServiceTier } from "./ServiceTier";
 
-export type ChatCompletionInferenceParams = {
-  temperature: number | null;
-  max_tokens: number | null;
-  seed: number | null;
-  top_p: number | null;
-  presence_penalty: number | null;
-  frequency_penalty: number | null;
-  json_mode: JsonMode | null;
-  stop_sequences: Array<string> | null;
-  reasoning_effort?: string;
-  service_tier?: ServiceTier;
-  thinking_budget_tokens?: number;
-  verbosity?: string;
-};
+export type ChatCompletionInferenceParams = { temperature: number | null, max_tokens: number | null, seed: number | null, top_p: number | null, presence_penalty: number | null, frequency_penalty: number | null, json_mode: JsonMode | null, stop_sequences: Array<string> | null, reasoning_effort?: string, service_tier?: ServiceTier, thinking_budget_tokens?: number, verbosity?: string, };

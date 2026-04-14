@@ -8,6 +8,4 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * `AutopilotToolResult::value()` which returns the structured value directly
  * or parses the legacy string as a fallback.
  */
-export type AutopilotToolResult =
-  | { result_value: JsonValue }
-  | { result: string };
+export type AutopilotToolResult = { result_value: JsonValue, } | { result: string, };

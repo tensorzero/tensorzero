@@ -4,14 +4,13 @@ import type { CreateDatapointsFromInferenceRequestParams } from "./CreateDatapoi
 /**
  * Parameters for the create_datapoints_from_inferences tool (visible to LLM).
  */
-export type CreateDatapointsFromInferencesToolParams = {
-  /**
-   * The name of the dataset to create datapoints in.
-   */
-  dataset_name: string;
-  /**
-   * Parameters specifying which inferences to create datapoints from.
-   * Can be either specific inference IDs or a query to find inferences.
-   */
-  params: CreateDatapointsFromInferenceRequestParams;
-};
+export type CreateDatapointsFromInferencesToolParams = { 
+/**
+ * The name of the dataset to create datapoints in.
+ */
+dataset_name: string, 
+/**
+ * Parameters specifying which inferences to create datapoints from.
+ * Can be either specific inference IDs or a query to find inferences.
+ */
+params: CreateDatapointsFromInferenceRequestParams, };

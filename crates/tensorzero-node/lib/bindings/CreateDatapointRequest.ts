@@ -5,6 +5,4 @@ import type { CreateJsonDatapointRequest } from "./CreateJsonDatapointRequest";
 /**
  * A tagged request to create a single datapoint.
  */
-export type CreateDatapointRequest =
-  | ({ type: "chat" } & CreateChatDatapointRequest)
-  | ({ type: "json" } & CreateJsonDatapointRequest);
+export type CreateDatapointRequest = { "type": "chat" } & CreateChatDatapointRequest | { "type": "json" } & CreateJsonDatapointRequest;

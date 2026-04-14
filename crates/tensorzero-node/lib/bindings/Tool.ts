@@ -18,6 +18,4 @@ import type { OpenAICustomTool } from "./OpenAICustomTool";
  * as there's not really anything we can do besides experiment with them.
  * They are a separate type `ProviderTool`.
  */
-export type Tool =
-  | ({ type: "function" } & FunctionTool)
-  | ({ type: "openai_custom" } & OpenAICustomTool);
+export type Tool = { "type": "function" } & FunctionTool | { "type": "openai_custom" } & OpenAICustomTool;

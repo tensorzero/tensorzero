@@ -3,13 +3,12 @@
 /**
  * Query parameters for listing config writes.
  */
-export type ListConfigWritesParams = {
-  /**
-   * Maximum number of config writes to return. Defaults to 20.
-   */
-  limit?: number;
-  /**
-   * Offset for pagination.
-   */
-  offset?: number;
-};
+export type ListConfigWritesParams = { 
+/**
+ * Maximum number of config writes to return. Defaults to 20.
+ */
+limit?: number, 
+/**
+ * Offset for pagination.
+ */
+offset?: number, };

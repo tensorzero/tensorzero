@@ -3,20 +3,4 @@ import type { Input } from "./Input";
 import type { JsonInferenceOutput } from "./JsonInferenceOutput";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type JsonInferenceDatapoint = {
-  dataset_name: string;
-  function_name: string;
-  id: string;
-  episode_id?: string;
-  input: Input;
-  output?: JsonInferenceOutput;
-  output_schema: JsonValue;
-  tags?: Record<string, string>;
-  auxiliary: string;
-  is_deleted: boolean;
-  is_custom: boolean;
-  source_inference_id?: string;
-  staled_at?: string;
-  updated_at: string;
-  name?: string;
-};
+export type JsonInferenceDatapoint = { dataset_name: string, function_name: string, id: string, episode_id?: string, input: Input, output?: JsonInferenceOutput, output_schema: JsonValue, tags?: Record<string, string>, auxiliary: string, is_deleted: boolean, is_custom: boolean, source_inference_id?: string, staled_at?: string, updated_at: string, name?: string, };

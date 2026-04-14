@@ -5,37 +5,36 @@
  *
  * The group_key is either the task_name or a generated key for episodes with NULL task_name.
  */
-export type GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow = {
-  /**
-   * The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'
-   */
-  group_key: string;
-  /**
-   * The episode ID
-   */
-  episode_id: string;
-  /**
-   * When the episode started (RFC 3339 format)
-   */
-  timestamp: string;
-  /**
-   * The run ID this episode belongs to
-   */
-  run_id: string;
-  /**
-   * Tags associated with this episode
-   */
-  tags: { [key in string]: string };
-  /**
-   * The task name (datapoint_name). NULL for episodes without a task name.
-   */
-  task_name?: string;
-  /**
-   * Metric names for feedback, sorted alphabetically
-   */
-  feedback_metric_names: Array<string>;
-  /**
-   * Feedback values corresponding to feedback_metric_names
-   */
-  feedback_values: Array<string>;
-};
+export type GroupedWorkflowEvaluationRunEpisodeWithFeedbackRow = { 
+/**
+ * The grouping key - either task_name or 'NULL_EPISODE_{episode_id_uint}'
+ */
+group_key: string, 
+/**
+ * The episode ID
+ */
+episode_id: string, 
+/**
+ * When the episode started (RFC 3339 format)
+ */
+timestamp: string, 
+/**
+ * The run ID this episode belongs to
+ */
+run_id: string, 
+/**
+ * Tags associated with this episode
+ */
+tags: { [key in string]: string }, 
+/**
+ * The task name (datapoint_name). NULL for episodes without a task name.
+ */
+task_name?: string, 
+/**
+ * Metric names for feedback, sorted alphabetically
+ */
+feedback_metric_names: Array<string>, 
+/**
+ * Feedback values corresponding to feedback_metric_names
+ */
+feedback_values: Array<string>, };

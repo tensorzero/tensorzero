@@ -3,4 +3,4 @@
 /**
  * Response containing the count of workflow evaluation projects.
  */
-export type GetWorkflowEvaluationProjectCountResponse = { count: number };
+export type GetWorkflowEvaluationProjectCountResponse = { count: number, };

@@ -10,17 +10,8 @@ import type { UninitializedTrackAndStopExperimentationConfig } from "./Uninitial
  * Wrapper struct that holds the base experimentation config plus namespace-specific configs.
  * This is the type used in the TOML config to allow both a default config and per-namespace overrides.
  */
-export type UninitializedExperimentationConfigWithNamespaces = {
-  /**
-   * Namespace-specific experimentation configs
-   */
-  namespaces: { [key in string]: UninitializedExperimentationConfig };
-} & (
-  | ({ type: "static" } & StaticExperimentationConfig)
-  | ({ type: "adaptive" } & UninitializedAdaptiveExperimentationConfig)
-  | ({ type: "static_weights" } & LegacyStaticWeightsExperimentationConfig)
-  | ({ type: "uniform" } & LegacyUniformExperimentationConfig)
-  | ({
-      type: "track_and_stop";
-    } & UninitializedTrackAndStopExperimentationConfig)
-);
+export type UninitializedExperimentationConfigWithNamespaces = { 
+/**
+ * Namespace-specific experimentation configs
+ */
+namespaces: { [key in string]: UninitializedExperimentationConfig }, } & ({ "type": "static" } & StaticExperimentationConfig | { "type": "adaptive" } & UninitializedAdaptiveExperimentationConfig | { "type": "static_weights" } & LegacyStaticWeightsExperimentationConfig | { "type": "uniform" } & LegacyUniformExperimentationConfig | { "type": "track_and_stop" } & UninitializedTrackAndStopExperimentationConfig);

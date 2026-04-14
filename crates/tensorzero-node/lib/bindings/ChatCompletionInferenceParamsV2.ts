@@ -5,9 +5,4 @@ import type { ServiceTier } from "./ServiceTier";
  * The V2 inference parameters — a transitional struct for parameters being
  * migrated to explicit per-provider handling.
  */
-export type ChatCompletionInferenceParamsV2 = {
-  reasoning_effort?: string;
-  service_tier?: ServiceTier;
-  thinking_budget_tokens?: number;
-  verbosity?: string;
-};
+export type ChatCompletionInferenceParamsV2 = { reasoning_effort?: string, service_tier?: ServiceTier, thinking_budget_tokens?: number, verbosity?: string, };

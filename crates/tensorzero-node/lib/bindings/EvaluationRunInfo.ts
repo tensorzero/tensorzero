@@ -3,12 +3,4 @@
 /**
  * Information about a single evaluation run.
  */
-export type EvaluationRunInfo = {
-  evaluation_run_id: string;
-  evaluation_name: string;
-  dataset_name: string;
-  function_name: string;
-  variant_name: string;
-  created_at: string;
-  snapshot_hash?: string;
-};
+export type EvaluationRunInfo = { evaluation_run_id: string, evaluation_name: string, dataset_name: string, function_name: string, variant_name: string, created_at: string, snapshot_hash?: string, };

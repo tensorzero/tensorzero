@@ -8,77 +8,76 @@ import type { RetryConfig } from "./RetryConfig";
  * of high-performing variants. It uses genetic programming techniques to evolve
  * prompt templates based on evaluation results.
  */
-export type GEPAConfig = {
-  /**
-   * Name of the function being optimized
-   */
-  function_name: string;
-  /**
-   * Deprecated: name of the evaluation used to score candidate variants.
-   * Prefer `evaluator_names` instead.
-   */
-  evaluation_name?: string;
-  /**
-   * Names of evaluators defined on `function_name`, used to score candidate variants.
-   */
-  evaluator_names?: Array<string>;
-  /**
-   * Optional list of variant_names to initialize GEPA with.
-   * If None, will use all variants defined for the function.
-   */
-  initial_variants?: Array<string>;
-  /**
-   * Prefix for the name of the new optimized variants
-   */
-  variant_prefix?: string;
-  /**
-   * Number of training samples to analyze per iteration
-   */
-  batch_size: number;
-  /**
-   * Maximum number of training iterations
-   */
-  max_iterations: number;
-  /**
-   * Maximum number of concurrent inference calls
-   */
-  max_concurrency: number;
-  /**
-   * Model for analysis (e.g., "anthropic::claude-sonnet-4-5")
-   */
-  analysis_model: string;
-  /**
-   * Model for mutation (e.g., "anthropic::claude-sonnet-4-5")
-   */
-  mutation_model: string;
-  /**
-   * Optional random seed for reproducibility
-   */
-  seed?: number;
-  /**
-   * Client timeout in seconds for TensorZero gateway operations
-   */
-  timeout: bigint;
-  /**
-   * Whether to include inference input and output in Analysis for mutation
-   *
-   * Inclusion can be helpful for adding few-shot examples.
-   *
-   * **Warning:** Use with caution, especially with:
-   * - Multi-turn conversations (many input messages)
-   * - Long inference outputs (many tokens)
-   * - Large batch sizes (many analyses per mutation)
-   *
-   * These can cause context length overflow for the mutation model.
-   */
-  include_inference_for_mutation: boolean;
-  /**
-   * Retry configuration for inference calls during GEPA optimization
-   * Applies to analyze function calls, mutate function calls, and all mutated variants
-   */
-  retries: RetryConfig;
-  /**
-   * Maximum number of tokens to generate for analysis and mutation model calls
-   */
-  max_tokens?: number;
-};
+export type GEPAConfig = { 
+/**
+ * Name of the function being optimized
+ */
+function_name: string, 
+/**
+ * Deprecated: name of the evaluation used to score candidate variants.
+ * Prefer `evaluator_names` instead.
+ */
+evaluation_name?: string, 
+/**
+ * Names of evaluators defined on `function_name`, used to score candidate variants.
+ */
+evaluator_names?: Array<string>, 
+/**
+ * Optional list of variant_names to initialize GEPA with.
+ * If None, will use all variants defined for the function.
+ */
+initial_variants?: Array<string>, 
+/**
+ * Prefix for the name of the new optimized variants
+ */
+variant_prefix?: string, 
+/**
+ * Number of training samples to analyze per iteration
+ */
+batch_size: number, 
+/**
+ * Maximum number of training iterations
+ */
+max_iterations: number, 
+/**
+ * Maximum number of concurrent inference calls
+ */
+max_concurrency: number, 
+/**
+ * Model for analysis (e.g., "anthropic::claude-sonnet-4-5")
+ */
+analysis_model: string, 
+/**
+ * Model for mutation (e.g., "anthropic::claude-sonnet-4-5")
+ */
+mutation_model: string, 
+/**
+ * Optional random seed for reproducibility
+ */
+seed?: number, 
+/**
+ * Client timeout in seconds for TensorZero gateway operations
+ */
+timeout: bigint, 
+/**
+ * Whether to include inference input and output in Analysis for mutation
+ *
+ * Inclusion can be helpful for adding few-shot examples.
+ *
+ * **Warning:** Use with caution, especially with:
+ * - Multi-turn conversations (many input messages)
+ * - Long inference outputs (many tokens)
+ * - Large batch sizes (many analyses per mutation)
+ *
+ * These can cause context length overflow for the mutation model.
+ */
+include_inference_for_mutation: boolean, 
+/**
+ * Retry configuration for inference calls during GEPA optimization
+ * Applies to analyze function calls, mutate function calls, and all mutated variants
+ */
+retries: RetryConfig, 
+/**
+ * Maximum number of tokens to generate for analysis and mutation model calls
+ */
+max_tokens?: number, };

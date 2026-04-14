@@ -8,53 +8,52 @@ import type { ToolChoice } from "./ToolChoice";
 /**
  * A request to create a chat datapoint.
  */
-export type CreateChatDatapointRequest = {
-  /**
-   * The function name for this datapoint. Required.
-   */
-  function_name: string;
-  /**
-   * Episode ID that the datapoint belongs to. Optional.
-   */
-  episode_id?: string;
-  /**
-   * Input to the function. Required.
-   */
-  input: Input;
-  /**
-   * Chat datapoint output. Optional.
-   */
-  output?: Array<ContentBlockChatOutput>;
-  /**
-   * Tags associated with this datapoint. Optional.
-   */
-  tags?: { [key in string]: string };
-  /**
-   * Human-readable name for the datapoint. Optional.
-   */
-  name?: string;
-  /**
-   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
-   * If not provided, all static tools are allowed.
-   */
-  allowed_tools?: Array<string>;
-  /**
-   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
-   * tools, that are also allowed.
-   */
-  additional_tools?: Array<Tool>;
-  /**
-   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-   * Optional.
-   */
-  tool_choice?: ToolChoice;
-  /**
-   * Whether to use parallel tool calls in the inference. Optional.
-   * If provided during inference, it will override the function-configured parallel tool calls.
-   */
-  parallel_tool_calls?: boolean;
-  /**
-   * Provider-specific tool configurations
-   */
-  provider_tools: Array<ProviderTool>;
-};
+export type CreateChatDatapointRequest = { 
+/**
+ * The function name for this datapoint. Required.
+ */
+function_name: string, 
+/**
+ * Episode ID that the datapoint belongs to. Optional.
+ */
+episode_id?: string, 
+/**
+ * Input to the function. Required.
+ */
+input: Input, 
+/**
+ * Chat datapoint output. Optional.
+ */
+output?: Array<ContentBlockChatOutput>, 
+/**
+ * Tags associated with this datapoint. Optional.
+ */
+tags?: { [key in string]: string }, 
+/**
+ * Human-readable name for the datapoint. Optional.
+ */
+name?: string, 
+/**
+ * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+ * If not provided, all static tools are allowed.
+ */
+allowed_tools?: Array<string>, 
+/**
+ * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+ * tools, that are also allowed.
+ */
+additional_tools?: Array<Tool>, 
+/**
+ * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+ * Optional.
+ */
+tool_choice?: ToolChoice, 
+/**
+ * Whether to use parallel tool calls in the inference. Optional.
+ * If provided during inference, it will override the function-configured parallel tool calls.
+ */
+parallel_tool_calls?: boolean, 
+/**
+ * Provider-specific tool configurations
+ */
+provider_tools: Array<ProviderTool>, };

@@ -3,14 +3,12 @@
 /**
  * Row returned from the get_function_throughput_by_variant query.
  */
-export type VariantThroughput = {
-  /**
-   * Start datetime of the period in RFC 3339 format with milliseconds
-   */
-  period_start: string;
-  variant_name: string;
-  /**
-   * Number of inferences for this (period, variant) combination
-   */
-  count: number;
-};
+export type VariantThroughput = { 
+/**
+ * Start datetime of the period in RFC 3339 format with milliseconds
+ */
+period_start: string, variant_name: string, 
+/**
+ * Number of inferences for this (period, variant) combination
+ */
+count: number, };

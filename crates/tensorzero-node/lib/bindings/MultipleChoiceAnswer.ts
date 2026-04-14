@@ -3,13 +3,12 @@
 /**
  * A user's answer to a multiple choice question.
  */
-export type MultipleChoiceAnswer = {
-  /**
-   * IDs of the selected options.
-   */
-  selected: Array<string>;
-  /**
-   * Optional free-text response for additional context.
-   */
-  free_response_text?: string;
-};
+export type MultipleChoiceAnswer = { 
+/**
+ * IDs of the selected options.
+ */
+selected: Array<string>, 
+/**
+ * Optional free-text response for additional context.
+ */
+free_response_text?: string, };

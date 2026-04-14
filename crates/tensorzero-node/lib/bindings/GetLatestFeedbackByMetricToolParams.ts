@@ -3,9 +3,8 @@
 /**
  * Parameters for the get_latest_feedback_by_metric tool (visible to LLM).
  */
-export type GetLatestFeedbackByMetricToolParams = {
-  /**
-   * The target ID (inference ID) to get feedback for.
-   */
-  target_id: string;
-};
+export type GetLatestFeedbackByMetricToolParams = { 
+/**
+ * The target ID (inference ID) to get feedback for.
+ */
+target_id: string, };

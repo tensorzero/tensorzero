@@ -7,7 +7,4 @@ import type { StaticExperimentationConfig } from "./StaticExperimentationConfig"
  * Legacy types (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted to these
  * during `load()`.
  */
-export type ExperimentationConfig =
-  | { type: "default" }
-  | ({ type: "static" } & StaticExperimentationConfig)
-  | ({ type: "adaptive" } & AdaptiveExperimentationConfig);
+export type ExperimentationConfig = { "type": "default" } | { "type": "static" } & StaticExperimentationConfig | { "type": "adaptive" } & AdaptiveExperimentationConfig;

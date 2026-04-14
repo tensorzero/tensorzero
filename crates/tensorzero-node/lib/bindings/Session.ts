@@ -3,13 +3,4 @@
 /**
  * A session representing an autopilot conversation.
  */
-export type Session = {
-  id: string;
-  organization_id: string;
-  workspace_id: string;
-  deployment_id: string;
-  tensorzero_version: string;
-  created_at: string;
-  last_event_at?: string;
-  short_summary?: string;
-};
+export type Session = { id: string, organization_id: string, workspace_id: string, deployment_id: string, tensorzero_version: string, created_at: string, last_event_at?: string, short_summary?: string, };

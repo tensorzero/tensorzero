@@ -10,16 +10,9 @@ import type { StaticToolConfig } from "./StaticToolConfig";
  * Contains only UI-safe fields from the gateway config, excluding sensitive
  * information like provider credentials, API keys, and internal settings.
  */
-export type UiConfig = {
-  functions: { [key in string]: FunctionConfig };
-  metrics: { [key in string]: MetricConfig };
-  tools: { [key in string]: StaticToolConfig };
-  evaluations: { [key in string]: EvaluationConfig };
-  model_names: Array<string>;
-  config_hash: string;
-  /**
-   * Whether the gateway config was loaded from the database (as opposed to a file on disk).
-   * Used by the UI to decide whether to show the config editor.
-   */
-  config_in_database: boolean;
-};
+export type UiConfig = { functions: { [key in string]: FunctionConfig }, metrics: { [key in string]: MetricConfig }, tools: { [key in string]: StaticToolConfig }, evaluations: { [key in string]: EvaluationConfig }, model_names: Array<string>, config_hash: string, 
+/**
+ * Whether the gateway config was loaded from the database (as opposed to a file on disk).
+ * Used by the UI to decide whether to show the config editor.
+ */
+config_in_database: boolean, };

@@ -4,10 +4,4 @@ import type { Detail } from "./Detail";
 /**
  * A file already encoded as base64
  */
-export type Base64File = {
-  source_url?: string;
-  mime_type: string;
-  data: string;
-  detail?: Detail;
-  filename?: string;
-};
+export type Base64File = { source_url?: string, mime_type: string, data: string, detail?: Detail, filename?: string, };

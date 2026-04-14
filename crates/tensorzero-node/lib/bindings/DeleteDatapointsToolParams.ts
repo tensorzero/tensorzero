@@ -3,13 +3,12 @@
 /**
  * Parameters for the delete_datapoints tool (visible to LLM).
  */
-export type DeleteDatapointsToolParams = {
-  /**
-   * The name of the dataset containing the datapoints.
-   */
-  dataset_name: string;
-  /**
-   * The IDs of the datapoints to delete.
-   */
-  ids: Array<string>;
-};
+export type DeleteDatapointsToolParams = { 
+/**
+ * The name of the dataset containing the datapoints.
+ */
+dataset_name: string, 
+/**
+ * The IDs of the datapoints to delete.
+ */
+ids: Array<string>, };

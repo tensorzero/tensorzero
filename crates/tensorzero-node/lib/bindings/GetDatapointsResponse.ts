@@ -4,9 +4,8 @@ import type { Datapoint } from "./Datapoint";
 /**
  * Response containing the requested datapoints.
  */
-export type GetDatapointsResponse = {
-  /**
-   * The retrieved datapoints.
-   */
-  datapoints: Array<Datapoint>;
-};
+export type GetDatapointsResponse = { 
+/**
+ * The retrieved datapoints.
+ */
+datapoints: Array<Datapoint>, };
