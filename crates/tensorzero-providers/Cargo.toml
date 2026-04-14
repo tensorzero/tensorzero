@@ -83,6 +83,8 @@ googletest = { workspace = true }
 serde_json = { workspace = true }
 lazy_static = { workspace = true }
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
+tensorzero-error = { path = "../tensorzero-error", features = ["e2e_tests"] }
+tensorzero-inference-types = { path = "../tensorzero-inference-types", features = ["e2e_tests"] }
 tracing-subscriber = { version = "0.3.23", features = [
     "env-filter",
     "fmt",
