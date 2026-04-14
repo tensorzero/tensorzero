@@ -18,33 +18,35 @@ use super::aws_common::{
     sign_request, warn_if_credential_exfiltration_risk,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::InferenceProvider;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+use tensorzero_error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::BatchRequestRow;
+use tensorzero_inference_types::LazyFileExt;
+use tensorzero_inference_types::PollBatchInferenceResponse;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::mime_type_to_ext;
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, StartBatchProviderInferenceResponse,
+    TextChunk, Usage,
 };
-use crate::inference::types::file::mime_type_to_ext;
-use crate::inference::types::resolved_input::LazyFileExt;
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionType, Latency,
-    ModelInferenceRequest, ModelInferenceRequestJsonMode, ObjectStorageFile,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Role as TensorZeroRole, Text, TextChunk,
-    Usage, batch::StartBatchProviderInferenceResponse,
-};
-use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::{FinishReason, ThoughtChunk};
+use tensorzero_types::Thought;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, FunctionType, ObjectStorageFile, Role as TensorZeroRole, Text};
 
-use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::credentials::{CredentialLocation, CredentialLocationOrHardcoded};
 
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice as TensorZeroToolChoice};
+use tensorzero_inference_types::ToolCallChunk;
+use tensorzero_types::ToolCall;
+use tensorzero_types::ToolChoice as TensorZeroToolChoice;
 use tensorzero_types_providers::aws_bedrock::{
     self as types, AdditionalModelRequestFields, ContentBlock as BedrockContentBlock,
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStart, ContentBlockStartEvent,
@@ -1310,7 +1312,7 @@ fn process_stream_event(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::testing::reset_capture_logs;
+    use crate::test_helpers::reset_capture_logs;
     use googletest::prelude::*;
 
     #[tokio::test]

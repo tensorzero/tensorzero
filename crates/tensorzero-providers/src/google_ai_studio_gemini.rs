@@ -13,38 +13,40 @@ use uuid::Uuid;
 
 use super::helpers::check_new_tool_call_name;
 use super::helpers::inject_extra_request_data_and_send_eventsource;
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::warn_discarded_unknown_chunk;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::TensorZeroEventSource;
-use crate::http::TensorzeroHttpClient;
-use crate::inference::InferenceProvider;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+use crate::gcp_vertex_gemini::GCPVertexGeminiContent;
+use crate::gcp_vertex_gemini::GCPVertexGeminiContentPart;
+use crate::gcp_vertex_gemini::GCPVertexGeminiPartData;
+use crate::gcp_vertex_gemini::GCPVertexGeminiRole;
+use tensorzero_error::warn_discarded_unknown_chunk;
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::TensorZeroEventSource;
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::serialize_or_log;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk,
-};
-use crate::inference::types::{FinishReason, FlattenUnknown};
-use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, Usage,
-    batch::StartBatchProviderInferenceResponse, serialize_or_log,
-};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContent;
-use crate::providers::gcp_vertex_gemini::GCPVertexGeminiContentPart;
-use crate::providers::gcp_vertex_gemini::GCPVertexGeminiPartData;
-use crate::providers::gcp_vertex_gemini::GCPVertexGeminiRole;
+use tensorzero_inference_types::{FinishReason, FlattenUnknown};
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    StartBatchProviderInferenceResponse, Usage,
+};
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Thought, Unknown};
 
+use tensorzero_inference_types::ToolCallChunk;
 #[cfg(test)]
-use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
+use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
+use tensorzero_types::{ToolCall, ToolChoice};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
@@ -1276,13 +1278,14 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::inference::types::{
-        FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role, Text,
-    };
     use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::{
+        FlattenUnknown, ModelInferenceRequestJsonMode, RequestMessage,
+    };
+    use tensorzero_types::{FunctionType, Role, Text};
 
-    use crate::providers::test_helpers::{MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::utils::testing::capture_logs;
+    use crate::test_helpers::capture_logs;
+    use crate::test_helpers::{MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
 
     #[test]
     fn test_convert_unknown_content_block_warn() {

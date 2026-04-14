@@ -1952,17 +1952,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
 /// # Returns
 ///
 /// A `String` containing the serialized JSON, or an empty string if serialization fails.
-pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
-    match serde_json::to_string(value) {
-        Ok(serialized) => serialized,
-        Err(e) => {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize value: {e}"),
-            });
-            String::new()
-        }
-    }
-}
+pub use tensorzero_inference_types::utils::serialize_or_log;
 
 #[cfg(test)]
 mod tests {

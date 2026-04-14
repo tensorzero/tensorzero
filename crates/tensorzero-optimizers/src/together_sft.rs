@@ -31,7 +31,7 @@ use tensorzero_core::{
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::{OpenAIMessagesConfig, OpenAITool, ReasoningFieldName},
+        openai::{OpenAIMessagesConfig, ReasoningFieldName},
         together::prepare_together_messages,
         together::tensorzero_to_together_assistant_message,
         together::{PROVIDER_TYPE, TOGETHER_API_BASE, TogetherRequestMessage},
@@ -370,8 +370,9 @@ impl JobHandle for TogetherSFTJobHandle {
 #[derive(Debug, Serialize)]
 pub struct TogetherSupervisedRow<'a> {
     messages: Vec<TogetherRequestMessage<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAITool<'a>>,
+    #[serde(rename = "tools", skip_serializing_if = "Vec::is_empty")]
+    #[serde(serialize_with = "crate::tool_serializer::serialize_as_openai_tools")]
+    tool_defs: Vec<tensorzero_inference_types::FunctionToolDef>,
 }
 
 impl<'a> TogetherSupervisedRow<'a> {
@@ -385,18 +386,18 @@ impl<'a> TogetherSupervisedRow<'a> {
                 message: "Parallel tool calls are not supported for Together".to_string(),
             }));
         }
-        let tools = inference
+        let tool_defs = inference
             .tool_params
             .additional_tools
             .as_ref()
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt {
+                    .filter_map(|dt| match dt {
                         tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None,
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
         let mut messages = prepare_together_messages(
@@ -438,7 +439,10 @@ impl<'a> TogetherSupervisedRow<'a> {
         )
         .await?;
         messages.push(final_assistant_message);
-        Ok(Self { messages, tools })
+        Ok(Self {
+            messages,
+            tool_defs,
+        })
     }
 }
 

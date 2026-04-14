@@ -13,34 +13,34 @@ use tensorzero_types_providers::groq::{
 };
 use tokio::time::Instant;
 
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{
+use tensorzero_error::{
     DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
-use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown, Usage,
-    batch::StartBatchProviderInferenceResponse,
-    resolved_input::{FileUrl, LazyFile, LazyFileExt},
-};
-use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
+use tensorzero_http::TensorzeroHttpClient;
 use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::ToolCallChunk;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::{InferenceProvider, TensorZeroEventError};
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileUrl, Latency, LazyFile, LazyFileExt,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    RequestMessage, StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, Usage,
+};
+use tensorzero_inference_types::{FinishReason, ProviderInferenceResponseStreamInner};
+use tensorzero_types::ApiType;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, ServiceTier};
+use tensorzero_types::{ObjectStorageFile, Role, Text, Thought, Unknown};
+use tensorzero_types::{ToolCall, ToolChoice};
 use uuid::Uuid;
 
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::helpers::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
@@ -1476,19 +1476,19 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::inference::types::file::Detail;
-    use crate::inference::types::resolved_input::LazyFile;
-    use crate::inference::types::storage::{StorageKind, StoragePath};
-    use crate::inference::types::{
-        ContentBlock, FunctionType, ObjectStorageFile, ObjectStoragePointer,
-        PendingObjectStoreFile, RequestMessage,
-    };
-    use crate::providers::test_helpers::{
+    use crate::test_helpers::capture_logs;
+    use crate::test_helpers::{
         MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
     };
-    use crate::tool::ToolCallConfig;
-    use crate::utils::testing::capture_logs;
+    use tensorzero_inference_types::LazyFile;
     use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::{
+        ContentBlock, ObjectStoragePointer, PendingObjectStoreFile, RequestMessage,
+    };
+    use tensorzero_types::Detail;
+    use tensorzero_types::{FunctionType, ObjectStorageFile};
+    use tensorzero_types::{StorageKind, StoragePath};
     use tensorzero_types_providers::groq::{
         GroqChatChunkChoice, GroqDelta, GroqFunctionCallChunk, GroqResponseFunctionCall,
         GroqResponseMessage, GroqToolCallChunk,
@@ -2176,7 +2176,7 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()
@@ -2214,10 +2214,10 @@ mod tests {
 
     #[test]
     fn test_prepare_groq_tools_with_allowed_tools() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test with allowed_tools specified
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],

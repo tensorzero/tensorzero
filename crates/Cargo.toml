@@ -24,6 +24,7 @@ members = [
     "tensorzero-derive",
     "tensorzero-mcp",
     "tensorzero-node",
+    "tensorzero-providers",
     "tensorzero-optimizers",
     "tensorzero-stored-config",
     "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless

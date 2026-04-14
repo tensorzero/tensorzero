@@ -21,58 +21,56 @@ use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
-use crate::embeddings::EmbeddingEncodingFormat;
-use crate::embeddings::{
-    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
-    EmbeddingProviderResponse, EmbeddingRequest,
-};
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{
-    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
-};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::InferenceProvider;
-use crate::inference::types::ObjectStorageFile;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::batch::{
-    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
-};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{Detail, mime_type_to_audio_format, mime_type_to_ext};
-use crate::inference::types::resolved_input::{FileUrl, LazyFile, LazyFileExt};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ProviderInferenceResponseStreamInner, ThoughtChunk};
-use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    RequestMessage, Role, Text, TextChunk, Thought, Unknown, Usage,
-    batch::{BatchStatus, StartBatchProviderInferenceResponse},
-};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::helpers::{
+use crate::helpers::{
     InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource_with_headers,
     inject_extra_request_data_and_send_with_headers,
 };
-use crate::providers::openai::responses::{
+use crate::openai::responses::{
     OpenAIResponsesInput, OpenAIResponsesInputInner, OpenAIResponsesInputMessage,
     OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
     get_responses_url,
 };
-use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
-
-use crate::tool::{
-    FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfigRef,
+use tensorzero_error::{
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
 };
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::EmbeddingEncodingFormat;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
+use tensorzero_inference_types::extra_body::FullExtraBodyConfig;
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    BatchStatus, ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    RequestMessage, StartBatchProviderInferenceResponse, TextChunk, Usage,
+};
+use tensorzero_inference_types::{FileUrl, LazyFile, LazyFileExt};
+use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
+use tensorzero_inference_types::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse};
+use tensorzero_inference_types::{ProviderInferenceResponseStreamInner, ThoughtChunk};
+use tensorzero_inference_types::{mime_type_to_audio_format, mime_type_to_ext};
+use tensorzero_types::ApiType;
+use tensorzero_types::Detail;
+use tensorzero_types::ObjectStorageFile;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, ServiceTier};
+use tensorzero_types::{Role, Text, Thought, Unknown};
+
+use tensorzero_inference_types::{OpenAICustomTool, ToolCallChunk, ToolConfigRef};
+use tensorzero_types::{ToolCall, ToolChoice};
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
-use crate::inference::TensorZeroEventError;
-use crate::inference::WrappedProvider;
+use tensorzero_inference_types::provider_trait::TensorZeroEventError;
+use tensorzero_inference_types::provider_trait::WrappedProvider;
 
 pub mod grader;
 mod responses;
@@ -112,6 +110,25 @@ impl From<OpenAIAPIType> for ApiType {
     }
 }
 
+impl From<tensorzero_stored_config::stored_model_config::StoredOpenAIAPIType> for OpenAIAPIType {
+    fn from(stored: tensorzero_stored_config::stored_model_config::StoredOpenAIAPIType) -> Self {
+        use tensorzero_stored_config::stored_model_config::StoredOpenAIAPIType;
+        match stored {
+            StoredOpenAIAPIType::ChatCompletions => Self::ChatCompletions,
+            StoredOpenAIAPIType::Responses => Self::Responses,
+        }
+    }
+}
+
+impl From<OpenAIAPIType> for tensorzero_stored_config::stored_model_config::StoredOpenAIAPIType {
+    fn from(api_type: OpenAIAPIType) -> Self {
+        match api_type {
+            OpenAIAPIType::ChatCompletions => Self::ChatCompletions,
+            OpenAIAPIType::Responses => Self::Responses,
+        }
+    }
+}
+
 /// Controls which OpenAI content block type to use for a given MIME type.
 ///
 /// By default, TensorZero maps `image/*` → `image_url`, `audio/*` → `input_audio`,
@@ -126,6 +143,31 @@ pub enum ContentBlockType {
     ImageUrl,
     File,
     InputAudio,
+}
+
+impl From<tensorzero_stored_config::stored_model_config::StoredContentBlockType>
+    for ContentBlockType
+{
+    fn from(stored: tensorzero_stored_config::stored_model_config::StoredContentBlockType) -> Self {
+        use tensorzero_stored_config::stored_model_config::StoredContentBlockType;
+        match stored {
+            StoredContentBlockType::ImageUrl => Self::ImageUrl,
+            StoredContentBlockType::File => Self::File,
+            StoredContentBlockType::InputAudio => Self::InputAudio,
+        }
+    }
+}
+
+impl From<&ContentBlockType>
+    for tensorzero_stored_config::stored_model_config::StoredContentBlockType
+{
+    fn from(value: &ContentBlockType) -> Self {
+        match value {
+            ContentBlockType::ImageUrl => Self::ImageUrl,
+            ContentBlockType::File => Self::File,
+            ContentBlockType::InputAudio => Self::InputAudio,
+        }
+    }
 }
 
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -2422,8 +2464,8 @@ pub struct OpenAISFTTool<'a> {
     pub function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a FunctionTool> for OpenAISFTTool<'a> {
-    fn from(tool: &'a FunctionTool) -> Self {
+impl<'a> From<&'a FunctionToolDef> for OpenAISFTTool<'a> {
+    fn from(tool: &'a FunctionToolDef) -> Self {
         OpenAISFTTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -2431,19 +2473,6 @@ impl<'a> From<&'a FunctionTool> for OpenAISFTTool<'a> {
                 description: Some(&tool.description),
                 parameters: &tool.parameters,
             },
-        }
-    }
-}
-
-impl<'a> From<&'a FunctionTool> for OpenAITool<'a> {
-    fn from(tool: &'a FunctionTool) -> Self {
-        OpenAITool::Function {
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
-            },
-            strict: tool.strict,
         }
     }
 }
@@ -3367,23 +3396,24 @@ mod tests {
     use serde_json::json;
     use std::borrow::Cow;
 
-    use crate::inference::types::file::Detail;
-    use crate::inference::types::storage::{StorageKind, StoragePath};
-    use crate::inference::types::{
-        FinishReason, FunctionType, ObjectStorageFile, ObjectStoragePointer,
-        PendingObjectStoreFile, RequestMessage,
-    };
-    use crate::providers::test_helpers::{
+    use crate::test_helpers::capture_logs;
+    use crate::test_helpers::{
         MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
         WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
-    use crate::tool::ToolCallConfig;
-    use crate::utils::testing::capture_logs;
+    use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::{
+        FinishReason, ObjectStoragePointer, PendingObjectStoreFile, RequestMessage,
+    };
+    use tensorzero_types::Detail;
+    use tensorzero_types::{FunctionType, ObjectStorageFile};
+    use tensorzero_types::{StorageKind, StoragePath};
     use tensorzero_types_providers::openai::OpenAIResponseFunctionCall;
 
     use super::*;
 
-    static FERRIS_PNG: &[u8] = include_bytes!("../../../tests/e2e/providers/ferris.png");
+    static FERRIS_PNG: &[u8] =
+        include_bytes!("../../tensorzero-core/tests/e2e/providers/ferris.png");
 
     #[test]
     fn test_get_chat_url() {
@@ -4152,7 +4182,7 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()
@@ -5716,8 +5746,8 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools_with_allowed_tools_auto() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and auto tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -5765,8 +5795,8 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools_with_allowed_tools_required() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and required tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -5816,8 +5846,8 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools_with_allowed_tools_none_tool_choice() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test that when tool_choice is None but allowed_tools is set,
         // we still use AllowedTools variant with Auto mode
@@ -5846,8 +5876,8 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools_with_allowed_tools_specific_tool_choice() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test that Specific tool choice with allowed_tools uses Auto mode
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -5934,8 +5964,8 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools_empty_allowed_tools_list() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
         use std::borrow::Cow;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test edge case: explicit allowed_tools but empty list
         let mut tool_config = MULTI_TOOL_CONFIG.clone();

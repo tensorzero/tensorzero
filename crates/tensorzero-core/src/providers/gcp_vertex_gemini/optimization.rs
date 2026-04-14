@@ -55,26 +55,37 @@ pub struct GCPVertexGeminiFineTuningRequest {
     pub encryption_spec: Option<EncryptionSpec>,
 }
 
-impl<'a> GCPVertexGeminiSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let tools = inference
+/// Extension trait for converting a `LazyRenderedSample` into the GCP Vertex Gemini
+/// supervised row format. Defined here (rather than as an inherent method on the foreign
+/// `GCPVertexGeminiSupervisedRow` type from `tensorzero-providers`) to satisfy the orphan
+/// rule while keeping the construction logic close to the optimizer code that uses it.
+pub trait LazyRenderedSampleGCPVertexGeminiExt {
+    fn to_supervised_row(
+        &self,
+    ) -> impl std::future::Future<Output = Result<GCPVertexGeminiSupervisedRow<'_>, Error>> + Send;
+}
+
+impl LazyRenderedSampleGCPVertexGeminiExt for LazyRenderedSample {
+    async fn to_supervised_row(
+        &self,
+    ) -> Result<GCPVertexGeminiSupervisedRow<'_>, Error> {
+        let tool_defs = self
             .tool_params
             .additional_tools
             .as_ref()
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt {
+                    .filter_map(|dt| match dt {
                         Tool::Function(func) => Some(func.into()),
-                        Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        Tool::OpenAICustom(_) => None,
                     })
-                    .collect()
+                    .collect::<Vec<tensorzero_inference_types::FunctionToolDef>>()
             })
             .unwrap_or_default();
-        let mut contents = prepare_gcp_vertex_gemini_messages(&inference.messages).await?;
+        let mut contents = prepare_gcp_vertex_gemini_messages(&self.messages).await?;
         let system_instruction =
-            inference
-                .system_input
+            self.system_input
                 .as_ref()
                 .map(|system_instruction| GCPVertexGeminiContent {
                     role: GCPVertexGeminiRole::System,
@@ -86,7 +97,7 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
                         }),
                     }],
                 });
-        let Some(output) = &inference.output else {
+        let Some(output) = &self.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
                 message: "No output in inference".to_string(),
             }));
@@ -105,11 +116,11 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
         )
         .await?;
         contents.push(final_model_message);
-        Ok(Self {
+        Ok(GCPVertexGeminiSupervisedRow::new(
             contents,
             system_instruction,
-            tools,
-        })
+            tool_defs,
+        ))
     }
 }
 

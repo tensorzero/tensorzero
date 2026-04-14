@@ -21,7 +21,8 @@ use tensorzero_core::{
         GCPVertexGeminiSupervisedRow, PROVIDER_TYPE, location_subdomain_prefix,
         optimization::{
             EncryptionSpec, GCPVertexGeminiFineTuningJob, GCPVertexGeminiFineTuningRequest,
-            SupervisedHyperparameters, SupervisedTuningSpec, convert_to_optimizer_status,
+            LazyRenderedSampleGCPVertexGeminiExt, SupervisedHyperparameters,
+            SupervisedTuningSpec, convert_to_optimizer_status,
         },
         upload_rows_to_gcp_object_store,
     },
@@ -94,7 +95,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
             train_examples
                 .iter()
-                .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                .map(|s| s.to_supervised_row()),
         )
         .await?;
 
@@ -103,7 +104,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 try_join_all(
                     examples
                         .iter()
-                        .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                        .map(|s| s.to_supervised_row()),
                 )
                 .await?,
             )

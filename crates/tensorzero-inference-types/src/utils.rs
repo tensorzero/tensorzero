@@ -2,6 +2,34 @@
 
 use url::Url;
 
+/// Logs a warning that a given inference parameter is not supported by a provider.
+pub fn warn_inference_parameter_not_supported(
+    model_provider_name: &str,
+    parameter_name: &str,
+    suffix: Option<&str>,
+) {
+    let mut message = format!(
+        "{model_provider_name} does not support the inference parameter `{parameter_name}`, so it will be ignored."
+    );
+    if let Some(suffix) = suffix {
+        message.push_str(&format!(" {suffix}"));
+    }
+    tracing::warn!("{message}");
+}
+
+/// Serializes a value to a JSON string, logging an error if serialization fails.
+pub fn serialize_or_log<T: serde::Serialize>(value: &T) -> String {
+    match serde_json::to_string(value) {
+        Ok(serialized) => serialized,
+        Err(e) => {
+            tensorzero_error::Error::new(tensorzero_error::ErrorDetails::Serialization {
+                message: format!("Failed to serialize value: {e}"),
+            });
+            String::new()
+        }
+    }
+}
+
 /// Emits a deprecation warning.
 /// All deprecation warnings should be emitted using this function so that we can detect
 /// unintentional use of deprecated behavior in our e2e tests.
