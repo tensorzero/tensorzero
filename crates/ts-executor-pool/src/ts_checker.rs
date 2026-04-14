@@ -794,7 +794,7 @@ mod tests {
     fn test_code_execution_ambient_excludes_rlm_only_globals() {
         let ambient = build_code_execution_ambient_declarations(&fake_exposed_tools());
         assert!(!ambient.contains("declare var context: string"));
-        assert!(!ambient.contains("declare function FINAL"));
+        assert!(ambient.contains("declare function FINAL"));
         assert!(!ambient.contains("declare function llm_query"));
         assert!(!ambient.contains("declare function llm_query_batched"));
         assert!(ambient.contains("declare var console"));

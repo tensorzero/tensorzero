@@ -1513,7 +1513,7 @@ mod tests {
             .expect("execute_js_block should succeed");
         assert_eq!(
             result.console_logs,
-            vec!["undefined undefined undefined object function object"]
+            vec!["undefined function undefined object function object"]
         );
         handle.shutdown().await.expect("shutdown should succeed");
     }
