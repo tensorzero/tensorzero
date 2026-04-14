@@ -971,8 +971,11 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
 ///
 /// Used by the config editor to build the full `path_contents` map — both
 /// files referenced in the TOML and "free" files the user added but has not
-/// yet referenced. The `DISTINCT ON … ORDER BY created_at DESC` pattern
-/// relies on `idx_stored_files_editor_latest`.
+/// yet referenced. The `DISTINCT ON … ORDER BY created_at DESC, id DESC`
+/// pattern relies on `idx_stored_files_editor_latest`. The secondary `id
+/// DESC` sort ensures deterministic row selection when rows share a
+/// `created_at` timestamp (which can happen within a single transaction,
+/// since `NOW()` is transaction-stable).
 pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, String>, Error> {
     #[derive(FromRow)]
     struct EditorFileRow {
@@ -984,7 +987,7 @@ pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, 
         SELECT DISTINCT ON (file_path) file_path, source_body
         FROM tensorzero.stored_files
         WHERE deleted_at IS NULL
-        ORDER BY file_path, created_at DESC
+        ORDER BY file_path, created_at DESC, id DESC
         ",
     )
     .fetch_all(pool)

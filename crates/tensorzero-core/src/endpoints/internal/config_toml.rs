@@ -10,7 +10,7 @@ use axum::Json;
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::{Postgres, QueryBuilder};
+use sqlx::Postgres;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -350,6 +350,10 @@ pub async fn apply_config_toml_handler(
 /// `stored_files` rows referenced by UUID from config tables are never
 /// queried with a `deleted_at` filter, so tombstoning only affects the
 /// editor view — it does not break any live config references.
+///
+/// At most one active row per `file_path` is maintained: if the content is
+/// unchanged the existing row is reused; if the content changed the old row
+/// is tombstoned before the new one is inserted.
 async fn write_free_files_in_tx(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     free_files: &HashMap<String, String>,
@@ -375,25 +379,61 @@ async fn write_free_files_in_tx(
         })
     })?;
 
-    // Insert free files (not handled by write_stored_config_in_tx).
-    if !free_files.is_empty() {
-        let mut qb = QueryBuilder::new(
-            "INSERT INTO tensorzero.stored_files (id, file_path, source_body, content_hash, creation_source) ",
-        );
-        qb.push_values(free_files, |mut b, (path, body)| {
-            let hash = blake3::hash(body.as_bytes()).as_bytes().to_vec();
-            b.push_bind(Uuid::now_v7())
-                .push_bind(path)
-                .push_bind(body)
-                .push_bind(hash)
-                .push_bind(creation_source);
-        });
-        qb.build().execute(&mut **tx).await.map_err(|e| {
-            Error::new(ErrorDetails::PostgresQuery {
-                message: format!("Failed to insert free files into stored_files: {e}"),
-            })
-        })?;
+    if free_files.is_empty() {
+        return Ok(());
     }
+
+    // Precompute IDs and hashes for all free files.
+    let ids: Vec<Uuid> = free_files.keys().map(|_| Uuid::now_v7()).collect();
+    let paths: Vec<&str> = free_files.keys().map(String::as_str).collect();
+    let bodies: Vec<&str> = free_files.values().map(String::as_str).collect();
+    let hashes: Vec<Vec<u8>> = bodies
+        .iter()
+        .map(|body| blake3::hash(body.as_bytes()).as_bytes().to_vec())
+        .collect();
+
+    // In a single CTE:
+    //   1. Insert rows where no active row with the same (file_path, content_hash)
+    //      already exists — content-hash dedup in one SQL round-trip.
+    //   2. Tombstone any previously active rows for the same paths, so there is
+    //      never more than one active row per file_path.
+    sqlx::query(
+        r"
+        WITH new_rows AS (
+            INSERT INTO tensorzero.stored_files
+                (id, file_path, source_body, content_hash, creation_source)
+            SELECT input.id, input.file_path, input.source_body,
+                   input.content_hash, $5
+            FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::bytea[])
+                 AS input(id, file_path, source_body, content_hash)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM tensorzero.stored_files t
+                WHERE t.file_path  = input.file_path
+                  AND t.content_hash = input.content_hash
+                  AND t.deleted_at IS NULL
+            )
+            RETURNING id, file_path
+        )
+        UPDATE tensorzero.stored_files t
+        SET deleted_at = NOW()
+        FROM new_rows n
+        WHERE t.file_path  = n.file_path
+          AND t.deleted_at IS NULL
+          AND t.id        != n.id
+        ",
+    )
+    .bind(&ids)
+    .bind(&paths)
+    .bind(&bodies)
+    .bind(&hashes)
+    .bind(creation_source)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to upsert free files into stored_files: {e}"),
+        })
+    })?;
 
     Ok(())
 }
