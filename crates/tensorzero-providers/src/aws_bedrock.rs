@@ -1320,7 +1320,7 @@ mod tests {
         // Clear bearer token env var so we test the SDK credential chain path
         tensorzero_unsafe_helpers::remove_env_var_tests_only("AWS_BEARER_TOKEN_BEDROCK");
 
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
 
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
         // SDK config is now loaded in AWSBedrockCredentials::from_fields()

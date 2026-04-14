@@ -879,7 +879,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::anthropic::{AnthropicFunctionTool, AnthropicMessageContent};
-    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
     use tensorzero_inference_types::FunctionToolDef;
     use tensorzero_inference_types::{ContentBlock, ModelInferenceRequestJsonMode, RequestMessage};
     use tensorzero_types::ToolResult;
@@ -1221,9 +1221,9 @@ mod tests {
                     disable_parallel_tool_use: Some(false),
                 }),
                 tools: Some(vec![AnthropicTool::Function(AnthropicFunctionTool {
-                    name: WEATHER_TOOL.name(),
-                    description: Some(WEATHER_TOOL.description()),
-                    input_schema: WEATHER_TOOL.parameters(),
+                    name: &WEATHER_TOOL_DEF.name,
+                    description: Some(&WEATHER_TOOL_DEF.description),
+                    input_schema: &WEATHER_TOOL_DEF.parameters,
                     strict: None,
                 })]),
                 ..Default::default()
@@ -1727,7 +1727,7 @@ mod tests {
 
     #[test]
     fn test_gcp_vertex_anthropic_apply_inference_params_thinking_budget_tokens() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: None,
             service_tier: None,

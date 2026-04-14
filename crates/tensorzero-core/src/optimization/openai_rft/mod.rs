@@ -5,7 +5,9 @@ use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_stored_config::{StoredOpenAIRFTConfig, StoredOpenAIRFTResponseFormat, StoredRFTJsonSchemaInfo};
+use tensorzero_stored_config::{
+    StoredOpenAIRFTConfig, StoredOpenAIRFTResponseFormat, StoredRFTJsonSchemaInfo,
+};
 use url::Url;
 
 use crate::{
@@ -108,7 +110,6 @@ impl std::fmt::Display for UninitializedOpenAIRFTConfig {
     }
 }
 
-
 impl From<StoredRFTJsonSchemaInfo> for JsonSchemaInfo {
     fn from(stored: StoredRFTJsonSchemaInfo) -> Self {
         Self {
@@ -129,7 +130,6 @@ impl From<StoredOpenAIRFTResponseFormat> for OpenAIRFTResponseFormat {
         }
     }
 }
-
 
 impl From<JsonSchemaInfo> for StoredRFTJsonSchemaInfo {
     fn from(info: JsonSchemaInfo) -> Self {
@@ -332,8 +332,15 @@ impl std::fmt::Display for OpenAIRFTJobHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::openai::grader::{
+        OpenAIModelGraderInput, OpenAIRFTRole, OpenAISimilarityMetric, OpenAIStringCheckOp,
+    };
     use googletest::prelude::*;
     use std::collections::HashMap;
+    use tensorzero_stored_config::{
+        StoredOpenAIGrader, StoredOpenAIRFTRole, StoredOpenAISimilarityMetric,
+        StoredOpenAIStringCheckOp,
+    };
 
     fn sample_string_check_grader() -> OpenAIGrader {
         OpenAIGrader::StringCheck {

@@ -939,7 +939,7 @@ mod tests {
     use crate::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
-    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
     use tensorzero_inference_types::credential_validation::with_skip_credential_validation;
     use tensorzero_inference_types::credentials::EndpointLocation;
     use tensorzero_inference_types::{FinishReason, ModelInferenceRequestJsonMode, RequestMessage};
@@ -981,15 +981,15 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1035,15 +1035,15 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1272,7 +1272,7 @@ mod tests {
 
     #[test]
     fn test_azure_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

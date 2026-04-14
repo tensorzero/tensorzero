@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn test_hyperbolic_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

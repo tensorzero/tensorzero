@@ -1,8 +1,6 @@
-#![expect(
-    clippy::expect_used,
-    clippy::unwrap_used,
-    clippy::print_stdout,
-    clippy::missing_panics_doc
+#![cfg_attr(
+    test,
+    allow(clippy::expect_used, clippy::print_stdout, clippy::missing_panics_doc)
 )]
 use std::{
     io,
