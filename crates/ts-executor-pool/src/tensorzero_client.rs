@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use tensorzero_core::client::ClientInferenceParams;
-use tensorzero_core::endpoints::inference::InferenceResponse;
+use tensorzero_types::InferenceResponse;
 
 #[cfg(test)]
 use mockall::automock;

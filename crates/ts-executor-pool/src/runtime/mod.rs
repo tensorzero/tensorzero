@@ -1188,10 +1188,11 @@ mod tests {
     use super::*;
     use crate::llm_query::extract_text_from_response;
     use crate::tensorzero_client::MockTensorZeroClient;
-    use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
-    use tensorzero_core::inference::types::ContentBlockChatOutput;
-    use tensorzero_core::inference::types::Usage;
-    use tensorzero_types::InputMessageContent;
+    use tensorzero_core::client::ClientInferenceParams;
+    use tensorzero_types::{
+        ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, InputMessageContent,
+        Usage,
+    };
 
     const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -1229,7 +1230,7 @@ mod tests {
         }
     }
 
-    fn first_inference_text(params: &tensorzero_core::client::ClientInferenceParams) -> String {
+    fn first_inference_text(params: &ClientInferenceParams) -> String {
         params
             .input
             .messages
@@ -1962,7 +1963,7 @@ mod tests {
     }
 
     fn mock_chat_response(texts: &[&str]) -> InferenceResponse {
-        use tensorzero_core::inference::types::Text as T0Text;
+        use tensorzero_types::Text as T0Text;
         InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::nil(),
             episode_id: Uuid::nil(),
@@ -2150,8 +2151,7 @@ mod tests {
 
     #[test]
     fn test_extract_text_json_response() {
-        use tensorzero_core::endpoints::inference::JsonInferenceResponse;
-        use tensorzero_core::inference::types::JsonInferenceOutput;
+        use tensorzero_types::{JsonInferenceOutput, JsonInferenceResponse};
         let response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::nil(),
             episode_id: Uuid::nil(),
