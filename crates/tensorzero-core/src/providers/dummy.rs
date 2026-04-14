@@ -713,6 +713,9 @@ impl InferenceProvider for DummyProvider {
                     data: serde_json::Value::Null, // dummy provider doesn't have real raw usage
                 }]),
                 relay_raw_response: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
             },
         ))
     }

@@ -774,6 +774,9 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             cost: Some(Decimal::new(500, 6)), // 0.000500
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         StoredModelInference {
@@ -798,6 +801,9 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             cost: Some(Decimal::new(1500, 6)), // 0.001500
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         StoredModelInference {
@@ -822,6 +828,9 @@ fn make_cost_test_inferences(model_name: &str) -> Vec<StoredModelInference> {
             cost: None, // NULL cost — should be excluded from SUM
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
     ]
@@ -872,6 +881,9 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             cost: Some(Decimal::new(500, 6)), // 0.000500
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         // Minute A, inference 2: has cost
@@ -897,6 +909,9 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             cost: Some(Decimal::new(1500, 6)), // 0.001500
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         // Minute B, inference 1: NO cost
@@ -922,6 +937,9 @@ fn make_cross_minute_cost_test_inferences(model_name: &str) -> Vec<StoredModelIn
             cost: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
     ]

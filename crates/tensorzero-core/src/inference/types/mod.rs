@@ -1159,6 +1159,12 @@ pub struct ModelInferenceResponse {
     /// Raw response entries from failed provider attempts during fallback.
     /// Populated when a model has multiple providers and earlier ones fail before a later one succeeds.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// See [`ProviderInferenceResponse::provider_response_id`].
+    pub provider_response_id: Option<String>,
+    /// See [`ProviderInferenceResponse::response_model_name`].
+    pub response_model_name: Option<String>,
+    /// See [`ProviderInferenceResponse::operation`].
+    pub operation: Option<String>,
 }
 
 /// Runtime type for model inference responses with full metadata during inference execution.
@@ -1191,6 +1197,12 @@ pub struct ModelInferenceResponseWithMetadata {
     pub relay_raw_response: Option<Vec<RawResponseEntry>>,
     /// Raw response entries from failed provider attempts during fallback.
     pub failed_raw_response: Vec<RawResponseEntry>,
+    /// See [`ProviderInferenceResponse::provider_response_id`].
+    pub provider_response_id: Option<String>,
+    /// See [`ProviderInferenceResponse::response_model_name`].
+    pub response_model_name: Option<String>,
+    /// See [`ProviderInferenceResponse::operation`].
+    pub operation: Option<String>,
 }
 
 /// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
@@ -1430,6 +1442,21 @@ pub struct StoredModelInference {
     pub cost: Option<Decimal>,
     pub finish_reason: Option<FinishReason>,
     pub snapshot_hash: Option<SnapshotHash>,
+    /// Provider-native response id (e.g. OpenAI `chatcmpl-...`, Anthropic `msg_...`).
+    /// Maps to OTel GenAI `gen_ai.response.id`. `None` when the provider does
+    /// not return one, or when the row predates OTel field capture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_response_id: Option<String>,
+    /// Model name actually returned by the provider (can differ from the
+    /// model that was requested — routers, version pins, fallbacks).
+    /// Maps to OTel GenAI `gen_ai.response.model`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_model_name: Option<String>,
+    /// OTel GenAI `gen_ai.operation.name` (e.g. "chat", "text_completion",
+    /// "embeddings"). Lets consumers disambiguate the call kind without
+    /// re-deriving it from the request shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
     /// Materialized column in ClickHouse - only present when reading from the database.
     /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
     #[serde(default, skip_serializing)]
@@ -1486,6 +1513,9 @@ impl ModelInferenceResponse {
             raw_usage: provider_inference_response.raw_usage,
             relay_raw_response: provider_inference_response.relay_raw_response,
             failed_raw_response: vec![],
+            provider_response_id: provider_inference_response.provider_response_id,
+            response_model_name: provider_inference_response.response_model_name,
+            operation: provider_inference_response.operation,
         }
     }
 
@@ -1520,6 +1550,10 @@ impl ModelInferenceResponse {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            // OTel GenAI fields aren't captured in the cache today.
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }
     }
 }
@@ -1545,6 +1579,9 @@ impl ModelInferenceResponseWithMetadata {
             raw_usage: model_inference_response.raw_usage,
             relay_raw_response: model_inference_response.relay_raw_response,
             failed_raw_response: model_inference_response.failed_raw_response,
+            provider_response_id: model_inference_response.provider_response_id,
+            response_model_name: model_inference_response.response_model_name,
+            operation: model_inference_response.operation,
         }
     }
 }
@@ -1632,6 +1669,9 @@ impl StoredModelInference {
             finish_reason: result.finish_reason,
             input_messages: Some(stored_input_messages),
             snapshot_hash: Some(snapshot_hash),
+            provider_response_id: result.provider_response_id,
+            response_model_name: result.response_model_name,
+            operation: result.operation,
             // timestamp is a materialized column, not set during insert
             timestamp: None,
         })
@@ -2074,6 +2114,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -2126,6 +2169,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -2181,6 +2227,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2232,6 +2281,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2303,6 +2355,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2392,6 +2447,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2490,6 +2548,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2544,6 +2605,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2622,6 +2686,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2682,6 +2749,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -2882,6 +2952,9 @@ mod tests {
                 raw_usage: None,
                 relay_raw_response: None,
                 failed_raw_response: vec![],
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
             };
 
         // Test Case 1: All values are Some() - should aggregate correctly
@@ -3155,6 +3228,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let response_middle = ModelInferenceResponseWithMetadata {
@@ -3176,6 +3252,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let response_newest = ModelInferenceResponseWithMetadata {
@@ -3197,6 +3276,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         // Test: passing results in order newest-first should still return newest's finish_reason

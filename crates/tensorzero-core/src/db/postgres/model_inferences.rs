@@ -881,6 +881,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
         let cost: Option<Decimal> = row.try_get("cost")?;
         let finish_reason: Option<FinishReason> = row.try_get("finish_reason")?;
         let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
+        let provider_response_id: Option<String> = row.try_get("provider_response_id")?;
+        let response_model_name: Option<String> = row.try_get("response_model_name")?;
+        let operation: Option<String> = row.try_get("operation")?;
         let created_at: DateTime<Utc> = row.try_get("created_at")?;
 
         Ok(StoredModelInference {
@@ -905,6 +908,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for StoredModelInference {
             cost,
             finish_reason,
             snapshot_hash,
+            provider_response_id,
+            response_model_name,
+            operation,
             timestamp: Some(created_at.to_rfc3339()),
         })
     }
@@ -1490,6 +1496,9 @@ mod tests {
             cost: None,
             finish_reason: Some(FinishReason::Stop),
             snapshot_hash: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         }];
 
@@ -1543,6 +1552,9 @@ mod tests {
                 cost: None,
                 finish_reason: None,
                 snapshot_hash: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
                 timestamp: None,
             },
             StoredModelInference {
@@ -1567,6 +1579,9 @@ mod tests {
                 cost: None,
                 finish_reason: Some(FinishReason::ToolCall),
                 snapshot_hash: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
                 timestamp: None,
             },
         ];

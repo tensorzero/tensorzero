@@ -1134,6 +1134,10 @@ pub async fn write_completed_batch_inference<'a>(
             raw_usage: None, // batch inference does not support include_raw_usage (#5452)
             relay_raw_response: None, // batch inference does not support include_raw_response (#5710)
             failed_raw_response: vec![],
+            // OTel GenAI fields aren't captured from batch inferences yet.
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let tool_config: Option<ToolCallConfig> = match tool_params {
             Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {

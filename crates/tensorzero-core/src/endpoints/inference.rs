@@ -3129,6 +3129,9 @@ mod tests {
             raw_usage: Some(raw_usage_entries.clone()),
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let mut metadata = create_test_metadata();
@@ -3233,6 +3236,9 @@ mod tests {
             raw_usage: Some(cached_raw_usage),
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let mut metadata = create_test_metadata();
@@ -3319,6 +3325,9 @@ mod tests {
             raw_usage: Some(raw_usage_entries),
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let mut metadata = create_test_metadata();
@@ -3524,6 +3533,9 @@ mod tests {
                 raw_usage: None,
                 relay_raw_response: None,
                 failed_raw_response: failed,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
             }
         };
 

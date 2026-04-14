@@ -1359,6 +1359,9 @@ impl<'a> TryFrom<GroqResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 raw_usage,
                 relay_raw_response: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
                 usage,
                 provider_latency: latency,
                 finish_reason: Some(groq_finish_reason_to_tensorzero_finish_reason(

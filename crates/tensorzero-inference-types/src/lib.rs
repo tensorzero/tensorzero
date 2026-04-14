@@ -495,6 +495,19 @@ pub struct ProviderInferenceResponse {
     pub raw_usage: Option<Vec<RawUsageEntry>>,
     /// Raw response entries for `include_raw_response` feature.
     pub relay_raw_response: Option<Vec<tensorzero_types::RawResponseEntry>>,
+    /// Provider-native response id (e.g. OpenAI `chatcmpl-...`, Anthropic `msg_...`).
+    /// Corresponds to the OTel GenAI attribute `gen_ai.response.id`.
+    /// Providers may or may not return one; if unset, this stays `None`.
+    pub provider_response_id: Option<String>,
+    /// Model name actually returned by the provider. May differ from the model
+    /// that was requested (e.g. when a provider routes to a version pin,
+    /// resolves an alias, or falls back).
+    /// Corresponds to the OTel GenAI attribute `gen_ai.response.model`.
+    pub response_model_name: Option<String>,
+    /// OTel GenAI `gen_ai.operation.name` — typically "chat", "text_completion",
+    /// or "embeddings". Lets consumers disambiguate the call kind without
+    /// re-deriving it from the request/response shape.
+    pub operation: Option<String>,
 }
 
 pub struct ProviderInferenceResponseArgs {
@@ -511,6 +524,12 @@ pub struct ProviderInferenceResponseArgs {
     pub provider_latency: Latency,
     pub finish_reason: Option<FinishReason>,
     pub id: Uuid,
+    /// See [`ProviderInferenceResponse::provider_response_id`].
+    pub provider_response_id: Option<String>,
+    /// See [`ProviderInferenceResponse::response_model_name`].
+    pub response_model_name: Option<String>,
+    /// See [`ProviderInferenceResponse::operation`].
+    pub operation: Option<String>,
 }
 
 impl ProviderInferenceResponse {
@@ -529,6 +548,9 @@ impl ProviderInferenceResponse {
             finish_reason: args.finish_reason,
             raw_usage: args.raw_usage,
             relay_raw_response: args.relay_raw_response,
+            provider_response_id: args.provider_response_id,
+            response_model_name: args.response_model_name,
+            operation: args.operation,
         }
     }
 }

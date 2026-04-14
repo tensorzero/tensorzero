@@ -855,6 +855,9 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 usage,
                 raw_usage,
                 relay_raw_response: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
                 provider_latency: latency,
                 finish_reason: response
                     .stop_reason

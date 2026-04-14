@@ -1708,6 +1708,9 @@ async fn test_get_evaluation_results_usage_aggregation(
             snapshot_hash: None,
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         // Inference 1 - model inference B (fallback)
@@ -1733,6 +1736,9 @@ async fn test_get_evaluation_results_usage_aggregation(
             snapshot_hash: None,
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         // Inference 2 - model inference A (has cost)
@@ -1758,6 +1764,9 @@ async fn test_get_evaluation_results_usage_aggregation(
             snapshot_hash: None,
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         // Inference 2 - model inference B (NO cost => total cost should be NULL)
@@ -1783,6 +1792,9 @@ async fn test_get_evaluation_results_usage_aggregation(
             snapshot_hash: None,
             provider_cache_read_input_tokens: None,
             provider_cache_write_input_tokens: None,
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
     ];
@@ -1955,6 +1967,9 @@ fn make_model_inference_for_eval(
         snapshot_hash: None,
         provider_cache_read_input_tokens: None,
         provider_cache_write_input_tokens: None,
+        provider_response_id: None,
+        response_model_name: None,
+        operation: None,
         timestamp: None,
     }
 }

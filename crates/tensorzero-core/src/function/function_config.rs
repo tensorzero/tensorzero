@@ -2078,6 +2078,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let templates = Arc::new(TemplateConfig::default());
         let inference_config = InferenceConfig {
@@ -2151,6 +2154,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2210,6 +2216,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2271,6 +2280,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2330,6 +2342,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2389,6 +2404,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2467,6 +2485,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2520,6 +2541,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2580,6 +2604,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2638,6 +2665,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(
@@ -2704,6 +2734,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let response = function_config
             .prepare_response(

@@ -1144,6 +1144,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -1187,6 +1190,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -1249,6 +1255,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1295,6 +1304,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1373,6 +1385,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1416,6 +1431,9 @@ mod tests {
             raw_usage: None,
             relay_raw_response: None,
             failed_raw_response: vec![],
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

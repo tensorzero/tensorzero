@@ -637,6 +637,9 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
+        provider_response_id: None,
+        response_model_name: None,
+        operation: None,
         timestamp: None,
     };
     let row2 = StoredModelInference {
@@ -661,6 +664,9 @@ async fn run_migration_0048_with_data<R: Future<Output = bool>, F: FnOnce() -> R
         provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
+        provider_response_id: None,
+        response_model_name: None,
+        operation: None,
         timestamp: None,
     };
 
@@ -735,6 +741,9 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             cost: Some(cost1),
             finish_reason: None,
             snapshot_hash: Some(SnapshotHash::new_test()),
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         StoredModelInference {
@@ -759,6 +768,9 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             cost: Some(cost2),
             finish_reason: None,
             snapshot_hash: Some(SnapshotHash::new_test()),
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
         StoredModelInference {
@@ -783,6 +795,9 @@ async fn run_migration_0052_with_data<R: Future<Output = bool>, F: FnOnce() -> R
             cost: None,
             finish_reason: None,
             snapshot_hash: Some(SnapshotHash::new_test()),
+            provider_response_id: None,
+            response_model_name: None,
+            operation: None,
             timestamp: None,
         },
     ];
@@ -1215,6 +1230,9 @@ async fn test_clickhouse_migration_manager() {
         provider_cache_write_input_tokens: None,
         finish_reason: None,
         snapshot_hash: Some(SnapshotHash::new_test()),
+        provider_response_id: None,
+        response_model_name: None,
+        operation: None,
         timestamp: None,
     };
     clickhouse

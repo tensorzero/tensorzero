@@ -618,6 +618,10 @@ impl TryFrom<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetada
             raw_usage: response.raw_usage,
             relay_raw_response: None,
             failed_raw_response: response.failed_raw_response,
+            provider_response_id: None,
+            response_model_name: None,
+            // Embedding calls have a dedicated OTel GenAI operation name.
+            operation: Some("embeddings".to_string()),
         })
     }
 }

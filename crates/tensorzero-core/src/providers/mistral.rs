@@ -942,6 +942,9 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 usage,
                 raw_usage,
                 relay_raw_response: None,
+                provider_response_id: None,
+                response_model_name: None,
+                operation: None,
                 provider_latency: latency,
                 finish_reason: Some(mistral_finish_reason_to_tensorzero_finish_reason(
                     finish_reason,

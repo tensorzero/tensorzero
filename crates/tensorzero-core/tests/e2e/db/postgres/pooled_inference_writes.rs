@@ -99,6 +99,9 @@ fn make_model_inference(inference_id: Uuid) -> StoredModelInference {
         provider_cache_write_input_tokens: None,
         finish_reason: Some(FinishReason::Stop),
         snapshot_hash: None,
+        provider_response_id: None,
+        response_model_name: None,
+        operation: None,
         timestamp: None,
     }
 }
