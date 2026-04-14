@@ -11,6 +11,7 @@ pub mod credentials;
 pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod inference_response;
 pub(crate) mod serde_helpers;
 
 #[cfg(feature = "pyo3")]

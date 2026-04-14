@@ -61,15 +61,10 @@ use futures::future::{join_all, try_join_all};
 use itertools::Itertools;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::types::PyAny;
-#[cfg(feature = "pyo3")]
-use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{
     LazyFileExt, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
 use rust_decimal::Decimal;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -77,7 +72,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tensorzero_derive::{TensorZeroDeserialize, export_schema};
+use tensorzero_derive::TensorZeroDeserialize;
 pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
 use uuid::Uuid;
 
@@ -925,50 +920,31 @@ enum ContentBlockOutputType {
     Unknown,
 }
 
-/// Defines the types of content block that can come from a `chat` function
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[export_schema]
-pub enum ContentBlockChatOutput {
-    #[schemars(title = "ContentBlockChatOutputText")]
-    Text(Text),
-    #[schemars(title = "ContentBlockChatOutputToolCall")]
-    ToolCall(InferenceResponseToolCall),
-    #[schemars(title = "ContentBlockChatOutputThought")]
-    Thought(Thought),
-    #[schemars(title = "ContentBlockChatOutputUnknown")]
-    Unknown(Unknown),
-}
+// Re-exported from tensorzero-inference-types
+pub use tensorzero_inference_types::inference_response::ContentBlockChatOutput;
 
-impl ContentBlockChatOutput {
-    /// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
-    /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
-    ///
-    /// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
-    /// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
-    /// and re-validate.
-    pub async fn into_validated(
-        self,
-        tool_call_config: Option<&ToolCallConfig>,
-    ) -> ContentBlockChatOutput {
-        if let ContentBlockChatOutput::ToolCall(input_tool_call) = self {
-            let unvalidated_tool_call = ToolCall {
-                name: input_tool_call.raw_name,
-                arguments: input_tool_call.raw_arguments,
-                id: input_tool_call.id,
-            };
-            let validated_tool_call = InferenceResponseToolCall::new_from_tool_call(
-                unvalidated_tool_call,
-                tool_call_config,
-            )
-            .await;
-            ContentBlockChatOutput::ToolCall(validated_tool_call)
-        } else {
-            self
-        }
+/// Validates a `ContentBlockChatOutput` and re-validates and re-parses structured fields
+/// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
+///
+/// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
+/// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
+/// and re-validate.
+pub async fn validate_content_block_chat_output(
+    block: ContentBlockChatOutput,
+    tool_call_config: Option<&ToolCallConfig>,
+) -> ContentBlockChatOutput {
+    if let ContentBlockChatOutput::ToolCall(input_tool_call) = block {
+        let unvalidated_tool_call = ToolCall {
+            name: input_tool_call.raw_name,
+            arguments: input_tool_call.raw_arguments,
+            id: input_tool_call.id,
+        };
+        let validated_tool_call =
+            InferenceResponseToolCall::new_from_tool_call(unvalidated_tool_call, tool_call_config)
+                .await;
+        ContentBlockChatOutput::ToolCall(validated_tool_call)
+    } else {
+        block
     }
 }
 
@@ -1263,42 +1239,8 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
-#[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct JsonInferenceOutput {
-    /// This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
-    /// It's rare and unexpected from the model, but it's possible.
-    pub raw: Option<String>,
-    /// This is never omitted from the response even if it's None.
-    pub parsed: Option<Value>,
-}
-
-impl std::fmt::Display for JsonInferenceOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl JsonInferenceOutput {
-    #[getter]
-    fn get_raw(&self) -> Option<String> {
-        self.raw.clone()
-    }
-
-    #[getter]
-    fn get_parsed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match &self.parsed {
-            Some(value) => serialize_to_dict(py, value)?.into_bound(py),
-            None => py.None().into_bound(py),
-        })
-    }
-}
+// Re-exported from tensorzero-inference-types
+pub use tensorzero_inference_types::inference_response::JsonInferenceOutput;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InternalJsonInferenceOutput {
@@ -1447,13 +1389,6 @@ impl From<String> for ResolvedInputMessageContent {
 impl From<String> for LazyResolvedInputMessageContent {
     fn from(text: String) -> Self {
         LazyResolvedInputMessageContent::Text(Text { text })
-    }
-}
-
-#[cfg(any(test, feature = "e2e_tests"))]
-impl From<String> for ContentBlockChatOutput {
-    fn from(text: String) -> Self {
-        ContentBlockChatOutput::Text(Text { text })
     }
 }
 
@@ -1914,32 +1849,6 @@ pub fn current_timestamp() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs()
-}
-
-impl From<ContentBlockChatOutput> for ContentBlock {
-    fn from(output: ContentBlockChatOutput) -> Self {
-        match output {
-            ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
-                ContentBlock::ToolCall(inference_response_tool_call.into_tool_call())
-            }
-            ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
-            ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
-        }
-    }
-}
-
-impl From<ContentBlockChatOutput> for ContentBlockOutput {
-    fn from(output: ContentBlockChatOutput) -> Self {
-        match output {
-            ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call) => {
-                ContentBlockOutput::ToolCall(tool_call.into_tool_call())
-            }
-            ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
-            ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
-        }
-    }
 }
 
 /// Serializes a value that implements `Serialize` into a JSON string.

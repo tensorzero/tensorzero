@@ -967,7 +967,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             }
         }
 
-        let response = InferenceResponse::new(
+        let response = inference_response_from_result(
             result,
             episode_id,
             variant_name.clone(),
@@ -1689,219 +1689,118 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     futures::future::join_all(futures).await;
 }
 
-/// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-#[serde(untagged, rename_all = "snake_case")]
-pub enum InferenceResponse {
-    Chat(ChatInferenceResponse),
-    Json(JsonInferenceResponse),
-}
+// Re-exported from tensorzero-inference-types
+pub use tensorzero_inference_types::inference_response::{
+    ChatInferenceResponse, InferenceResponse, JsonInferenceResponse,
+};
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct ChatInferenceResponse {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub content: Vec<ContentBlockChatOutput>,
-    pub usage: Usage,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_response: Option<String>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_response: Option<Vec<RawResponseEntry>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub finish_reason: Option<FinishReason>,
-}
+/// Construct an `InferenceResponse` from core-internal `InferenceResult`.
+pub fn inference_response_from_result(
+    inference_result: InferenceResult,
+    episode_id: Uuid,
+    variant_name: String,
+    include_raw_usage: bool,
+    include_original_response: bool,
+    include_raw_response: bool,
+) -> InferenceResponse {
+    let usage = inference_result.usage_considering_cached();
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
-pub struct JsonInferenceResponse {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub output: JsonInferenceOutput,
-    pub usage: Usage,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_usage: Option<Vec<RawUsageEntry>>,
-    /// DEPRECATED (#5697 / 2026.4+): Use `raw_response` instead.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_response: Option<String>,
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_response: Option<Vec<RawResponseEntry>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub finish_reason: Option<FinishReason>,
-}
+    // Build raw_usage if requested
+    // Returns Some(entries) if requested (even if empty when all cached), None if not requested
+    let raw_usage = if include_raw_usage {
+        let entries: Vec<RawUsageEntry> = inference_result
+            .model_inference_results()
+            .iter()
+            .filter(|r| !r.cached) // Exclude TensorZero cache hits
+            .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
+            .collect();
+        Some(entries)
+    } else {
+        None
+    };
 
-impl InferenceResponse {
-    pub fn new(
-        inference_result: InferenceResult,
-        episode_id: Uuid,
-        variant_name: String,
-        include_raw_usage: bool,
-        include_original_response: bool,
-        include_raw_response: bool,
-    ) -> Self {
-        let usage = inference_result.usage_considering_cached();
-
-        // Build raw_usage if requested
-        // Returns Some(entries) if requested (even if empty when all cached), None if not requested
-        let raw_usage = if include_raw_usage {
-            let entries: Vec<RawUsageEntry> = inference_result
-                .model_inference_results()
-                .iter()
-                .filter(|r| !r.cached) // Exclude TensorZero cache hits
-                .flat_map(|r| r.raw_usage.clone().unwrap_or_default())
-                .collect();
-            Some(entries)
-        } else {
-            None
-        };
-
-        // Build raw_response if requested
-        // Returns Some(entries) if requested (even if empty when all cached), None if not requested
-        let raw_response = if include_raw_response {
-            let mut entries: Vec<RawResponseEntry> = Vec::new();
-            for r in inference_result.model_inference_results() {
-                // Include failed provider attempts (model-level fallback) for this inference
-                entries.extend(r.failed_raw_response.clone());
-                // Include successful provider response
-                if !r.cached {
-                    if let Some(passed_through) = &r.relay_raw_response {
-                        entries.extend(passed_through.clone());
-                    } else {
-                        // Relay sets `provider_type` to `"tensorzero::relay"` because the real
-                        // downstream provider is unknown at that level. The actual provider type is
-                        // carried inside `relay_raw_response` entries (handled in the branch above).
-                        // So we should never reach this branch for relay responses.
-                        debug_assert!(
-                            &*r.provider_type != "tensorzero::relay",
-                            "Relay responses should always have `relay_raw_response` populated; \
-                             got `provider_type`={} without `relay_raw_response`",
-                            r.provider_type
-                        );
-                        let api_type = r
-                            .raw_usage
-                            .as_ref()
-                            .and_then(|entries| entries.first())
-                            .map(|entry| entry.api_type)
-                            .unwrap_or(ApiType::ChatCompletions);
-                        entries.push(RawResponseEntry {
-                            model_inference_id: Some(r.id),
-                            provider_type: r.provider_type.to_string(),
-                            api_type,
-                            data: r.raw_response.clone(),
-                        });
-                    }
+    // Build raw_response if requested
+    // Returns Some(entries) if requested (even if empty when all cached), None if not requested
+    let raw_response = if include_raw_response {
+        let mut entries: Vec<RawResponseEntry> = Vec::new();
+        for r in inference_result.model_inference_results() {
+            // Include failed provider attempts (model-level fallback) for this inference
+            entries.extend(r.failed_raw_response.clone());
+            // Include successful provider response
+            if !r.cached {
+                if let Some(passed_through) = &r.relay_raw_response {
+                    entries.extend(passed_through.clone());
+                } else {
+                    // Relay sets `provider_type` to `"tensorzero::relay"` because the real
+                    // downstream provider is unknown at that level. The actual provider type is
+                    // carried inside `relay_raw_response` entries (handled in the branch above).
+                    // So we should never reach this branch for relay responses.
+                    debug_assert!(
+                        &*r.provider_type != "tensorzero::relay",
+                        "Relay responses should always have `relay_raw_response` populated; \
+                         got `provider_type`={} without `relay_raw_response`",
+                        r.provider_type
+                    );
+                    let api_type = r
+                        .raw_usage
+                        .as_ref()
+                        .and_then(|entries| entries.first())
+                        .map(|entry| entry.api_type)
+                        .unwrap_or(ApiType::ChatCompletions);
+                    entries.push(RawResponseEntry {
+                        model_inference_id: Some(r.id),
+                        provider_type: r.provider_type.to_string(),
+                        api_type,
+                        data: r.raw_response.clone(),
+                    });
                 }
             }
-            Some(entries)
-        } else {
-            None
-        };
-
-        match inference_result {
-            InferenceResult::Chat(result) => {
-                // Populate original_response if deprecated flag was set
-                let original_response = if include_original_response {
-                    result.original_response
-                } else {
-                    None
-                };
-                InferenceResponse::Chat(ChatInferenceResponse {
-                    inference_id: result.inference_id,
-                    episode_id,
-                    variant_name,
-                    content: result.content,
-                    usage,
-                    raw_usage: raw_usage.clone(),
-                    original_response,
-                    raw_response: raw_response.clone(),
-                    finish_reason: result.finish_reason,
-                })
-            }
-            InferenceResult::Json(result) => {
-                let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
-                let output = JsonInferenceOutput { raw, parsed };
-                // Populate original_response if deprecated flag was set
-                let original_response = if include_original_response {
-                    result.original_response
-                } else {
-                    None
-                };
-                InferenceResponse::Json(JsonInferenceResponse {
-                    inference_id: result.inference_id,
-                    episode_id,
-                    variant_name,
-                    output,
-                    usage,
-                    raw_usage,
-                    original_response,
-                    raw_response,
-                    finish_reason: result.finish_reason,
-                })
-            }
         }
-    }
+        Some(entries)
+    } else {
+        None
+    };
 
-    pub fn usage(&self) -> Usage {
-        match self {
-            InferenceResponse::Chat(c) => c.usage,
-            InferenceResponse::Json(j) => j.usage,
+    match inference_result {
+        InferenceResult::Chat(result) => {
+            // Populate original_response if deprecated flag was set
+            let original_response = if include_original_response {
+                result.original_response
+            } else {
+                None
+            };
+            InferenceResponse::Chat(ChatInferenceResponse {
+                inference_id: result.inference_id,
+                episode_id,
+                variant_name,
+                content: result.content,
+                usage,
+                raw_usage: raw_usage.clone(),
+                original_response,
+                raw_response: raw_response.clone(),
+                finish_reason: result.finish_reason,
+            })
         }
-    }
-
-    pub fn raw_usage(&self) -> Option<&Vec<RawUsageEntry>> {
-        match self {
-            InferenceResponse::Chat(c) => c.raw_usage.as_ref(),
-            InferenceResponse::Json(j) => j.raw_usage.as_ref(),
-        }
-    }
-
-    pub fn raw_response(&self) -> Option<&Vec<RawResponseEntry>> {
-        match self {
-            InferenceResponse::Chat(c) => c.raw_response.as_ref(),
-            InferenceResponse::Json(j) => j.raw_response.as_ref(),
-        }
-    }
-
-    pub fn finish_reason(&self) -> Option<FinishReason> {
-        match self {
-            InferenceResponse::Chat(c) => c.finish_reason,
-            InferenceResponse::Json(j) => j.finish_reason,
-        }
-    }
-
-    pub fn variant_name(&self) -> &str {
-        match self {
-            InferenceResponse::Chat(c) => &c.variant_name,
-            InferenceResponse::Json(j) => &j.variant_name,
-        }
-    }
-
-    pub fn inference_id(&self) -> Uuid {
-        match self {
-            InferenceResponse::Chat(c) => c.inference_id,
-            InferenceResponse::Json(j) => j.inference_id,
-        }
-    }
-
-    pub fn episode_id(&self) -> Uuid {
-        match self {
-            InferenceResponse::Chat(c) => c.episode_id,
-            InferenceResponse::Json(j) => j.episode_id,
+        InferenceResult::Json(result) => {
+            let InternalJsonInferenceOutput { raw, parsed, .. } = result.output;
+            let output = JsonInferenceOutput { raw, parsed };
+            // Populate original_response if deprecated flag was set
+            let original_response = if include_original_response {
+                result.original_response
+            } else {
+                None
+            };
+            InferenceResponse::Json(JsonInferenceResponse {
+                inference_id: result.inference_id,
+                episode_id,
+                variant_name,
+                output,
+                usage,
+                raw_usage,
+                original_response,
+                raw_response,
+                finish_reason: result.finish_reason,
+            })
         }
     }
 }
@@ -3553,7 +3452,7 @@ mod tests {
             finish_reason: None,
         });
 
-        let response = InferenceResponse::new(
+        let response = inference_response_from_result(
             inference_result,
             Uuid::now_v7(),
             "test_variant".to_string(),
