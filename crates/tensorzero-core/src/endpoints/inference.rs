@@ -72,6 +72,8 @@ use crate::variant::{InferenceConfig, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tensorzero_types::inference_params::JsonMode;
 
+pub use tensorzero_types::{ChatInferenceResponse, InferenceResponse, JsonInferenceResponse};
+
 use crate::endpoints::namespace::{
     validate_model_namespace, validate_variant_namespace_at_inference,
 };

@@ -53,7 +53,8 @@ pub use file::{
 };
 // Re-export content types from tensorzero-types
 pub use tensorzero_types::{
-    Arguments, FunctionType, RawText, System, Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+    Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, RawText, System,
+    Template, Text, Thought, ThoughtSummaryBlock, Unknown,
 };
 // Re-export message types from tensorzero-types
 use futures::FutureExt;
@@ -923,17 +924,17 @@ enum ContentBlockOutputType {
 // Re-exported from tensorzero-inference-types
 pub use tensorzero_inference_types::inference_response::ContentBlockChatOutput;
 
-/// Validates a `ContentBlockChatOutput` and re-validates and re-parses structured fields
+/// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
 /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
 ///
 /// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
 /// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
 /// and re-validate.
 pub async fn validate_content_block_chat_output(
-    block: ContentBlockChatOutput,
+    output: ContentBlockChatOutput,
     tool_call_config: Option<&ToolCallConfig>,
 ) -> ContentBlockChatOutput {
-    if let ContentBlockChatOutput::ToolCall(input_tool_call) = block {
+    if let ContentBlockChatOutput::ToolCall(input_tool_call) = output {
         let unvalidated_tool_call = ToolCall {
             name: input_tool_call.raw_name,
             arguments: input_tool_call.raw_arguments,
@@ -944,7 +945,7 @@ pub async fn validate_content_block_chat_output(
                 .await;
         ContentBlockChatOutput::ToolCall(validated_tool_call)
     } else {
-        block
+        output
     }
 }
 
