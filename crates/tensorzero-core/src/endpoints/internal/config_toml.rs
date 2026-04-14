@@ -13,7 +13,7 @@ use serde_json::json;
 use sqlx::Postgres;
 use tracing::instrument;
 
-use crate::config::editable::{config_to_toml, toml_to_config};
+use crate::config::editable::{config_to_toml, config_to_toml_with_errors, toml_to_config};
 use crate::config::{Config, ConfigLoadingError, UninitializedConfig};
 use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
 use crate::db::postgres::stored_config_writes::{
@@ -59,7 +59,7 @@ impl GetConfigTomlResponse {
         tags: HashMap<String, String>,
         loading_errors: Vec<ConfigLoadingError>,
     ) -> Result<Self, Error> {
-        let (toml, path_contents) = config_to_toml(&config)?;
+        let (toml, path_contents) = config_to_toml_with_errors(&config, &loading_errors)?;
         let base_signature = editable_config_signature(&toml, &path_contents)?;
         Ok(Self {
             toml,
@@ -248,7 +248,9 @@ pub async fn apply_config_toml_handler(
     let current_loaded = load_config_from_db(pool)
         .await
         .map_err(merge_load_config_errors)?;
-    let (current_toml, current_path_contents) = config_to_toml(&current_loaded.config)?;
+    // Use config_to_toml_with_errors so the CAS signature matches what GET returns.
+    let (current_toml, current_path_contents) =
+        config_to_toml_with_errors(&current_loaded.config, &current_loaded.loading_errors)?;
     let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
 
     if current_signature != request.base_signature {

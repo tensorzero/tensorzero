@@ -6,7 +6,7 @@ use tensorzero_config_paths::{
 
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 
-use super::UninitializedConfig;
+use super::{ConfigLoadingError, UninitializedConfig};
 
 pub fn config_to_toml(
     config: &UninitializedConfig,
@@ -35,6 +35,37 @@ pub fn config_to_toml(
             message: format!("Failed to render editable config TOML: {e}"),
         })
     })?;
+    Ok((toml, path_contents))
+}
+
+/// Like [`config_to_toml`], but also appends broken items as commented-out
+/// TOML fragments so the editor shows them for debugging/fixing rather than
+/// silently omitting them (which would cause them to be deleted on the next
+/// save).
+pub fn config_to_toml_with_errors(
+    config: &UninitializedConfig,
+    errors: &[ConfigLoadingError],
+) -> Result<(String, HashMap<String, String>), Error> {
+    let (mut toml, path_contents) = config_to_toml(config)?;
+
+    for err in errors {
+        let label = match &err.parent {
+            Some(parent) => format!("{} / {}", parent, err.name),
+            None => err.name.clone(),
+        };
+        toml.push_str(&format!(
+            "\n# BROKEN ({} {:?}): {}\n",
+            err.kind, label, err.error
+        ));
+        if let Some(fragment) = &err.raw_toml {
+            for line in fragment.lines() {
+                toml.push_str(&format!("# {line}\n"));
+            }
+        } else {
+            toml.push_str("# (raw config not available)\n");
+        }
+    }
+
     Ok((toml, path_contents))
 }
 
