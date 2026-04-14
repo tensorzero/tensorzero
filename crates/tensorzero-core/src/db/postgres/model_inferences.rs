@@ -226,6 +226,9 @@ fn build_get_model_inferences_query(inference_id: Uuid) -> QueryBuilder<sqlx::Po
             i.cost,
             i.finish_reason,
             i.snapshot_hash,
+            i.provider_response_id,
+            i.response_model_name,
+            i.operation,
             i.created_at
         FROM tensorzero.model_inferences i
         LEFT JOIN tensorzero.model_inference_data io ON io.id = i.id AND io.created_at = i.created_at
@@ -252,7 +255,9 @@ pub(super) fn build_insert_model_inferences_query(
             id, inference_id, function_name, variant_name, input_tokens, output_tokens,
             provider_cache_read_input_tokens, provider_cache_write_input_tokens,
             response_time_ms, model_name, model_provider_name,
-            ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
+            ttft_ms, cached, finish_reason, snapshot_hash, cost,
+            provider_response_id, response_model_name, operation,
+            created_at
         ) ",
     );
 
@@ -273,6 +278,9 @@ pub(super) fn build_insert_model_inferences_query(
             .push_bind(row.finish_reason)
             .push_bind(row.snapshot_hash.as_ref())
             .push_bind(row.cost)
+            .push_bind(&row.provider_response_id)
+            .push_bind(&row.response_model_name)
+            .push_bind(&row.operation)
             .push_bind(created_at);
     });
 
