@@ -20,6 +20,7 @@ use uuid::Uuid;
 use super::inference::{
     ChatInferenceResponse, InferenceClients, InferenceCredentials, InferenceDatabaseInsertMetadata,
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
+    inference_response_from_result,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
@@ -1184,7 +1185,7 @@ pub async fn write_completed_batch_inference<'a>(
                 None,
             )
             .await?;
-        let inference_response = InferenceResponse::new(
+        let inference_response = inference_response_from_result(
             inference_result.clone(),
             episode_id,
             variant_name.to_string(),
