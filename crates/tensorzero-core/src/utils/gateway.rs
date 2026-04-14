@@ -149,6 +149,12 @@ struct LiveState {
     valkey_cache_connection_info: ValkeyConnectionInfo,
     cache_manager: CacheManager,
     primary_datastore: PrimaryDatastore,
+    /// Token pool manager for rate limiting pre-borrowing.
+    /// Stored inside `LiveState` so that config hot-swaps are atomic:
+    /// `swap_config` issues a single `ArcSwap::store`, ensuring every
+    /// request sees either the old (config, rate-limiter) pair or the new
+    /// one — never a mix of the two.
+    rate_limiting_manager: Arc<RateLimitingManager>,
 }
 
 #[derive(Clone, Default)]
@@ -268,10 +274,6 @@ pub struct SwappableAppStateData {
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
-    /// Token pool manager for rate limiting pre-borrowing.
-    /// Stored separately from `LiveState` so that the rate limiter state
-    /// (e.g. in-memory token pools) persists across config hot-swaps.
-    rate_limiting_manager: Arc<ArcSwap<RateLimitingManager>>,
     /// Optional cache for TensorZero API key authentication
     pub auth_cache: Option<Cache<String, AuthResult>>,
     /// Optional cache for historical config snapshots loaded from ClickHouse
@@ -387,8 +389,6 @@ impl SwappableAppStateData {
     /// This is infallible; all fallible work is done up front in
     /// [`Self::prepare_config_swap`].
     pub fn swap_config(&self, prepared: PreparedConfigSwap) {
-        self.rate_limiting_manager
-            .store(prepared.rate_limiting_manager);
         self.live_state.store(Arc::new(LiveState {
             config: prepared.config,
             runtime_overlay: prepared.runtime_overlay,
@@ -397,6 +397,7 @@ impl SwappableAppStateData {
             valkey_cache_connection_info: prepared.valkey_cache_connection_info,
             cache_manager: prepared.cache_manager,
             primary_datastore: prepared.primary_datastore,
+            rate_limiting_manager: prepared.rate_limiting_manager,
         }));
     }
 
@@ -418,7 +419,7 @@ impl SwappableAppStateData {
             autopilot_client: self.autopilot_client.clone(),
             spawn_client: self.spawn_client.clone(),
             deployment_id: self.deployment_id.clone(),
-            rate_limiting_manager: self.rate_limiting_manager.load_full(),
+            rate_limiting_manager: live_state.rate_limiting_manager.clone(),
             shutdown_token: self.shutdown_token.clone(),
             primary_datastore: live_state.primary_datastore,
             config_in_database: self.config_in_database,
@@ -451,7 +452,7 @@ impl SwappableAppStateData {
     }
 
     pub fn rate_limiting_manager(&self) -> Arc<RateLimitingManager> {
-        self.rate_limiting_manager.load_full()
+        self.live_state.load().rate_limiting_manager.clone()
     }
 }
 
@@ -604,6 +605,7 @@ impl GatewayHandle {
             valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             cache_manager,
             primary_datastore: PrimaryDatastore::ClickHouse,
+            rate_limiting_manager,
         }));
         let deferred_tasks = TaskTracker::new();
         Self {
@@ -616,7 +618,6 @@ impl GatewayHandle {
                     postgres_connection_info,
                 }),
                 deferred_tasks,
-                rate_limiting_manager: Arc::new(ArcSwap::new(rate_limiting_manager)),
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
@@ -811,6 +812,7 @@ impl GatewayHandle {
             valkey_cache_connection_info,
             cache_manager,
             primary_datastore,
+            rate_limiting_manager,
         }));
         let deferred_tasks = TaskTracker::new();
         Ok(Self {
@@ -823,7 +825,6 @@ impl GatewayHandle {
                     postgres_connection_info,
                 }),
                 deferred_tasks,
-                rate_limiting_manager: Arc::new(ArcSwap::new(rate_limiting_manager)),
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
@@ -852,6 +853,10 @@ impl SwappableAppStateData {
             valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             cache_manager: CacheManager::disabled(),
             primary_datastore: current.primary_datastore,
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(RateLimitingConfig::default()),
+                Arc::new(DisabledRateLimitQueries),
+            )),
         }));
         Self {
             live_state,
@@ -862,10 +867,6 @@ impl SwappableAppStateData {
                 postgres_connection_info: PostgresConnectionInfo::new_disabled(),
             }),
             deferred_tasks: TaskTracker::new(),
-            rate_limiting_manager: Arc::new(ArcSwap::new(Arc::new(RateLimitingManager::new(
-                Arc::new(RateLimitingConfig::default()),
-                Arc::new(DisabledRateLimitQueries),
-            )))),
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
