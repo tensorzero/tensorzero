@@ -15,6 +15,7 @@ uv run pytest tests/test_embeddings.py
 """
 
 import asyncio
+import random
 
 import pytest
 
@@ -216,17 +217,18 @@ async def test_embeddings_consistency(async_openai_client):
 @pytest.mark.asyncio
 async def test_embeddings_cache_with_float_encoding(async_openai_client):
     """Test that caching works correctly with float encoding format"""
-    input_text = "Cache test with float encoding"
+    # Use a unique input to ensure we're not hitting existing cache
+    input_text = f"Cache test with float encoding - {random.randint(0, 1000000)}"
 
-    # First request: write_only bypasses cache reads (avoids stale Valkey hits)
+    # First request with float encoding and cache enabled
     result1 = await async_openai_client.embeddings.create(
         input=input_text,
         model="tensorzero::embedding_model_name::text-embedding-3-small",
         encoding_format="float",
-        extra_body={"tensorzero::cache_options": {"enabled": "write_only"}},
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
     )
 
-    # write_only always hits the provider
+    # Verify first response has non-zero usage (not from cache)
     assert result1.usage.prompt_tokens > 0
     assert result1.usage.total_tokens > 0
     assert isinstance(result1.data[0].embedding[0], float)  # float encoded
@@ -252,17 +254,18 @@ async def test_embeddings_cache_with_float_encoding(async_openai_client):
 @pytest.mark.asyncio
 async def test_embeddings_cache_with_base64_encoding(async_openai_client):
     """Test that caching works correctly with base64 encoding format"""
-    input_text = "Cache test with base64 encoding"
+    # Use a unique input to ensure we're not hitting existing cache
+    input_text = f"Cache test with base64 encoding - {random.randint(0, 1000000)}"
 
-    # First request: write_only bypasses cache reads (avoids stale Valkey hits)
+    # First request with base64 encoding and cache enabled
     result1 = await async_openai_client.embeddings.create(
         input=input_text,
         model="tensorzero::embedding_model_name::text-embedding-3-small",
         encoding_format="base64",
-        extra_body={"tensorzero::cache_options": {"enabled": "write_only"}},
+        extra_body={"tensorzero::cache_options": {"enabled": "on"}},
     )
 
-    # write_only always hits the provider
+    # Verify first response has non-zero usage (not from cache)
     assert result1.usage.prompt_tokens > 0
     assert result1.usage.total_tokens > 0
     assert isinstance(result1.data[0].embedding, str)  # base64 encoded

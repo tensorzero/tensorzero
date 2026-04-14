@@ -234,16 +234,18 @@ async fn test_embeddings_raw_response_batch() {
 
 #[tokio::test]
 async fn test_embeddings_raw_response_with_cache() {
-    let input_text = "This is a cache test for embeddings raw_response";
+    let input_text = format!(
+        "This is a cache test for embeddings raw_response - {}",
+        rand::random::<u32>()
+    );
 
-    // First request: write_only bypasses cache reads (avoids stale Valkey hits)
-    // while still writing the result for the second request to read.
+    // First request: populate cache with raw_response enabled
     let payload = json!({
         "input": input_text,
         "model": "tensorzero::embedding_model_name::text-embedding-3-small",
         "tensorzero::include_raw_response": true,
         "tensorzero::cache_options": {
-            "enabled": "write_only",
+            "enabled": "on",
             "max_age_s": 60
         }
     });
@@ -278,19 +280,10 @@ async fn test_embeddings_raw_response_with_cache() {
     // Wait for cache write to complete
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    // Second request: cache enabled (should hit cache written by the first request)
-    let cached_payload = json!({
-        "input": input_text,
-        "model": "tensorzero::embedding_model_name::text-embedding-3-small",
-        "tensorzero::include_raw_response": true,
-        "tensorzero::cache_options": {
-            "enabled": "on",
-            "max_age_s": 60
-        }
-    });
+    // Second request: should hit cache
     let response_cached = Client::new()
         .post(get_gateway_endpoint("/openai/v1/embeddings"))
-        .json(&cached_payload)
+        .json(&payload)
         .send()
         .await
         .unwrap();
