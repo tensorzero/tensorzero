@@ -3222,7 +3222,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -3314,7 +3314,6 @@ mod tests {
     async fn test_openai_responses_request_with_allowed_tools_auto() {
         use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
         use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and auto tool choice
@@ -3330,7 +3329,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 
@@ -3369,7 +3368,6 @@ mod tests {
     async fn test_openai_responses_request_with_allowed_tools_required() {
         use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
         use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and required tool choice
@@ -3385,7 +3383,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 
@@ -3428,7 +3426,6 @@ mod tests {
     async fn test_openai_responses_request_with_allowed_tools_none_tool_choice() {
         use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
         use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test that when tool_choice is None but allowed_tools is set,
@@ -3445,7 +3442,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 
@@ -3478,7 +3475,6 @@ mod tests {
     async fn test_openai_responses_request_without_allowed_tools() {
         use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test that when allowed_tools is not set (FunctionDefault),
         // we use the regular tool_choice conversion
@@ -3490,7 +3486,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 
@@ -3518,9 +3514,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_with_specific_tool_without_allowed_tools() {
-        use crate::test_helpers::WEATHER_TOOL_DEF_CONFIG;
+        use crate::test_helpers::WEATHER_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
 
         // Test that Specific tool choice without allowed_tools converts to AllowedTools with mode Required
         let tool_config = WEATHER_TOOL_CONFIG.clone();
@@ -3531,7 +3526,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 
@@ -3572,7 +3567,6 @@ mod tests {
     async fn test_openai_responses_request_empty_allowed_tools_list() {
         use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
-        use tensorzero_inference_types::ProviderToolCallConfig;
         use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test edge case: explicit allowed_tools but empty list
@@ -3587,7 +3581,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["test".to_string().into()],
             }],
-            tool_config: Some(Cow::Owned(ProviderToolCallConfig::from(&tool_config))),
+            tool_config: Some(Cow::Owned(tool_config.clone())),
             ..Default::default()
         };
 

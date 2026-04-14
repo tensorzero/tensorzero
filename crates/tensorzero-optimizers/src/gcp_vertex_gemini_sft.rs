@@ -21,8 +21,8 @@ use tensorzero_core::{
         GCPVertexGeminiSupervisedRow, PROVIDER_TYPE, location_subdomain_prefix,
         optimization::{
             EncryptionSpec, GCPVertexGeminiFineTuningJob, GCPVertexGeminiFineTuningRequest,
-            LazyRenderedSampleGCPVertexGeminiExt, SupervisedHyperparameters,
-            SupervisedTuningSpec, convert_to_optimizer_status,
+            LazyRenderedSampleGCPVertexGeminiExt, SupervisedHyperparameters, SupervisedTuningSpec,
+            convert_to_optimizer_status,
         },
         upload_rows_to_gcp_object_store,
     },
@@ -92,22 +92,11 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         });
 
         // TODO(#2642): improve error handling here so we know what index of example failed
-        let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
-            train_examples
-                .iter()
-                .map(|s| s.to_supervised_row()),
-        )
-        .await?;
+        let train_rows: Vec<GCPVertexGeminiSupervisedRow> =
+            try_join_all(train_examples.iter().map(|s| s.to_supervised_row())).await?;
 
         let val_rows = if let Some(examples) = val_examples.as_ref() {
-            Some(
-                try_join_all(
-                    examples
-                        .iter()
-                        .map(|s| s.to_supervised_row()),
-                )
-                .await?,
-            )
+            Some(try_join_all(examples.iter().map(|s| s.to_supervised_row())).await?)
         } else {
             None
         };

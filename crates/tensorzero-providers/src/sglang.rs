@@ -853,8 +853,7 @@ mod tests {
         OpenAIUsage,
     };
     use crate::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
-        WEATHER_TOOL_DEF as WEATHER_TOOL,
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF,
     };
     use tensorzero_inference_types::{
         FinishReason, ModelInferenceRequestJsonMode, ProviderToolCallConfig, RequestMessage,
@@ -1145,7 +1144,7 @@ mod tests {
 
     #[test]
     fn test_sglang_provider_new_api_base_check() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -1214,15 +1213,15 @@ mod tests {
         assert_eq!(tools.len(), 2);
         match &tools[0] {
             OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, WEATHER_TOOL.name());
-                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+                assert_eq!(function.name, WEATHER_TOOL_DEF.name);
+                assert_eq!(function.parameters, &WEATHER_TOOL_DEF.parameters);
             }
             OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
             OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, QUERY_TOOL.name());
-                assert_eq!(function.parameters, QUERY_TOOL.parameters());
+                assert_eq!(function.name, QUERY_TOOL_DEF.name);
+                assert_eq!(function.parameters, &QUERY_TOOL_DEF.parameters);
             }
             OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
@@ -1240,7 +1239,7 @@ mod tests {
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request_without_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1272,7 +1271,7 @@ mod tests {
 
     #[test]
     fn test_sglang_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

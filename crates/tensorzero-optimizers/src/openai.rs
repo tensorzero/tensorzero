@@ -496,7 +496,7 @@ mod tests {
         };
         assert_eq!(text, "The capital of France is Paris.");
         assert!(!row.parallel_tool_calls);
-        assert_eq!(row.tools.len(), 0);
+        assert_eq!(row.tool_defs.len(), 0);
     }
 
     #[tokio::test]
@@ -566,7 +566,7 @@ mod tests {
         );
         assert!(row.output.reference_tools.is_none());
         assert!(!row.parallel_tool_calls);
-        assert_eq!(row.tools.len(), 0);
+        assert_eq!(row.tool_defs.len(), 0);
     }
 
     #[tokio::test]
@@ -643,7 +643,7 @@ mod tests {
             r#"{"location": "New York"}"#
         );
         assert!(!row.parallel_tool_calls);
-        assert_eq!(row.tools.len(), 0);
+        assert_eq!(row.tool_defs.len(), 0);
     }
 
     #[test]

@@ -616,8 +616,7 @@ mod tests {
         OpenAIUsage,
     };
     use crate::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
-        WEATHER_TOOL_DEF as WEATHER_TOOL,
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF,
     };
     use tensorzero_inference_types::{
         ModelInferenceRequestJsonMode, ProviderToolCallConfig, RequestMessage,
@@ -958,7 +957,7 @@ mod tests {
 
     #[test]
     fn test_vllm_provider_new_api_base_check() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -1027,15 +1026,15 @@ mod tests {
         assert_eq!(tools.len(), 2);
         match &tools[0] {
             crate::openai::OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, WEATHER_TOOL.name());
-                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+                assert_eq!(function.name, WEATHER_TOOL_DEF.name);
+                assert_eq!(function.parameters, &WEATHER_TOOL_DEF.parameters);
             }
             crate::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
             crate::openai::OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, QUERY_TOOL.name());
-                assert_eq!(function.parameters, QUERY_TOOL.parameters());
+                assert_eq!(function.name, QUERY_TOOL_DEF.name);
+                assert_eq!(function.parameters, &QUERY_TOOL_DEF.parameters);
             }
             crate::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
@@ -1051,7 +1050,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -1085,7 +1084,7 @@ mod tests {
 
     #[test]
     fn test_vllm_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

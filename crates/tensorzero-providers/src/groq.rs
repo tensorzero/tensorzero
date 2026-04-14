@@ -1478,15 +1478,13 @@ mod tests {
     use super::*;
     use crate::test_helpers::capture_logs;
     use crate::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF,
     };
     use tensorzero_inference_types::LazyFile;
     use tensorzero_inference_types::ProviderToolCallConfig;
-    use tensorzero_inference_types::ProviderToolCallConfig;
-    use tensorzero_inference_types::{
-        ContentBlock, ObjectStoragePointer, PendingObjectStoreFile, RequestMessage,
-    };
+    use tensorzero_inference_types::{ContentBlock, PendingObjectStoreFile, RequestMessage};
     use tensorzero_types::Detail;
+    use tensorzero_types::ObjectStoragePointer;
     use tensorzero_types::{FunctionType, ObjectStorageFile};
     use tensorzero_types::{StorageKind, StoragePath};
     use tensorzero_types_providers::groq::{
@@ -1702,14 +1700,14 @@ mod tests {
         );
         assert!(groq_request.tools.is_some());
         let tools = groq_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             groq_request.tool_choice,
             Some(GroqToolChoice::Specific(SpecificToolChoice {
                 r#type: GroqToolType::Function,
                 function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+                    name: &WEATHER_TOOL_DEF.name,
                 }
             }))
         );
@@ -2165,10 +2163,10 @@ mod tests {
             prepare_groq_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
+        assert_eq!(tools[1].function.name, QUERY_TOOL_DEF.name);
+        assert_eq!(tools[1].function.parameters, &QUERY_TOOL_DEF.parameters);
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -2181,7 +2179,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -2218,19 +2216,20 @@ mod tests {
 
         // Test with allowed_tools specified
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone(), QUERY_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {
-                tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
+                tools: vec![WEATHER_TOOL_DEF.name.to_string()]
+                    .into_iter()
+                    .collect(),
                 choice: AllowedToolsChoice::Explicit,
             },
         };
 
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request = ModelInferenceRequest {
             inference_id: uuid::Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2271,7 +2270,7 @@ mod tests {
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
                 match &allowed_tools_choice.allowed_tools.tools[0] {
                     ToolReference::Function { function } => {
-                        assert_eq!(function.name, WEATHER_TOOL.name());
+                        assert_eq!(function.name, WEATHER_TOOL_DEF.name);
                     }
                     ToolReference::Custom { .. } => panic!("Expected Function variant"),
                 }
@@ -2874,7 +2873,7 @@ mod tests {
 
     #[test]
     fn test_groq_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

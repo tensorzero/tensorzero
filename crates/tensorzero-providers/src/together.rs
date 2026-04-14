@@ -1088,7 +1088,7 @@ mod tests {
         ChatCompletionToolChoice, ChatCompletionToolType,
     };
     use crate::openai::OpenAIUsage;
-    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
 
     #[tokio::test]
     async fn test_together_request_new() {
@@ -1131,15 +1131,15 @@ mod tests {
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tool.function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tool.function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             together_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1882,7 +1882,7 @@ mod tests {
 
     #[test]
     fn test_together_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

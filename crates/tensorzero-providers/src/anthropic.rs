@@ -3754,7 +3754,7 @@ mod tests {
 
     #[test]
     fn test_convert_unknown_chunk_warn() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let mut tool_state: HashMap<u32, (String, String)> = HashMap::new();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
@@ -3779,7 +3779,7 @@ mod tests {
 
     #[test]
     fn test_anthropic_apply_inference_params_thinking_budget_tokens() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: None,
             service_tier: None,
@@ -3944,14 +3944,13 @@ mod tests {
 
     #[test]
     fn test_anthropic_respects_allowed_tools() {
-        use crate::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
+        use crate::test_helpers::{QUERY_TOOL_DEF, WEATHER_TOOL_DEF};
         use tensorzero_inference_types::ProviderToolCallConfig;
         use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a ToolCallConfig with two tools but only allow one
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone(), QUERY_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
@@ -3961,7 +3960,7 @@ mod tests {
                 choice: AllowedToolsChoice::Explicit,
             },
         };
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
 
         // Convert to Anthropic tools
         let tools: Vec<AnthropicFunctionTool> = provider_tool_config

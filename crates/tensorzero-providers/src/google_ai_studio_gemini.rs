@@ -418,7 +418,7 @@ fn stream_google_ai_studio_gemini(
 struct GeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: &'a str,
-    parameters: Value, // Should be a JSONSchema as a Value
+    parameters: Value, // Should be a serde_json::Value as a Value
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -1285,7 +1285,7 @@ mod tests {
     use tensorzero_types::{FunctionType, Role, Text};
 
     use crate::test_helpers::capture_logs;
-    use crate::test_helpers::{MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
+    use crate::test_helpers::{MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_TOOL_DEF};
 
     #[test]
     fn test_convert_unknown_content_block_warn() {
@@ -2088,15 +2088,15 @@ mod tests {
             function_declarations,
         } = &tools[0];
         assert_eq!(function_declarations.len(), 2);
-        assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+        assert_eq!(function_declarations[0].name, WEATHER_TOOL_DEF.name);
         assert_eq!(
             function_declarations[0].parameters,
-            WEATHER_TOOL.parameters().clone()
+            WEATHER_TOOL_DEF.parameters.clone()
         );
-        assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+        assert_eq!(function_declarations[1].name, QUERY_TOOL_DEF.name);
         assert_eq!(
             function_declarations[1].parameters,
-            QUERY_TOOL.parameters().clone()
+            QUERY_TOOL_DEF.parameters.clone()
         );
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -2133,15 +2133,15 @@ mod tests {
             function_declarations,
         } = &tools[0];
         assert_eq!(function_declarations.len(), 2);
-        assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+        assert_eq!(function_declarations[0].name, WEATHER_TOOL_DEF.name);
         assert_eq!(
             function_declarations[0].parameters,
-            WEATHER_TOOL.parameters().clone()
+            WEATHER_TOOL_DEF.parameters.clone()
         );
-        assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+        assert_eq!(function_declarations[1].name, QUERY_TOOL_DEF.name);
         assert_eq!(
             function_declarations[1].parameters,
-            QUERY_TOOL.parameters().clone()
+            QUERY_TOOL_DEF.parameters.clone()
         );
     }
 
@@ -2715,7 +2715,7 @@ mod tests {
 
     #[test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

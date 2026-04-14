@@ -1068,7 +1068,7 @@ mod tests {
     use super::*;
     use googletest::prelude::*;
 
-    use crate::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{QUERY_TOOL_DEF, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
     use tensorzero_inference_types::AllowedTools;
     use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_inference_types::RequestMessage;
@@ -1118,8 +1118,8 @@ mod tests {
         assert!(mistral_request.tools.is_some());
         let tools = mistral_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             mistral_request.tool_choice,
             Some(MistralToolChoice::Specific(MistralSpecificToolChoice {
@@ -1137,19 +1137,20 @@ mod tests {
 
         // Test with allowed_tools specified - Mistral doesn't support allowed_tools constraint
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone(), QUERY_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {
-                tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
+                tools: vec![WEATHER_TOOL_DEF.name.to_string()]
+                    .into_iter()
+                    .collect(),
                 choice: AllowedToolsChoice::Explicit,
             },
         };
 
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1177,7 +1178,7 @@ mod tests {
         // Verify only allowed tools are returned (strict_tools_available respects allowed_tools)
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
 
         // Verify tool_choice
         let tool_choice = tool_choice.unwrap();
@@ -1194,8 +1195,7 @@ mod tests {
     fn test_prepare_mistral_tools_auto_mode() {
         // Test Auto mode with default allowed_tools
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone(), QUERY_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
@@ -1203,7 +1203,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1248,8 +1248,7 @@ mod tests {
         use tensorzero_inference_types::AllowedTools;
 
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
@@ -1257,7 +1256,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1300,8 +1299,7 @@ mod tests {
     #[test]
     fn test_prepare_mistral_tools_none_mode() {
         let tool_config = ProviderToolCallConfig {
-            static_tools_available: vec![WEATHER_TOOL.clone()],
-            dynamic_tools_available: vec![],
+            tools: vec![WEATHER_TOOL_DEF.clone()],
             provider_tools: vec![],
             openai_custom_tools: vec![],
             tool_choice: ToolChoice::None,
@@ -1309,7 +1307,7 @@ mod tests {
             allowed_tools: AllowedTools::default(),
         };
 
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1378,7 +1376,7 @@ mod tests {
         // Verify tools
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
 
         // Verify tool_choice is Specific
         let tool_choice = tool_choice.unwrap();
@@ -1821,7 +1819,7 @@ mod tests {
 
     #[test]
     fn test_mistral_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

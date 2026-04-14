@@ -2070,8 +2070,7 @@ fn openrouter_usage_from_raw_response(raw_response: &str) -> Option<Value> {
 mod tests {
     use super::*;
     use crate::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
-        WEATHER_TOOL_DEF as WEATHER_TOOL,
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF,
     };
     use serde_json::json;
     use std::borrow::Cow;
@@ -2302,14 +2301,14 @@ mod tests {
         );
         assert!(openrouter_request.tools.is_some());
         let tools = openrouter_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             openrouter_request.tool_choice,
             Some(OpenRouterToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+                    name: &WEATHER_TOOL_DEF.name,
                 }
             }))
         );
@@ -2835,10 +2834,10 @@ mod tests {
             prepare_openrouter_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
+        assert_eq!(tools[1].function.name, QUERY_TOOL_DEF.name);
+        assert_eq!(tools[1].function.parameters, &QUERY_TOOL_DEF.parameters);
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -2851,7 +2850,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             ..Default::default()
         };
-        let provider_tool_config = ProviderToolCallConfig::from(&tool_config);
+        let provider_tool_config = tool_config.clone();
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {

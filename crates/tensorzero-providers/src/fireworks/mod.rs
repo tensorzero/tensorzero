@@ -1129,7 +1129,7 @@ mod tests {
 
     use crate::openai::OpenAIToolType;
     use crate::openai::{SpecificToolChoice, SpecificToolFunction};
-    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
     use tensorzero_inference_types::{FinishReason, RequestMessage, Usage};
     use tensorzero_types::{FunctionType, Role};
 
@@ -1276,14 +1276,14 @@ mod tests {
         assert!(fireworks_request.tools.is_some());
         let tools = fireworks_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             fireworks_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+                    name: &WEATHER_TOOL_DEF.name,
                 }
             }))
         );
@@ -2117,7 +2117,7 @@ mod tests {
 
     #[test]
     fn test_fireworks_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

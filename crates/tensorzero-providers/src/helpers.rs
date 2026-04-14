@@ -1782,7 +1782,7 @@ mod tests {
 
     #[test]
     fn test_delete_json_pointer_errors() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let mut obj = serde_json::json!({"other": "value"});
         delete_json_pointer(&mut obj, "/object1").unwrap();
         assert!(logs_contain(

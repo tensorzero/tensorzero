@@ -66,9 +66,7 @@ pub trait LazyRenderedSampleGCPVertexGeminiExt {
 }
 
 impl LazyRenderedSampleGCPVertexGeminiExt for LazyRenderedSample {
-    async fn to_supervised_row(
-        &self,
-    ) -> Result<GCPVertexGeminiSupervisedRow<'_>, Error> {
+    async fn to_supervised_row(&self) -> Result<GCPVertexGeminiSupervisedRow<'_>, Error> {
         let tool_defs = self
             .tool_params
             .additional_tools
@@ -323,9 +321,7 @@ mod tests {
             tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
         };
         let lazy_inference = inference.into_lazy_rendered_sample();
-        let row = GCPVertexGeminiSupervisedRow::from_rendered_sample(&lazy_inference)
-            .await
-            .unwrap();
+        let row = lazy_inference.to_supervised_row().await.unwrap();
 
         // Check that we have the expected number of messages (user + assistant)
         assert_eq!(row.contents.len(), 2);
@@ -372,7 +368,7 @@ mod tests {
         }
 
         // Check tools
-        assert_eq!(row.tools.len(), 0);
+        assert_eq!(row.tool_defs.len(), 0);
     }
 
     #[test]

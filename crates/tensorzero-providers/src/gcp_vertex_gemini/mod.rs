@@ -338,8 +338,8 @@ pub async fn make_gcp_object_store(
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiSupervisedRow<'a> {
-    contents: Vec<GCPVertexGeminiContent<'a>>,
-    system_instruction: Option<GCPVertexGeminiContent<'a>>,
+    pub contents: Vec<GCPVertexGeminiContent<'a>>,
+    pub system_instruction: Option<GCPVertexGeminiContent<'a>>,
     /// Owned `FunctionToolDef`s. We store them owned (rather than borrowing
     /// `GCPVertexGeminiSFTTool<'a>` views) so callers in `tensorzero-core` can
     /// build them from intermediate `FunctionToolDef`s converted from
@@ -348,7 +348,7 @@ pub struct GCPVertexGeminiSupervisedRow<'a> {
     #[serde(rename = "tools")]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(serialize_with = "serialize_tool_defs_as_sft_tools")]
-    tool_defs: Vec<FunctionToolDef>,
+    pub tool_defs: Vec<FunctionToolDef>,
 }
 
 fn serialize_tool_defs_as_sft_tools<S: serde::Serializer>(
@@ -1766,7 +1766,7 @@ impl<'a> GCPVertexGeminiContent<'a> {
 pub struct GCPVertexGeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: Option<&'a str>,
-    parameters: Option<Value>, // Should be a JSONSchema as a Value
+    parameters: Option<Value>, // Should be a serde_json::Value as a Value
 }
 
 // TODO (if needed): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
@@ -3264,13 +3264,12 @@ fn handle_gcp_vertex_gemini_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jsonschema_util::JSONSchema;
     use tensorzero_inference_types::ModelInferenceRequestJsonMode;
     use tensorzero_inference_types::ProviderToolCallConfig;
     use tensorzero_types::FunctionType;
 
     use crate::test_helpers::{
-        MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL,
+        MULTI_PROVIDER_TOOL_CONFIG, MULTI_TOOL_CONFIG, QUERY_TOOL_DEF, WEATHER_TOOL_DEF,
     };
     use googletest::prelude::*;
     use serde_json::json;
@@ -4150,7 +4149,7 @@ mod tests {
 
     #[test]
     fn test_prepare_tools() {
-        let multi_tool_provider_config = ProviderToolCallConfig::from(&*MULTI_TOOL_CONFIG);
+        let multi_tool_provider_config = MULTI_TOOL_CONFIG.clone();
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -4183,15 +4182,15 @@ mod tests {
         match &tools[0] {
             GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
                 assert_eq!(function_declarations.len(), 2);
-                assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+                assert_eq!(function_declarations[0].name, WEATHER_TOOL_DEF.name);
                 assert_eq!(
                     function_declarations[0].parameters,
-                    Some(WEATHER_TOOL.parameters().clone())
+                    Some(WEATHER_TOOL_DEF.parameters.clone())
                 );
-                assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+                assert_eq!(function_declarations[1].name, QUERY_TOOL_DEF.name);
                 assert_eq!(
                     function_declarations[1].parameters,
-                    Some(QUERY_TOOL.parameters().clone())
+                    Some(QUERY_TOOL_DEF.parameters.clone())
                 );
             }
         }
@@ -4228,15 +4227,15 @@ mod tests {
         match &tools[0] {
             GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
                 assert_eq!(function_declarations.len(), 2);
-                assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+                assert_eq!(function_declarations[0].name, WEATHER_TOOL_DEF.name);
                 assert_eq!(
                     function_declarations[0].parameters,
-                    Some(WEATHER_TOOL.parameters().clone())
+                    Some(WEATHER_TOOL_DEF.parameters.clone())
                 );
-                assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+                assert_eq!(function_declarations[1].name, QUERY_TOOL_DEF.name);
                 assert_eq!(
                     function_declarations[1].parameters,
-                    Some(QUERY_TOOL.parameters().clone())
+                    Some(QUERY_TOOL_DEF.parameters.clone())
                 );
             }
         }
@@ -4625,12 +4624,12 @@ mod tests {
             "additionalProperties": false
         });
 
-        let tool_schema = JSONSchema::from_value(tool_schema_value).unwrap();
+        let tool_schema: serde_json::Value = serde_json::from_value(tool_schema_value).unwrap();
 
         let tool_def = FunctionToolDef {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: tool_schema.value,
+            parameters: tool_schema,
             strict: false,
         };
 
@@ -4837,7 +4836,7 @@ mod tests {
 
     #[test]
     fn test_convert_unknown_content_block_warn() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         use std::time::Duration;
 
         // Test with text content
@@ -5570,7 +5569,7 @@ mod tests {
 
     #[test]
     fn test_gcp_vertex_gemini_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,
