@@ -921,9 +921,6 @@ enum ContentBlockOutputType {
     Unknown,
 }
 
-// Re-exported from tensorzero-inference-types
-pub use tensorzero_inference_types::inference_response::ContentBlockChatOutput;
-
 /// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
 /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
 ///
@@ -1240,8 +1237,6 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-// Re-exported from tensorzero-inference-types
-pub use tensorzero_inference_types::inference_response::JsonInferenceOutput;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InternalJsonInferenceOutput {

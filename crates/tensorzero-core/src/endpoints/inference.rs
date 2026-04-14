@@ -1691,11 +1691,6 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     futures::future::join_all(futures).await;
 }
 
-// Re-exported from tensorzero-inference-types
-pub use tensorzero_inference_types::inference_response::{
-    ChatInferenceResponse, InferenceResponse, JsonInferenceResponse,
-};
-
 /// Construct an `InferenceResponse` from core-internal `InferenceResult`.
 pub fn inference_response_from_result(
     inference_result: InferenceResult,
