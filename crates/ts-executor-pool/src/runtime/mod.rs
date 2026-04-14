@@ -1229,7 +1229,7 @@ mod tests {
         }
     }
 
-    fn first_inference_text(params: &tensorzero_core::client::ClientInferenceParams) -> String {
+    fn first_inference_text(params: &crate::tensorzero_client::PoolInferenceParams) -> String {
         params
             .input
             .messages
