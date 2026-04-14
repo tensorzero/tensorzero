@@ -798,7 +798,7 @@ struct GCPVertexAnthropicResponse {
 }
 
 #[derive(Debug)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
 struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     raw_response: String,

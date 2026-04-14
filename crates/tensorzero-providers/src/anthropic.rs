@@ -1349,7 +1349,7 @@ impl AnthropicStopReason {
 }
 
 #[derive(Debug)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
