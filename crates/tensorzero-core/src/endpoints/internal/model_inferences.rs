@@ -98,6 +98,18 @@ pub struct ModelInference {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | undefined"))]
     pub cost: Option<Decimal>,
+
+    /// Provider-native response id (e.g. OpenAI `chatcmpl-...`, Anthropic `msg_...`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_response_id: Option<String>,
+
+    /// Actual model returned by the provider (may differ from requested model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_model_name: Option<String>,
+
+    /// OTel GenAI `gen_ai.operation.name` (e.g. "chat", "embeddings").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
 }
 
 /// HTTP handler for getting model inferences by inference ID
@@ -167,6 +179,9 @@ async fn get_model_inferences(
                 output: row.output,
                 cached: row.cached,
                 cost: row.cost,
+                provider_response_id: row.provider_response_id,
+                response_model_name: row.response_model_name,
+                operation: row.operation,
             })
         })
         .collect()

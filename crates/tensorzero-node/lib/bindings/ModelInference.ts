@@ -82,4 +82,16 @@ export type ModelInference = {
    * Cost of the inference.
    */
   cost: number | undefined;
+  /**
+   * Provider-native response id (e.g. OpenAI `chatcmpl-...`, Anthropic `msg_...`).
+   */
+  provider_response_id?: string;
+  /**
+   * Actual model returned by the provider (may differ from requested model).
+   */
+  response_model_name?: string;
+  /**
+   * OTel GenAI `gen_ai.operation.name` (e.g. "chat", "embeddings").
+   */
+  operation?: string;
 };
