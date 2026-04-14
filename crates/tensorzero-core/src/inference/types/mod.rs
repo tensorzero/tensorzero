@@ -1237,7 +1237,6 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct InternalJsonInferenceOutput {
     pub raw: Option<String>,
