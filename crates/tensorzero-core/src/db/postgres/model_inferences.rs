@@ -1472,6 +1472,9 @@ mod tests {
                 i.cost,
                 i.finish_reason,
                 i.snapshot_hash,
+                i.provider_response_id,
+                i.response_model_name,
+                i.operation,
                 i.created_at
             FROM tensorzero.model_inferences i
             LEFT JOIN tensorzero.model_inference_data io ON io.id = i.id AND io.created_at = i.created_at
@@ -1518,8 +1521,10 @@ mod tests {
                 id, inference_id, function_name, variant_name, input_tokens, output_tokens,
                 provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost,
+                provider_response_id, response_model_name, operation,
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             ",
         );
 
@@ -1602,9 +1607,11 @@ mod tests {
                 id, inference_id, function_name, variant_name, input_tokens, output_tokens,
                 provider_cache_read_input_tokens, provider_cache_write_input_tokens,
                 response_time_ms, model_name, model_provider_name,
-                ttft_ms, cached, finish_reason, snapshot_hash, cost, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17),
-            ($18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+                ttft_ms, cached, finish_reason, snapshot_hash, cost,
+                provider_response_id, response_model_name, operation,
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20),
+            ($21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
             ",
         );
 

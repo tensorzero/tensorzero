@@ -427,6 +427,9 @@ mod tests {
                     cost,
                     finish_reason,
                     snapshot_hash,
+                    provider_response_id,
+                    response_model_name,
+                    operation,
                     formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp
                 FROM ModelInference
                 WHERE inference_id = {inference_id:UUID}
