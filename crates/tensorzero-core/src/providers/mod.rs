@@ -1,27 +1,16 @@
-pub mod anthropic;
-pub mod aws_bedrock;
-pub mod aws_common;
-pub mod aws_sagemaker;
-pub mod azure;
-pub mod chat_completions;
-pub mod deepseek;
+// Re-export everything from `tensorzero_providers`, but suppress the `gcp_vertex_gemini`
+// submodule because we override it locally to add the core-only `optimization` submodule.
+// (Other provider submodules pass through unchanged via the glob re-export.)
+pub use tensorzero_providers::{
+    anthropic, aws_bedrock, aws_common, aws_sagemaker, azure, chat_completions, deepseek,
+    fireworks, gcp_vertex_anthropic, google_ai_studio_gemini, groq, helpers,
+    helpers_thinking_block, hyperbolic, mistral, openai, openrouter, sglang, tgi, together, vllm,
+    xai,
+};
+
+pub mod gcp_vertex_gemini;
+
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod dummy;
-pub mod fireworks;
-pub mod gcp_vertex_anthropic;
-pub mod gcp_vertex_gemini;
-pub mod google_ai_studio_gemini;
-pub mod groq;
-pub mod helpers;
-pub mod helpers_thinking_block;
-pub mod hyperbolic;
-pub mod mistral;
-pub mod openai;
-pub mod openrouter;
-pub mod sglang;
 #[cfg(test)]
 pub mod test_helpers;
-pub mod tgi;
-pub mod together;
-pub mod vllm;
-pub mod xai;

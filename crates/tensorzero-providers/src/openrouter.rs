@@ -10,49 +10,50 @@ use std::borrow::Cow;
 // TODO: Remove this import after migrating OpenRouter streaming chunk types to `tensorzero-types-providers`
 use tensorzero_types_providers::serde_util::empty_string_as_none;
 
-use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
+use tensorzero_http::TensorzeroHttpClient;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::embeddings::EmbeddingEncodingFormat;
-use crate::embeddings::{
+use tensorzero_error::{
+    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
+};
+use tensorzero_inference_types::EmbeddingEncodingFormat;
+use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::StartBatchProviderInferenceResponse;
+use tensorzero_inference_types::ToolCallChunk;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::embeddings::{
     Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
     EmbeddingProviderResponse, EmbeddingRequest,
 };
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{
-    DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_thought_block,
-};
-use crate::inference::InferenceProvider;
-use crate::inference::types::ObjectStorageFile;
-use crate::inference::types::batch::StartBatchProviderInferenceResponse;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, FinishReason, ProviderInferenceResponseStreamInner};
-use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FileUrl, Latency, LazyFile, LazyFileExt,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    RequestMessage, Role, Text, TextChunk, ThoughtChunk, Unknown, Usage,
-    resolved_input::{FileUrl, LazyFile, LazyFileExt},
+    RequestMessage, TextChunk, ThoughtChunk, Usage,
 };
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
-use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::{FinishReason, ProviderInferenceResponseStreamInner};
+use tensorzero_inference_types::{mime_type_to_audio_format, mime_type_to_ext};
+use tensorzero_types::ApiType;
+use tensorzero_types::ObjectStorageFile;
 use tensorzero_types::content::{Thought, ThoughtSummaryBlock};
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{Role, Text, Unknown};
+use tensorzero_types::{ToolCall, ToolChoice};
 use tensorzero_types_providers::openrouter::{
     ReasoningConfig as OpenRouterReasoningConfig, ReasoningDetail as OpenRouterReasoningDetail,
 };
 use uuid::Uuid;
 
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::helpers::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
@@ -68,9 +69,9 @@ use super::openai::{
     SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
-use crate::inference::TensorZeroEventError;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::providers::openai::OpenAIEmbeddingUsage;
+use crate::openai::OpenAIEmbeddingUsage;
+use tensorzero_inference_types::extra_body::FullExtraBodyConfig;
+use tensorzero_inference_types::provider_trait::TensorZeroEventError;
 use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
 lazy_static! {
@@ -2068,16 +2069,14 @@ fn openrouter_usage_from_raw_response(raw_response: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        inference::types::{FunctionType, RequestMessage},
-        providers::test_helpers::{
-            MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
-        },
-        tool::ToolCallConfig,
+    use crate::test_helpers::{
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
+        WEATHER_TOOL_DEF as WEATHER_TOOL,
     };
     use serde_json::json;
     use std::borrow::Cow;
-    use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::{ProviderToolCallConfig, RequestMessage};
+    use tensorzero_types::FunctionType;
 
     #[test]
     fn test_get_chat_url() {
@@ -2847,7 +2846,7 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()

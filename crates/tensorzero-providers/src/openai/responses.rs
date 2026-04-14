@@ -1,43 +1,39 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::{
-    inference::types::{
-        ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
-        chat_completion_inference_params::{
-            ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
-        },
-    },
-    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
+    OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax,
+    ProviderInferenceResponseStreamInner, ToolConfigRef,
 };
+use tensorzero_types::ThoughtSummaryBlock;
+use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, ServiceTier};
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
-use crate::providers::helpers::convert_stream_error;
-use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
+use crate::helpers::convert_stream_error;
 use futures::StreamExt;
 use futures::{Stream, future::try_join_all};
 use reqwest_sse_stream::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tensorzero_error::IMPOSSIBLE_ERROR_MESSAGE;
+use tensorzero_inference_types::provider_trait::TensorZeroEventError;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::{
-    error::{Error, ErrorDetails, warn_discarded_thought_block},
-    inference::types::{
-        ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown,
-        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage, file::Detail,
-    },
-    providers::openai::{
-        OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
-        ReasoningFieldName, SystemOrDeveloper, prepare_file_message,
-        prepare_system_or_developer_message_helper,
-    },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+use super::{
+    OpenAIContentBlock, OpenAIFile, OpenAIMessagesConfig, OpenAITool, PROVIDER_TYPE,
+    ReasoningFieldName, SystemOrDeveloper, prepare_file_message,
+    prepare_system_or_developer_message_helper,
 };
+use tensorzero_error::{Error, ErrorDetails, warn_discarded_thought_block};
+use tensorzero_inference_types::{
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, TextChunk,
+    ThoughtChunk, ToolCallChunk, UnknownChunk, Usage, raw_usage_entries_from_value,
+};
+use tensorzero_types::{ApiType, Detail, Role, Text, Thought, ToolCall, ToolChoice, Unknown};
 use uuid::Uuid;
 
 #[derive(Serialize, Debug)]
@@ -1703,7 +1699,8 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
+    use tensorzero_inference_types::{ModelInferenceRequest, RequestMessage};
+    use tensorzero_types::{FunctionType, Role};
 
     #[test]
     fn test_deserialize_response_created() {
@@ -3274,7 +3271,7 @@ mod tests {
 
     #[test]
     fn test_input_image_serialization_with_detail() {
-        use crate::inference::types::file::Detail;
+        use tensorzero_types::Detail;
 
         // Test serialization with detail: low
         let input_low = OpenAIResponsesInputMessageContent::InputImage {
@@ -3315,10 +3312,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_with_allowed_tools_auto() {
-        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and auto tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -3370,10 +3367,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_with_allowed_tools_required() {
-        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Create a tool config with explicit allowed_tools and required tool choice
         let mut tool_config = MULTI_TOOL_CONFIG.clone();
@@ -3429,10 +3426,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_with_allowed_tools_none_tool_choice() {
-        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test that when tool_choice is None but allowed_tools is set,
         // we use AllowedTools variant with Auto mode
@@ -3479,7 +3476,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_without_allowed_tools() {
-        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
+        use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
 
@@ -3521,7 +3518,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_with_specific_tool_without_allowed_tools() {
-        use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
+        use crate::test_helpers::WEATHER_TOOL_DEF_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
 
@@ -3573,10 +3570,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_responses_request_empty_allowed_tools_list() {
-        use crate::providers::test_helpers::MULTI_TOOL_CONFIG;
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use crate::test_helpers::MULTI_TOOL_CONFIG;
         use std::borrow::Cow;
         use tensorzero_inference_types::ProviderToolCallConfig;
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test edge case: explicit allowed_tools but empty list
         let mut tool_config = MULTI_TOOL_CONFIG.clone();

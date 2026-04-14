@@ -23,6 +23,7 @@ use tensorzero_core::{
 
 pub mod dicl;
 pub mod endpoints;
+pub(crate) mod tool_serializer;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod gepa;

@@ -1,30 +1,29 @@
 use std::borrow::Cow;
 
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ContentBlockOutput};
-use crate::inference::types::{
-    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
-    batch::StartBatchProviderInferenceResponse,
-};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::helpers::{
+use crate::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::ContentBlockOutput;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, StartBatchProviderInferenceResponse,
+};
+use tensorzero_types::ApiType;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
@@ -34,7 +33,7 @@ use super::openai::{
     handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
     prepare_openai_messages, stream_openai,
 };
-use crate::inference::{InferenceProvider, TensorZeroEventError};
+use tensorzero_inference_types::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
@@ -542,13 +541,12 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
-    };
-    use crate::providers::openai::{
+    use crate::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
-    use crate::providers::test_helpers::WEATHER_PROVIDER_TOOL_CONFIG;
+    use crate::test_helpers::WEATHER_PROVIDER_TOOL_CONFIG;
+    use tensorzero_inference_types::{ModelInferenceRequestJsonMode, RequestMessage};
+    use tensorzero_types::{FunctionType, Role};
     #[tokio::test]
     async fn test_hyperbolic_request_new() {
         let request_with_tools = ModelInferenceRequest {

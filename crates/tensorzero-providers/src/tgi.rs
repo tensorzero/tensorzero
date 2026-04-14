@@ -1,4 +1,3 @@
-use crate::http::TensorzeroHttpClient;
 use async_trait::async_trait;
 /// TGI integration for TensorZero
 ///
@@ -21,6 +20,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::pin::Pin;
 use std::time::Duration;
+use tensorzero_http::TensorzeroHttpClient;
 use tokio::time::Instant;
 use url::Url;
 
@@ -29,34 +29,34 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIToolType, StreamOptions, SystemOrDeveloper, get_chat_url,
     prepare_openai_messages,
 };
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::DisplayOrDebugGateway;
-use crate::error::{DelayedError, Error, ErrorDetails};
-use crate::inference::InferenceProvider;
-use crate::inference::TensorZeroEventError;
-use crate::inference::WrappedProvider;
-use crate::inference::types::batch::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
+use crate::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
+use tensorzero_error::DisplayOrDebugGateway;
+use tensorzero_error::{DelayedError, Error, ErrorDetails};
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::provider_trait::TensorZeroEventError;
+use tensorzero_inference_types::provider_trait::WrappedProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
+use tensorzero_inference_types::{
+    ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
-use crate::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
-use crate::tool::ToolCall;
+use tensorzero_types::ApiType;
+use tensorzero_types::ToolCall;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
 use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -891,16 +891,13 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::{
-        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
-        providers::{
-            chat_completions::{
-                ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
-                ChatCompletionToolChoice, ChatCompletionToolType,
-            },
-            test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL},
-        },
+    use crate::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
     };
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF as WEATHER_TOOL};
+    use tensorzero_inference_types::{ModelInferenceRequestJsonMode, RequestMessage};
+    use tensorzero_types::{FunctionType, Role};
 
     use super::*;
 

@@ -14,27 +14,27 @@ use super::openai::{
     openai_response_tool_call_to_tensorzero_tool_call, stream_openai,
     tensorzero_to_openai_messages,
 };
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::Thought;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
-};
-use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::helpers::{
+use crate::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::{InferenceProvider, TensorZeroEventError};
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, StartBatchProviderInferenceResponse,
+};
+use tensorzero_types::ApiType;
+use tensorzero_types::Thought;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
 use uuid::Uuid;
 
 const PROVIDER_NAME: &str = "vLLM";
@@ -611,21 +611,18 @@ mod tests {
 
     use super::*;
 
-    use crate::{
-        inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
-        providers::{
-            openai::{
-                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
-                OpenAIToolChoiceString, OpenAIUsage,
-            },
-            test_helpers::{
-                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
-            },
-        },
+    use crate::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolChoiceString,
+        OpenAIUsage,
     };
-
-    use crate::tool::{ToolCallConfig, ToolChoice};
-    use tensorzero_inference_types::ProviderToolCallConfig;
+    use crate::test_helpers::{
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
+        WEATHER_TOOL_DEF as WEATHER_TOOL,
+    };
+    use tensorzero_inference_types::{
+        ModelInferenceRequestJsonMode, ProviderToolCallConfig, RequestMessage,
+    };
+    use tensorzero_types::{FunctionType, Role, ToolChoice};
     use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
 
     #[tokio::test]
@@ -1029,18 +1026,18 @@ mod tests {
         let tools = vllm_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
         match &tools[0] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
+            crate::openai::OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            crate::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
+            crate::openai::OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            crate::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         let tool_choice = vllm_request.tool_choice.unwrap();
         assert_eq!(
@@ -1049,7 +1046,7 @@ mod tests {
         );
         let parallel_tool_calls = vllm_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()

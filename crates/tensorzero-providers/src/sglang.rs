@@ -1,39 +1,39 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use futures::StreamExt;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tensorzero_http::{TensorZeroEventSource, TensorzeroHttpClient};
 use tokio::time::Instant;
 use url::Url;
 
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::inference::InferenceProvider;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+use crate::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, Thought, batch::StartBatchProviderInferenceResponse,
-};
-use crate::inference::types::{
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_inference_types::ToolCallChunk;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
 };
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, StartBatchProviderInferenceResponse,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName, check_api_base_suffix};
-use crate::tool::ToolCallChunk;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Thought};
 use uuid::Uuid;
 
 use super::openai::{
@@ -848,22 +848,18 @@ mod tests {
     use std::{borrow::Cow, time::Duration};
     use uuid::Uuid;
 
-    use crate::{
-        inference::types::{
-            FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
-        },
-        providers::{
-            openai::{
-                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
-                OpenAIToolChoiceString, OpenAIUsage,
-            },
-            test_helpers::{
-                MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL,
-            },
-        },
-        tool::{ToolCallConfig, ToolChoice},
+    use crate::openai::{
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolChoiceString,
+        OpenAIUsage,
     };
-    use tensorzero_inference_types::ProviderToolCallConfig;
+    use crate::test_helpers::{
+        MULTI_PROVIDER_TOOL_CONFIG, QUERY_TOOL_DEF as QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG,
+        WEATHER_TOOL_DEF as WEATHER_TOOL,
+    };
+    use tensorzero_inference_types::{
+        FinishReason, ModelInferenceRequestJsonMode, ProviderToolCallConfig, RequestMessage,
+    };
+    use tensorzero_types::{FunctionType, Role, ToolChoice};
 
     use super::*;
 
@@ -1237,7 +1233,7 @@ mod tests {
         );
         let parallel_tool_calls = sglang_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             ..Default::default()

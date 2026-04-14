@@ -1,9 +1,6 @@
 use std::{borrow::Cow, time::Duration};
 
-use crate::{
-    http::{TensorZeroEventSource, TensorzeroHttpClient},
-    providers::openai::{OpenAIMessagesConfig, ReasoningFieldName},
-};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
@@ -11,6 +8,7 @@ use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
+use tensorzero_http::{TensorZeroEventSource, TensorzeroHttpClient};
 use tensorzero_types_providers::mistral::{
     MistralChatChunk, MistralContent, MistralContentChunk, MistralFinishReason, MistralResponse,
     MistralResponseChoice, MistralResponseFormat, MistralResponseToolCall, MistralThinkingSubChunk,
@@ -19,35 +17,27 @@ use tensorzero_types_providers::mistral::{
 use tokio::time::Instant;
 use url::Url;
 
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::{
-    endpoints::inference::InferenceCredentials,
-    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::{
-        InferenceProvider,
-        types::{
-            ApiType, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
-            ModelInferenceRequest, ModelInferenceRequestJsonMode,
-            PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-            ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStreamInner, RequestMessage, Role, TextChunk, Thought,
-            ThoughtChunk, Usage,
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
-            chat_completion_inference_params::{
-                ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-            },
-        },
-    },
-    model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
-    providers::helpers::{
-        check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
-        inject_extra_request_data_and_send_eventsource,
-    },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+use crate::helpers::{
+    check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource,
 };
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::credentials::{
+    Credential, ModelProviderRequestInfo, ProviderInferenceRequest,
+};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
+    BatchRequestRow, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    PollBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, ToolCallChunk, Usage,
+    raw_usage_entries_from_value,
+};
+use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, InferenceCredentials};
+use tensorzero_types::{ApiType, Role, Thought, ToolCall, ToolChoice};
 use uuid::Uuid;
 
 use super::openai::{
@@ -1078,10 +1068,11 @@ mod tests {
     use super::*;
     use googletest::prelude::*;
 
-    use crate::inference::types::{FunctionType, RequestMessage, Role};
-    use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
-    use crate::tool::{AllowedTools, ToolCallConfig};
+    use crate::test_helpers::{QUERY_TOOL, WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use tensorzero_inference_types::AllowedTools;
     use tensorzero_inference_types::ProviderToolCallConfig;
+    use tensorzero_inference_types::RequestMessage;
+    use tensorzero_types::{FunctionType, Role};
     use tensorzero_types_providers::mistral::{
         MistralChatChunkChoice, MistralDelta, MistralResponseFunctionCall, MistralResponseMessage,
         MistralThinkingSubChunk,
@@ -1142,10 +1133,10 @@ mod tests {
 
     #[test]
     fn test_prepare_mistral_tools_with_allowed_tools() {
-        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
 
         // Test with allowed_tools specified - Mistral doesn't support allowed_tools constraint
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -1202,7 +1193,7 @@ mod tests {
     #[test]
     fn test_prepare_mistral_tools_auto_mode() {
         // Test Auto mode with default allowed_tools
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -1254,9 +1245,9 @@ mod tests {
 
     #[test]
     fn test_prepare_mistral_tools_required_mode() {
-        use crate::tool::AllowedTools;
+        use tensorzero_inference_types::AllowedTools;
 
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             static_tools_available: vec![WEATHER_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -1308,7 +1299,7 @@ mod tests {
 
     #[test]
     fn test_prepare_mistral_tools_none_mode() {
-        let tool_config = ToolCallConfig {
+        let tool_config = ProviderToolCallConfig {
             static_tools_available: vec![WEATHER_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -2044,7 +2035,8 @@ mod tests {
 
     #[test]
     fn test_mistral_assistant_message_with_thought_blocks() {
-        use crate::inference::types::{ContentBlock, Text, Thought};
+        use tensorzero_inference_types::ContentBlock;
+        use tensorzero_types::{Text, Thought};
 
         let message = RequestMessage {
             role: Role::Assistant,

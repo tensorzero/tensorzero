@@ -5,7 +5,7 @@ use std::{borrow::Cow, collections::HashMap};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use tensorzero_core::providers::openai::{
-    OpenAIFileID, OpenAIRequestMessage, OpenAISFTTool, SystemOrDeveloper, prepare_openai_messages,
+    OpenAIFileID, OpenAIRequestMessage, SystemOrDeveloper, prepare_openai_messages,
     tensorzero_to_openai_assistant_message,
 };
 use tensorzero_core::{
@@ -109,8 +109,9 @@ pub struct ReinforcementHyperparameters {
 pub struct OpenAISupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     parallel_tool_calls: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAISFTTool<'a>>,
+    #[serde(rename = "tools", skip_serializing_if = "Vec::is_empty")]
+    #[serde(serialize_with = "crate::tool_serializer::serialize_as_openai_sft_tools")]
+    tool_defs: Vec<tensorzero_inference_types::FunctionToolDef>,
 }
 
 impl<'a> OpenAISupervisedRow<'a> {
@@ -119,18 +120,18 @@ impl<'a> OpenAISupervisedRow<'a> {
             .tool_params
             .parallel_tool_calls
             .unwrap_or_default();
-        let tools = inference
+        let tool_defs = inference
             .tool_params
             .additional_tools
             .as_ref()
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt {
+                    .filter_map(|dt| match dt {
                         tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None,
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
         let mut messages = prepare_openai_messages(
@@ -178,7 +179,7 @@ impl<'a> OpenAISupervisedRow<'a> {
         Ok(Self {
             messages,
             parallel_tool_calls,
-            tools,
+            tool_defs,
         })
     }
 }
@@ -197,8 +198,9 @@ pub struct OpenAIReinforcementRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     #[serde(flatten)]
     output: OpenAIReinforcementOutput<'a>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAISFTTool<'a>>,
+    #[serde(rename = "tools", skip_serializing_if = "Vec::is_empty")]
+    #[serde(serialize_with = "crate::tool_serializer::serialize_as_openai_sft_tools")]
+    tool_defs: Vec<tensorzero_inference_types::FunctionToolDef>,
     parallel_tool_calls: bool,
 }
 
@@ -208,18 +210,18 @@ impl<'a> OpenAIReinforcementRow<'a> {
             .tool_params
             .parallel_tool_calls
             .unwrap_or_default();
-        let tools = inference
+        let tool_defs = inference
             .tool_params
             .additional_tools
             .as_ref()
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt {
+                    .filter_map(|dt| match dt {
                         tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None,
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
         let messages = prepare_openai_messages(
@@ -252,7 +254,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
         Ok(Self {
             messages,
             output: openai_output,
-            tools,
+            tool_defs,
             parallel_tool_calls,
         })
     }
