@@ -229,7 +229,8 @@ async fn load_config_from_db_round_trips_written_function_configs(pool: PgPool) 
         .functions
         .get_or_insert_with(HashMap::new)
         .insert("test".to_string(), sample_function());
-    assert_that!(&loaded, eq(&expected));
+    assert_that!(&loaded.config, eq(&expected));
+    assert_that!(loaded.loading_errors.is_empty(), eq(true));
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
@@ -293,11 +294,12 @@ async fn load_config_from_db_loads_top_level_tools_and_evaluations(pool: PgPool)
         .expect("DB load should succeed");
 
     assert_that!(
-        loaded.tools.as_ref().and_then(|t| t.get("search")),
+        loaded.config.tools.as_ref().and_then(|t| t.get("search")),
         some(eq(&sample_tool()))
     );
     assert_that!(
         loaded
+            .config
             .evaluations
             .as_ref()
             .and_then(|e| e.get("exact_eval")),
@@ -372,22 +374,43 @@ async fn load_config_from_db_skips_invalid_collection_rows_and_broken_functions(
         .await
         .expect("DB load should succeed");
 
+    // The broken model is skipped — models map is empty.
     assert_that!(
-        loaded.models.as_ref().is_none_or(|m| m.is_empty()),
+        loaded.config.models.as_ref().is_none_or(|m| m.is_empty()),
         eq(true)
     );
+    // The "good" function loads normally.
     assert_that!(
-        loaded.functions.as_ref().and_then(|f| f.get("good")),
+        loaded.config.functions.as_ref().and_then(|f| f.get("good")),
         some(eq(&sample_function()))
     );
+    // The "broken" function loads but with an empty variants map (the missing
+    // variant reference is collected as a per-variant error, not a fatal failure).
+    let broken = loaded
+        .config
+        .functions
+        .as_ref()
+        .and_then(|f| f.get("broken"));
+    assert_that!(broken.is_some(), eq(true));
+
+    // Both the broken model and the missing variant should be in loading_errors.
+    assert_that!(loaded.loading_errors.len(), ge(2usize));
     assert_that!(
-        loaded.functions.as_ref().and_then(|f| f.get("broken")),
-        none()
+        loaded
+            .loading_errors
+            .iter()
+            .any(|e| e.kind == "model" && e.name == "broken-model"),
+        eq(true)
+    );
+    // The missing variant should appear as a variant-kind error.
+    assert_that!(
+        loaded.loading_errors.iter().any(|e| e.kind == "variant"),
+        eq(true)
     );
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
-async fn load_config_from_db_fails_on_invalid_singleton_rows(pool: PgPool) {
+async fn load_config_from_db_collects_invalid_singleton_rows_as_loading_errors(pool: PgPool) {
     sqlx::query(
         "INSERT INTO tensorzero.gateway_configs (id, schema_revision, config) \
          VALUES ($1, $2, $3)",
@@ -399,13 +422,16 @@ async fn load_config_from_db_fails_on_invalid_singleton_rows(pool: PgPool) {
     .await
     .expect("bad gateway row insert should succeed");
 
-    let errors = load_config_from_db(&pool)
+    // Invalid singleton rows no longer abort the load — they produce loading errors and
+    // fall back to Default::default() so the gateway can still start up.
+    let loaded = load_config_from_db(&pool)
         .await
-        .expect_err("invalid singleton rows should fail");
+        .expect("load should succeed despite broken singleton row");
 
-    assert_that!(errors.len(), eq(1));
+    assert_that!(loaded.loading_errors.len(), eq(1));
+    assert_that!(loaded.loading_errors[0].kind, eq("gateway_config"));
     assert_that!(
-        errors[0].to_string(),
+        loaded.loading_errors[0].error,
         contains_substring("unsupported schema revision 999 for `gateway_config`")
     );
 }

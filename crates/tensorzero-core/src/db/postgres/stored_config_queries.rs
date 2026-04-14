@@ -18,7 +18,7 @@ use tensorzero_stored_config::{
 use uuid::Uuid;
 
 use crate::config::rehydrate::{FileMap, rehydrate_evaluation, rehydrate_function, rehydrate_tool};
-use crate::config::{UninitializedConfig, validate_user_config_names};
+use crate::config::{ConfigLoadingError, UninitializedConfig, validate_user_config_names};
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Clone, Debug, FromRow)]
@@ -63,8 +63,46 @@ struct StoredFileRow {
     source_autopilot_session_id: Option<Uuid>,
 }
 
-fn log_collection_skip(kind: &str, name: &str, error: &impl std::fmt::Display) {
-    tracing::error!("Skipping {kind} `{name}` from DB config: {error}");
+/// Best-effort conversion from a raw JSONB config value into a TOML string fragment.
+/// Used to populate `ConfigLoadingError::raw_toml` for copy/paste debugging.
+/// Returns `None` if the value cannot be rendered as TOML (e.g. top-level null).
+fn json_to_toml_fragment(value: serde_json::Value) -> Option<String> {
+    let toml_value = json_value_to_toml(value)?;
+    toml::to_string_pretty(&toml_value).ok()
+}
+
+fn json_value_to_toml(value: serde_json::Value) -> Option<toml::Value> {
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::Bool(b) => Some(toml::Value::Boolean(b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(toml::Value::Integer(i))
+            } else {
+                n.as_f64().map(toml::Value::Float)
+            }
+        }
+        serde_json::Value::String(s) => Some(toml::Value::String(s)),
+        serde_json::Value::Array(arr) => {
+            let items: Vec<toml::Value> = arr.into_iter().filter_map(json_value_to_toml).collect();
+            Some(toml::Value::Array(items))
+        }
+        serde_json::Value::Object(obj) => {
+            let map: toml::map::Map<String, toml::Value> = obj
+                .into_iter()
+                .filter_map(|(k, v)| json_value_to_toml(v).map(|tv| (k, tv)))
+                .collect();
+            Some(toml::Value::Table(map))
+        }
+    }
+}
+
+/// The result of loading config from the database. Contains the successfully
+/// parsed config alongside any per-item errors encountered during loading.
+#[derive(Debug)]
+pub struct LoadedConfig {
+    pub config: UninitializedConfig,
+    pub loading_errors: Vec<ConfigLoadingError>,
 }
 
 /// Open a new REPEATABLE READ READ ONLY transaction on its own connection and
@@ -427,37 +465,51 @@ fn collect_evaluation_file_ids(stored: &StoredEvaluationConfig, file_ids: &mut H
 
 fn rehydrate_named_collection<Stored, Item, DeserializeFn, RehydrateFn, DeserializeError>(
     rows: Vec<NamedVersionedConfigRow>,
-    kind: &str,
+    kind: &'static str,
     deserialize: DeserializeFn,
     rehydrate: RehydrateFn,
-) -> HashMap<String, Item>
+) -> (HashMap<String, Item>, Vec<ConfigLoadingError>)
 where
     DeserializeFn: Fn(i32, serde_json::Value) -> Result<Stored, DeserializeError>,
     RehydrateFn: Fn(Stored) -> Result<Item, Error>,
     DeserializeError: std::fmt::Display,
 {
     let mut result = HashMap::new();
+    let mut errors = Vec::new();
 
     for row in rows {
         let name = row.name;
+        let raw_toml = json_to_toml_fragment(row.config.clone());
         let stored = match deserialize(row.schema_revision, row.config) {
             Ok(stored) => stored,
             Err(error) => {
-                log_collection_skip(kind, &name, &error);
+                errors.push(ConfigLoadingError {
+                    kind,
+                    name,
+                    parent: None,
+                    error: error.to_string(),
+                    raw_toml,
+                });
                 continue;
             }
         };
         let item = match rehydrate(stored) {
             Ok(item) => item,
             Err(error) => {
-                log_collection_skip(kind, &name, &error);
+                errors.push(ConfigLoadingError {
+                    kind,
+                    name,
+                    parent: None,
+                    error: error.to_string(),
+                    raw_toml,
+                });
                 continue;
             }
         };
         result.insert(name, item);
     }
 
-    result
+    (result, errors)
 }
 
 struct LoadedStoredConfigRows {
@@ -477,13 +529,18 @@ struct LoadedStoredConfigRows {
     latest_function_rows: Vec<FunctionConfigRow>,
 }
 
-/// Rehydrate the given config rows into an `UninitializedConfig`. The provided
+/// Rehydrate the given config rows into a `LoadedConfig`. The provided
 /// connection is used for the secondary sequential loads of variant versions
 /// and prompt templates that depend on which functions are present.
+///
+/// Per-item failures (broken JSONB, missing file refs, broken variant refs)
+/// are collected into `LoadedConfig::loading_errors` rather than aborting the
+/// load. Only unrecoverable structural failures (DB connectivity, snapshot
+/// transaction errors) propagate as `Err`.
 async fn rehydrate_loaded_config_rows(
     rows: LoadedStoredConfigRows,
     conn: &mut sqlx::PgConnection,
-) -> Result<UninitializedConfig, Vec<Error>> {
+) -> Result<(UninitializedConfig, Vec<ConfigLoadingError>), Vec<Error>> {
     let LoadedStoredConfigRows {
         gateway_row,
         clickhouse_row,
@@ -501,119 +558,229 @@ async fn rehydrate_loaded_config_rows(
         latest_function_rows,
     } = rows;
 
+    let mut loading_errors: Vec<ConfigLoadingError> = Vec::new();
+
     let gateway = match gateway_row {
         Some(row) => {
-            let stored = deserialize_gateway_config(row.schema_revision, row.config)
-                .map_err(|error| vec![schema_dispatch_error(error)])?;
-            stored.try_into().map_err(|error| vec![error])?
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            let result = deserialize_gateway_config(row.schema_revision, row.config)
+                .map_err(schema_dispatch_error)
+                .and_then(|stored| stored.try_into());
+            match result {
+                Ok(g) => g,
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "gateway_config",
+                        name: "gateway_config".to_string(),
+                        parent: None,
+                        error: error.to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
         }
         None => Default::default(),
     };
     let clickhouse = match clickhouse_row {
-        Some(row) => deserialize_clickhouse_config(row.schema_revision, row.config)
-            .map_err(|error| vec![schema_dispatch_error(error)])?
-            .into(),
+        Some(row) => {
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            match deserialize_clickhouse_config(row.schema_revision, row.config) {
+                Ok(stored) => stored.into(),
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "clickhouse_config",
+                        name: "clickhouse_config".to_string(),
+                        parent: None,
+                        error: schema_dispatch_error(error).to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
+        }
         None => Default::default(),
     };
     let postgres = match postgres_row {
-        Some(row) => deserialize_postgres_config(row.schema_revision, row.config)
-            .map_err(|error| vec![schema_dispatch_error(error)])?
-            .into(),
+        Some(row) => {
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            match deserialize_postgres_config(row.schema_revision, row.config) {
+                Ok(stored) => stored.into(),
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "postgres_config",
+                        name: "postgres_config".to_string(),
+                        parent: None,
+                        error: schema_dispatch_error(error).to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
+        }
         None => Default::default(),
     };
     let object_storage = match object_storage_row {
-        Some(row) => Some(
-            deserialize_storage_kind(row.schema_revision, row.config)
-                .map_err(|error| vec![schema_dispatch_error(error)])?
-                .into(),
-        ),
+        Some(row) => {
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            match deserialize_storage_kind(row.schema_revision, row.config) {
+                Ok(stored) => Some(stored.into()),
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "object_storage_config",
+                        name: "object_storage_config".to_string(),
+                        parent: None,
+                        error: schema_dispatch_error(error).to_string(),
+                        raw_toml,
+                    });
+                    None
+                }
+            }
+        }
         None => None,
     };
     let rate_limiting = match rate_limiting_row {
         Some(row) => {
-            let stored = deserialize_rate_limiting_config(row.schema_revision, row.config)
-                .map_err(|error| vec![schema_dispatch_error(error)])?;
-            stored.try_into().map_err(|error| vec![error])?
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            let result = deserialize_rate_limiting_config(row.schema_revision, row.config)
+                .map_err(schema_dispatch_error)
+                .and_then(|stored| stored.try_into());
+            match result {
+                Ok(r) => r,
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "rate_limiting_config",
+                        name: "rate_limiting_config".to_string(),
+                        parent: None,
+                        error: error.to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
         }
         None => Default::default(),
     };
     let autopilot = match autopilot_row {
-        Some(row) => deserialize_autopilot_config(row.schema_revision, row.config)
-            .map_err(|error| vec![schema_dispatch_error(error)])?
-            .into(),
+        Some(row) => {
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            match deserialize_autopilot_config(row.schema_revision, row.config) {
+                Ok(stored) => stored.into(),
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "autopilot_config",
+                        name: "autopilot_config".to_string(),
+                        parent: None,
+                        error: schema_dispatch_error(error).to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
+        }
         None => Default::default(),
     };
     let provider_types = match provider_types_row {
-        Some(row) => deserialize_provider_types_config(row.schema_revision, row.config)
-            .map_err(|error| vec![schema_dispatch_error(error)])?
-            .into(),
+        Some(row) => {
+            let raw_toml = json_to_toml_fragment(row.config.clone());
+            match deserialize_provider_types_config(row.schema_revision, row.config) {
+                Ok(stored) => stored.into(),
+                Err(error) => {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "provider_types_config",
+                        name: "provider_types_config".to_string(),
+                        parent: None,
+                        error: schema_dispatch_error(error).to_string(),
+                        raw_toml,
+                    });
+                    Default::default()
+                }
+            }
+        }
         None => Default::default(),
     };
 
-    let models = rehydrate_named_collection(
+    let (model_map, model_errors) = rehydrate_named_collection(
         model_rows,
         "model",
         deserialize_model_config,
         TryInto::try_into,
-    )
-    .into_iter()
-    .map(|(name, config)| (Arc::<str>::from(name), config))
-    .collect::<HashMap<_, _>>();
-    let models = Some(models);
-    let embedding_models: HashMap<_, _> = rehydrate_named_collection(
+    );
+    let models: HashMap<_, _> = model_map
+        .into_iter()
+        .map(|(name, config)| (Arc::<str>::from(name), config))
+        .collect();
+    loading_errors.extend(model_errors);
+
+    let (embedding_model_map, embedding_model_errors) = rehydrate_named_collection(
         embedding_model_rows,
-        "embedding model",
+        "embedding_model",
         deserialize_embedding_model_config,
         TryInto::try_into,
-    )
-    .into_iter()
-    .map(|(name, config)| (Arc::<str>::from(name), config))
-    .collect();
-    let embedding_models = Some(embedding_models);
-    let metrics =
+    );
+    let embedding_models: HashMap<_, _> = embedding_model_map
+        .into_iter()
+        .map(|(name, config)| (Arc::<str>::from(name), config))
+        .collect();
+    loading_errors.extend(embedding_model_errors);
+
+    let (metrics, metric_errors) =
         rehydrate_named_collection(metric_rows, "metric", deserialize_metric_config, |stored| {
             Ok::<_, Error>(stored.into())
         });
-    let optimizers = rehydrate_named_collection(
+    loading_errors.extend(metric_errors);
+
+    let (optimizers, optimizer_errors) = rehydrate_named_collection(
         optimizer_rows,
         "optimizer",
         deserialize_optimizer_config,
         TryInto::try_into,
     );
+    loading_errors.extend(optimizer_errors);
 
-    let stored_tools =
+    let (stored_tools, tool_errors) =
         rehydrate_named_collection(tool_rows, "tool", deserialize_tool_config, |tool| {
             Ok::<_, Error>(tool)
         });
-    let stored_evaluations = rehydrate_named_collection(
+    loading_errors.extend(tool_errors);
+
+    let (stored_evaluations, evaluation_errors) = rehydrate_named_collection(
         evaluation_rows,
         "evaluation",
         deserialize_evaluation_config,
         Ok::<_, Error>,
     );
+    loading_errors.extend(evaluation_errors);
 
     let mut stored_functions = HashMap::new();
+    let mut function_raw_configs: HashMap<String, serde_json::Value> = HashMap::new();
     let mut variant_ids = HashSet::new();
     for function_row in &latest_function_rows {
         if function_row.deleted_at.is_some() {
             continue;
         }
+        let raw_toml = json_to_toml_fragment(function_row.config.clone());
         let stored = match deserialize_function_config(
             function_row.schema_revision,
             function_row.config.clone(),
         ) {
             Ok(stored) => stored,
             Err(error) => {
-                tracing::error!(
-                    "Skipping function `{}` from DB config: failed to deserialize function version `{}`: {}",
-                    function_row.name,
-                    function_row.id,
-                    error
-                );
+                loading_errors.push(ConfigLoadingError {
+                    kind: "function",
+                    name: function_row.name.clone(),
+                    parent: None,
+                    error: format!(
+                        "Failed to deserialize function version `{}`: {error}",
+                        function_row.id
+                    ),
+                    raw_toml,
+                });
                 continue;
             }
         };
         collect_function_variant_ids(&stored, &mut variant_ids);
+        function_raw_configs.insert(function_row.name.clone(), function_row.config.clone());
         stored_functions.insert(function_row.name.clone(), stored);
     }
 
@@ -623,14 +790,24 @@ async fn rehydrate_loaded_config_rows(
         .map_err(|error| vec![error])?;
     let mut stored_variants = HashMap::new();
     for row in variant_version_rows {
-        let stored = match deserialize_variant_config(row.schema_revision, row.config.clone()) {
+        let raw_toml = json_to_toml_fragment(row.config.clone());
+        let stored = match deserialize_variant_config(row.schema_revision, row.config) {
             Ok(stored) => stored,
             Err(error) => {
-                tracing::error!(
-                    "Skipping variant version `{}` from DB config: {}",
-                    row.id,
-                    error
-                );
+                // We don't know the parent function name at this point — that association
+                // is in the function config's variant refs. We record the variant UUID in
+                // the name so the error is still actionable. The function rehydration step
+                // will produce a follow-up "missing or broken variant" error with the name.
+                loading_errors.push(ConfigLoadingError {
+                    kind: "variant",
+                    name: row.name.clone(),
+                    parent: None,
+                    error: format!(
+                        "Failed to deserialize variant version `{}`: {error}",
+                        row.id
+                    ),
+                    raw_toml,
+                });
                 continue;
             }
         };
@@ -689,7 +866,13 @@ async fn rehydrate_loaded_config_rows(
                 tools.insert(name, tool);
             }
             Err(error) => {
-                log_collection_skip("tool", &name, &error);
+                loading_errors.push(ConfigLoadingError {
+                    kind: "tool",
+                    name,
+                    parent: None,
+                    error: error.to_string(),
+                    raw_toml: None,
+                });
             }
         }
     }
@@ -701,7 +884,13 @@ async fn rehydrate_loaded_config_rows(
                 evaluations.insert(name, evaluation);
             }
             Err(error) => {
-                log_collection_skip("evaluation", &name, &error);
+                loading_errors.push(ConfigLoadingError {
+                    kind: "evaluation",
+                    name,
+                    parent: None,
+                    error: error.to_string(),
+                    raw_toml: None,
+                });
             }
         }
     }
@@ -715,15 +904,28 @@ async fn rehydrate_loaded_config_rows(
             continue;
         };
         match rehydrate_function(stored_function, &stored_variants, &files) {
-            Ok(function) => {
+            Ok((function, variant_errors)) => {
+                for (variant_name, error) in variant_errors {
+                    loading_errors.push(ConfigLoadingError {
+                        kind: "variant",
+                        name: variant_name,
+                        parent: Some(function_row.name.clone()),
+                        error: error.to_string(),
+                        raw_toml: None,
+                    });
+                }
                 functions.insert(function_row.name, function);
             }
             Err(error) => {
-                tracing::error!(
-                    "Skipping function `{}` from DB config during rehydration: {}",
-                    function_row.name,
-                    error
-                );
+                loading_errors.push(ConfigLoadingError {
+                    kind: "function",
+                    name: function_row.name.clone(),
+                    parent: None,
+                    error: format!("Failed to rehydrate function: {error}"),
+                    raw_toml: function_raw_configs
+                        .get(&function_row.name)
+                        .and_then(|v| json_to_toml_fragment(v.clone())),
+                });
             }
         }
     }
@@ -734,8 +936,8 @@ async fn rehydrate_loaded_config_rows(
         postgres: Some(postgres),
         rate_limiting: Some(rate_limiting),
         object_storage,
-        models,
-        embedding_models,
+        models: Some(models),
+        embedding_models: Some(embedding_models),
         functions: Some(functions),
         metrics: Some(metrics),
         tools: Some(tools),
@@ -747,7 +949,7 @@ async fn rehydrate_loaded_config_rows(
 
     validate_user_config_names(&config).map_err(|error| vec![error])?;
 
-    Ok(config)
+    Ok((config, loading_errors))
 }
 
 /// Collapses the `Vec<Error>` returned by `load_config_from_db` into a single
@@ -798,7 +1000,7 @@ async fn load_functions_in_snapshot(
     load_latest_functions(&mut *tx).await
 }
 
-pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, Vec<Error>> {
+pub async fn load_config_from_db(pool: &PgPool) -> Result<LoadedConfig, Vec<Error>> {
     // We want every read in this function to observe the same database state.
     // Without that, a concurrent writer (e.g. `write_stored_config` or
     // `write_function_config`) could move between our individual reads and
@@ -952,7 +1154,7 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     let mut secondary_tx = begin_snapshot_read_tx(pool, snapshot_id)
         .await
         .map_err(|error| vec![error])?;
-    let config = rehydrate_loaded_config_rows(rows, &mut secondary_tx).await?;
+    let (config, loading_errors) = rehydrate_loaded_config_rows(rows, &mut secondary_tx).await?;
     drop(secondary_tx);
 
     // All snapshot readers have finished, so the leader transaction is no
@@ -964,5 +1166,26 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
         })]
     })?;
 
-    Ok(config)
+    if !loading_errors.is_empty() {
+        let summary = loading_errors
+            .iter()
+            .map(|e| {
+                if let Some(parent) = &e.parent {
+                    format!("  - {} `{}` (in `{}`): {}", e.kind, e.name, parent, e.error)
+                } else {
+                    format!("  - {} `{}`: {}", e.kind, e.name, e.error)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        tracing::error!(
+            "{} config item(s) failed to load from the database and will be unavailable:\n{summary}",
+            loading_errors.len()
+        );
+    }
+
+    Ok(LoadedConfig {
+        config,
+        loading_errors,
+    })
 }

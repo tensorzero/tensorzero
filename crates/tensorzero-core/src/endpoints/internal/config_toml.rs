@@ -113,11 +113,11 @@ async fn load_db_authoritative_uninitialized_config(
         .postgres_connection_info
         .get_pool_result()
         .map_err(|e| e.log())?;
-    let uninitialized = load_config_from_db(pool)
+    let loaded = load_config_from_db(pool)
         .await
         .map_err(merge_load_config_errors)?;
-    let validated = Config::load_from_uninitialized(uninitialized.clone(), false).await?;
-    Ok((uninitialized, validated.hash.to_string()))
+    let validated = Config::load_from_uninitialized(loaded.config.clone(), false).await?;
+    Ok((loaded.config, validated.hash.to_string()))
 }
 
 async fn load_db_authoritative_config_toml(
@@ -234,10 +234,10 @@ pub async fn apply_config_toml_handler(
     // observe uncommitted state on `tx` — but that is fine here: at this
     // point `tx` has only acquired the lock, not written anything, so the
     // committed baseline is exactly what we want to CAS against.
-    let current_uninitialized = load_config_from_db(pool)
+    let current_loaded = load_config_from_db(pool)
         .await
         .map_err(merge_load_config_errors)?;
-    let (current_toml, current_path_contents) = config_to_toml(&current_uninitialized)?;
+    let (current_toml, current_path_contents) = config_to_toml(&current_loaded.config)?;
     let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
 
     if current_signature != request.base_signature {
