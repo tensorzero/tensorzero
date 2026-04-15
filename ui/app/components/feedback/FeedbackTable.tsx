@@ -16,6 +16,7 @@ import { useConfig } from "~/context/config";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { cn } from "~/utils/common";
 import { Badge } from "../ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useMemo } from "react";
 
 /**
@@ -114,14 +115,29 @@ export default function FeedbackTable({
                   <TableItemShortUuid id={item.id} />
                 </TableCell>
 
-                <TableCell className="flex items-center gap-2">
-                  <span className="font-mono">{getMetricName(item)}</span>
-                  {metrics[getMetricName(item)] && (
-                    <FeedbackBadges
-                      metric={metrics[getMetricName(item)]!}
-                      row={item}
-                    />
-                  )}
+                <TableCell className="max-w-[250px]">
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="min-w-0 truncate font-mono">
+                          {getMetricName(item)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span className="max-w-xs break-all font-mono">
+                          {getMetricName(item)}
+                        </span>
+                      </TooltipContent>
+                    </Tooltip>
+                    {metrics[getMetricName(item)] && (
+                      <div className="shrink-0">
+                        <FeedbackBadges
+                          metric={metrics[getMetricName(item)]!}
+                          row={item}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
 
                 {anyOverwrites && (
@@ -151,7 +167,12 @@ export default function FeedbackTable({
                   />
                 </TableCell>
 
-                <TableCell className={cn(!isLatestOfType && "opacity-50")}>
+                <TableCell
+                  className={cn(
+                    "max-w-[200px]",
+                    !isLatestOfType && "opacity-50",
+                  )}
+                >
                   <TagsBadges tags={item.tags} />
                 </TableCell>
 
