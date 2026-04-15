@@ -2,7 +2,7 @@
   "scripts": {
     "format": "oxfmt \"**/*.{md,mdx,yaml,yml,json}\"",
     "format:check": "oxfmt --check \"**/*.{md,mdx,yaml,yml,json}\"",
-    "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
+    "build-bindings": "pnpm --filter=@tensorzero/tensorzero-node build-bindings",
     "generate-python-schemas": "cd crates/tensorzero-python && uv run --no-project generate_schema_types.py",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",

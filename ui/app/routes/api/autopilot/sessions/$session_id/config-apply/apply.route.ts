@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { ConfigApplier } from "tensorzero-node";
+import { ConfigApplier } from "@tensorzero/tensorzero-node";
 import type { GatewayEvent } from "~/types/tensorzero";
 import { getEnv } from "~/utils/env.server";
 import { logger } from "~/utils/logger";
