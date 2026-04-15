@@ -19,6 +19,7 @@ use deno_core::v8::IsolateHandle;
 use deno_core::{JsRuntime, OpState, PollEventLoopOptions, RuntimeOptions};
 use deno_error::JsErrorBox;
 use durable::{ControlFlow, async_trait};
+use tensorzero_types::InputMessage;
 use tensorzero_types::tool_error::ToolResult;
 use tokio::runtime::Handle;
 use tracing::Span;
@@ -64,6 +65,21 @@ pub struct RlmLoopParams<'a> {
     pub exposed_tools: Option<&'a ExposedTools>,
     /// The TensorZero function name to use for code generation inference calls.
     pub function_name: &'a str,
+    /// Optional message history from a previous RLM session to prepend.
+    /// When provided, these messages are placed before the initial prompt
+    /// so the LLM has context from prior interactions.
+    pub initial_messages: Vec<InputMessage>,
+}
+
+/// Result of an RLM loop execution, containing both the final answer
+/// and the full message history for potential reuse.
+#[derive(Debug)]
+pub struct RlmResult {
+    /// The final answer produced by `FINAL()`.
+    pub answer: String,
+    /// The complete message history from this RLM session,
+    /// including any initial messages that were prepended.
+    pub messages: Vec<InputMessage>,
 }
 
 /// Trait abstracting the RLM loop execution within `llm_query`.
@@ -72,7 +88,10 @@ pub struct RlmLoopParams<'a> {
 /// implementation delegates to `run_rlm_loop`.
 #[async_trait]
 pub trait RlmQuery: Send + Sync {
-    async fn run(&self, params: RlmLoopParams<'_>) -> Result<Result<String, ControlFlow>, TsError>;
+    async fn run(
+        &self,
+        params: RlmLoopParams<'_>,
+    ) -> Result<Result<RlmResult, ControlFlow>, TsError>;
 }
 
 // ---------------------------------------------------------------------------
