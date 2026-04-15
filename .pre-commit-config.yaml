@@ -77,7 +77,7 @@ repos:
 
       - id: "oxfmt: tensorzero-node"
         name: "oxfmt: tensorzero-node"
-        entry: bash -c 'pnpm --filter=tensorzero-node run format'
+        entry: bash -c 'pnpm --filter=@tensorzero/tensorzero-node run format'
         language: node
         language_version: "24.13.0"
         types_or:
@@ -124,7 +124,7 @@ repos:
 
       - id: "eslint: tensorzero-node"
         name: "eslint: tensorzero-node"
-        entry: bash -c 'pnpm --filter=tensorzero-node run lint'
+        entry: bash -c 'pnpm --filter=@tensorzero/tensorzero-node run lint'
         language: node
         language_version: "24.13.0"
         types_or: [javascript, jsx, ts, tsx]
@@ -156,7 +156,7 @@ repos:
 
       - id: "tsc: tensorzero-node"
         name: "tsc: tensorzero-node"
-        entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
+        entry: bash -c 'pnpm --filter=@tensorzero/tensorzero-node run typecheck'
         language: node
         language_version: "24.13.0"
         types_or: [ts, tsx]

@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { ConfigApplier } from "tensorzero-node";
+import { ConfigApplier } from "@tensorzero/tensorzero-node";
 import { getEnv } from "~/utils/env.server";
 import { getAutopilotClient } from "~/utils/get-autopilot-client.server";
 import { logger } from "~/utils/logger";
