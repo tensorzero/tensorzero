@@ -86,7 +86,7 @@ google-cloud-auth = "1.7.0"
 object_store = { version = "0.13.2", features = ["serde", "aws", "gcp"] }
 arrow = { version = "58.1.0", default-features = false, features = ["json"] }
 parquet = { version = "58.1.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
-rand = "0.10.0"
+rand = "0.10.1"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",
