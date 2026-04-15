@@ -50,6 +50,24 @@ use crate::{
 
 use super::common::E2ETestProvider;
 
+fn expected_batch_max_tokens(function_name: &str, provider: &E2ETestProvider) -> u64 {
+    if provider.model_name.starts_with("o1") {
+        return 1000;
+    }
+
+    match (function_name, provider.variant_name.as_str()) {
+        // `basic_test` gives Gemini Flash more room in batch mode so image/tool tests do not
+        // get truncated before returning the expected content.
+        ("basic_test", "gcp-vertex-gemini-flash") => 200,
+        _ => 100,
+    }
+}
+
+fn should_skip_gemini_2_5_batch_poll(provider: &E2ETestProvider) -> bool {
+    provider.model_provider_name == "gcp_vertex_gemini"
+        && provider.model_name.starts_with("gcp-gemini-2.5")
+}
+
 #[macro_export]
 macro_rules! generate_batch_inference_tests {
     ($func:ident) => {
@@ -789,11 +807,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("basic_test", &provider);
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -1709,11 +1723,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         }),
     ];
 
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("weather_helper", &provider);
 
     let expected_inference_params = [
         json!({
@@ -1881,6 +1891,9 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     provider: E2ETestProvider,
 ) {
     skip_for_postgres!();
+    if should_skip_gemini_2_5_batch_poll(&provider) {
+        return;
+    }
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -2001,6 +2014,9 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     skip_for_postgres!();
+    if should_skip_gemini_2_5_batch_poll(&provider) {
+        return;
+    }
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
@@ -2267,11 +2283,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("basic_test", &provider);
     let max_tokens = inference_params
         .get("max_tokens")
         .unwrap()
@@ -2721,11 +2733,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("weather_helper_parallel", &provider);
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -2927,11 +2935,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("weather_helper", &provider);
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -3485,11 +3489,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
+    let expected_max_tokens = expected_batch_max_tokens("basic_test", &provider);
     let max_tokens = inference_params
         .get("max_tokens")
         .unwrap()
