@@ -1299,6 +1299,39 @@ async fn test_bad_clickhouse_write() {
     );
 }
 
+/// Like `get_clean_clickhouse`, but with a custom database name.
+/// Useful for testing database names that contain special characters (e.g. hyphens).
+pub async fn get_clean_clickhouse_with_name(
+    database: String,
+    allow_db_missing: bool,
+) -> (ClickHouseConnectionInfo, DeleteDbOnDrop) {
+    let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_path(&database);
+    let clickhouse_url = clickhouse_url.to_string();
+    let clickhouse = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        BatchWritesConfig {
+            enabled: false,
+            __force_allow_embedded_batch_writes: Some(false),
+            flush_interval_ms: Some(1000),
+            max_rows: Some(100),
+            max_rows_postgres: None,
+            write_queue_capacity: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    (
+        clickhouse.clone(),
+        DeleteDbOnDrop {
+            database,
+            client: clickhouse,
+            allow_db_missing,
+        },
+    )
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start() {
     let (clickhouse, _cleanup_db) = get_clean_clickhouse(false).await;
@@ -1346,6 +1379,43 @@ async fn test_clean_clickhouse_start() {
             assert_eq!(replica_count, 2);
         }
     }
+}
+
+/// Regression test for issue #6996: ClickHouse database names containing hyphens
+/// caused SQL syntax errors because `migration_0050.rs` used an unquoted database
+/// identifier in a `FROM db.table` clause.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clean_clickhouse_start_hyphenated_db_name() {
+    let database = format!(
+        "tensorzero-e2e-tests-hyphen-{}",
+        Uuid::now_v7().simple()
+    );
+    let (clickhouse, _cleanup_db) =
+        get_clean_clickhouse_with_name(database, false).await;
+    let is_manual = clickhouse.is_cluster_configured();
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: is_manual,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Verify the migration table was created
+    let response = clickhouse
+        .run_query_synchronous_no_params("SHOW TABLES".to_string())
+        .await
+        .unwrap();
+    let tables: Vec<&str> = response
+        .response
+        .split('\n')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .collect();
+    assert!(
+        tables.contains(&"TensorZeroMigration"),
+        "TensorZeroMigration table should exist after migrations"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
