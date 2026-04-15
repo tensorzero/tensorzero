@@ -408,3 +408,161 @@ export const WithVariousTags: Story = {
     },
   },
 };
+
+// Regression stories for issue #6437:
+// Layout breaks with long metric names or many tags
+
+export const WithLongMetricName: Story = {
+  args: {
+    feedback: [
+      {
+        type: "float",
+        id: makeOrderedUuid(10),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::extract_entities_accuracy::evaluator_name::accuracy",
+        value: 0.92,
+        tags: { user_id: "123" },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(9),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::summarization_quality_check::evaluator_name::hallucination_detection",
+        value: false,
+        tags: {},
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+      {
+        type: "float",
+        id: makeOrderedUuid(8),
+        target_id: TARGET_ID,
+        metric_name: "accuracy",
+        value: 0.5,
+        tags: {},
+        timestamp: "2024-03-20T10:02:00Z",
+      },
+    ],
+    latestCommentId: undefined,
+    latestDemonstrationId: undefined,
+    latestFeedbackIdByMetric: {
+      "tensorzero::evaluation_name::extract_entities_accuracy::evaluator_name::accuracy":
+        makeOrderedUuid(10),
+      "tensorzero::evaluation_name::summarization_quality_check::evaluator_name::hallucination_detection":
+        makeOrderedUuid(9),
+      accuracy: makeOrderedUuid(8),
+    },
+  },
+};
+
+export const WithManyTags: Story = {
+  args: {
+    feedback: [
+      {
+        type: "float",
+        id: makeOrderedUuid(10),
+        target_id: TARGET_ID,
+        metric_name: "accuracy",
+        value: 0.95,
+        tags: {
+          user_id: "user-12345",
+          experiment: "experiment_alpha",
+          session_id: "sess-abc-def-ghi",
+          model: "gpt-4-turbo",
+          region: "us-east-1",
+          priority: "high",
+          version: "2.1.0",
+          environment: "production",
+          team: "ml-platform",
+          run_id: "run-20240320-001",
+          "tensorzero::evaluation_name": "safety_check",
+          "tensorzero::dataset_name": "training_v3",
+        },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(9),
+        target_id: TARGET_ID,
+        metric_name: "exact_match",
+        value: true,
+        tags: { simple: "tag" },
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+    ],
+    latestCommentId: undefined,
+    latestDemonstrationId: undefined,
+    latestFeedbackIdByMetric: {
+      accuracy: makeOrderedUuid(10),
+      exact_match: makeOrderedUuid(9),
+    },
+  },
+};
+
+export const WithLongMetricNameAndManyTags: Story = {
+  args: {
+    feedback: [
+      {
+        type: "float",
+        id: makeOrderedUuid(10),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::extract_entities_accuracy::evaluator_name::accuracy",
+        value: 0.88,
+        tags: {
+          user_id: "user-12345",
+          experiment: "experiment_alpha",
+          session_id: "sess-abc-def-ghi",
+          model: "gpt-4-turbo",
+          region: "us-east-1",
+          priority: "high",
+          version: "2.1.0",
+          environment: "production",
+          team: "ml-platform",
+          run_id: "run-20240320-001",
+          "tensorzero::evaluation_name": "safety_check",
+          "tensorzero::dataset_name": "training_v3",
+        },
+        timestamp: "2024-03-20T10:00:00Z",
+      },
+      {
+        type: "boolean",
+        id: makeOrderedUuid(9),
+        target_id: TARGET_ID,
+        metric_name:
+          "tensorzero::evaluation_name::summarization_quality_check::evaluator_name::hallucination_detection",
+        value: true,
+        tags: {
+          very_long_key_name_that_should_be_truncated:
+            "very_long_value_that_should_also_be_truncated_in_display",
+          another_long_key: "another_long_value",
+          third_key: "third",
+          fourth: "val",
+          fifth: "val",
+          sixth: "val",
+        },
+        timestamp: "2024-03-20T10:01:00Z",
+      },
+      {
+        type: "float",
+        id: makeOrderedUuid(8),
+        target_id: TARGET_ID,
+        metric_name: "accuracy",
+        value: 0.5,
+        tags: {},
+        timestamp: "2024-03-20T10:02:00Z",
+      },
+    ],
+    latestCommentId: undefined,
+    latestDemonstrationId: undefined,
+    latestFeedbackIdByMetric: {
+      "tensorzero::evaluation_name::extract_entities_accuracy::evaluator_name::accuracy":
+        makeOrderedUuid(10),
+      "tensorzero::evaluation_name::summarization_quality_check::evaluator_name::hallucination_detection":
+        makeOrderedUuid(9),
+      accuracy: makeOrderedUuid(8),
+    },
+  },
+};

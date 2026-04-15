@@ -3,7 +3,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 /* This component displays a list of tag keys and values as badges.
  * They will be truncated if long, so we offer a tooltop on hover with the full value.
+ * When there are more than MAX_VISIBLE_TAGS, extra tags collapse into a "+N more" badge.
  */
+
+const MAX_VISIBLE_TAGS = 3;
 
 interface TagsBadgesProps {
   tags: Record<string, string | undefined>;
@@ -18,9 +21,12 @@ export function TagsBadges({ tags }: TagsBadgesProps) {
     return <span className="text-muted-foreground text-sm">—</span>;
   }
 
+  const visibleTags = tagEntries.slice(0, MAX_VISIBLE_TAGS);
+  const hiddenTags = tagEntries.slice(MAX_VISIBLE_TAGS);
+
   return (
     <div className="flex max-w-[200px] flex-wrap gap-1">
-      {tagEntries.map(([key, value]) => {
+      {visibleTags.map(([key, value]) => {
         const isSystemTag = key.startsWith("tensorzero::");
         const displayText = `${key}=${value}`;
         const truncatedText =
@@ -46,6 +52,24 @@ export function TagsBadges({ tags }: TagsBadgesProps) {
           </Tooltip>
         );
       })}
+      {hiddenTags.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="cursor-help text-xs">
+              +{hiddenTags.length} more
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="max-w-xs space-y-1 font-mono break-words">
+              {hiddenTags.map(([key, value]) => (
+                <div key={key}>
+                  <strong>{key}</strong>={value}
+                </div>
+              ))}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }
