@@ -13,7 +13,7 @@ use crate::runtime::ToolContextHelper;
 use crate::tensorzero_client::TensorZeroClient;
 use bip39_uuid_substitution::{UuidSubstituter, postprocess_response, preprocess_message};
 use tensorzero_core::client::ClientInferenceParams;
-use tensorzero_core::endpoints::inference::InferenceResponse;
+use tensorzero_types::InferenceResponse;
 use tensorzero_types::ToolError;
 use tensorzero_types::tool_error::ToolResult;
 use tensorzero_types::tool_failure::NonControlToolError;

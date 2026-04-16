@@ -202,14 +202,13 @@ async fn test_thinking_rejected_128k() {
     // does not cache. Therefore, this test will always hit live providers.
     // Consider moving to periodic live tests if this causes merge queue instability.
     // See: https://github.com/tensorzero/tensorzero/issues/5380
-    let random = Uuid::now_v7();
     let payload = json!({
         "model_name": "anthropic::claude-sonnet-4-5",
         "input":{
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Output a haiku that ends in the word 'my_custom_stop': {random}"),
+                    "content": "Output a haiku that ends in the word 'my_custom_stop': deterministic-cache-test",
                 }
             ]},
         "params": {

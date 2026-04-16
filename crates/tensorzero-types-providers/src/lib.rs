@@ -7,6 +7,7 @@
 
 pub mod aws_bedrock;
 pub mod cache;
+pub mod conversions;
 pub mod deepseek;
 pub mod fireworks;
 pub mod groq;
