@@ -11,8 +11,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use tensorzero_core::endpoints::inference::InferenceResponse;
-use tensorzero_types::Input;
+use tensorzero_types::{InferenceResponse, Input};
 use uuid::Uuid;
 
 #[cfg(test)]

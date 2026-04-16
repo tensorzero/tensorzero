@@ -103,6 +103,9 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tensorzero/tensorzero-node':
+        specifier: file:../crates/tensorzero-node
+        version: link:../crates/tensorzero-node
       '@uiw/codemirror-theme-github':
         specifier: ^4.24.0
         version: 4.25.8(@codemirror/language@6.12.2)(@codemirror/state@6.5.4)(@codemirror/view@6.40.0)
@@ -178,9 +181,6 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.2.1)
-      tensorzero-node:
-        specifier: file:../crates/tensorzero-node
-        version: link:../crates/tensorzero-node
       type-fest:
         specifier: ^4.41.0
         version: 4.41.0
