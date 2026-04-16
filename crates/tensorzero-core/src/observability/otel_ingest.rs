@@ -268,20 +268,67 @@ pub fn parse_otlp_jsonl(jsonl: &str) -> Result<Vec<StoredModelInference>, serde_
 mod tests {
     use super::*;
     use googletest::prelude::*;
+    use tensorzero_inference_types::FinishReason;
 
-    const TRACES_JSONL: &str = include_str!("../../testdata/otel_traces/traces.jsonl");
+    const OPENAI_CHAT: &str = include_str!("../../testdata/otel_traces/openai_chat.jsonl");
+    const OPENAI_RESPONSES: &str =
+        include_str!("../../testdata/otel_traces/openai_responses.jsonl");
+    const ANTHROPIC_CHAT: &str = include_str!("../../testdata/otel_traces/anthropic_chat.jsonl");
+    const ANTHROPIC_TOOL_USE: &str =
+        include_str!("../../testdata/otel_traces/anthropic_tool_use.jsonl");
+
+    /// Helper: parse and verify all required fields are populated on every span.
+    fn assert_required_fields(results: &[StoredModelInference]) {
+        for (i, mi) in results.iter().enumerate() {
+            expect_that!(mi.model_name, not(eq("")), "span {i}: model_name");
+            expect_that!(
+                mi.model_provider_name,
+                not(eq("")),
+                "span {i}: model_provider_name"
+            );
+            expect_that!(
+                mi.provider_response_id,
+                some(anything()),
+                "span {i}: provider_response_id"
+            );
+            expect_that!(
+                mi.response_model_name,
+                some(anything()),
+                "span {i}: response_model_name"
+            );
+            expect_that!(mi.operation, some(anything()), "span {i}: operation");
+            expect_that!(mi.input_tokens, some(anything()), "span {i}: input_tokens");
+            expect_that!(
+                mi.output_tokens,
+                some(anything()),
+                "span {i}: output_tokens"
+            );
+            expect_that!(
+                mi.finish_reason,
+                some(anything()),
+                "span {i}: finish_reason"
+            );
+            expect_that!(
+                mi.response_time_ms,
+                some(anything()),
+                "span {i}: response_time_ms"
+            );
+        }
+    }
+
+    // ── OpenAI Chat Completions ──────────────────────────────────────────
 
     #[gtest]
-    fn parses_all_spans_from_fixture() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        // The fixture has 6 lines, each with 1 span = 6 total.
-        expect_that!(results.len(), eq(6));
+    fn openai_chat_parses_two_spans() {
+        let results = parse_otlp_jsonl(OPENAI_CHAT).expect("should parse");
+        expect_that!(results.len(), eq(2));
+        assert_required_fields(&results);
     }
 
     #[gtest]
-    fn openai_chat_simple() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        let mi = &results[0]; // Line 0: openai.chat, gpt-4o-mini
+    fn openai_chat_first_span() {
+        let results = parse_otlp_jsonl(OPENAI_CHAT).expect("should parse");
+        let mi = &results[0];
 
         expect_that!(mi.model_name, eq("gpt-4o-mini"));
         expect_that!(mi.model_provider_name, eq("openai"));
@@ -296,92 +343,47 @@ mod tests {
         expect_that!(mi.operation.as_deref(), some(eq("chat")));
         expect_that!(mi.input_tokens, some(eq(13)));
         expect_that!(mi.output_tokens, some(eq(5)));
-        expect_that!(
-            mi.finish_reason,
-            some(eq(tensorzero_inference_types::FinishReason::Stop))
-        );
-        // Response time: (1776346969531762000 - 1776346968790316000) / 1_000_000 = 741 ms
+        expect_that!(mi.finish_reason, some(eq(FinishReason::Stop)));
+        // (1776346969531762000 - 1776346968790316000) / 1_000_000 = 741 ms
         expect_that!(mi.response_time_ms, some(eq(741)));
-        // raw_request should contain the input messages JSON
         expect_that!(
             mi.raw_request.as_deref(),
             some(contains_substring("Say hello in three words"))
         );
-        // raw_response should contain the output messages JSON
         expect_that!(
             mi.raw_response.as_deref(),
             some(contains_substring("Hello there, friend!"))
         );
+        expect_that!(mi.provider_cache_read_input_tokens, some(eq(0)));
     }
 
     #[gtest]
-    fn anthropic_chat_simple() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        let mi = &results[1]; // Line 1: anthropic.chat, claude-sonnet
+    fn openai_chat_second_span() {
+        let results = parse_otlp_jsonl(OPENAI_CHAT).expect("should parse");
+        let mi = &results[1];
 
-        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
-        expect_that!(mi.model_provider_name, eq("anthropic"));
         expect_that!(
             mi.provider_response_id.as_deref(),
-            some(eq("msg_014eJGsS2mHFBdvg71gToaaB"))
+            some(eq("chatcmpl-DVHHhqgjSU5zDs00XROzyYfGtgKv2"))
         );
-        expect_that!(
-            mi.response_model_name.as_deref(),
-            some(eq("claude-sonnet-4-20250514"))
-        );
-        expect_that!(mi.operation.as_deref(), some(eq("chat")));
         expect_that!(mi.input_tokens, some(eq(13)));
-        expect_that!(mi.output_tokens, some(eq(8)));
-        expect_that!(
-            mi.finish_reason,
-            some(eq(tensorzero_inference_types::FinishReason::Stop))
-        );
+        expect_that!(mi.output_tokens, some(eq(6)));
+        expect_that!(mi.finish_reason, some(eq(FinishReason::Stop)));
+    }
+
+    // ── OpenAI Responses API ─────────────────────────────────────────────
+
+    #[gtest]
+    fn openai_responses_parses_one_span() {
+        let results = parse_otlp_jsonl(OPENAI_RESPONSES).expect("should parse");
+        expect_that!(results.len(), eq(1));
+        assert_required_fields(&results);
     }
 
     #[gtest]
-    fn anthropic_tool_call() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        let mi = &results[2]; // Line 2: anthropic.chat with tool_call finish
-
-        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
-        expect_that!(
-            mi.provider_response_id.as_deref(),
-            some(eq("msg_01DuKSqmpQ4Y7vWfZthTqcZh"))
-        );
-        expect_that!(mi.input_tokens, some(eq(390)));
-        expect_that!(mi.output_tokens, some(eq(67)));
-        expect_that!(
-            mi.finish_reason,
-            some(eq(tensorzero_inference_types::FinishReason::ToolCall))
-        );
-        // Output should contain the tool call
-        expect_that!(
-            mi.raw_response.as_deref(),
-            some(contains_substring("get_weather"))
-        );
-    }
-
-    #[gtest]
-    fn anthropic_tool_result_followup() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        let mi = &results[3]; // Line 3: anthropic.chat after tool result
-
-        expect_that!(
-            mi.provider_response_id.as_deref(),
-            some(eq("msg_01Pg51hhLM7qXeVPUk2qmRBq"))
-        );
-        expect_that!(mi.input_tokens, some(eq(479)));
-        expect_that!(mi.output_tokens, some(eq(28)));
-        expect_that!(
-            mi.finish_reason,
-            some(eq(tensorzero_inference_types::FinishReason::Stop))
-        );
-    }
-
-    #[gtest]
-    fn openai_responses_api() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        let mi = &results[4]; // Line 4: openai.response (Responses API)
+    fn openai_responses_span() {
+        let results = parse_otlp_jsonl(OPENAI_RESPONSES).expect("should parse");
+        let mi = &results[0];
 
         expect_that!(mi.model_name, eq("gpt-4o-mini"));
         expect_that!(mi.model_provider_name, eq("openai"));
@@ -398,74 +400,83 @@ mod tests {
         expect_that!(mi.operation.as_deref(), some(eq("chat")));
         expect_that!(mi.input_tokens, some(eq(26)));
         expect_that!(mi.output_tokens, some(eq(7)));
-        // Should have system prompt in raw_request
+        expect_that!(mi.finish_reason, some(eq(FinishReason::Stop)));
         expect_that!(
             mi.raw_request.as_deref(),
             some(contains_substring("You are a helpful assistant"))
         );
     }
 
+    // ── Anthropic Chat ───────────────────────────────────────────────────
+
     #[gtest]
-    fn all_spans_have_required_fields() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        for (i, mi) in results.iter().enumerate() {
-            expect_that!(
-                mi.model_name,
-                not(eq("")),
-                "span {i} should have model_name"
-            );
-            expect_that!(
-                mi.model_provider_name,
-                not(eq("")),
-                "span {i} should have model_provider_name"
-            );
-            expect_that!(
-                mi.provider_response_id,
-                some(anything()),
-                "span {i} should have provider_response_id"
-            );
-            expect_that!(
-                mi.response_model_name,
-                some(anything()),
-                "span {i} should have response_model_name"
-            );
-            expect_that!(
-                mi.operation,
-                some(anything()),
-                "span {i} should have operation"
-            );
-            expect_that!(
-                mi.input_tokens,
-                some(anything()),
-                "span {i} should have input_tokens"
-            );
-            expect_that!(
-                mi.output_tokens,
-                some(anything()),
-                "span {i} should have output_tokens"
-            );
-            expect_that!(
-                mi.finish_reason,
-                some(anything()),
-                "span {i} should have finish_reason"
-            );
-            expect_that!(
-                mi.response_time_ms,
-                some(anything()),
-                "span {i} should have response_time_ms"
-            );
-        }
+    fn anthropic_chat_parses_one_span() {
+        let results = parse_otlp_jsonl(ANTHROPIC_CHAT).expect("should parse");
+        expect_that!(results.len(), eq(1));
+        assert_required_fields(&results);
     }
 
     #[gtest]
-    fn cache_tokens_parsed() {
-        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
-        // OpenAI spans have gen_ai.usage.cache_read.input_tokens = 0
+    fn anthropic_chat_span() {
+        let results = parse_otlp_jsonl(ANTHROPIC_CHAT).expect("should parse");
         let mi = &results[0];
-        expect_that!(mi.provider_cache_read_input_tokens, some(eq(0)));
 
-        // Anthropic spans have gen_ai.usage.cache_creation.input_tokens = 0
-        let mi = &results[1];
+        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
+        expect_that!(mi.model_provider_name, eq("anthropic"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_014eJGsS2mHFBdvg71gToaaB"))
+        );
+        expect_that!(
+            mi.response_model_name.as_deref(),
+            some(eq("claude-sonnet-4-20250514"))
+        );
+        expect_that!(mi.operation.as_deref(), some(eq("chat")));
+        expect_that!(mi.input_tokens, some(eq(13)));
+        expect_that!(mi.output_tokens, some(eq(8)));
+        expect_that!(mi.finish_reason, some(eq(FinishReason::Stop)));
         expect_that!(mi.provider_cache_write_input_tokens, some(eq(0)));
+    }
+
+    // ── Anthropic Tool Use ───────────────────────────────────────────────
+
+    #[gtest]
+    fn anthropic_tool_use_parses_two_spans() {
+        let results = parse_otlp_jsonl(ANTHROPIC_TOOL_USE).expect("should parse");
+        expect_that!(results.len(), eq(2));
+        assert_required_fields(&results);
+    }
+
+    #[gtest]
+    fn anthropic_tool_call_span() {
+        let results = parse_otlp_jsonl(ANTHROPIC_TOOL_USE).expect("should parse");
+        let mi = &results[0];
+
+        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_01DuKSqmpQ4Y7vWfZthTqcZh"))
+        );
+        expect_that!(mi.input_tokens, some(eq(390)));
+        expect_that!(mi.output_tokens, some(eq(67)));
+        expect_that!(mi.finish_reason, some(eq(FinishReason::ToolCall)));
+        expect_that!(
+            mi.raw_response.as_deref(),
+            some(contains_substring("get_weather"))
+        );
+    }
+
+    #[gtest]
+    fn anthropic_tool_result_followup_span() {
+        let results = parse_otlp_jsonl(ANTHROPIC_TOOL_USE).expect("should parse");
+        let mi = &results[1];
+
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_01Pg51hhLM7qXeVPUk2qmRBq"))
+        );
+        expect_that!(mi.input_tokens, some(eq(479)));
+        expect_that!(mi.output_tokens, some(eq(28)));
+        expect_that!(mi.finish_reason, some(eq(FinishReason::Stop)));
     }
 }
