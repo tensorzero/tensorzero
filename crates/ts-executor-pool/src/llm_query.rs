@@ -15,9 +15,10 @@ use crate::tensorzero_client::TensorZeroClient;
 use crate::ts_checker::TsCheckerPool;
 use durable::ControlFlow;
 use tensorzero_core::client::ClientInferenceParams;
-use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
-use tensorzero_core::inference::types::ContentBlockChatOutput;
-use tensorzero_types::{Input, InputMessage, InputMessageContent, Role};
+use tensorzero_types::{
+    ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Text,
+};
 
 /// Shared implementation for `op_llm_query` and `op_llm_query_batched`.
 ///
@@ -182,7 +183,7 @@ pub fn make_user_message(text: impl IntoIterator<Item = String>) -> InputMessage
         role: Role::User,
         content: text
             .into_iter()
-            .map(|t| InputMessageContent::Text(tensorzero_core::inference::types::Text { text: t }))
+            .map(|t| InputMessageContent::Text(Text { text: t }))
             .collect(),
     }
 }
@@ -191,8 +192,6 @@ pub fn make_user_message(text: impl IntoIterator<Item = String>) -> InputMessage
 pub fn make_assistant_message(text: impl Into<String>) -> InputMessage {
     InputMessage {
         role: Role::Assistant,
-        content: vec![InputMessageContent::Text(
-            tensorzero_core::inference::types::Text { text: text.into() },
-        )],
+        content: vec![InputMessageContent::Text(Text { text: text.into() })],
     }
 }
