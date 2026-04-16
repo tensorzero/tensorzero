@@ -255,6 +255,17 @@ impl FunctionTool {
     }
 }
 
+impl From<&FunctionTool> for tensorzero_inference_types::FunctionToolDef {
+    fn from(tool: &FunctionTool) -> Self {
+        Self {
+            name: tool.name.clone(),
+            description: tool.description.clone(),
+            parameters: tool.parameters.clone(),
+            strict: tool.strict,
+        }
+    }
+}
+
 pub use tensorzero_inference_types::{
     OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition, OpenAIGrammarSyntax,
     ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider,

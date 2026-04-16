@@ -10,9 +10,9 @@ use serde_json::Value;
 
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
-use crate::error::Error;
-use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{FunctionTool, ToolChoice};
+use tensorzero_error::Error;
+use tensorzero_inference_types::ModelInferenceRequest;
+use tensorzero_types::ToolChoice;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -96,20 +96,6 @@ type PreparedChatCompletionToolsResult<'a> = (
 
 impl<'a> From<&'a FunctionToolDef> for ChatCompletionTool<'a> {
     fn from(tool: &'a FunctionToolDef) -> Self {
-        ChatCompletionTool {
-            r#type: ChatCompletionToolType::Function,
-            function: ChatCompletionFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
-            },
-            strict: tool.strict,
-        }
-    }
-}
-
-impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
-    fn from(tool: &'a FunctionTool) -> Self {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
@@ -239,8 +225,8 @@ pub fn prepare_chat_completion_tools<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tool::{AllowedTools, AllowedToolsChoice};
     use serde_json::json;
+    use tensorzero_inference_types::{AllowedTools, AllowedToolsChoice};
     use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
     // Helper to create a test function tool def
@@ -407,8 +393,8 @@ mod tests {
     }
 
     #[test]
-    fn test_from_function_tool() {
-        let tool = FunctionTool {
+    fn test_from_function_tool_def_direct() {
+        let tool = FunctionToolDef {
             name: "direct_tool".to_string(),
             description: "Direct tool".to_string(),
             parameters: json!({"type": "object"}),

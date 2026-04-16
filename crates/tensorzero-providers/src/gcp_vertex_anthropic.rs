@@ -12,37 +12,37 @@ use tokio::time::Instant;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
-use crate::inference::InferenceProvider;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
-};
-use crate::inference::types::{
-    FunctionType, Latency, ModelInferenceRequestJsonMode,
-    batch::StartBatchProviderInferenceResponse,
-};
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::{TensorZeroEventSource, TensorzeroHttpClient};
+use tensorzero_inference_types::BatchRequestRow;
+use tensorzero_inference_types::PollBatchInferenceResponse;
 use tensorzero_inference_types::credential_validation::{
     e2e_skip_credential_validation, skip_credential_validation,
 };
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
+    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Usage,
+};
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequestJsonMode, StartBatchProviderInferenceResponse,
+};
+use tensorzero_types::FunctionType;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Thought, Unknown};
 
-use crate::model_table::ProviderType;
-use crate::providers::anthropic::{
+use crate::anthropic::{
     AnthropicStreamMessage, AnthropicToolChoice, anthropic_to_tensorzero_stream_message,
     handle_anthropic_error,
 };
-use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
-use crate::tool::ToolCall;
+use crate::gcp_vertex_gemini::location_subdomain_prefix;
+use tensorzero_inference_types::credentials::ProviderType;
+use tensorzero_types::ToolCall;
 use uuid::Uuid;
 
 use super::anthropic::{
@@ -798,7 +798,7 @@ struct GCPVertexAnthropicResponse {
 }
 
 #[derive(Debug)]
-#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
 struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     raw_response: String,
@@ -869,8 +869,8 @@ fn gcp_vertex_anthropic_usage_from_raw_response(raw_response: &str) -> Option<se
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::FlattenUnknown;
     use std::borrow::Cow;
+    use tensorzero_inference_types::FlattenUnknown;
 
     use super::*;
 
@@ -878,13 +878,12 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::inference::types::{
-        ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
-    };
-    use crate::providers::anthropic::{AnthropicFunctionTool, AnthropicMessageContent};
-    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
-    use crate::tool::ToolResult;
+    use crate::anthropic::{AnthropicFunctionTool, AnthropicMessageContent};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
     use tensorzero_inference_types::FunctionToolDef;
+    use tensorzero_inference_types::{ContentBlock, ModelInferenceRequestJsonMode, RequestMessage};
+    use tensorzero_types::ToolResult;
+    use tensorzero_types::{FunctionType, Role};
 
     fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropicUsage {
         serde_json::from_value(usage_info.clone()).unwrap_or_default()
@@ -1222,9 +1221,9 @@ mod tests {
                     disable_parallel_tool_use: Some(false),
                 }),
                 tools: Some(vec![AnthropicTool::Function(AnthropicFunctionTool {
-                    name: WEATHER_TOOL.name(),
-                    description: Some(WEATHER_TOOL.description()),
-                    input_schema: WEATHER_TOOL.parameters(),
+                    name: &WEATHER_TOOL_DEF.name,
+                    description: Some(&WEATHER_TOOL_DEF.description),
+                    input_schema: &WEATHER_TOOL_DEF.parameters,
                     strict: None,
                 })]),
                 ..Default::default()
@@ -1728,7 +1727,7 @@ mod tests {
 
     #[test]
     fn test_gcp_vertex_anthropic_apply_inference_params_thinking_budget_tokens() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: None,
             service_tier: None,

@@ -1,0 +1,91 @@
+[package]
+name = "tensorzero-providers"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+e2e_tests = ["tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests", "tensorzero-http/e2e_tests", "tensorzero-stored-config/e2e_tests"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3", "tensorzero-http/pyo3"]
+ts-bindings = [
+    "dep:ts-rs",
+    "tensorzero-types/ts-bindings",
+    "tensorzero-error/ts-bindings",
+    "tensorzero-inference-types/ts-bindings",
+]
+
+[lints]
+workspace = true
+
+[dependencies]
+async-stream = { workspace = true }
+async-trait = { workspace = true }
+aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+aws-smithy-types = { version = "1.4.7", features = [
+    "serde-deserialize",
+    "serde-serialize",
+] }
+aws-types = "1.3.6"
+aws-credential-types = { version = "1.2.2", features = [
+    "hardcoded-credentials",
+] }
+aws-sigv4 = "1.3"
+aws-smithy-eventstream = "0.60"
+aws-smithy-runtime-api = "1.11.0"
+base64 = "0.22.1"
+bytes = "1.11.1"
+chrono = { workspace = true }
+derive_builder = { workspace = true }
+futures = { workspace = true }
+futures-core = "0.3.30"
+google-cloud-auth = { workspace = true }
+hex = "0.4.3"
+http = { workspace = true }
+itertools = "0.14.0"
+jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
+lazy_static = { workspace = true }
+mime = { workspace = true }
+mime_guess = "2.0.5"
+object_store = { workspace = true }
+reqwest = { workspace = true }
+reqwest-sse-stream = { workspace = true }
+rust_decimal = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
+sha2 = "0.11.0"
+strum = { version = "0.28.0", features = ["derive"] }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tracing.workspace = true
+tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
+    "http",
+] }
+url = { workspace = true, features = ["serde"] }
+uuid = { workspace = true }
+tensorzero-derive = { path = "../tensorzero-derive" }
+tensorzero-error = { path = "../tensorzero-error", features = ["otel"] }
+tensorzero-http = { path = "../tensorzero-http" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
+tensorzero-stored-config = { path = "../tensorzero-stored-config" }
+tensorzero-types = { path = "../tensorzero-types" }
+tensorzero-types-providers = { path = "../tensorzero-types-providers" }
+pyo3 = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
+infer.workspace = true
+schemars = { workspace = true, features = ["uuid1"] }
+urlencoding = "2.1.3"
+
+[dev-dependencies]
+googletest = { workspace = true }
+serde_json = { workspace = true }
+lazy_static = { workspace = true }
+tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
+tensorzero-error = { path = "../tensorzero-error", features = ["e2e_tests"] }
+tensorzero-inference-types = { path = "../tensorzero-inference-types", features = ["e2e_tests"] }
+tracing-subscriber = { version = "0.3.23", features = [
+    "env-filter",
+    "fmt",
+] }
