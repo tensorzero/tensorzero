@@ -7,33 +7,34 @@ use serde_json::{Value, json};
 use tokio::time::Instant;
 use url::Url;
 
-use crate::embeddings::{
-    Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingProvider,
-    EmbeddingProviderRequestInfo, EmbeddingProviderResponse, EmbeddingRequest,
-};
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{ApiType, ContentBlockOutput, Thought};
-use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, batch::StartBatchProviderInferenceResponse,
-};
-use crate::model::{Credential, EndpointLocation};
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::helpers::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::BatchRequestRow;
+use tensorzero_inference_types::ContentBlockOutput;
+use tensorzero_inference_types::EmbeddingEncodingFormat;
+use tensorzero_inference_types::PollBatchInferenceResponse;
+use tensorzero_inference_types::credentials::{Credential, EndpointLocation};
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
+use tensorzero_inference_types::extra_body::FullExtraBodyConfig;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs, StartBatchProviderInferenceResponse,
+};
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::inference_params::{ChatCompletionInferenceParamsV2, ServiceTier};
+use tensorzero_types::{ApiType, Thought};
 use uuid::Uuid;
 
 use super::chat_completions::{
@@ -45,7 +46,7 @@ use super::openai::{
     StreamOptions, SystemOrDeveloper, handle_openai_error,
     openai_response_tool_call_to_tensorzero_tool_call, prepare_openai_messages, stream_openai,
 };
-use crate::inference::{InferenceProvider, TensorZeroEventError};
+use tensorzero_inference_types::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
@@ -931,19 +932,18 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::config::with_skip_credential_validation;
-    use crate::inference::types::{
-        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
-    };
-    use crate::model::EndpointLocation;
-    use crate::providers::chat_completions::{
+    use crate::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolChoiceString, ChatCompletionToolType,
     };
-    use crate::providers::openai::{
+    use crate::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
-    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
+    use tensorzero_inference_types::credential_validation::with_skip_credential_validation;
+    use tensorzero_inference_types::credentials::EndpointLocation;
+    use tensorzero_inference_types::{FinishReason, ModelInferenceRequestJsonMode, RequestMessage};
+    use tensorzero_types::{FunctionType, Role};
 
     #[tokio::test]
     async fn test_azure_request_new() {
@@ -981,15 +981,15 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1035,15 +1035,15 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1272,7 +1272,7 @@ mod tests {
 
     #[test]
     fn test_azure_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

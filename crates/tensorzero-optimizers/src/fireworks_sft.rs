@@ -43,7 +43,7 @@ use tensorzero_core::{
     },
     providers::{
         fireworks::{
-            FIREWORKS_API_BASE, FireworksTool, PROVIDER_TYPE, prepare_fireworks_messages,
+            FIREWORKS_API_BASE, PROVIDER_TYPE, prepare_fireworks_messages,
             tensorzero_to_fireworks_assistant_message,
         },
         helpers::UrlParseErrExt,
@@ -375,8 +375,9 @@ pub struct FireworksFineTuningRequest {
 #[derive(Debug, Serialize)]
 struct FireworksSupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<FireworksTool<'a>>,
+    #[serde(rename = "tools", skip_serializing_if = "Vec::is_empty")]
+    #[serde(serialize_with = "crate::tool_serializer::serialize_as_fireworks_tools")]
+    tool_defs: Vec<tensorzero_inference_types::FunctionToolDef>,
 }
 
 impl<'a> FireworksSupervisedRow<'a> {
@@ -390,18 +391,18 @@ impl<'a> FireworksSupervisedRow<'a> {
                 message: "Parallel tool calls are not supported for Fireworks".to_string(),
             }));
         }
-        let tools = inference
+        let tool_defs = inference
             .tool_params
             .additional_tools
             .as_ref()
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt {
+                    .filter_map(|dt| match dt {
                         tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None,
                     })
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
         let mut messages = prepare_fireworks_messages(
@@ -443,7 +444,10 @@ impl<'a> FireworksSupervisedRow<'a> {
         )
         .await?;
         messages.push(final_assistant_message);
-        Ok(Self { messages, tools })
+        Ok(Self {
+            messages,
+            tool_defs,
+        })
     }
 }
 

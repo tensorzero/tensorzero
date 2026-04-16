@@ -1,45 +1,42 @@
 use std::{borrow::Cow, time::Duration};
 
-use crate::error::warn_discarded_thought_block;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::{ContentBlock, RequestMessage, Role};
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
+use tensorzero_error::warn_discarded_thought_block;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{ContentBlock, RequestMessage};
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::error::DisplayOrDebugGateway;
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
-use crate::inference::InferenceProvider;
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+use crate::helpers::{
+    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+};
+use tensorzero_error::DisplayOrDebugGateway;
+use tensorzero_error::{DelayedError, Error, ErrorDetails};
+use tensorzero_http::{TensorZeroEventSource, TensorzeroHttpClient};
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::{
+    BatchRequestRow, ContentBlockChunk, ContentBlockOutput, PollBatchInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner,
+    StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, ToolCallChunk,
+};
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs,
 };
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use crate::tool::ToolChoice;
-use crate::{
-    endpoints::inference::InferenceCredentials,
-    error::{DelayedError, Error, ErrorDetails},
-    inference::types::{
-        ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStreamInner, Text, TextChunk, Thought, ThoughtChunk,
-        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-    },
-    tool::{ToolCall, ToolCallChunk},
-};
+use tensorzero_types::ToolChoice;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Role, Text, Thought, ToolCall};
 
 use super::helpers_thinking_block::{
     REASONING_FIELD_CHUNK_ID, ThinkingState, process_think_blocks,
@@ -49,8 +46,8 @@ use super::openai::{
     OpenAIToolRequestMessage, OpenAIUserRequestMessage, get_chat_url, handle_openai_error,
     prepare_file_message, serialize_optional_text_content_vec, tensorzero_to_openai_messages,
 };
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::chat_completions::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::chat_completions::{
     ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 use tensorzero_types_providers::together::{
@@ -648,16 +645,12 @@ pub async fn tensorzero_to_together_assistant_message<'a>(
                 )?;
                 thought_blocks.push(Cow::Owned(thought));
             }
-            Cow::Borrowed(ContentBlock::Unknown(crate::inference::types::Unknown {
-                data, ..
-            })) => {
+            Cow::Borrowed(ContentBlock::Unknown(tensorzero_types::Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown(crate::inference::types::Unknown {
-                data, ..
-            })) => {
+            Cow::Owned(ContentBlock::Unknown(tensorzero_types::Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Owned(data),
                 });
@@ -1083,18 +1076,19 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
+    use tensorzero_inference_types::{FinishReason, RequestMessage, Usage};
+    use tensorzero_types::{FunctionType, Role};
     use tensorzero_types_providers::together::{
         TogetherChatChunkChoice, TogetherDelta, TogetherFinishReason, TogetherFunctionCallChunk,
         TogetherResponseMessage, TogetherToolCallChunk,
     };
 
-    use crate::providers::chat_completions::{
+    use crate::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolType,
     };
-    use crate::providers::openai::OpenAIUsage;
-    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::openai::OpenAIUsage;
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
 
     #[tokio::test]
     async fn test_together_request_new() {
@@ -1137,15 +1131,15 @@ mod tests {
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tool.function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tool.function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             together_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1888,7 +1882,7 @@ mod tests {
 
     #[test]
     fn test_together_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

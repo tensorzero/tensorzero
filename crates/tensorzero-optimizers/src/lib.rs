@@ -31,6 +31,7 @@ pub mod openai_rft;
 pub mod openai_sft;
 pub mod postgres;
 pub mod together_sft;
+pub(crate) mod tool_serializer;
 
 // Re-export core types for convenience
 pub use tensorzero_core::optimization::OptimizerOutput;

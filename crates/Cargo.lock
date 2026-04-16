@@ -8323,6 +8323,8 @@ dependencies = [
  "tensorzero",
  "tensorzero-core",
  "tensorzero-derive",
+ "tensorzero-inference-types",
+ "tensorzero-providers",
  "tokio",
  "tokio-stream",
  "tokio-util",
