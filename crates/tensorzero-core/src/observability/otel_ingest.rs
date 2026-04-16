@@ -1,0 +1,450 @@
+//! Parse OTLP JSON traces (the standard wire format for OTel GenAI spans)
+//! and convert them into TensorZero's `StoredModelInference` type.
+//!
+//! This module handles the full OTLP JSON envelope: `resourceSpans` →
+//! `scopeSpans` → `spans`, with typed attribute values (`stringValue`,
+//! `intValue`, `boolValue`, `arrayValue`).
+//!
+//! Spec references:
+//! - OTLP JSON: <https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding>
+//! - GenAI spans: <https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/>
+
+use serde::Deserialize;
+use uuid::Uuid;
+
+use crate::inference::types::StoredModelInference;
+
+// =============================================================================
+// OTLP JSON wire types (subset needed for GenAI span parsing)
+// =============================================================================
+
+/// Top-level OTLP export request (one JSONL line).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OtlpExportRequest {
+    #[serde(default)]
+    pub resource_spans: Vec<ResourceSpans>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceSpans {
+    #[serde(default)]
+    pub scope_spans: Vec<ScopeSpans>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeSpans {
+    #[serde(default)]
+    pub spans: Vec<OtlpSpan>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OtlpSpan {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub start_time_unix_nano: String,
+    #[serde(default)]
+    pub end_time_unix_nano: String,
+    #[serde(default)]
+    pub attributes: Vec<OtlpAttribute>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OtlpAttribute {
+    pub key: String,
+    pub value: OtlpValue,
+}
+
+/// OTLP typed attribute value. We handle the types that appear in GenAI spans.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OtlpValue {
+    #[serde(default)]
+    pub string_value: Option<String>,
+    #[serde(default)]
+    pub int_value: Option<serde_json::Value>, // can be string or number in OTLP JSON
+    #[serde(default)]
+    pub bool_value: Option<bool>,
+    #[serde(default)]
+    pub array_value: Option<OtlpArrayValue>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct OtlpArrayValue {
+    #[serde(default)]
+    pub values: Vec<OtlpValue>,
+}
+
+impl OtlpValue {
+    /// Extract as a string, coercing ints and bools.
+    pub fn as_string(&self) -> Option<String> {
+        if let Some(s) = &self.string_value {
+            return Some(s.clone());
+        }
+        if let Some(v) = &self.int_value {
+            return Some(match v {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                other => other.to_string(),
+            });
+        }
+        if let Some(b) = self.bool_value {
+            return Some(b.to_string());
+        }
+        None
+    }
+
+    /// Extract as u32 (for token counts, max_tokens, etc.).
+    pub fn as_u32(&self) -> Option<u32> {
+        if let Some(v) = &self.int_value {
+            return match v {
+                serde_json::Value::String(s) => s.parse().ok(),
+                serde_json::Value::Number(n) => n.as_u64().map(|n| n as u32),
+                _ => None,
+            };
+        }
+        if let Some(s) = &self.string_value {
+            return s.parse().ok();
+        }
+        None
+    }
+
+    /// Extract the first string from an array value (for finish_reasons).
+    pub fn first_array_string(&self) -> Option<String> {
+        self.array_value.as_ref()?.values.first()?.as_string()
+    }
+}
+
+// =============================================================================
+// Helpers: attribute lookup on a span
+// =============================================================================
+
+/// A thin wrapper for convenient attribute access on an OTLP span.
+struct SpanAttrs<'a>(&'a [OtlpAttribute]);
+
+impl<'a> SpanAttrs<'a> {
+    fn get(&self, key: &str) -> Option<&'a OtlpValue> {
+        self.0.iter().find(|a| a.key == key).map(|a| &a.value)
+    }
+
+    fn string(&self, key: &str) -> Option<String> {
+        self.get(key)?.as_string()
+    }
+
+    fn u32(&self, key: &str) -> Option<u32> {
+        self.get(key)?.as_u32()
+    }
+
+    fn first_array_string(&self, key: &str) -> Option<String> {
+        self.get(key)?.first_array_string()
+    }
+}
+
+// =============================================================================
+// Conversion: OtlpSpan → StoredModelInference
+// =============================================================================
+
+/// Map an OTel GenAI finish-reason string to a `FinishReason`.
+fn parse_finish_reason(s: &str) -> tensorzero_inference_types::FinishReason {
+    use tensorzero_inference_types::FinishReason;
+    match s {
+        "stop" => FinishReason::Stop,
+        "stop_sequence" => FinishReason::StopSequence,
+        "length" => FinishReason::Length,
+        "tool_calls" | "tool_call" => FinishReason::ToolCall,
+        "content_filter" => FinishReason::ContentFilter,
+        _ => FinishReason::Unknown,
+    }
+}
+
+/// Convert a single OTLP GenAI span into a `StoredModelInference`.
+///
+/// Fields that don't have a natural source in the OTel span (e.g.
+/// `inference_id`, `function_name`, `variant_name`) are left as defaults
+/// — the caller is responsible for filling those in.
+pub fn otlp_span_to_stored_model_inference(span: &OtlpSpan) -> StoredModelInference {
+    let attrs = SpanAttrs(&span.attributes);
+
+    // Timing: compute response_time_ms from start/end nanos.
+    let start_ns: u128 = span.start_time_unix_nano.parse().unwrap_or(0);
+    let end_ns: u128 = span.end_time_unix_nano.parse().unwrap_or(0);
+    let response_time_ms = if end_ns > start_ns {
+        Some(((end_ns - start_ns) / 1_000_000) as u32)
+    } else {
+        None
+    };
+
+    // Token usage
+    let input_tokens = attrs.u32("gen_ai.usage.input_tokens");
+    let output_tokens = attrs.u32("gen_ai.usage.output_tokens");
+
+    // Finish reason: from the array attribute `gen_ai.response.finish_reasons`
+    let finish_reason = attrs
+        .first_array_string("gen_ai.response.finish_reasons")
+        .map(|s| parse_finish_reason(&s));
+
+    // The raw request/response aren't available from OTel traces in a standard
+    // form — the closest we have is `gen_ai.input.messages` / `gen_ai.output.messages`
+    // which are JSON strings representing the semantic content.
+    let raw_request = attrs.string("gen_ai.input.messages");
+    let raw_response = attrs.string("gen_ai.output.messages");
+
+    StoredModelInference {
+        id: Uuid::now_v7(),
+        inference_id: Uuid::nil(),
+        function_name: String::new(),
+        variant_name: String::new(),
+        raw_request,
+        raw_response,
+        system: None, // System prompt is embedded in input.messages, not a separate attribute
+        input_messages: None, // Would need further parsing of the gen_ai.input.messages JSON
+        output: None, // Would need further parsing of the gen_ai.output.messages JSON
+        input_tokens,
+        output_tokens,
+        provider_cache_read_input_tokens: attrs.u32("gen_ai.usage.cache_read.input_tokens"),
+        provider_cache_write_input_tokens: attrs.u32("gen_ai.usage.cache_creation.input_tokens"),
+        response_time_ms,
+        model_name: attrs.string("gen_ai.request.model").unwrap_or_default(),
+        model_provider_name: attrs.string("gen_ai.provider.name").unwrap_or_default(),
+        ttft_ms: None, // Not available in standard OTel GenAI spans
+        cached: false,
+        cost: None,
+        finish_reason,
+        snapshot_hash: None,
+        provider_response_id: attrs.string("gen_ai.response.id"),
+        response_model_name: attrs.string("gen_ai.response.model"),
+        operation: attrs.string("gen_ai.operation.name"),
+        timestamp: None,
+    }
+}
+
+/// Parse an entire OTLP JSONL file (one `OtlpExportRequest` per line)
+/// and return all `StoredModelInference` entries.
+pub fn parse_otlp_jsonl(jsonl: &str) -> Result<Vec<StoredModelInference>, serde_json::Error> {
+    let mut results = Vec::new();
+    for line in jsonl.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let export: OtlpExportRequest = serde_json::from_str(line)?;
+        for rs in &export.resource_spans {
+            for ss in &rs.scope_spans {
+                for span in &ss.spans {
+                    results.push(otlp_span_to_stored_model_inference(span));
+                }
+            }
+        }
+    }
+    Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    const TRACES_JSONL: &str = include_str!("../../testdata/otel_traces/traces.jsonl");
+
+    #[gtest]
+    fn parses_all_spans_from_fixture() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        // The fixture has 6 lines, each with 1 span = 6 total.
+        expect_that!(results.len(), eq(6));
+    }
+
+    #[gtest]
+    fn openai_chat_simple() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        let mi = &results[0]; // Line 0: openai.chat, gpt-4o-mini
+
+        expect_that!(mi.model_name, eq("gpt-4o-mini"));
+        expect_that!(mi.model_provider_name, eq("openai"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("chatcmpl-DVHHVlFx61AuQIq4gZvooyrpLQ0NL"))
+        );
+        expect_that!(
+            mi.response_model_name.as_deref(),
+            some(eq("gpt-4o-mini-2024-07-18"))
+        );
+        expect_that!(mi.operation.as_deref(), some(eq("chat")));
+        expect_that!(mi.input_tokens, some(eq(13)));
+        expect_that!(mi.output_tokens, some(eq(5)));
+        expect_that!(
+            mi.finish_reason,
+            some(eq(tensorzero_inference_types::FinishReason::Stop))
+        );
+        // Response time: (1776346969531762000 - 1776346968790316000) / 1_000_000 = 741 ms
+        expect_that!(mi.response_time_ms, some(eq(741)));
+        // raw_request should contain the input messages JSON
+        expect_that!(
+            mi.raw_request.as_deref(),
+            some(contains_substring("Say hello in three words"))
+        );
+        // raw_response should contain the output messages JSON
+        expect_that!(
+            mi.raw_response.as_deref(),
+            some(contains_substring("Hello there, friend!"))
+        );
+    }
+
+    #[gtest]
+    fn anthropic_chat_simple() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        let mi = &results[1]; // Line 1: anthropic.chat, claude-sonnet
+
+        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
+        expect_that!(mi.model_provider_name, eq("anthropic"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_014eJGsS2mHFBdvg71gToaaB"))
+        );
+        expect_that!(
+            mi.response_model_name.as_deref(),
+            some(eq("claude-sonnet-4-20250514"))
+        );
+        expect_that!(mi.operation.as_deref(), some(eq("chat")));
+        expect_that!(mi.input_tokens, some(eq(13)));
+        expect_that!(mi.output_tokens, some(eq(8)));
+        expect_that!(
+            mi.finish_reason,
+            some(eq(tensorzero_inference_types::FinishReason::Stop))
+        );
+    }
+
+    #[gtest]
+    fn anthropic_tool_call() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        let mi = &results[2]; // Line 2: anthropic.chat with tool_call finish
+
+        expect_that!(mi.model_name, eq("claude-sonnet-4-20250514"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_01DuKSqmpQ4Y7vWfZthTqcZh"))
+        );
+        expect_that!(mi.input_tokens, some(eq(390)));
+        expect_that!(mi.output_tokens, some(eq(67)));
+        expect_that!(
+            mi.finish_reason,
+            some(eq(tensorzero_inference_types::FinishReason::ToolCall))
+        );
+        // Output should contain the tool call
+        expect_that!(
+            mi.raw_response.as_deref(),
+            some(contains_substring("get_weather"))
+        );
+    }
+
+    #[gtest]
+    fn anthropic_tool_result_followup() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        let mi = &results[3]; // Line 3: anthropic.chat after tool result
+
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq("msg_01Pg51hhLM7qXeVPUk2qmRBq"))
+        );
+        expect_that!(mi.input_tokens, some(eq(479)));
+        expect_that!(mi.output_tokens, some(eq(28)));
+        expect_that!(
+            mi.finish_reason,
+            some(eq(tensorzero_inference_types::FinishReason::Stop))
+        );
+    }
+
+    #[gtest]
+    fn openai_responses_api() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        let mi = &results[4]; // Line 4: openai.response (Responses API)
+
+        expect_that!(mi.model_name, eq("gpt-4o-mini"));
+        expect_that!(mi.model_provider_name, eq("openai"));
+        expect_that!(
+            mi.provider_response_id.as_deref(),
+            some(eq(
+                "resp_09146d0742be5c060169e0e761eb3c8190a5695efe2e8df0d6"
+            ))
+        );
+        expect_that!(
+            mi.response_model_name.as_deref(),
+            some(eq("gpt-4o-mini-2024-07-18"))
+        );
+        expect_that!(mi.operation.as_deref(), some(eq("chat")));
+        expect_that!(mi.input_tokens, some(eq(26)));
+        expect_that!(mi.output_tokens, some(eq(7)));
+        // Should have system prompt in raw_request
+        expect_that!(
+            mi.raw_request.as_deref(),
+            some(contains_substring("You are a helpful assistant"))
+        );
+    }
+
+    #[gtest]
+    fn all_spans_have_required_fields() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        for (i, mi) in results.iter().enumerate() {
+            expect_that!(
+                mi.model_name,
+                not(eq("")),
+                "span {i} should have model_name"
+            );
+            expect_that!(
+                mi.model_provider_name,
+                not(eq("")),
+                "span {i} should have model_provider_name"
+            );
+            expect_that!(
+                mi.provider_response_id,
+                some(anything()),
+                "span {i} should have provider_response_id"
+            );
+            expect_that!(
+                mi.response_model_name,
+                some(anything()),
+                "span {i} should have response_model_name"
+            );
+            expect_that!(
+                mi.operation,
+                some(anything()),
+                "span {i} should have operation"
+            );
+            expect_that!(
+                mi.input_tokens,
+                some(anything()),
+                "span {i} should have input_tokens"
+            );
+            expect_that!(
+                mi.output_tokens,
+                some(anything()),
+                "span {i} should have output_tokens"
+            );
+            expect_that!(
+                mi.finish_reason,
+                some(anything()),
+                "span {i} should have finish_reason"
+            );
+            expect_that!(
+                mi.response_time_ms,
+                some(anything()),
+                "span {i} should have response_time_ms"
+            );
+        }
+    }
+
+    #[gtest]
+    fn cache_tokens_parsed() {
+        let results = parse_otlp_jsonl(TRACES_JSONL).expect("should parse");
+        // OpenAI spans have gen_ai.usage.cache_read.input_tokens = 0
+        let mi = &results[0];
+        expect_that!(mi.provider_cache_read_input_tokens, some(eq(0)));
+
+        // Anthropic spans have gen_ai.usage.cache_creation.input_tokens = 0
+        let mi = &results[1];
+        expect_that!(mi.provider_cache_write_input_tokens, some(eq(0)));
+    }
+}
