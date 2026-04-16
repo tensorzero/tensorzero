@@ -1,16 +1,7 @@
 use std::borrow::Cow;
 
-use crate::error::warn_discarded_thought_block;
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::{ContentBlock, Role};
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
-use crate::{
-    http::TensorZeroEventSource, providers::helpers_thinking_block::REASONING_FIELD_CHUNK_ID,
-    tool::FunctionTool,
-};
+use crate::helpers_thinking_block::REASONING_FIELD_CHUNK_ID;
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_sse_stream::Event;
@@ -18,6 +9,13 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero_error::warn_discarded_thought_block;
+use tensorzero_http::TensorZeroEventSource;
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::ContentBlock;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_types::Role;
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
 use tensorzero_types_providers::fireworks::*;
 use tokio::time::Instant;
 use url::Url;
@@ -25,28 +23,23 @@ use url::Url;
 use super::helpers::{
     inject_extra_request_data_and_send_eventsource, inject_extra_request_data_and_send_with_headers,
 };
-use crate::inference::types::Usage;
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::{
-    endpoints::inference::InferenceCredentials,
-    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::{
-        InferenceProvider,
-        types::{
-            ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-            ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-            ProviderInferenceResponse, ProviderInferenceResponseArgs,
-            ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-            Text, TextChunk, Thought, ThoughtChunk,
-            batch::{
-                BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
-            },
-        },
-    },
-    model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
-    tool::{ToolCall, ToolCallChunk},
-};
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use tensorzero_inference_types::FunctionToolDef;
+use tensorzero_inference_types::Usage;
+use tensorzero_inference_types::credentials::{
+    Credential, ModelProviderRequestInfo, ProviderInferenceRequest,
+};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::{
+    BatchRequestRow, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    PollBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, ToolCallChunk,
+};
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Text, Thought, ToolCall};
 use uuid::Uuid;
 
 use super::{
@@ -793,19 +786,6 @@ pub struct FireworksTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
-    fn from(tool: &'a FunctionTool) -> Self {
-        FireworksTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
-            },
-        }
-    }
-}
-
 impl<'a> From<&'a FunctionToolDef> for FireworksTool<'a> {
     fn from(tool: &'a FunctionToolDef) -> Self {
         FireworksTool {
@@ -1147,10 +1127,11 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::types::{FinishReason, FunctionType, RequestMessage, Role, Usage};
-    use crate::providers::openai::OpenAIToolType;
-    use crate::providers::openai::{SpecificToolChoice, SpecificToolFunction};
-    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::openai::OpenAIToolType;
+    use crate::openai::{SpecificToolChoice, SpecificToolFunction};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
+    use tensorzero_inference_types::{FinishReason, RequestMessage, Usage};
+    use tensorzero_types::{FunctionType, Role};
 
     #[tokio::test]
     async fn test_fireworks_response_with_thinking_blocks() {
@@ -1295,14 +1276,14 @@ mod tests {
         assert!(fireworks_request.tools.is_some());
         let tools = fireworks_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[0].function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tools[0].function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             fireworks_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+                    name: &WEATHER_TOOL_DEF.name,
                 }
             }))
         );
@@ -2136,7 +2117,7 @@ mod tests {
 
     #[test]
     fn test_fireworks_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,

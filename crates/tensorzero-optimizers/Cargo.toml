@@ -15,6 +15,8 @@ ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
+tensorzero-providers = { path = "../tensorzero-providers" }
 evaluations = { path = "../evaluations" }
 durable-tools-spawn = { path = "../durable-tools-spawn" }
 schemars = { workspace = true }

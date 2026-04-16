@@ -10,11 +10,10 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
-use tensorzero_stored_config::{
-    StoredContentBlockType, StoredHostedProviderKind, StoredModelConfig, StoredModelProvider,
-    StoredOpenAIAPIType, StoredProviderConfig,
-};
 use tensorzero_stored_config::{StoredCostConfig, StoredTimeoutsConfig, StoredUnifiedCostConfig};
+use tensorzero_stored_config::{
+    StoredHostedProviderKind, StoredModelConfig, StoredModelProvider, StoredProviderConfig,
+};
 use tokio::time::error::Elapsed;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{Level, Span, span};
@@ -298,35 +297,6 @@ impl From<StoredHostedProviderKind> for HostedProviderKind {
         match stored {
             StoredHostedProviderKind::OpenAI => Self::OpenAI,
             StoredHostedProviderKind::TGI => Self::TGI,
-        }
-    }
-}
-
-impl From<StoredOpenAIAPIType> for OpenAIAPIType {
-    fn from(stored: StoredOpenAIAPIType) -> Self {
-        match stored {
-            StoredOpenAIAPIType::ChatCompletions => Self::ChatCompletions,
-            StoredOpenAIAPIType::Responses => Self::Responses,
-        }
-    }
-}
-
-impl From<StoredContentBlockType> for ContentBlockType {
-    fn from(stored: StoredContentBlockType) -> Self {
-        match stored {
-            StoredContentBlockType::ImageUrl => Self::ImageUrl,
-            StoredContentBlockType::File => Self::File,
-            StoredContentBlockType::InputAudio => Self::InputAudio,
-        }
-    }
-}
-
-impl From<&ContentBlockType> for StoredContentBlockType {
-    fn from(value: &ContentBlockType) -> Self {
-        match value {
-            ContentBlockType::ImageUrl => StoredContentBlockType::ImageUrl,
-            ContentBlockType::File => StoredContentBlockType::File,
-            ContentBlockType::InputAudio => StoredContentBlockType::InputAudio,
         }
     }
 }
@@ -2570,15 +2540,6 @@ impl From<HostedProviderKind> for StoredHostedProviderKind {
         match kind {
             HostedProviderKind::OpenAI => StoredHostedProviderKind::OpenAI,
             HostedProviderKind::TGI => StoredHostedProviderKind::TGI,
-        }
-    }
-}
-
-impl From<OpenAIAPIType> for StoredOpenAIAPIType {
-    fn from(api_type: OpenAIAPIType) -> Self {
-        match api_type {
-            OpenAIAPIType::ChatCompletions => StoredOpenAIAPIType::ChatCompletions,
-            OpenAIAPIType::Responses => StoredOpenAIAPIType::Responses,
         }
     }
 }

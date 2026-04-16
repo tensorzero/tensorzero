@@ -1,17 +1,12 @@
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
-use crate::providers::openai::grader::{
-    OpenAIModelGraderInput, OpenAIRFTRole, OpenAISimilarityMetric, OpenAIStringCheckOp,
-};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredOpenAIGrader, StoredOpenAIModelGraderInput, StoredOpenAIRFTConfig,
-    StoredOpenAIRFTResponseFormat, StoredOpenAIRFTRole, StoredOpenAISimilarityMetric,
-    StoredOpenAIStringCheckOp, StoredRFTJsonSchemaInfo,
+    StoredOpenAIRFTConfig, StoredOpenAIRFTResponseFormat, StoredRFTJsonSchemaInfo,
 };
 use url::Url;
 
@@ -115,130 +110,6 @@ impl std::fmt::Display for UninitializedOpenAIRFTConfig {
     }
 }
 
-impl From<StoredOpenAIStringCheckOp> for crate::providers::openai::grader::OpenAIStringCheckOp {
-    fn from(stored: StoredOpenAIStringCheckOp) -> Self {
-        match stored {
-            StoredOpenAIStringCheckOp::Eq => Self::Eq,
-            StoredOpenAIStringCheckOp::Ne => Self::Ne,
-            StoredOpenAIStringCheckOp::Like => Self::Like,
-            StoredOpenAIStringCheckOp::Ilike => Self::Ilike,
-        }
-    }
-}
-
-impl From<StoredOpenAISimilarityMetric>
-    for crate::providers::openai::grader::OpenAISimilarityMetric
-{
-    fn from(stored: StoredOpenAISimilarityMetric) -> Self {
-        match stored {
-            StoredOpenAISimilarityMetric::FuzzyMatch => Self::FuzzyMatch,
-            StoredOpenAISimilarityMetric::Bleu => Self::Bleu,
-            StoredOpenAISimilarityMetric::Gleu => Self::Gleu,
-            StoredOpenAISimilarityMetric::Meteor => Self::Meteor,
-            StoredOpenAISimilarityMetric::Rouge1 => Self::Rouge1,
-            StoredOpenAISimilarityMetric::Rouge2 => Self::Rouge2,
-            StoredOpenAISimilarityMetric::Rouge3 => Self::Rouge3,
-            StoredOpenAISimilarityMetric::Rouge4 => Self::Rouge4,
-            StoredOpenAISimilarityMetric::Rouge5 => Self::Rouge5,
-            StoredOpenAISimilarityMetric::RougeL => Self::RougeL,
-        }
-    }
-}
-
-impl From<StoredOpenAIRFTRole> for crate::providers::openai::grader::OpenAIRFTRole {
-    fn from(stored: StoredOpenAIRFTRole) -> Self {
-        match stored {
-            StoredOpenAIRFTRole::Developer => Self::Developer,
-            StoredOpenAIRFTRole::User => Self::User,
-        }
-    }
-}
-
-impl From<StoredOpenAIModelGraderInput>
-    for crate::providers::openai::grader::OpenAIModelGraderInput
-{
-    fn from(stored: StoredOpenAIModelGraderInput) -> Self {
-        Self {
-            role: stored.role.into(),
-            content: stored.content,
-        }
-    }
-}
-
-impl From<StoredOpenAIGrader> for OpenAIGrader {
-    fn from(stored: StoredOpenAIGrader) -> Self {
-        match stored {
-            StoredOpenAIGrader::StringCheck {
-                name,
-                operation,
-                input,
-                reference,
-            } => Self::StringCheck {
-                name,
-                operation: operation.into(),
-                input,
-                reference,
-            },
-            StoredOpenAIGrader::TextSimilarity {
-                name,
-                evaluation_metric,
-                input,
-                reference,
-            } => Self::TextSimilarity {
-                name,
-                evaluation_metric: evaluation_metric.into(),
-                input,
-                reference,
-            },
-            StoredOpenAIGrader::ScoreModel {
-                name,
-                model,
-                input,
-                range,
-            } => Self::ScoreModel {
-                name,
-                model,
-                input: input.into_iter().map(Into::into).collect(),
-                range,
-            },
-            StoredOpenAIGrader::LabelModel {
-                name,
-                model,
-                labels,
-                passing_labels,
-                input,
-            } => Self::LabelModel {
-                name,
-                model,
-                labels,
-                passing_labels,
-                input: input.into_iter().map(Into::into).collect(),
-            },
-            StoredOpenAIGrader::Python {
-                name,
-                source,
-                image_tag,
-            } => Self::Python {
-                name,
-                source,
-                image_tag,
-            },
-            StoredOpenAIGrader::Multi {
-                calculate_output,
-                graders,
-                name,
-            } => Self::Multi {
-                calculate_output,
-                graders: graders
-                    .into_iter()
-                    .map(|(k, v)| (k, Box::new((*v).into())))
-                    .collect(),
-                name,
-            },
-        }
-    }
-}
-
 impl From<StoredRFTJsonSchemaInfo> for JsonSchemaInfo {
     fn from(stored: StoredRFTJsonSchemaInfo) -> Self {
         Self {
@@ -255,128 +126,6 @@ impl From<StoredOpenAIRFTResponseFormat> for OpenAIRFTResponseFormat {
         match stored {
             StoredOpenAIRFTResponseFormat::JsonSchema { json_schema } => Self::JsonSchema {
                 json_schema: RFTJsonSchemaInfoOption::JsonSchema(json_schema.into()),
-            },
-        }
-    }
-}
-
-// --- Reverse conversions: core -> stored ---
-
-impl From<OpenAIStringCheckOp> for StoredOpenAIStringCheckOp {
-    fn from(op: OpenAIStringCheckOp) -> Self {
-        match op {
-            OpenAIStringCheckOp::Eq => Self::Eq,
-            OpenAIStringCheckOp::Ne => Self::Ne,
-            OpenAIStringCheckOp::Like => Self::Like,
-            OpenAIStringCheckOp::Ilike => Self::Ilike,
-        }
-    }
-}
-
-impl From<OpenAISimilarityMetric> for StoredOpenAISimilarityMetric {
-    fn from(metric: OpenAISimilarityMetric) -> Self {
-        match metric {
-            OpenAISimilarityMetric::FuzzyMatch => Self::FuzzyMatch,
-            OpenAISimilarityMetric::Bleu => Self::Bleu,
-            OpenAISimilarityMetric::Gleu => Self::Gleu,
-            OpenAISimilarityMetric::Meteor => Self::Meteor,
-            OpenAISimilarityMetric::Rouge1 => Self::Rouge1,
-            OpenAISimilarityMetric::Rouge2 => Self::Rouge2,
-            OpenAISimilarityMetric::Rouge3 => Self::Rouge3,
-            OpenAISimilarityMetric::Rouge4 => Self::Rouge4,
-            OpenAISimilarityMetric::Rouge5 => Self::Rouge5,
-            OpenAISimilarityMetric::RougeL => Self::RougeL,
-        }
-    }
-}
-
-impl From<OpenAIRFTRole> for StoredOpenAIRFTRole {
-    fn from(role: OpenAIRFTRole) -> Self {
-        match role {
-            OpenAIRFTRole::Developer => Self::Developer,
-            OpenAIRFTRole::User => Self::User,
-        }
-    }
-}
-
-impl From<OpenAIModelGraderInput> for StoredOpenAIModelGraderInput {
-    fn from(input: OpenAIModelGraderInput) -> Self {
-        Self {
-            role: input.role.into(),
-            content: input.content,
-        }
-    }
-}
-
-impl From<OpenAIGrader> for StoredOpenAIGrader {
-    fn from(grader: OpenAIGrader) -> Self {
-        match grader {
-            OpenAIGrader::StringCheck {
-                name,
-                operation,
-                input,
-                reference,
-            } => Self::StringCheck {
-                name,
-                operation: operation.into(),
-                input,
-                reference,
-            },
-            OpenAIGrader::TextSimilarity {
-                name,
-                evaluation_metric,
-                input,
-                reference,
-            } => Self::TextSimilarity {
-                name,
-                evaluation_metric: evaluation_metric.into(),
-                input,
-                reference,
-            },
-            OpenAIGrader::ScoreModel {
-                name,
-                model,
-                input,
-                range,
-            } => Self::ScoreModel {
-                name,
-                model,
-                input: input.into_iter().map(Into::into).collect(),
-                range,
-            },
-            OpenAIGrader::LabelModel {
-                name,
-                model,
-                labels,
-                passing_labels,
-                input,
-            } => Self::LabelModel {
-                name,
-                model,
-                labels,
-                passing_labels,
-                input: input.into_iter().map(Into::into).collect(),
-            },
-            OpenAIGrader::Python {
-                name,
-                source,
-                image_tag,
-            } => Self::Python {
-                name,
-                source,
-                image_tag,
-            },
-            OpenAIGrader::Multi {
-                calculate_output,
-                graders,
-                name,
-            } => Self::Multi {
-                calculate_output,
-                graders: graders
-                    .into_iter()
-                    .map(|(k, v)| (k, Box::new((*v).into())))
-                    .collect(),
-                name,
             },
         }
     }
@@ -583,8 +332,15 @@ impl std::fmt::Display for OpenAIRFTJobHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::openai::grader::{
+        OpenAIModelGraderInput, OpenAIRFTRole, OpenAISimilarityMetric, OpenAIStringCheckOp,
+    };
     use googletest::prelude::*;
     use std::collections::HashMap;
+    use tensorzero_stored_config::{
+        StoredOpenAIGrader, StoredOpenAIRFTRole, StoredOpenAISimilarityMetric,
+        StoredOpenAIStringCheckOp,
+    };
 
     fn sample_string_check_grader() -> OpenAIGrader {
         OpenAIGrader::StringCheck {

@@ -12,35 +12,35 @@ use super::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource,
 };
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
-use crate::inference::InferenceProvider;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
-};
-use crate::inference::types::usage::raw_usage_entries_from_value;
-use crate::inference::types::{
-    ApiType, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, Usage,
-    batch::StartBatchProviderInferenceResponse,
-};
-use crate::model::Credential;
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
-use crate::providers::chat_completions::prepare_chat_completion_tools;
-use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
-use crate::providers::openai::{
+use crate::chat_completions::prepare_chat_completion_tools;
+use crate::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
+use crate::openai::{
     OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIRequestMessage,
     OpenAISystemRequestMessage, OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
     get_chat_url, handle_openai_error, openai_response_tool_call_to_tensorzero_tool_call,
     prepare_system_or_developer_message, tensorzero_to_openai_messages,
 };
-use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
-use crate::tool::ToolCallChunk;
+use crate::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use serde_json::Value;
+use tensorzero_error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
+use tensorzero_http::{TensorZeroEventSource, TensorzeroHttpClient};
+use tensorzero_inference_types::ToolCallChunk;
+use tensorzero_inference_types::credentials::Credential;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::InferenceProvider;
+use tensorzero_inference_types::raw_usage_entries_from_value;
+use tensorzero_inference_types::utils::warn_inference_parameter_not_supported;
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, StartBatchProviderInferenceResponse, TextChunk,
+    ThoughtChunk, Usage,
+};
+use tensorzero_types::inference_params::ChatCompletionInferenceParamsV2;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tensorzero_types::{ApiType, Thought};
 use tensorzero_types_providers::deepseek::{
     DeepSeekChatChunk, DeepSeekResponse, DeepSeekResponseChoice, DeepSeekResponseFormat,
 };
@@ -833,18 +833,17 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::inference::types::Usage;
-    use crate::inference::types::{
-        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
-    };
-    use crate::providers::chat_completions::{
+    use crate::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolType,
     };
-    use crate::providers::openai::{
+    use crate::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
     };
-    use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use crate::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL_DEF};
+    use tensorzero_inference_types::Usage;
+    use tensorzero_inference_types::{FinishReason, ModelInferenceRequestJsonMode, RequestMessage};
+    use tensorzero_types::{FunctionType, Role};
     use tensorzero_types_providers::deepseek::{DeepSeekResponseMessage, DeepSeekUsage};
     use tensorzero_types_providers::openai::OpenAIFinishReason;
 
@@ -886,15 +885,15 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tool.function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tool.function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             deepseek_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -940,15 +939,15 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tool.function.name, WEATHER_TOOL_DEF.name);
+        assert_eq!(tool.function.parameters, &WEATHER_TOOL_DEF.parameters);
         assert_eq!(
             deepseek_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
                 ChatCompletionSpecificToolChoice {
                     r#type: ChatCompletionToolType::Function,
                     function: ChatCompletionSpecificToolFunction {
-                        name: WEATHER_TOOL.name(),
+                        name: &WEATHER_TOOL_DEF.name,
                     }
                 }
             ))
@@ -1297,7 +1296,7 @@ mod tests {
 
     #[test]
     fn test_deepseek_apply_inference_params_called() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             service_tier: None,
