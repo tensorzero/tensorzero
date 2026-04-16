@@ -20,6 +20,13 @@ use tensorzero_types::{
     InputMessageContent, Role, Text,
 };
 
+/// Maximum prompt length (in chars) accepted by `llm_query_with_timeout`.
+///
+/// Roughly matches the context compaction token budget (~300k tokens ≈ 1.2M chars).
+/// Prompts exceeding this are rejected early with a JS-visible error instead of
+/// being sent to the inference provider (which would fail with a payload-too-large error).
+const MAX_LLM_QUERY_INPUT_CHARS: usize = 1_200_000;
+
 /// Shared implementation for `op_llm_query` and `op_llm_query_batched`.
 ///
 /// At `depth < max_depth`, spawns a child RLM loop with the prompt as context.
@@ -36,6 +43,16 @@ pub async fn llm_query_with_timeout(
     exposed_tools: Option<ExposedTools>,
     oom_snapshot_config: Option<OomSnapshotConfig>,
 ) -> Result<Result<String, ControlFlow>, TsError> {
+    let prompt_char_count = prompt.chars().count();
+    if prompt_char_count > MAX_LLM_QUERY_INPUT_CHARS {
+        return Err(TsError::Execution {
+            message: format!(
+                "`llm_query` input too large ({prompt_char_count} chars, limit {MAX_LLM_QUERY_INPUT_CHARS}). \
+                 Try again with less data (e.g. use smaller limits or more specific filters).",
+            ),
+        });
+    }
+
     let timeout = std::time::Duration::from_secs(rlm_state.execution_timeout_secs);
     Box::pin(tokio::time::timeout(
         timeout,
@@ -117,10 +134,12 @@ async fn llm_query_inner(
                 ts_checker: &ts_checker,
                 exposed_tools: exposed_tools.as_ref(),
                 function_name: "rlm_recursive_query",
+                initial_messages: vec![],
             })),
         )
         .await
         .and_then(|r| r)
+        .map(|r| r.map(|rlm_result| rlm_result.answer))
     } else {
         // Leaf: single-shot inference via rlm_text_analysis.
         let user_text = format!(
