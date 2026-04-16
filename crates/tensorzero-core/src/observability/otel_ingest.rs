@@ -9,6 +9,12 @@
 //! - OTLP JSON: <https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding>
 //! - GenAI spans: <https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/>
 
+// TODO: remove once the OTel ingestion endpoint is wired up.
+#![expect(
+    dead_code,
+    reason = "only called from tests until ingestion endpoint lands"
+)]
+
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -17,32 +23,37 @@ use crate::inference::types::StoredModelInference;
 // =============================================================================
 // OTLP JSON wire types (subset needed for GenAI span parsing)
 // =============================================================================
+//
+// These are modeled as structs with optional fields rather than enums because
+// the OTLP JSON protobuf encoding sends typed values as optional fields on a
+// single JSON object (not a tagged union), so serde's untagged enum would give
+// poor error messages and worse perf.
 
 /// Top-level OTLP export request (one JSONL line).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OtlpExportRequest {
+pub(crate) struct OtlpExportRequest {
     #[serde(default)]
     pub resource_spans: Vec<ResourceSpans>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResourceSpans {
+pub(crate) struct ResourceSpans {
     #[serde(default)]
     pub scope_spans: Vec<ScopeSpans>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ScopeSpans {
+pub(crate) struct ScopeSpans {
     #[serde(default)]
     pub spans: Vec<OtlpSpan>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OtlpSpan {
+pub(crate) struct OtlpSpan {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -54,7 +65,7 @@ pub struct OtlpSpan {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct OtlpAttribute {
+pub(crate) struct OtlpAttribute {
     pub key: String,
     pub value: OtlpValue,
 }
@@ -62,7 +73,7 @@ pub struct OtlpAttribute {
 /// OTLP typed attribute value. We handle the types that appear in GenAI spans.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct OtlpValue {
+pub(crate) struct OtlpValue {
     #[serde(default)]
     pub string_value: Option<String>,
     #[serde(default)]
@@ -74,14 +85,19 @@ pub struct OtlpValue {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct OtlpArrayValue {
+pub(crate) struct OtlpArrayValue {
     #[serde(default)]
     pub values: Vec<OtlpValue>,
 }
 
 impl OtlpValue {
-    /// Extract as a string, coercing ints and bools.
-    pub fn as_string(&self) -> Option<String> {
+    /// Borrow the string value without allocating (when the value is a `stringValue`).
+    fn as_str(&self) -> Option<&str> {
+        self.string_value.as_deref()
+    }
+
+    /// Extract as an owned string, coercing ints and bools.
+    fn as_string(&self) -> Option<String> {
         if let Some(s) = &self.string_value {
             return Some(s.clone());
         }
@@ -99,11 +115,12 @@ impl OtlpValue {
     }
 
     /// Extract as u32 (for token counts, max_tokens, etc.).
-    pub fn as_u32(&self) -> Option<u32> {
+    /// Returns `None` if the value overflows `u32`.
+    fn as_u32(&self) -> Option<u32> {
         if let Some(v) = &self.int_value {
             return match v {
                 serde_json::Value::String(s) => s.parse().ok(),
-                serde_json::Value::Number(n) => n.as_u64().map(|n| n as u32),
+                serde_json::Value::Number(n) => n.as_u64().and_then(|n| u32::try_from(n).ok()),
                 _ => None,
             };
         }
@@ -114,8 +131,8 @@ impl OtlpValue {
     }
 
     /// Extract the first string from an array value (for finish_reasons).
-    pub fn first_array_string(&self) -> Option<String> {
-        self.array_value.as_ref()?.values.first()?.as_string()
+    fn first_array_str(&self) -> Option<&str> {
+        self.array_value.as_ref()?.values.first()?.as_str()
     }
 }
 
@@ -131,6 +148,8 @@ impl<'a> SpanAttrs<'a> {
         self.0.iter().find(|a| a.key == key).map(|a| &a.value)
     }
 
+    /// Return an owned `String` (allocates). Use for fields that go into
+    /// `StoredModelInference` owned-string fields.
     fn string(&self, key: &str) -> Option<String> {
         self.get(key)?.as_string()
     }
@@ -139,8 +158,9 @@ impl<'a> SpanAttrs<'a> {
         self.get(key)?.as_u32()
     }
 
-    fn first_array_string(&self, key: &str) -> Option<String> {
-        self.get(key)?.first_array_string()
+    /// Borrow the first string element of an array attribute (no allocation).
+    fn first_array_str(&self, key: &str) -> Option<&'a str> {
+        self.get(key)?.first_array_str()
     }
 }
 
@@ -173,7 +193,8 @@ pub fn otlp_span_to_stored_model_inference(span: &OtlpSpan) -> StoredModelInfere
     let start_ns: u128 = span.start_time_unix_nano.parse().unwrap_or(0);
     let end_ns: u128 = span.end_time_unix_nano.parse().unwrap_or(0);
     let response_time_ms = if end_ns > start_ns {
-        Some(((end_ns - start_ns) / 1_000_000) as u32)
+        let ms = (end_ns - start_ns) / 1_000_000;
+        Some(u32::try_from(ms).unwrap_or(u32::MAX))
     } else {
         None
     };
@@ -184,8 +205,8 @@ pub fn otlp_span_to_stored_model_inference(span: &OtlpSpan) -> StoredModelInfere
 
     // Finish reason: from the array attribute `gen_ai.response.finish_reasons`
     let finish_reason = attrs
-        .first_array_string("gen_ai.response.finish_reasons")
-        .map(|s| parse_finish_reason(&s));
+        .first_array_str("gen_ai.response.finish_reasons")
+        .map(parse_finish_reason);
 
     // The raw request/response aren't available from OTel traces in a standard
     // form — the closest we have is `gen_ai.input.messages` / `gen_ai.output.messages`
