@@ -1,5 +1,5 @@
-use crate::error::{Error, ErrorDetails};
-use crate::inference::types::ApiType;
+use tensorzero_error::{Error, ErrorDetails};
+use tensorzero_types::ApiType;
 
 pub const THINK_TAG: &str = "<think>";
 pub const THINK_TAG_LEN: usize = THINK_TAG.len();

@@ -1,24 +1,21 @@
-use axum::http;
 use bytes::Bytes;
 use futures::{Stream, stream::Peekable};
+use http;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, map::Entry};
 use std::{collections::HashMap, pin::Pin};
 use uuid::Uuid;
 
-use crate::{
-    error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
-    http::{TensorZeroEventSource, TensorzeroRequestBuilder, TensorzeroResponseWrapper},
-    inference::types::{
-        ProviderInferenceResponseChunk,
-        batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
-        extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
-        extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
-        resolved_input::{FileUrl, LazyFile},
-        usage::ApiType,
-    },
-    model::ModelProviderRequestInfo,
+use tensorzero_error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use tensorzero_http::{TensorZeroEventSource, TensorzeroRequestBuilder, TensorzeroResponseWrapper};
+use tensorzero_inference_types::{
+    FileUrl, LazyFile, ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
+    ProviderInferenceResponseChunk,
+    credentials::ModelProviderRequestInfo,
+    extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
+    extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
 };
+use tensorzero_types::ApiType;
 
 pub struct JsonlBatchFileInfo {
     pub provider_type: String,
@@ -999,7 +996,7 @@ pub async fn peek_first_chunk<
 /// We also update the last_tool_name to the new name.
 /// If the tool call name does not change, we return None.
 /// We do not update the last_tool_name in this case.
-pub(crate) fn check_new_tool_call_name(
+pub fn check_new_tool_call_name(
     new_name: String,
     last_tool_name: &mut Option<String>,
 ) -> Option<String> {
@@ -1046,12 +1043,12 @@ mod tests {
 
     use serde_json::json;
 
-    use crate::inference::types::{
+    use futures::{StreamExt, stream};
+    use tensorzero_inference_types::{
         ContentBlockChunk, TextChunk,
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
         extra_headers::{DynamicExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders},
     };
-    use futures::{StreamExt, stream};
 
     use super::*;
 
@@ -1785,7 +1782,7 @@ mod tests {
 
     #[test]
     fn test_delete_json_pointer_errors() {
-        let logs_contain = crate::utils::testing::capture_logs();
+        let logs_contain = crate::test_helpers::capture_logs();
         let mut obj = serde_json::json!({"other": "value"});
         delete_json_pointer(&mut obj, "/object1").unwrap();
         assert!(logs_contain(
@@ -1853,7 +1850,7 @@ mod tests {
     #[expect(clippy::unnecessary_wraps)]
     fn ok_make_output(
         value: serde_json::Value,
-    ) -> Result<ProviderBatchInferenceOutput, crate::error::Error> {
+    ) -> Result<ProviderBatchInferenceOutput, tensorzero_error::Error> {
         let id = value
             .get("custom_id")
             .and_then(|v| v.as_str())
@@ -1863,7 +1860,7 @@ mod tests {
             id,
             output: vec![],
             raw_response: value.to_string(),
-            usage: crate::inference::types::Usage::default(),
+            usage: tensorzero_inference_types::Usage::default(),
             finish_reason: None,
         })
     }
@@ -1964,8 +1961,8 @@ mod tests {
             make_batch_file_info(),
             ApiType::ChatCompletions,
             |_value: serde_json::Value| {
-                Err(crate::error::Error::new(
-                    crate::error::ErrorDetails::InternalError {
+                Err(tensorzero_error::Error::new(
+                    tensorzero_error::ErrorDetails::InternalError {
                         message: "make_output failed".to_string(),
                     },
                 ))

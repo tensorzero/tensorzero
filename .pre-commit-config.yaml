@@ -21,6 +21,7 @@ repos:
         exclude: |
           (?x)^(
               crates/tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
+              crates/tensorzero-providers/src/gcp_vertex_gemini/mod\.rs|
               ci/dummy-gcp-credentials\.json|
               crates/tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
