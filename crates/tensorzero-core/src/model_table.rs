@@ -636,7 +636,7 @@ fn load_credential(
             }
         }
         CredentialLocation::Path(path) => match fs::read_to_string(path) {
-            Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+            Ok(contents) => Ok(Credential::Static(SecretString::from(contents))),
             Err(e) => {
                 if skip_credential_validation() {
                     if e2e_skip_credential_validation() {
