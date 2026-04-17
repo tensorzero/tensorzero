@@ -1206,8 +1206,7 @@ async fn upload_oom_snapshot(
 mod tests {
     use super::*;
     use crate::llm_query::extract_text_from_response;
-    use crate::tensorzero_client::MockTensorZeroClient;
-    use tensorzero_core::client::ClientInferenceParams;
+    use crate::tensorzero_client::{MockTensorZeroClient, PoolInferenceParams};
     use tensorzero_types::{
         ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, InputMessageContent,
         Usage,
@@ -1249,7 +1248,7 @@ mod tests {
         }
     }
 
-    fn first_inference_text(params: &ClientInferenceParams) -> String {
+    fn first_inference_text(params: &PoolInferenceParams) -> String {
         params
             .input
             .messages

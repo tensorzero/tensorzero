@@ -11,10 +11,9 @@ use crate::runtime::{
     RuntimeMode, RuntimeParams, spawn_child_runtime,
 };
 use crate::state::OomSnapshotConfig;
-use crate::tensorzero_client::TensorZeroClient;
+use crate::tensorzero_client::{PoolInferenceParams, TensorZeroClient};
 use crate::ts_checker::TsCheckerPool;
 use durable::ControlFlow;
-use tensorzero_core::client::ClientInferenceParams;
 use tensorzero_types::{
     ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, Input, InputMessage,
     InputMessageContent, Role, Text,
@@ -149,7 +148,7 @@ async fn llm_query_inner(
         let messages = vec![make_user_message(vec![user_text])];
         let response = rlm_permit
             .run_with_cancellation(run_inference(
-                ClientInferenceParams {
+                PoolInferenceParams {
                     function_name: Some("rlm_text_analysis".to_string()),
                     episode_id: Some(rlm_state.episode_id),
                     input: Input {
