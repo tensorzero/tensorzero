@@ -313,7 +313,7 @@ If unset, no API key will be sent.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none`.
 
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
@@ -831,7 +831,7 @@ Defines the location of the API key for the Anthropic provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none`.
 
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
@@ -1243,7 +1243,7 @@ Defines the location of the API key for the Azure OpenAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none`.
 
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
@@ -1305,7 +1305,7 @@ Defines the location of the API key for the DeepSeek provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.deepseek_chat.providers.deepseek]
@@ -1346,7 +1346,7 @@ Defines the location of the API key for the Fireworks provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models."llama-3.1-8b-instruct".providers.fireworks]
@@ -1585,7 +1585,7 @@ Defines the location of the API key for the Google AI Studio Gemini provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models."gemini-2.5-flash".providers.google_ai_studio_gemini]
@@ -1627,7 +1627,7 @@ Defines the location of the API key for the Groq provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.llama4_scout_17b_16e_instruct.providers.groq]
@@ -1687,7 +1687,7 @@ Defines the location of the API key for the Hyperbolic provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models."openai/gpt-oss-20b".providers.hyperbolic]
@@ -1729,7 +1729,7 @@ Defines the location of the API key for the Mistral provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models."open-mistral-nemo".providers.mistral]
@@ -1806,7 +1806,7 @@ Defines the location of the API key for the OpenAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.gpt-4o-mini.providers.openai]
@@ -1941,7 +1941,7 @@ Defines the location of the API key for the OpenRouter provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.gpt4_turbo.providers.openrouter]
@@ -1998,7 +1998,7 @@ Defines the location of the API key for the SGLang provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.llama.providers.sglang]
@@ -2024,7 +2024,7 @@ Defines the location of the API key for the Together AI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.llama3_3_70b_instruct_turbo.providers.together]
@@ -2098,7 +2098,7 @@ Defines the location of the API key for the vLLM provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models."phi-3.5-mini-instruct".providers.vllm]
@@ -2124,7 +2124,7 @@ Defines the location of the API key for the xAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.grok_4_1_fast_non_reasoning.providers.xai]
@@ -2181,7 +2181,7 @@ Defines the location of the API key for the TGI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [models.phi_4.providers.tgi]
@@ -2425,7 +2425,7 @@ Defines the location of the API key for the OpenAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [embedding_models.openai-text-embedding-3-small.providers.openai]
@@ -2472,7 +2472,7 @@ Defines the default location of the API key for Anthropic models.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.anthropic.defaults]
@@ -2496,7 +2496,7 @@ Defines the default location of the API key for Azure models.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.azure.defaults]
@@ -2519,7 +2519,7 @@ Defines the location of the API key for the DeepSeek provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.deepseek.defaults]
@@ -2542,7 +2542,7 @@ Defines the location of the API key for the Fireworks provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.fireworks.defaults]
@@ -2713,7 +2713,7 @@ Defines the location of the API key for the Google AI Studio provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.google_ai_studio.defaults]
@@ -2736,7 +2736,7 @@ Defines the location of the API key for the Groq provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.groq.defaults]
@@ -2759,7 +2759,7 @@ Defines the location of the API key for the Hyperbolic provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.hyperbolic.defaults]
@@ -2782,7 +2782,7 @@ Defines the location of the API key for the Mistral provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.mistral.defaults]
@@ -2805,7 +2805,7 @@ Defines the location of the API key for the OpenAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.openai.defaults]
@@ -2828,7 +2828,7 @@ Defines the location of the API key for the OpenRouter provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.openrouter.defaults]
@@ -2851,7 +2851,7 @@ Defines the location of the API key for the Together provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.together.defaults]
@@ -2909,7 +2909,7 @@ Defines the location of the API key for the xAI provider.
 
 This field can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `path::FILE_PATH`, and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
 
 ```toml title="tensorzero.toml"
 [provider_types.xai.defaults]

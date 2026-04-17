@@ -74,7 +74,7 @@ The `api_key_location` field in your model provider configuration specifies how 
   api_key_location = "none"
   ```
 
-- If your endpoint requires an API key, you have two options:
+- If your endpoint requires an API key, you have three options:
   1. Configure it in advance through an environment variable:
 
      ```toml
@@ -83,7 +83,15 @@ The `api_key_location` field in your model provider configuration specifies how 
 
      You'll need to set the environment variable before starting the gateway.
 
-  2. Provide it at inference time:
+  2. Configure it in advance through a file path:
+
+      ```toml
+      api_key_location = "path::/path/to/api_key_file"
+      ```
+
+      The gateway reads the API key from the file at startup.
+
+  3. Provide it at inference time:
      ```toml
      api_key_location = "dynamic::ARGUMENT_NAME"
      ```
