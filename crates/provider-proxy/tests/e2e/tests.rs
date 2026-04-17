@@ -61,6 +61,17 @@ async fn start_target_server(
                     yield Ok(Event::default().data("[DONE]"));
                 })
             }),
+        )
+        .route(
+            "/slow-short",
+            post(|| async {
+                Sse::new(async_stream::stream! {
+                    yield Ok::<_, String>(Event::default().data("Hello"));
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    yield Ok(Event::default().data("World"));
+                    yield Ok(Event::default().data("[DONE]"));
+                })
+            }),
         );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -718,4 +729,150 @@ async fn test_stream_body() {
     );
     // Second line is the request body (for debugging) - may be empty for POST without body
     let _second_line = lines.next();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_skip_write_when_newer_file_exists() {
+    // Verify that if a concurrent run wrote a newer file at the cache path after our
+    // request started, the in-flight request skips its own write and leaves the newer
+    // file untouched.
+    let (server_started_tx, server_started_rx) = oneshot::channel();
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
+    let _proxy_handle = tokio::spawn(run_server(
+        Args {
+            cache_path: temp_dir.path().to_path_buf(),
+            port: 0,
+            sanitize_traceparent: true,
+            sanitize_bearer_auth: true,
+            sanitize_aws_sigv4: true,
+            health_port: 0,
+            sanitize_model_headers: true,
+            remove_user_agent_non_amazon: false,
+            mode: CacheMode::ReadWrite,
+            save_request_body: true,
+        },
+        server_started_tx,
+    ));
+
+    let (_shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let shutdown_fut = async {
+        shutdown_rx.await.unwrap();
+    };
+
+    let (target_server_addr, _target_server_handle) = start_target_server(shutdown_fut).await;
+
+    let proxy_addr = server_started_rx.await.unwrap();
+
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://{proxy_addr}")).unwrap())
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    // Warmup: make a request so the cache file is written and we learn its path.
+    let request_body = r#"{"test": "skip_write_when_newer_file_exists"}"#;
+    let warmup_stream = client
+        .post(format!("http://{target_server_addr}/slow-short"))
+        .body(request_body)
+        .eventsource()
+        .await
+        .unwrap();
+    let mut warmup_stream = std::pin::pin!(warmup_stream);
+    while let Some(event) = warmup_stream.next().await {
+        let event = event.unwrap();
+        if let reqwest_sse_stream::Event::Message(event) = event
+            && event.data == "[DONE]"
+        {
+            break;
+        }
+    }
+
+    // Wait for save_cache_body to finish writing the file.
+    let cache_file_path = loop {
+        let temp_path = temp_dir.path().to_path_buf();
+        let found_file = tokio::task::spawn_blocking(move || {
+            std::fs::read_dir(temp_path)
+                .unwrap()
+                .filter_map(|f| f.ok())
+                .find(|f| f.path().to_string_lossy().contains("127.0.0.1"))
+                .map(|f| f.path())
+        })
+        .await
+        .unwrap();
+        if let Some(path) = found_file {
+            break path;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
+
+    // Delete the file so the next identical request is a cache miss and will try to write.
+    std::fs::remove_file(&cache_file_path).unwrap();
+
+    // Start a second request. While its upstream is still sleeping, we will drop in a
+    // "newer" file at the cache path. When save_cache_body runs, it should detect the
+    // newer mtime and skip the write.
+    let second_stream = client
+        .post(format!("http://{target_server_addr}/slow-short"))
+        .body(request_body)
+        .eventsource()
+        .await
+        .unwrap();
+    let mut second_stream = std::pin::pin!(second_stream);
+
+    // Consume the Open + "Hello" events so we know request_start_time has been captured
+    // inside check_cache and the upstream /slow-short is now sleeping.
+    let open = second_stream.next().await.unwrap().unwrap();
+    assert_eq!(open, reqwest_sse_stream::Event::Open);
+    let hello = second_stream.next().await.unwrap().unwrap();
+    assert_eq!(
+        hello,
+        reqwest_sse_stream::Event::Message(reqwest_sse_stream::MessageEvent {
+            event: String::new(),
+            data: "Hello".to_string(),
+            id: String::new(),
+        })
+    );
+
+    // Sleep briefly so the manual file's mtime is strictly after request_start_time,
+    // regardless of filesystem/clock resolution.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let concurrent_content = "CONCURRENT_RUN_WROTE_THIS";
+    std::fs::write(&cache_file_path, concurrent_content).unwrap();
+
+    // Finish consuming the stream so the proxy receives the full upstream body and
+    // fires the save_cache_body callback.
+    while let Some(event) = second_stream.next().await {
+        let event = event.unwrap();
+        if let reqwest_sse_stream::Event::Message(event) = event
+            && event.data == "[DONE]"
+        {
+            break;
+        }
+    }
+
+    // Give save_cache_body a chance to run.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // The cache file should still contain the manually-written "concurrent run" content,
+    // because save_cache_body saw the newer mtime and skipped its own rename.
+    let final_content = std::fs::read_to_string(&cache_file_path).unwrap();
+    assert_eq!(
+        final_content, concurrent_content,
+        "save_cache_body should have skipped the write because a newer file was present"
+    );
+
+    // Sanity check: no leftover NamedTempFile tempfiles should be sitting in the dir.
+    let files: Vec<_> = std::fs::read_dir(temp_dir.path())
+        .unwrap()
+        .map(|f| f.unwrap().path())
+        .collect();
+    assert_eq!(
+        files.len(),
+        1,
+        "expected only the cache file, got: {files:?}"
+    );
 }
