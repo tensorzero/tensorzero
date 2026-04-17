@@ -791,6 +791,8 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_provider_name == "gcp_vertex_gemini" {
+        200
     } else {
         100
     };
@@ -2269,6 +2271,8 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let inference_params = inference_params.get("chat_completion").unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_provider_name == "gcp_vertex_gemini" {
+        200
     } else {
         100
     };
@@ -3487,6 +3491,8 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_provider_name == "gcp_vertex_gemini" {
+        200
     } else {
         100
     };
