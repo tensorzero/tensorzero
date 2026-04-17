@@ -1691,6 +1691,7 @@ async fn write_inference<T: InferenceQueries + ModelInferenceQueries + Send + Sy
     futures::future::join_all(futures).await;
 }
 
+/// Construct an `InferenceResponse` from core-internal `InferenceResult`.
 pub fn inference_response_from_result(
     inference_result: InferenceResult,
     episode_id: Uuid,
@@ -1734,7 +1735,7 @@ pub fn inference_response_from_result(
                     debug_assert!(
                         &*r.provider_type != "tensorzero::relay",
                         "Relay responses should always have `relay_raw_response` populated; \
-                             got `provider_type`={} without `relay_raw_response`",
+                         got `provider_type`={} without `relay_raw_response`",
                         r.provider_type
                     );
                     let api_type = r

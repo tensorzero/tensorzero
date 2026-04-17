@@ -8897,6 +8897,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tensorzero-core",
+ "tensorzero-inference-types",
  "tensorzero-ts-types",
  "tensorzero-types",
  "thiserror 2.0.18",
