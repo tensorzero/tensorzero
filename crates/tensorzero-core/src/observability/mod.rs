@@ -94,6 +94,7 @@ use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod disjoint_intervals;
 mod exporter_wrapper;
+pub mod genai_conventions;
 pub mod internal_metrics;
 pub mod overhead_timing;
 pub mod request_logging;

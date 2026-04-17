@@ -648,6 +648,11 @@ pub struct OtlpTracesConfig {
     pub format: Option<OtlpTracesFormat>,
     /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
     pub extra_headers: Option<HashMap<String, String>>,
+    /// When `format = "opentelemetry"`, emit the content-carrying GenAI semantic-convention attributes
+    /// (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`,
+    /// `gen_ai.tool.definitions`) on the `model_provider_inference` span. These contain full
+    /// prompt/response content and are opt-in even when traces are enabled. Defaults to `false`.
+    pub include_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
