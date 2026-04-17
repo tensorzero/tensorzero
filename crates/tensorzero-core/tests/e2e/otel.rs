@@ -15,7 +15,7 @@ use tensorzero::{
     InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role, Usage,
 };
 use tensorzero::{
-    InferenceParams,
+    InferenceParams, System,
     test_helpers::{make_embedded_gateway_with_config, make_embedded_gateway_with_rate_limiting},
 };
 use tensorzero_core::observability::{
@@ -1433,4 +1433,191 @@ pub async fn test_capture_feedback_spans() {
         None,
         "feedback span should have no children"
     );
+}
+
+// =============================================================================
+// GenAI content-capture attributes (include_content flag)
+// =============================================================================
+
+fn run_inference_with_config_and_system(
+    config: &str,
+    system: Option<&str>,
+) -> CapturingOtelExporter {
+    let system_owned = system.map(|s| System::Text(s.to_string()));
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let exporter = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
+        let client = make_embedded_gateway_with_config(config).await;
+        let _res = client
+            .inference(ClientInferenceParams {
+                model_name: Some("dummy::good".to_string()),
+                input: Input {
+                    system: system_owned,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "What is your name?".to_string(),
+                        })],
+                    }],
+                },
+                params: InferenceParams {
+                    chat_completion: ChatCompletionInferenceParams {
+                        max_tokens: Some(1000),
+                        ..Default::default()
+                    },
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        drop(client);
+        exporter
+    });
+    drop(runtime);
+    exporter
+}
+
+fn find_model_provider_span(spans: &SpanMap) -> &SpanData {
+    for children in spans.span_children.values() {
+        for child in children {
+            if child.name == "model_provider_inference" {
+                return child;
+            }
+        }
+    }
+    for root in &spans.root_spans {
+        if root.name == "model_provider_inference" {
+            return root;
+        }
+    }
+    panic!("model_provider_inference span not found");
+}
+
+#[test]
+fn test_capture_content_off_by_default_omits_content_attrs() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "opentelemetry"
+    "#;
+
+    let exporter = run_inference_with_config_and_system(config, Some("be helpful"));
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    // Sanity: existing gen_ai.* attrs still emitted.
+    assert_eq!(attrs["gen_ai.operation.name"], "chat".into());
+    assert_eq!(attrs["gen_ai.system"], "dummy".into());
+
+    // Content attrs must be absent without include_content.
+    assert!(!attrs.contains_key("gen_ai.input.messages"));
+    assert!(!attrs.contains_key("gen_ai.output.messages"));
+    assert!(!attrs.contains_key("gen_ai.system_instructions"));
+    assert!(!attrs.contains_key("gen_ai.tool.definitions"));
+}
+
+#[test]
+fn test_capture_content_non_streaming_emits_input_output_system() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "opentelemetry"
+    include_content = true
+    "#;
+
+    let exporter = run_inference_with_config_and_system(config, Some("be helpful"));
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    let input_messages_attr = attrs
+        .get("gen_ai.input.messages")
+        .expect("gen_ai.input.messages should be set")
+        .as_str();
+    let input_messages: serde_json::Value = serde_json::from_str(input_messages_attr.as_ref())
+        .expect("gen_ai.input.messages should be valid JSON");
+    assert_eq!(
+        input_messages,
+        serde_json::json!([
+            {
+                "role": "user",
+                "parts": [{"type": "text", "content": "What is your name?"}]
+            }
+        ])
+    );
+
+    let output_messages_attr = attrs
+        .get("gen_ai.output.messages")
+        .expect("gen_ai.output.messages should be set")
+        .as_str();
+    let output_messages: serde_json::Value = serde_json::from_str(output_messages_attr.as_ref())
+        .expect("gen_ai.output.messages should be valid JSON");
+    // The dummy::good provider returns a single assistant text message.
+    let out_arr = output_messages.as_array().expect("output is array");
+    assert_eq!(out_arr.len(), 1);
+    assert_eq!(out_arr[0]["role"], serde_json::json!("assistant"));
+    let parts = out_arr[0]["parts"].as_array().expect("parts is array");
+    assert!(!parts.is_empty());
+    assert_eq!(parts[0]["type"], serde_json::json!("text"));
+
+    let system_attr = attrs
+        .get("gen_ai.system_instructions")
+        .expect("gen_ai.system_instructions should be set")
+        .as_str();
+    let system: serde_json::Value = serde_json::from_str(system_attr.as_ref())
+        .expect("gen_ai.system_instructions should be valid JSON");
+    assert_eq!(
+        system,
+        serde_json::json!([{"type": "text", "content": "be helpful"}])
+    );
+
+    // No tools configured on the default function — tool.definitions omitted.
+    assert!(!attrs.contains_key("gen_ai.tool.definitions"));
+}
+
+#[test]
+fn test_capture_content_omits_system_when_absent() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "opentelemetry"
+    include_content = true
+    "#;
+
+    let exporter = run_inference_with_config_and_system(config, None);
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    assert!(attrs.contains_key("gen_ai.input.messages"));
+    assert!(attrs.contains_key("gen_ai.output.messages"));
+    assert!(!attrs.contains_key("gen_ai.system_instructions"));
+    assert!(!attrs.contains_key("gen_ai.tool.definitions"));
+}
+
+#[test]
+fn test_capture_content_ignored_for_openinference_format() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "openinference"
+    include_content = true
+    "#;
+
+    let exporter = run_inference_with_config_and_system(config, Some("be helpful"));
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    // OpenInference format uses its own attributes; GenAI content attrs are not emitted.
+    assert!(!attrs.contains_key("gen_ai.input.messages"));
+    assert!(!attrs.contains_key("gen_ai.output.messages"));
+    assert!(!attrs.contains_key("gen_ai.system_instructions"));
+    assert!(!attrs.contains_key("gen_ai.tool.definitions"));
+    // OpenInference's own content attrs still present (input.value/output.value).
+    assert_eq!(attrs["input.mime_type"], "application/json".into());
+    assert!(attrs.contains_key("input.value"));
+    assert!(attrs.contains_key("output.value"));
 }

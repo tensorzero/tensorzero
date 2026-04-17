@@ -39,6 +39,7 @@ use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::usage::aggregate_usage_from_single_streaming_model_inference;
 use crate::model_table::ProviderKind;
+use crate::observability::genai_conventions;
 use crate::observability::internal_metrics::{
     TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
 };
@@ -2595,28 +2596,53 @@ pub struct StreamResponseAndMessages {
 }
 
 impl ModelProvider {
-    fn apply_otlp_span_fields_input(&self, otlp_config: &OtlpConfig, span: &Span) {
-        let traces = match &otlp_config.traces {
+    fn apply_otlp_span_fields_input(&self, request: ModelProviderRequest<'_>, span: &Span) {
+        let traces = match &request.otlp_config.traces {
             Some(t) => t,
             None => return,
         };
-        if traces.enabled.unwrap_or(false) {
-            match &traces.format {
-                None | Some(OtlpTracesFormat::OpenTelemetry) => {
-                    span.set_attribute("gen_ai.operation.name", "chat");
-                    span.set_attribute("gen_ai.system", self.genai_system_name());
+        if !traces.enabled.unwrap_or(false) {
+            return;
+        }
+        match &traces.format {
+            None | Some(OtlpTracesFormat::OpenTelemetry) => {
+                span.set_attribute("gen_ai.operation.name", "chat");
+                span.set_attribute("gen_ai.system", self.genai_system_name());
 
-                    if let Some(model_name) = self.genai_model_name() {
-                        span.set_attribute("gen_ai.request.model", model_name.to_string());
+                if let Some(model_name) = self.genai_model_name() {
+                    span.set_attribute("gen_ai.request.model", model_name.to_string());
+                }
+
+                if traces.include_content.unwrap_or(false) {
+                    let messages = genai_conventions::to_genai_messages(&request.request.messages);
+                    span.set_attribute(
+                        "gen_ai.input.messages",
+                        serde_json::to_string(&messages).unwrap_or_default(),
+                    );
+                    if let Some(instructions) = genai_conventions::to_genai_system_instructions(
+                        request.request.system.as_deref(),
+                    ) {
+                        span.set_attribute(
+                            "gen_ai.system_instructions",
+                            serde_json::to_string(&instructions).unwrap_or_default(),
+                        );
+                    }
+                    if let Some(tool_defs) = genai_conventions::to_genai_tool_definitions(
+                        request.request.tool_config.as_deref(),
+                    ) {
+                        span.set_attribute(
+                            "gen_ai.tool.definitions",
+                            serde_json::to_string(&tool_defs).unwrap_or_default(),
+                        );
                     }
                 }
-                Some(OtlpTracesFormat::OpenInference) => {
-                    span.set_attribute("openinference.span.kind", "LLM");
-                    span.set_attribute("llm.system", self.genai_system_name());
+            }
+            Some(OtlpTracesFormat::OpenInference) => {
+                span.set_attribute("openinference.span.kind", "LLM");
+                span.set_attribute("llm.system", self.genai_system_name());
 
-                    if let Some(model_name) = self.genai_model_name() {
-                        span.set_attribute("llm.model_name", model_name.to_string());
-                    }
+                if let Some(model_name) = self.genai_model_name() {
+                    span.set_attribute("llm.model_name", model_name.to_string());
                 }
             }
         }
@@ -2630,11 +2656,26 @@ impl ModelProvider {
         resp: &Result<ProviderInferenceResponse, Error>,
     ) {
         let traces_format = otlp_config.traces.as_ref().and_then(|t| t.format.clone());
+        let include_content = otlp_config
+            .traces
+            .as_ref()
+            .is_some_and(|t| t.enabled.unwrap_or(false) && t.include_content.unwrap_or(false));
         match resp {
             Ok(response) => {
                 otlp_config.apply_usage_to_model_provider_span(span, &response.usage);
                 match traces_format {
-                    None | Some(OtlpTracesFormat::OpenTelemetry) => {}
+                    None | Some(OtlpTracesFormat::OpenTelemetry) => {
+                        if include_content {
+                            let out_messages = genai_conventions::to_genai_output(
+                                &response.output,
+                                response.finish_reason,
+                            );
+                            span.set_attribute(
+                                "gen_ai.output.messages",
+                                serde_json::to_string(&out_messages).unwrap_or_default(),
+                            );
+                        }
+                    }
                     Some(OtlpTracesFormat::OpenInference) => {
                         // If we ever add providers that don't use JSON, we'll need to update this.
                         span.set_attribute("input.mime_type", "application/json");
@@ -2717,7 +2758,7 @@ impl ModelProvider {
         clients: &InferenceClients,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
-        self.apply_otlp_span_fields_input(request.otlp_config, &span);
+        self.apply_otlp_span_fields_input(request, &span);
 
         let provider_request = ProviderInferenceRequest {
             request: request.request,
@@ -2960,7 +3001,7 @@ impl ModelProvider {
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
     ) -> Result<StreamAndRawRequest, Error> {
-        self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
+        self.apply_otlp_span_fields_input(request, &Span::current());
 
         let provider_request = ProviderInferenceRequest {
             request: request.request,

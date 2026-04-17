@@ -23,12 +23,10 @@ use mime::MediaType;
 use serde::Serialize;
 use serde_json::Value;
 use tensorzero_inference_types::{
-    ContentBlock, ContentBlockOutput, LazyFile, OpenAICustomTool, OpenAICustomToolFormat,
-    RequestMessage,
+    ContentBlock, ContentBlockOutput, FunctionToolDef, LazyFile, OpenAICustomTool,
+    OpenAICustomToolFormat, ProviderToolCallConfig, RequestMessage,
 };
 use tensorzero_types::{FinishReason, Role};
-
-use crate::tool::config::{FunctionToolConfig, ToolCallConfig};
 
 /// Message role as defined by the GenAI semantic conventions.
 ///
@@ -171,15 +169,11 @@ pub fn to_genai_system_instructions(system: Option<&str>) -> Option<Vec<GenAiPar
 }
 
 pub fn to_genai_tool_definitions(
-    tool_config: Option<&ToolCallConfig>,
+    tool_config: Option<&ProviderToolCallConfig>,
 ) -> Option<Vec<GenAiToolDefinition>> {
     let config = tool_config?;
     let mut defs: Vec<GenAiToolDefinition> = Vec::new();
-    for tool in config
-        .static_tools_available
-        .iter()
-        .chain(config.dynamic_tools_available.iter())
-    {
+    for tool in &config.tools {
         defs.push(function_tool_to_definition(tool));
     }
     for tool in &config.openai_custom_tools {
@@ -327,11 +321,11 @@ fn finish_reason_to_string(reason: FinishReason) -> String {
     .to_owned()
 }
 
-fn function_tool_to_definition(tool: &FunctionToolConfig) -> GenAiToolDefinition {
+fn function_tool_to_definition(tool: &FunctionToolDef) -> GenAiToolDefinition {
     GenAiToolDefinition::Function {
-        name: tool.name().to_owned(),
-        description: non_empty(tool.description()),
-        parameters: tool.parameters().clone(),
+        name: tool.name.clone(),
+        description: non_empty(&tool.description),
+        parameters: tool.parameters.clone(),
     }
 }
 
@@ -353,26 +347,22 @@ fn non_empty(s: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use futures::FutureExt;
     use googletest::prelude::*;
     use googletest_matchers::matches_json_literal;
     use serde_json::{Value, json};
     use tensorzero_inference_types::{
-        AllowedTools, AllowedToolsChoice, ContentBlock, ContentBlockOutput, FileUrl, LazyFile,
-        OpenAICustomTool, PendingObjectStoreFile, RequestMessage,
+        AllowedTools, AllowedToolsChoice, ContentBlock, ContentBlockOutput, FileUrl,
+        FunctionToolDef, LazyFile, OpenAICustomTool, PendingObjectStoreFile, ProviderTool,
+        ProviderToolCallConfig, ProviderToolScope, RequestMessage,
     };
     use tensorzero_types::{
         Base64FileMetadata, FinishReason, ObjectStorageFile, ObjectStoragePointer, Role,
-        StorageKind, StoragePath, Text, Thought, ToolCall, ToolResult, Unknown,
+        StorageKind, StoragePath, Text, Thought, ToolCall, ToolChoice, ToolResult, Unknown,
     };
     use url::Url;
 
     use super::*;
-    use crate::jsonschema_util::JSONSchema;
-    use crate::tool::config::{DynamicToolConfig, StaticToolConfig};
-    use crate::tool::wire::ToolChoice;
 
     fn to_json(value: &impl Serialize) -> Value {
         serde_json::to_value(value).expect("serialization should succeed")
@@ -845,14 +835,9 @@ mod tests {
 
     // ── Tool definitions ────────────────────────────────────────────────
 
-    fn make_schema(val: Value) -> JSONSchema {
-        JSONSchema::from_value(val).expect("valid schema")
-    }
-
-    fn empty_tool_config() -> ToolCallConfig {
-        ToolCallConfig {
-            static_tools_available: Vec::new(),
-            dynamic_tools_available: Vec::new(),
+    fn empty_provider_tool_config() -> ProviderToolCallConfig {
+        ProviderToolCallConfig {
+            tools: Vec::new(),
             provider_tools: Vec::new(),
             openai_custom_tools: Vec::new(),
             tool_choice: ToolChoice::Auto,
@@ -871,22 +856,19 @@ mod tests {
 
     #[gtest]
     fn tool_definitions_none_when_empty() {
-        let config = empty_tool_config();
+        let config = empty_provider_tool_config();
         expect_that!(to_genai_tool_definitions(Some(&config)), none());
     }
 
     #[gtest]
-    fn tool_definitions_static_tool() {
-        let mut config = empty_tool_config();
-        config
-            .static_tools_available
-            .push(FunctionToolConfig::Static(Arc::new(StaticToolConfig {
-                description: "Get current weather".to_string(),
-                parameters: make_schema(json!({"type": "object"})),
-                name: "get_weather".to_string(),
-                key: "get_weather".to_string(),
-                strict: false,
-            })));
+    fn tool_definitions_function_tool() {
+        let mut config = empty_provider_tool_config();
+        config.tools.push(FunctionToolDef {
+            name: "get_weather".to_string(),
+            description: "Get current weather".to_string(),
+            parameters: json!({"type": "object"}),
+            strict: false,
+        });
         expect_that!(
             to_json(&to_genai_tool_definitions(Some(&config))),
             matches_json_literal!([
@@ -901,23 +883,21 @@ mod tests {
     }
 
     #[gtest]
-    fn tool_definitions_dynamic_tool_and_openai_custom() {
-        let mut config = empty_tool_config();
-        config
-            .dynamic_tools_available
-            .push(FunctionToolConfig::Dynamic(DynamicToolConfig {
-                description: String::new(),
-                parameters: make_schema(json!({})),
-                name: "dyn".to_string(),
-                strict: false,
-            }));
+    fn tool_definitions_function_with_empty_description_and_openai_custom() {
+        let mut config = empty_provider_tool_config();
+        config.tools.push(FunctionToolDef {
+            name: "dyn".to_string(),
+            description: String::new(),
+            parameters: json!({}),
+            strict: false,
+        });
         config.openai_custom_tools.push(OpenAICustomTool {
             name: "custom".to_string(),
             description: Some("an openai custom tool".to_string()),
             format: None,
         });
         let value = to_json(&to_genai_tool_definitions(Some(&config)));
-        // Dynamic tool: empty description omitted.
+        // Function tool: empty description omitted.
         expect_that!(
             value.pointer("/0"),
             some(eq(&json!({
@@ -935,5 +915,15 @@ mod tests {
                 "description": "an openai custom tool"
             })))
         );
+    }
+
+    #[gtest]
+    fn tool_definitions_ignores_provider_tools() {
+        let mut config = empty_provider_tool_config();
+        config.provider_tools.push(ProviderTool {
+            scope: ProviderToolScope::Unscoped,
+            tool: json!({"type": "code_interpreter"}),
+        });
+        expect_that!(to_genai_tool_definitions(Some(&config)), none());
     }
 }
