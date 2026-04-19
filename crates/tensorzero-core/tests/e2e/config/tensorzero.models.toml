@@ -982,12 +982,12 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "test-embeddings"
 
-[embedding_models.gemini_embedding_001_openrouter]
+[embedding_models.qwen3_embedding_8b_openrouter]
 routing = ["openrouter"]
 
-[embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
+[embedding_models.qwen3_embedding_8b_openrouter.providers.openrouter]
 type = "openrouter"
-model_name = "google/gemini-embedding-001"
+model_name = "qwen/qwen3-embedding-8b"
 
 [embedding_models.multilingual-e5-together]
 routing = ["together"]
