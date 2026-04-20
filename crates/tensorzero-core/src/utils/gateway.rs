@@ -20,7 +20,7 @@ use serde::de::DeserializeOwned;
 use sqlx::ConnectOptions;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tensorzero_auth::postgres::AuthResult;
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, RuntimeFlavor};
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -112,11 +112,25 @@ impl Drop for GatewayHandle {
             // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
             // as well as reducing the number of log messages in the common case.
             if !deferred_tasks.is_empty() {
-                tokio::task::block_in_place(|| {
-                    tracing::info!("Waiting for deferred tasks to finish");
-                    Handle::current().block_on(deferred_tasks.wait());
-                    tracing::info!("Deferred tasks finished");
-                });
+                let handle = Handle::current();
+                match handle.runtime_flavor() {
+                    RuntimeFlavor::CurrentThread => {
+                        // `block_in_place` panics on the current-thread runtime, and
+                        // `Handle::block_on` from another thread cannot drive the single-threaded
+                        // runtime's existing tasks. Skip the synchronous drain here to avoid
+                        // deadlocking embedded current-thread runtimes during shutdown.
+                        tracing::info!(
+                            "Skipping deferred task drain on current-thread runtime during shutdown"
+                        );
+                    }
+                    _ => {
+                        tracing::info!("Waiting for deferred tasks to finish");
+                        tokio::task::block_in_place(|| {
+                            handle.block_on(deferred_tasks.wait());
+                        });
+                        tracing::info!("Deferred tasks finished");
+                    }
+                }
             }
         };
         // If we have a `DropWrapper` configured, call it with the `drop_self` function,
@@ -2176,5 +2190,49 @@ mod tests {
         )
         .await
         .expect("Gateway should start when auth is disabled even without Postgres");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_gateway_drop_skips_blocking_deferred_task_drain_on_current_thread_runtime() {
+        use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use tokio::sync::Mutex;
+
+        let config = Arc::new(Config::default());
+        let mut mock_client = MockClickHouseClient::new();
+        mock_client.expect_batcher_join_handle().returning(|| None);
+        mock_client
+            .expect_client_type()
+            .returning(|| ClickHouseClientType::Production);
+
+        let gateway = GatewayHandle::new_unit_test_data(
+            config,
+            GatewayHandleTestOptions {
+                clickhouse_client: Arc::new(mock_client),
+                postgres_healthy: true,
+            },
+        );
+
+        let completion = Arc::new(Mutex::new(false));
+        let completion_for_task = completion.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        gateway.app_state.deferred_tasks.spawn(async move {
+            let _ = rx.await;
+            *completion_for_task.lock().await = true;
+        });
+
+        drop(gateway);
+        tx.send(())
+            .expect("receiver should still be available after gateway drop");
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if *completion.lock().await {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("deferred task should still finish after gateway drop");
     }
 }
