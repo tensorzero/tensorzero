@@ -13,7 +13,7 @@ axum = { workspace = true }
 tracing = { version = "0.1.43", features = ["log", "release_max_level_debug"] }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-mimalloc = "0.1.48"
+mimalloc = "0.1.49"
 clap = { workspace = true }
 tower-http = { workspace = true, features = ["metrics", "decompression-gzip", "decompression-br", "decompression-zstd"] }
 metrics-exporter-prometheus = { workspace = true }
@@ -45,7 +45,7 @@ ts-bindings = ["dep:ts-rs", "tensorzero-core/ts-bindings", "tensorzero-optimizer
 
 [dev-dependencies]
 googletest = { workspace = true }
-rmcp = { version = "1.3.0", features = [
+rmcp = { version = "1.5.0", features = [
     "client",
     "transport-streamable-http-client-reqwest",
 ] }

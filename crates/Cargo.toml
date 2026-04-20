@@ -45,12 +45,12 @@ license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-deno_core = "0.397.0"
+deno_core = "0.398.0"
 reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"] }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 serde_with = { version = "3.18.0", default-features = false, features = ["macros"] }
-uuid = { version = "1.22.0", features = ["serde", "v7"] }
+uuid = { version = "1.23.1", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "1.0.6", features = ["preserve_order"] }
@@ -59,19 +59,19 @@ async-trait = "0.1.89"
 http = "1.4.0"
 infer = "0.19.0"
 tokio-stream = "0.1.15"
-tokio = { version = "1.51.1", features = ["full"] }
+tokio = { version = "1.52.1", features = ["full"] }
 tokio-util = { version = "0.7.17", features = ["rt", "time"] }
 tracing = { version = "0.1.43", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.102"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-clap = { version = "4.6.0", features = ["derive", "env"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
 http-body-util = "0.1.3"
 futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
-sse-stream = "0.2.1"
+sse-stream = "0.2.2"
 reqwest-sse-stream = { path = "reqwest-sse-stream" }
 minijinja = { version = "2.19.0", features = [
     "loader",
@@ -82,7 +82,7 @@ minijinja = { version = "2.19.0", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.7.0"
+google-cloud-auth = "1.9.0"
 object_store = { version = "0.13.2", features = ["serde", "aws", "gcp"] }
 arrow = { version = "58.1.0", default-features = false, features = ["json"] }
 parquet = { version = "58.1.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }

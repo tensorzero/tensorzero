@@ -40,7 +40,7 @@ tensorzero-ts-types = { path = "../tensorzero-ts-types", optional = true }
 ts-rs = { workspace = true, optional = true }
 evaluations = { path = "../evaluations" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
-indexmap = "2.13.1"
+indexmap = "2.14.0"
 
 [dev-dependencies]
 mockall = "0.14"
