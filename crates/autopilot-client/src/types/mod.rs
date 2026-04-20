@@ -148,6 +148,15 @@ pub enum AutopilotStatus {
     WaitingForAutoEvalExampleLabelingAnswers,
     WaitingForAutoEvalBehaviorSpecAnswers,
     WaitingForRetry,
+    /// The session emitted an error event but the underlying durable task
+    /// has not yet transitioned to a terminal state. The session may still
+    /// recover — the worker often emits follow-up events after a transient
+    /// internal error (e.g. a database connection blip) and resumes work.
+    /// Clients should keep polling; the status will transition either to an
+    /// actionable state on recovery, or to `Failed` if the task ultimately
+    /// dies. Distinct from `Failed` so clients can tell "task is gone" from
+    /// "task errored but is still running."
+    ErroredInProgress,
     Failed,
 }
 

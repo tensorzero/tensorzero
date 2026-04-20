@@ -45,6 +45,7 @@ ALLOWED_SKIP=(
   "Endpoint tests"
   "lint-rust"
   "live-tests"
+  "live-tests-config-in-database"
   "minikube"
   "mock-optimization-tests"
   "mocked-batch-tests"

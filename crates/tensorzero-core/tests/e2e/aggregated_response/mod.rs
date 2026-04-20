@@ -15,7 +15,6 @@ use crate::common::get_gateway_endpoint;
 #[tokio::test]
 async fn test_aggregated_response_chat_streaming() {
     let episode_id = Uuid::now_v7();
-    let random_suffix = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -26,7 +25,7 @@ async fn test_aggregated_response_chat_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": format!("Say hello in one sentence. {random_suffix}")
+                    "content": "Say hello in one sentence. deterministic-cache-test"
                 }
             ]
         },

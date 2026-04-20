@@ -34,7 +34,18 @@ workspace = true
 [dependencies]
 async-stream = { workspace = true }
 async-trait = { workspace = true }
-aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+# `default-features = false` avoids the legacy `hyper 0.14` + `rustls 0.21`
+# stack pulled in by `aws-smithy-runtime/tls-rustls`. See
+# https://github.com/smithy-lang/smithy-rs/issues/4576#issuecomment-4113177811
+# The feature list mirrors `aws-config`'s defaults (`default-https-client`,
+# `rt-tokio`, `credentials-process`, `sso`) plus `behavior-version-latest`.
+aws-config = { version = "1.8", default-features = false, features = [
+    "behavior-version-latest",
+    "default-https-client",
+    "rt-tokio",
+    "credentials-process",
+    "sso",
+] }
 aws-smithy-types = { version = "1.4.7", features = [
     "serde-deserialize",
     "serde-serialize",

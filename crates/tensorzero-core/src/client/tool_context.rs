@@ -6,8 +6,10 @@
 use async_trait::async_trait;
 use durable::SpawnOptions;
 use serde_json::Value as JsonValue;
+use tensorzero_types::ToolError;
 use tensorzero_types::ToolHandle;
 use tensorzero_types::tool_error::ToolResult;
+use tensorzero_types::tool_failure::NonControlToolError;
 use uuid::Uuid;
 
 use super::ClientInferenceParams;
@@ -32,4 +34,21 @@ pub trait ToolContextHelper: Send + Sync {
     ) -> ToolResult<ToolHandle>;
     async fn inference(&mut self, params: ClientInferenceParams) -> ToolResult<InferenceResponse>;
     async fn heartbeat(&mut self) -> ToolResult<()>;
+}
+
+/// Run a checkpointed inference call via [`ToolContextHelper`].
+///
+/// Validates that `episode_id` is `None` (it will be set from the context),
+/// then delegates to [`ToolContextHelper::inference`].
+pub async fn checkpointed_inference(
+    ctx: &mut dyn ToolContextHelper,
+    mut params: ClientInferenceParams,
+) -> ToolResult<InferenceResponse> {
+    if params.episode_id.is_some() {
+        return Err(ToolError::NonControl(NonControlToolError::Internal {
+            message: "episode_id must be None when using checkpointed_inference".to_string(),
+        }));
+    }
+    params.episode_id = Some(ctx.episode_id());
+    ctx.inference(params).await
 }

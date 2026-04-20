@@ -1,4 +1,4 @@
-import { PostgresClient } from "tensorzero-node";
+import { PostgresClient } from "@tensorzero/tensorzero-node";
 import { getEnv } from "./env.server";
 
 let _postgresClient: PostgresClient | undefined;

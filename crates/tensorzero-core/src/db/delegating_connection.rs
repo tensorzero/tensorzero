@@ -61,7 +61,7 @@ use crate::db::{
     CacheStatisticsTimePoint, ConfigQueries, DICLExampleWithDistance, DICLQueries,
     DeploymentIdQueries, EpisodeByIdRow, EpisodeQueries, HowdyFeedbackCounts, HowdyInferenceCounts,
     HowdyQueries, HowdyTokenUsage, ModelLatencyDatapoint, ModelUsageTimePoint, StoredDICLExample,
-    TableBoundsWithCount,
+    TableBoundsWithCount, VariantUsageTimePoint,
 };
 use crate::endpoints::inference::InferenceResponse;
 use crate::endpoints::stored_inferences::v1::types::InferenceFilter;
@@ -708,6 +708,17 @@ impl ModelInferenceQueries for DelegatingDatabaseConnection {
     fn get_model_latency_quantile_function_inputs(&self) -> &[f64] {
         self.get_database()
             .get_model_latency_quantile_function_inputs()
+    }
+
+    async fn get_variant_usage_timeseries(
+        &self,
+        function_name: &str,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<VariantUsageTimePoint>, Error> {
+        self.get_database()
+            .get_variant_usage_timeseries(function_name, time_window, max_periods)
+            .await
     }
 
     async fn get_cache_statistics_timeseries(

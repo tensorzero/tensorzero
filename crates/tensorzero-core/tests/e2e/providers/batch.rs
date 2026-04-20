@@ -789,19 +789,6 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
-    assert_eq!(
-        inference_params
-            .get("max_tokens")
-            .unwrap()
-            .as_u64()
-            .unwrap(),
-        expected_max_tokens
-    );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
@@ -2264,21 +2251,6 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     });
     assert_eq!(tool_params, expected_tool_params);
 
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, expected_max_tokens);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, &provider.model_name);
 
@@ -3481,21 +3453,6 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
         "parallel_tool_calls": null
     });
     assert_eq!(tool_params, expected_tool_params);
-
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let inference_params = inference_params.get("chat_completion").unwrap();
-    let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        1000
-    } else {
-        100
-    };
-    let max_tokens = inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);

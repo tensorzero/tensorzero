@@ -24,7 +24,7 @@ mod imp {
     use tensorzero_core::evaluations::{TypescriptJudgeConfig, TypescriptJudgeOutputType};
     use ts_executor_pool::ExtraInferenceTags;
     use ts_executor_pool::runtime::RlmPool;
-    use ts_executor_pool::tensorzero_client::TensorZeroClient;
+    use ts_executor_pool::tensorzero_client::{PoolInferenceParams, TensorZeroClient};
     use ts_executor_pool::ts_checker::{TsCheckerPool, build_code_execution_ambient_declarations};
 
     /// Wall-clock timeout for a single TypeScript judge evaluation. Includes
@@ -98,7 +98,7 @@ mod imp {
     impl TensorZeroClient for NoopTensorZeroClient {
         async fn inference(
             &self,
-            _params: tensorzero_core::client::ClientInferenceParams,
+            _params: PoolInferenceParams,
         ) -> Result<CoreInferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
             Err("TensorZero inference is not available inside typescript judge evaluators".into())
         }

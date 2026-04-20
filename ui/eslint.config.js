@@ -64,15 +64,15 @@ export default [
         },
         {
           selector:
-            "ImportDeclaration[source.value='tensorzero-node'][importKind='type']",
+            "ImportDeclaration[source.value='@tensorzero/tensorzero-node'][importKind='type']",
           message:
-            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+            "Do not import types directly from '@tensorzero/tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
         },
         {
           selector:
-            "ImportDeclaration[source.value='tensorzero-node'] ImportSpecifier[importKind='type']",
+            "ImportDeclaration[source.value='@tensorzero/tensorzero-node'] ImportSpecifier[importKind='type']",
           message:
-            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+            "Do not import types directly from '@tensorzero/tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
         },
         {
           selector:

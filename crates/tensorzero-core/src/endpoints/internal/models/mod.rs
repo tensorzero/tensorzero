@@ -5,16 +5,18 @@
 pub mod types;
 
 pub use types::{
-    CountModelsResponse, GetCacheStatisticsResponse, GetModelLatencyResponse, GetModelUsageResponse,
+    CountModelsResponse, GetCacheStatisticsResponse, GetModelLatencyResponse,
+    GetModelUsageResponse, GetVariantUsageResponse,
 };
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use tracing::instrument;
 
 use crate::db::model_inferences::ModelInferenceQueries;
 use crate::endpoints::internal::models::types::{
     GetCacheStatisticsQueryParams, GetModelLatencyQueryParams, GetModelUsageQueryParams,
+    GetVariantUsageQueryParams,
 };
 use crate::error::Error;
 use crate::utils::gateway::AppState;
@@ -90,4 +92,29 @@ pub async fn get_cache_statistics_handler(
         .await?;
 
     Ok(Json(GetCacheStatisticsResponse { data }))
+}
+
+/// Handler for `GET /internal/functions/{function_name}/variant_usage`
+///
+/// Returns variant usage timeseries data (tokens, costs, counts over time) for a function.
+#[instrument(name = "variants.usage", skip_all, fields(function_name = %function_name))]
+pub async fn get_variant_usage_handler(
+    State(app_state): AppState,
+    Path(function_name): Path<String>,
+    Query(params): Query<GetVariantUsageQueryParams>,
+) -> Result<Json<GetVariantUsageResponse>, Error> {
+    let database = app_state.get_delegating_database();
+
+    let data = database
+        .get_variant_usage_timeseries(&function_name, params.time_window, params.max_periods)
+        .await?;
+
+    let quantile_inputs = database.get_model_latency_quantile_function_inputs();
+    let quantiles = if quantile_inputs.is_empty() {
+        None
+    } else {
+        Some(quantile_inputs.to_vec())
+    };
+
+    Ok(Json(GetVariantUsageResponse { quantiles, data }))
 }
