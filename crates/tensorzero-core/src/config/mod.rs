@@ -617,6 +617,10 @@ impl OtlpConfig {
                     }
                 }
             }
+            // Emit computed cost only when the provider has a `cost` rate configured.
+            if let Some(cost) = usage.cost {
+                span.set_attribute("tensorzero.cost_usd", cost.to_string());
+            }
         }
     }
 
