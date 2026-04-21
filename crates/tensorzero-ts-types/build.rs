@@ -94,6 +94,10 @@ const ROOT_TYPES: &[(&str, &str)] = &[
         "GET_VARIANT_STATISTICS_RESPONSE",
         "GetVariantStatisticsResponse",
     ),
+    // Types exposed to TypeScript judge evaluators (the `tensorzero_evaluator`
+    // function's `(input, output)` signature).
+    ("INPUT", "Input"),
+    ("CONTENT_BLOCK_CHAT_OUTPUT", "ContentBlockChatOutput"),
 ];
 
 /// Parsed information from a single .ts file.

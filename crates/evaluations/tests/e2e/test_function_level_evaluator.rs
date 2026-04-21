@@ -92,6 +92,7 @@ async fn test_top_level_exact_match_evaluator() {
         concurrency: 2,
         inference_cache: CacheEnabledMode::Off,
         tags: HashMap::new(),
+        ts_executor: crate::common::build_test_ts_executor().await,
     };
 
     let result = run_evaluation_core_streaming(core_args, None, HashMap::new())

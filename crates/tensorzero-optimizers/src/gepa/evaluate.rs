@@ -188,6 +188,15 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     // Wrap the gateway client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(params.gateway_client));
 
+    let ts_executor =
+        evaluations::evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to build TypeScript judge executor: {e}"),
+                })
+            })?;
+
     // Create EvaluationCoreArgs
     let core_args = EvaluationCoreArgs {
         inference_executor,
@@ -203,7 +212,8 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         concurrency: params.concurrency,
         inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation
         tags: HashMap::new(),                   // No external tags for optimizer evaluations
-                                                // We may want to tag inferences made as part of GEPA later as well.
+        // We may want to tag inferences made as part of GEPA later as well.
+        ts_executor,
     };
 
     // Call run_evaluation_core_streaming

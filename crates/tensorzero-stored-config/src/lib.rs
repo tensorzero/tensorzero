@@ -45,7 +45,8 @@ pub use stored_evaluation_config::{
     StoredLLMJudgeInputFormat, StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize,
     StoredLLMJudgeOutputType, StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo,
     StoredNonStreamingTimeouts, StoredRegexConfig, StoredRetryConfig, StoredStreamingTimeouts,
-    StoredTimeoutsConfig, StoredToolUseConfig,
+    StoredTimeoutsConfig, StoredToolUseConfig, StoredTypescriptJudgeConfig,
+    StoredTypescriptJudgeOptimize, StoredTypescriptJudgeOutputType,
 };
 pub use stored_extra_body::{
     StoredExtraBodyConfig, StoredExtraBodyReplacement, StoredExtraBodyReplacementKind,

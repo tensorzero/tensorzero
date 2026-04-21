@@ -32,6 +32,7 @@ use crate::evaluations::{
     UninitializedLLMJudgeChatCompletionVariantConfig, UninitializedLLMJudgeConfig,
     UninitializedLLMJudgeDiclVariantConfig, UninitializedLLMJudgeMixtureOfNVariantConfig,
     UninitializedLLMJudgeVariantConfig, UninitializedLLMJudgeVariantInfo,
+    UninitializedTypescriptJudgeConfig,
 };
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::extra_headers::ExtraHeadersConfig;
@@ -481,6 +482,16 @@ fn rehydrate_evaluator(
             };
             Ok(UninitializedEvaluatorConfig::LLMJudge(config))
         }
+        StoredEvaluatorConfig::Typescript(t) => Ok(UninitializedEvaluatorConfig::TypescriptJudge(
+            UninitializedTypescriptJudgeConfig {
+                typescript_file: ResolvedTomlPathData::new_fake_path(
+                    "stored::typescript_evaluator".to_string(),
+                    t.typescript_code,
+                ),
+                output_type: t.output_type.into(),
+                optimize: t.optimize.into(),
+            },
+        )),
     }
 }
 

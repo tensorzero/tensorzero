@@ -619,7 +619,10 @@ jobs:
 
       - name: Build (Rust)
         working-directory: crates
-        run: cargo build --workspace --verbose
+        # A workspace-level build does not work, as this will to perform a Python
+        # build with the 'ts-executor-pool' feature enabled on 'evaluations'
+        # (due to feaure unification)
+        run: cargo build -p gateway
 
       - name: Validate config
         working-directory: crates
