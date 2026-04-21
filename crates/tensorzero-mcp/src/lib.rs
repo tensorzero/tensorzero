@@ -28,6 +28,13 @@ pub async fn build_mcp_router(
 ) -> Result<axum::Router, String> {
     let tool_router = handler::build_tool_router(&app_state).await?;
 
+    let mut config =
+        StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token());
+    // During e2e tests, we use the magic docker-compose service hostnames
+    if cfg!(feature = "e2e_tests") {
+        config = config.disable_allowed_hosts();
+    }
+
     let service = StreamableHttpService::new(
         move || {
             Ok(TensorZeroMcpServer::new(
@@ -36,7 +43,7 @@ pub async fn build_mcp_router(
             ))
         },
         LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token()),
+        config,
     );
 
     Ok(axum::Router::new().fallback_service(service))
