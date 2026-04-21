@@ -222,7 +222,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 return;
             }
             let response = model_config
-                .infer(&request, &clients, "test")
+                .infer(&request, &clients, "test", None)
                 .await
                 .unwrap();
             println!("Response: {response:?}");

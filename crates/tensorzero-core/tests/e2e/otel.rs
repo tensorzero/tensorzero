@@ -1597,6 +1597,73 @@ fn test_capture_content_omits_system_when_absent() {
     assert!(!attrs.contains_key("gen_ai.tool.definitions"));
 }
 
+fn run_streaming_inference_with_config(config: &str) -> CapturingOtelExporter {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let exporter = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
+        let client = make_embedded_gateway_with_config(config).await;
+        let _data = make_streaming_inference(&client).await;
+        drop(client);
+        exporter
+    });
+    drop(runtime);
+    exporter
+}
+
+#[test]
+fn test_capture_content_streaming_emits_output_messages() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "opentelemetry"
+    include_content = true
+    "#;
+
+    let exporter = run_streaming_inference_with_config(config);
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    // Input attrs set at span open (covered by the non-streaming tests too, but
+    // confirm they reach the streaming path as well).
+    assert!(attrs.contains_key("gen_ai.input.messages"));
+
+    let output_attr = attrs
+        .get("gen_ai.output.messages")
+        .expect("gen_ai.output.messages should be set on streaming model_provider_inference span")
+        .as_str();
+    let output_messages: serde_json::Value = serde_json::from_str(output_attr.as_ref())
+        .expect("gen_ai.output.messages should be valid JSON");
+    let arr = output_messages.as_array().expect("output is array");
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["role"], serde_json::json!("assistant"));
+    let parts = arr[0]["parts"].as_array().expect("parts is array");
+    assert!(!parts.is_empty());
+    assert_eq!(parts[0]["type"], serde_json::json!("text"));
+    assert!(
+        !parts[0]["content"].as_str().unwrap_or("").is_empty(),
+        "aggregated text should be non-empty"
+    );
+}
+
+#[test]
+fn test_capture_content_streaming_off_omits_output_messages() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "opentelemetry"
+    "#;
+
+    let exporter = run_streaming_inference_with_config(config);
+    let spans = build_span_map(exporter.take_spans());
+    let model_provider_span = find_model_provider_span(&spans);
+    let attrs = attrs_to_map(&model_provider_span.attributes);
+
+    assert!(!attrs.contains_key("gen_ai.input.messages"));
+    assert!(!attrs.contains_key("gen_ai.output.messages"));
+}
+
 #[test]
 fn test_capture_content_ignored_for_openinference_format() {
     let config = r#"

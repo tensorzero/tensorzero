@@ -884,6 +884,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &InferenceClients,
         model_name: &'request str,
+        function_name: Option<&'request str>,
     ) -> Result<ModelInferenceResponse, Error> {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
@@ -916,6 +917,7 @@ impl ModelConfig {
                     provider_name,
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
+                    function_name,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -1029,6 +1031,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &InferenceClients,
         model_name: &'request str,
+        function_name: Option<&'request str>,
     ) -> Result<StreamResponseAndMessages, Error> {
         clients
             .otlp_config
@@ -1069,6 +1072,7 @@ impl ModelConfig {
                     provider_name,
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
+                    function_name,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -1275,6 +1279,7 @@ fn wrap_provider_stream(
         .clone()
         .map(std::borrow::Cow::into_owned);
     let otlp_config = clients.otlp_config.clone();
+    let capture_content = otlp_config.genai_content_capture_enabled();
     let deferred_tasks = clients.deferred_tasks.clone();
     let span_clone = span.clone();
 
@@ -1284,6 +1289,7 @@ fn wrap_provider_stream(
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
+        let should_buffer = write_to_cache || capture_content;
 
         // IMPORTANT: We should NOT modify chunks here, as they'll be re-processed downstream (e.g. `create_stream`).
         while let Some(chunk) = stream.next().await {
@@ -1291,14 +1297,14 @@ fn wrap_provider_stream(
                 usages.push(*chunk_usage);
             }
 
-            // We can skip cloning the chunk if we know we're not going to write to the cache
-            if write_to_cache && !errored {
+            // Buffer chunks when we need them downstream (cache write and/or GenAI span attribute emission).
+            if should_buffer && !errored {
                 match chunk.as_ref() {
                     Ok(chunk) => {
                         buffer.push(chunk.clone());
                     }
                     Err(e) => {
-                        tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
+                        tracing::warn!("Skipping buffered chunk due to error in stream: {e}");
                         errored = true;
                     }
                 }
@@ -1321,6 +1327,13 @@ fn wrap_provider_stream(
         let aggregated_usage = aggregate_usage_from_single_streaming_model_inference(usages);
 
         otlp_config.apply_usage_to_model_provider_span(&span_clone, &aggregated_usage);
+        if capture_content && !errored {
+            let out_messages = genai_conventions::to_genai_output_from_chunks(&buffer);
+            span_clone.set_attribute(
+                "gen_ai.output.messages",
+                serde_json::to_string(&out_messages).unwrap_or_default(),
+            );
+        }
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
             let nano_cost = aggregated_usage.cost.map(decimal_cost_to_nano_cost);
@@ -1358,7 +1371,8 @@ fn wrap_provider_stream(
                 tool_config
             );
         }
-    }.instrument(span);
+    }
+    .instrument(span);
     // We unconditionally create a stream, and forward items into it from a separate task
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
@@ -2613,6 +2627,10 @@ impl ModelProvider {
                     span.set_attribute("gen_ai.request.model", model_name.to_string());
                 }
 
+                if let Some(function_name) = request.function_name {
+                    span.set_attribute("gen_ai.agent.name", function_name.to_string());
+                }
+
                 if traces.include_content.unwrap_or(false) {
                     let messages = genai_conventions::to_genai_messages(&request.request.messages);
                     span.set_attribute(
@@ -3806,7 +3824,7 @@ mod tests {
         };
         let model_name = "test model";
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         let content = response.output;
@@ -3850,7 +3868,7 @@ mod tests {
             namespace: None,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -3950,6 +3968,7 @@ mod tests {
             provider_name: "test_provider",
             otlp_config: &Default::default(),
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         };
 
         // Should fail with RateLimitMissingMaxTokens
@@ -3978,6 +3997,7 @@ mod tests {
             provider_name: "test_provider",
             otlp_config: &Default::default(),
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         };
 
         let result = provider
@@ -4086,7 +4106,7 @@ mod tests {
 
         let model_name = "test model";
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
@@ -4202,7 +4222,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -4258,7 +4278,7 @@ mod tests {
             namespace: None,
         };
         let response = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -4392,7 +4412,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -4503,7 +4523,7 @@ mod tests {
         };
         let model_name = "test model";
         let error = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4549,7 +4569,7 @@ mod tests {
             include_aggregated_response: false,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4641,7 +4661,7 @@ mod tests {
             ..Default::default()
         };
         let error = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4687,7 +4707,7 @@ mod tests {
             include_aggregated_response: false,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         assert_eq!(
