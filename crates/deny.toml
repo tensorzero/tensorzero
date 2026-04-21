@@ -24,7 +24,6 @@ multiple-versions = "allow"
 ignore = [
     "RUSTSEC-2024-0436", # We don't care that 'paste' is unmaintained
     "RUSTSEC-2025-0141", # `bincode` is unmaintained but is a transitive dep of `deno_core`
-    "RUSTSEC-2026-0097", # `rand` vulnerability in transitive deps (https://github.com/tensorzero/tensorzero/issues/7273)
 ]
 
 [licenses]
