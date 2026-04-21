@@ -23,12 +23,11 @@ use mime::MediaType;
 use serde::Serialize;
 use serde_json::Value;
 use tensorzero_inference_types::{
-    ContentBlock, ContentBlockOutput, LazyFile, OpenAICustomTool, OpenAICustomToolFormat,
-    RequestMessage,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FunctionToolDef, LazyFile,
+    OpenAICustomTool, OpenAICustomToolFormat, ProviderInferenceResponseChunk,
+    ProviderToolCallConfig, RequestMessage,
 };
 use tensorzero_types::{FinishReason, Role};
-
-use crate::tool::config::{FunctionToolConfig, ToolCallConfig};
 
 /// Message role as defined by the GenAI semantic conventions.
 ///
@@ -163,6 +162,131 @@ pub fn to_genai_output(
     }]
 }
 
+/// Aggregate a buffered stream of provider response chunks into the GenAI
+/// output messages shape, for use when setting `gen_ai.output.messages` on a
+/// streaming `model_provider_inference` span.
+///
+/// Chunks sharing an `id` collapse into a single part (text appended, tool-call
+/// raw arguments concatenated then JSON-parsed once, thought text appended).
+/// The last non-`None` `finish_reason` across chunks is used.
+pub fn to_genai_output_from_chunks(chunks: &[ProviderInferenceResponseChunk]) -> Vec<GenAiMessage> {
+    #[derive(Default)]
+    struct PartialToolCall {
+        name: String,
+        raw_arguments: String,
+    }
+
+    enum Acc {
+        Text(String),
+        ToolCall(PartialToolCall),
+        Reasoning(String),
+        Unknown(Value),
+    }
+
+    // Keyed by `(PartKind, id)` so that providers which reuse the same `id`
+    // across different chunk kinds (e.g. a text chunk and a thought chunk both
+    // named `"0"`) accumulate into separate parts instead of colliding.
+    #[derive(Clone, Copy, Eq, Hash, PartialEq)]
+    enum PartKind {
+        Text,
+        ToolCall,
+        Reasoning,
+        Unknown,
+    }
+
+    type Key = (PartKind, String);
+
+    let mut order: Vec<Key> = Vec::new();
+    let mut accs: std::collections::HashMap<Key, Acc> = std::collections::HashMap::new();
+    let mut finish_reason: Option<FinishReason> = None;
+
+    for chunk in chunks {
+        if let Some(fr) = chunk.finish_reason {
+            finish_reason = Some(fr);
+        }
+        for block in &chunk.content {
+            match block {
+                ContentBlockChunk::Text(t) => {
+                    let key = (PartKind::Text, t.id.clone());
+                    match accs.get_mut(&key) {
+                        Some(Acc::Text(s)) => s.push_str(&t.text),
+                        Some(_) => {}
+                        None => {
+                            order.push(key.clone());
+                            accs.insert(key, Acc::Text(t.text.clone()));
+                        }
+                    }
+                }
+                ContentBlockChunk::ToolCall(tc) => {
+                    let key = (PartKind::ToolCall, tc.id.clone());
+                    match accs.get_mut(&key) {
+                        Some(Acc::ToolCall(partial)) => {
+                            if let Some(name) = &tc.raw_name
+                                && partial.name.is_empty()
+                            {
+                                partial.name.clone_from(name);
+                            }
+                            partial.raw_arguments.push_str(&tc.raw_arguments);
+                        }
+                        Some(_) => {}
+                        None => {
+                            order.push(key.clone());
+                            accs.insert(
+                                key,
+                                Acc::ToolCall(PartialToolCall {
+                                    name: tc.raw_name.clone().unwrap_or_default(),
+                                    raw_arguments: tc.raw_arguments.clone(),
+                                }),
+                            );
+                        }
+                    }
+                }
+                ContentBlockChunk::Thought(t) => {
+                    let fragment = t.text.clone().unwrap_or_default();
+                    let key = (PartKind::Reasoning, t.id.clone());
+                    match accs.get_mut(&key) {
+                        Some(Acc::Reasoning(s)) => s.push_str(&fragment),
+                        Some(_) => {}
+                        None => {
+                            order.push(key.clone());
+                            accs.insert(key, Acc::Reasoning(fragment));
+                        }
+                    }
+                }
+                ContentBlockChunk::Unknown(u) => {
+                    let key = (PartKind::Unknown, u.id.clone());
+                    if let std::collections::hash_map::Entry::Vacant(slot) = accs.entry(key.clone())
+                    {
+                        order.push(key);
+                        slot.insert(Acc::Unknown(u.data.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    let parts: Vec<GenAiPart> = order
+        .into_iter()
+        .filter_map(|key| accs.remove(&key).map(|acc| (key, acc)))
+        .map(|((_, id), acc)| match acc {
+            Acc::Text(content) => GenAiPart::Text { content },
+            Acc::ToolCall(partial) => GenAiPart::ToolCall {
+                id,
+                name: partial.name,
+                arguments: parse_json_or_string(&partial.raw_arguments),
+            },
+            Acc::Reasoning(content) => GenAiPart::Reasoning { content },
+            Acc::Unknown(content) => GenAiPart::TensorzeroUnknown { content },
+        })
+        .collect();
+
+    vec![GenAiMessage {
+        role: GenAiRole::Assistant,
+        parts,
+        finish_reason: finish_reason.map(finish_reason_to_string),
+    }]
+}
+
 pub fn to_genai_system_instructions(system: Option<&str>) -> Option<Vec<GenAiPart>> {
     let text = system?;
     Some(vec![GenAiPart::Text {
@@ -171,15 +295,11 @@ pub fn to_genai_system_instructions(system: Option<&str>) -> Option<Vec<GenAiPar
 }
 
 pub fn to_genai_tool_definitions(
-    tool_config: Option<&ToolCallConfig>,
+    tool_config: Option<&ProviderToolCallConfig>,
 ) -> Option<Vec<GenAiToolDefinition>> {
     let config = tool_config?;
     let mut defs: Vec<GenAiToolDefinition> = Vec::new();
-    for tool in config
-        .static_tools_available
-        .iter()
-        .chain(config.dynamic_tools_available.iter())
-    {
+    for tool in &config.tools {
         defs.push(function_tool_to_definition(tool));
     }
     for tool in &config.openai_custom_tools {
@@ -327,11 +447,11 @@ fn finish_reason_to_string(reason: FinishReason) -> String {
     .to_owned()
 }
 
-fn function_tool_to_definition(tool: &FunctionToolConfig) -> GenAiToolDefinition {
+fn function_tool_to_definition(tool: &FunctionToolDef) -> GenAiToolDefinition {
     GenAiToolDefinition::Function {
-        name: tool.name().to_owned(),
-        description: non_empty(tool.description()),
-        parameters: tool.parameters().clone(),
+        name: tool.name.clone(),
+        description: non_empty(&tool.description),
+        parameters: tool.parameters.clone(),
     }
 }
 
@@ -353,26 +473,24 @@ fn non_empty(s: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use futures::FutureExt;
     use googletest::prelude::*;
     use googletest_matchers::matches_json_literal;
     use serde_json::{Value, json};
+    use std::time::Duration;
     use tensorzero_inference_types::{
-        AllowedTools, AllowedToolsChoice, ContentBlock, ContentBlockOutput, FileUrl, LazyFile,
-        OpenAICustomTool, PendingObjectStoreFile, RequestMessage,
+        AllowedTools, AllowedToolsChoice, ContentBlock, ContentBlockOutput, FileUrl,
+        FunctionToolDef, LazyFile, OpenAICustomTool, PendingObjectStoreFile, ProviderTool,
+        ProviderToolCallConfig, ProviderToolScope, RequestMessage, TextChunk, ThoughtChunk,
+        ToolCallChunk,
     };
     use tensorzero_types::{
         Base64FileMetadata, FinishReason, ObjectStorageFile, ObjectStoragePointer, Role,
-        StorageKind, StoragePath, Text, Thought, ToolCall, ToolResult, Unknown,
+        StorageKind, StoragePath, Text, Thought, ToolCall, ToolChoice, ToolResult, Unknown,
     };
     use url::Url;
 
     use super::*;
-    use crate::jsonschema_util::JSONSchema;
-    use crate::tool::config::{DynamicToolConfig, StaticToolConfig};
-    use crate::tool::wire::ToolChoice;
 
     fn to_json(value: &impl Serialize) -> Value {
         serde_json::to_value(value).expect("serialization should succeed")
@@ -845,14 +963,9 @@ mod tests {
 
     // ── Tool definitions ────────────────────────────────────────────────
 
-    fn make_schema(val: Value) -> JSONSchema {
-        JSONSchema::from_value(val).expect("valid schema")
-    }
-
-    fn empty_tool_config() -> ToolCallConfig {
-        ToolCallConfig {
-            static_tools_available: Vec::new(),
-            dynamic_tools_available: Vec::new(),
+    fn empty_provider_tool_config() -> ProviderToolCallConfig {
+        ProviderToolCallConfig {
+            tools: Vec::new(),
             provider_tools: Vec::new(),
             openai_custom_tools: Vec::new(),
             tool_choice: ToolChoice::Auto,
@@ -871,22 +984,19 @@ mod tests {
 
     #[gtest]
     fn tool_definitions_none_when_empty() {
-        let config = empty_tool_config();
+        let config = empty_provider_tool_config();
         expect_that!(to_genai_tool_definitions(Some(&config)), none());
     }
 
     #[gtest]
-    fn tool_definitions_static_tool() {
-        let mut config = empty_tool_config();
-        config
-            .static_tools_available
-            .push(FunctionToolConfig::Static(Arc::new(StaticToolConfig {
-                description: "Get current weather".to_string(),
-                parameters: make_schema(json!({"type": "object"})),
-                name: "get_weather".to_string(),
-                key: "get_weather".to_string(),
-                strict: false,
-            })));
+    fn tool_definitions_function_tool() {
+        let mut config = empty_provider_tool_config();
+        config.tools.push(FunctionToolDef {
+            name: "get_weather".to_string(),
+            description: "Get current weather".to_string(),
+            parameters: json!({"type": "object"}),
+            strict: false,
+        });
         expect_that!(
             to_json(&to_genai_tool_definitions(Some(&config))),
             matches_json_literal!([
@@ -901,23 +1011,21 @@ mod tests {
     }
 
     #[gtest]
-    fn tool_definitions_dynamic_tool_and_openai_custom() {
-        let mut config = empty_tool_config();
-        config
-            .dynamic_tools_available
-            .push(FunctionToolConfig::Dynamic(DynamicToolConfig {
-                description: String::new(),
-                parameters: make_schema(json!({})),
-                name: "dyn".to_string(),
-                strict: false,
-            }));
+    fn tool_definitions_function_with_empty_description_and_openai_custom() {
+        let mut config = empty_provider_tool_config();
+        config.tools.push(FunctionToolDef {
+            name: "dyn".to_string(),
+            description: String::new(),
+            parameters: json!({}),
+            strict: false,
+        });
         config.openai_custom_tools.push(OpenAICustomTool {
             name: "custom".to_string(),
             description: Some("an openai custom tool".to_string()),
             format: None,
         });
         let value = to_json(&to_genai_tool_definitions(Some(&config)));
-        // Dynamic tool: empty description omitted.
+        // Function tool: empty description omitted.
         expect_that!(
             value.pointer("/0"),
             some(eq(&json!({
@@ -935,5 +1043,218 @@ mod tests {
                 "description": "an openai custom tool"
             })))
         );
+    }
+
+    // ── Streaming aggregation ───────────────────────────────────────────
+
+    fn make_chunk(
+        content: Vec<ContentBlockChunk>,
+        finish_reason: Option<FinishReason>,
+    ) -> ProviderInferenceResponseChunk {
+        ProviderInferenceResponseChunk::new(
+            content,
+            None,
+            String::new(),
+            Duration::ZERO,
+            finish_reason,
+        )
+    }
+
+    #[gtest]
+    fn chunks_text_concatenation() {
+        let chunks = vec![
+            make_chunk(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "t1".to_string(),
+                    text: "Hello ".to_string(),
+                })],
+                None,
+            ),
+            make_chunk(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "t1".to_string(),
+                    text: "world".to_string(),
+                })],
+                Some(FinishReason::Stop),
+            ),
+        ];
+        expect_that!(
+            to_json(&to_genai_output_from_chunks(&chunks)),
+            matches_json_literal!([
+                {
+                    "role": "assistant",
+                    "parts": [{"type": "text", "content": "Hello world"}],
+                    "finish_reason": "stop"
+                }
+            ])
+        );
+    }
+
+    #[gtest]
+    fn chunks_tool_call_raw_arguments_concatenate_and_parse() {
+        let chunks = vec![
+            make_chunk(
+                vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: "tc1".to_string(),
+                    raw_name: Some("get_weather".to_string()),
+                    raw_arguments: r#"{"loc"#.to_string(),
+                })],
+                None,
+            ),
+            make_chunk(
+                vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: "tc1".to_string(),
+                    raw_name: None,
+                    raw_arguments: r#"ation":"Paris"}"#.to_string(),
+                })],
+                Some(FinishReason::ToolCall),
+            ),
+        ];
+        expect_that!(
+            to_json(&to_genai_output_from_chunks(&chunks)),
+            matches_json_literal!([
+                {
+                    "role": "assistant",
+                    "parts": [{
+                        "type": "tool_call",
+                        "id": "tc1",
+                        "name": "get_weather",
+                        "arguments": {"location": "Paris"}
+                    }],
+                    "finish_reason": "tool_call"
+                }
+            ])
+        );
+    }
+
+    #[gtest]
+    fn chunks_thought_concatenation() {
+        let chunks = vec![
+            make_chunk(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "r1".to_string(),
+                    text: Some("step one. ".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })],
+                None,
+            ),
+            make_chunk(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "r1".to_string(),
+                    text: Some("step two.".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })],
+                None,
+            ),
+        ];
+        let value = to_json(&to_genai_output_from_chunks(&chunks));
+        expect_that!(
+            value.pointer("/0/parts/0"),
+            some(eq(
+                &json!({"type": "reasoning", "content": "step one. step two."})
+            ))
+        );
+    }
+
+    #[gtest]
+    fn chunks_preserve_first_seen_order_across_ids() {
+        let chunks = vec![make_chunk(
+            vec![
+                ContentBlockChunk::Text(TextChunk {
+                    id: "t1".to_string(),
+                    text: "first".to_string(),
+                }),
+                ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: "tc1".to_string(),
+                    raw_name: Some("f".to_string()),
+                    raw_arguments: "{}".to_string(),
+                }),
+            ],
+            Some(FinishReason::ToolCall),
+        )];
+        let value = to_json(&to_genai_output_from_chunks(&chunks));
+        expect_that!(value.pointer("/0/parts/0/type"), some(eq(&json!("text"))));
+        expect_that!(
+            value.pointer("/0/parts/1/type"),
+            some(eq(&json!("tool_call")))
+        );
+    }
+
+    #[gtest]
+    fn chunks_last_non_none_finish_reason_wins() {
+        let chunks = vec![
+            make_chunk(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "t1".to_string(),
+                    text: "x".to_string(),
+                })],
+                None,
+            ),
+            make_chunk(vec![], Some(FinishReason::Length)),
+            make_chunk(vec![], None),
+        ];
+        let value = to_json(&to_genai_output_from_chunks(&chunks));
+        expect_that!(
+            value.pointer("/0/finish_reason"),
+            some(eq(&json!("length")))
+        );
+    }
+
+    #[gtest]
+    fn chunks_same_id_across_kinds_accumulate_separately() {
+        // A provider that reuses positional ids across chunk kinds (here a
+        // `Text` chunk and a `Thought` chunk both named `"0"`) should produce
+        // two independent parts, not one dropped and one kept.
+        let chunks = vec![
+            make_chunk(
+                vec![ContentBlockChunk::Text(TextChunk {
+                    id: "0".to_string(),
+                    text: "visible".to_string(),
+                })],
+                None,
+            ),
+            make_chunk(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "0".to_string(),
+                    text: Some("thinking".to_string()),
+                    signature: None,
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: None,
+                    extra_data: None,
+                })],
+                None,
+            ),
+        ];
+        expect_that!(
+            to_json(&to_genai_output_from_chunks(&chunks)),
+            matches_json_literal!([
+                {
+                    "role": "assistant",
+                    "parts": [
+                        {"type": "text", "content": "visible"},
+                        {"type": "reasoning", "content": "thinking"}
+                    ]
+                }
+            ])
+        );
+    }
+
+    #[gtest]
+    fn tool_definitions_ignores_provider_tools() {
+        let mut config = empty_provider_tool_config();
+        config.provider_tools.push(ProviderTool {
+            scope: ProviderToolScope::Unscoped,
+            tool: json!({"type": "code_interpreter"}),
+        });
+        expect_that!(to_genai_tool_definitions(Some(&config)), none());
     }
 }
