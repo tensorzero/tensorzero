@@ -135,12 +135,9 @@ impl HTTPGateway {
 
     pub fn customize_builder<'a>(
         &self,
-        mut builder: TensorzeroRequestBuilder<'a>,
+        builder: TensorzeroRequestBuilder<'a>,
     ) -> TensorzeroRequestBuilder<'a> {
-        if let Some(timeout) = self.timeout {
-            builder = builder.timeout(timeout);
-        }
-        builder.headers(self.headers.clone())
+        self.customize_builder_with_extras(builder, None)
     }
 
     /// Like `customize_builder` but without applying the per-request timeout.
@@ -150,14 +147,57 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'a>,
     ) -> TensorzeroRequestBuilder<'a> {
-        builder.headers(self.headers.clone())
+        self.customize_builder_no_timeout_with_extras(builder, None)
+    }
+
+    fn customize_builder_with_extras<'a>(
+        &self,
+        mut builder: TensorzeroRequestBuilder<'a>,
+        extra_headers: Option<&HeaderMap>,
+    ) -> TensorzeroRequestBuilder<'a> {
+        if let Some(timeout) = self.timeout {
+            builder = builder.timeout(timeout);
+        }
+        self.apply_headers_with_extras(builder, extra_headers)
+    }
+
+    fn customize_builder_no_timeout_with_extras<'a>(
+        &self,
+        builder: TensorzeroRequestBuilder<'a>,
+        extra_headers: Option<&HeaderMap>,
+    ) -> TensorzeroRequestBuilder<'a> {
+        self.apply_headers_with_extras(builder, extra_headers)
+    }
+
+    /// Applies the client-level headers followed by any caller-supplied extras.
+    /// Since `RequestBuilder::headers` replaces same-named entries, applying the
+    /// extras last ensures they override both prior per-request headers and the
+    /// client-level defaults.
+    fn apply_headers_with_extras<'a>(
+        &self,
+        builder: TensorzeroRequestBuilder<'a>,
+        extra_headers: Option<&HeaderMap>,
+    ) -> TensorzeroRequestBuilder<'a> {
+        let builder = builder.headers(self.headers.clone());
+        match extra_headers {
+            Some(extras) if !extras.is_empty() => builder.headers(extras.clone()),
+            _ => builder,
+        }
     }
 
     pub async fn send_request(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<String, TensorZeroError> {
-        let builder = self.customize_builder(builder);
+        self.send_request_with_extras(builder, None).await
+    }
+
+    pub(crate) async fn send_request_with_extras(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+        extra_headers: Option<&HeaderMap>,
+    ) -> Result<String, TensorZeroError> {
+        let builder = self.customize_builder_with_extras(builder, extra_headers);
         let resp = builder.send().await;
         self.check_http_response(resp)
             .await?
@@ -181,7 +221,16 @@ impl HTTPGateway {
         &self,
         builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<(T, String), TensorZeroError> {
-        let builder = self.customize_builder(builder);
+        self.send_and_parse_http_response_with_extras(builder, None)
+            .await
+    }
+
+    pub(crate) async fn send_and_parse_http_response_with_extras<T: serde::de::DeserializeOwned>(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+        extra_headers: Option<&HeaderMap>,
+    ) -> Result<(T, String), TensorZeroError> {
+        let builder = self.customize_builder_with_extras(builder, extra_headers);
         let resp = self.check_http_response(builder.send().await).await?;
         let raw_response = resp.text().await.map_err(|e| TensorZeroError::Other {
             source: Error::new(ErrorDetails::Serialization {
@@ -215,8 +264,13 @@ impl HTTPGateway {
     async fn send_http_stream_inference(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
+        extra_headers: Option<&HeaderMap>,
     ) -> Result<InferenceStream, TensorZeroError> {
-        let event_source = match self.customize_builder(builder).eventsource().await {
+        let event_source = match self
+            .customize_builder_with_extras(builder, extra_headers)
+            .eventsource()
+            .await
+        {
             Ok(es) => es,
             Err(e) => {
                 let err_str = format!("Error in streaming response: {e:?}");
@@ -1086,6 +1140,17 @@ impl Client {
         &self,
         params: ClientInferenceParams,
     ) -> Result<HttpResponse<InferenceOutput>, TensorZeroError> {
+        Box::pin(self.http_inference_with_request_headers(params, None)).await
+    }
+
+    /// Like `http_inference`, but additionally attaches caller-supplied HTTP headers to the
+    /// gateway request. Extra headers override any header with the same name that would
+    /// otherwise be set by the client.
+    pub async fn http_inference_with_request_headers(
+        &self,
+        params: ClientInferenceParams,
+        extra_request_headers: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<HttpResponse<InferenceOutput>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url =
@@ -1141,17 +1206,28 @@ impl Client {
                     builder = builder.header(header_name, value);
                 }
 
+                let extra_header_map = extra_request_headers
+                    .filter(|map| !map.is_empty())
+                    .map(build_extra_request_headers)
+                    .transpose()?;
+
                 if params.stream.unwrap_or(false) {
                     Ok(HttpResponse {
                         response: InferenceOutput::Streaming(
-                            client.send_http_stream_inference(builder).await?,
+                            client
+                                .send_http_stream_inference(builder, extra_header_map.as_ref())
+                                .await?,
                         ),
                         raw_request: body,
                         raw_response: None,
                     })
                 } else {
-                    let (response, raw_response) =
-                        client.send_and_parse_http_response(builder).await?;
+                    let (response, raw_response) = client
+                        .send_and_parse_http_response_with_extras(
+                            builder,
+                            extra_header_map.as_ref(),
+                        )
+                        .await?;
                     Ok(HttpResponse {
                         response: InferenceOutput::NonStreaming(response),
                         raw_request: body,
@@ -1174,8 +1250,22 @@ impl Client {
         &self,
         params: ClientInferenceParams,
     ) -> Result<InferenceOutput, TensorZeroError> {
+        Box::pin(self.inference_with_request_headers(params, None)).await
+    }
+
+    /// Like `inference`, but in HTTPGateway mode additionally attaches caller-supplied HTTP
+    /// headers to the gateway request. Extra headers override any header with the same name
+    /// that would otherwise be set by the client. Ignored in embedded mode.
+    pub async fn inference_with_request_headers(
+        &self,
+        params: ClientInferenceParams,
+        extra_request_headers: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<InferenceOutput, TensorZeroError> {
         match &*self.mode {
-            ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
+            ClientMode::HTTPGateway(_) => Ok(self
+                .http_inference_with_request_headers(params, extra_request_headers)
+                .await?
+                .response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     let app_state = gateway.handle.app_state.load_latest();
@@ -1256,6 +1346,34 @@ impl Client {
             }
         }
     }
+}
+
+/// Validates caller-supplied HTTP headers and returns them as a `HeaderMap` so they can be
+/// applied after the client-level headers (which ensures caller values win the replace).
+fn build_extra_request_headers(
+    extra_headers: &std::collections::HashMap<String, String>,
+) -> Result<HeaderMap, TensorZeroError> {
+    let mut header_map = HeaderMap::with_capacity(extra_headers.len());
+    for (name, value) in extra_headers {
+        let header_name = reqwest::header::HeaderName::try_from(name.as_str()).map_err(|e| {
+            TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Invalid HTTP header name `{name}`: {e}"),
+                })
+                .into(),
+            }
+        })?;
+        let header_value = reqwest::header::HeaderValue::try_from(value.as_str()).map_err(|e| {
+            TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Invalid HTTP header value for `{name}`: {e}"),
+                })
+                .into(),
+            }
+        })?;
+        header_map.insert(header_name, header_value);
+    }
+    Ok(header_map)
 }
 
 #[doc(hidden)]
@@ -1591,6 +1709,94 @@ mod tests {
         assert!(
             !feature_flags::TEST_FLAG.get(),
             "Should be able to get TEST_FLAG value without panic"
+        );
+    }
+
+    #[googletest::gtest]
+    fn test_extra_request_headers_override_client_headers() {
+        use googletest::prelude::*;
+        use reqwest::header::{HeaderName, HeaderValue};
+
+        let mut client_headers = HeaderMap::new();
+        client_headers.insert(
+            reqwest::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer client-level"),
+        );
+        client_headers.insert(
+            HeaderName::from_static("x-client-only"),
+            HeaderValue::from_static("keep"),
+        );
+
+        let gateway = HTTPGateway {
+            base_url: Url::parse("http://example.invalid/").expect("valid url"),
+            http_client: TensorzeroHttpClient::new_testing().expect("http client"),
+            headers: client_headers,
+            timeout: None,
+            verbose_errors: false,
+        };
+
+        let mut extras = HeaderMap::new();
+        extras.insert(
+            reqwest::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer per-call"),
+        );
+        extras.insert(
+            HeaderName::from_static("traceparent"),
+            HeaderValue::from_static("00-trace-span-01"),
+        );
+
+        let builder = gateway
+            .http_client
+            .post(gateway.base_url.clone())
+            .header(reqwest::header::AUTHORIZATION, "Bearer stale-request");
+        let request = gateway
+            .customize_builder_with_extras(builder, Some(&extras))
+            .build_for_test()
+            .expect("request should build");
+
+        let headers = request.headers();
+        expect_that!(
+            headers.get(reqwest::header::AUTHORIZATION),
+            some(eq(&HeaderValue::from_static("Bearer per-call")))
+        );
+        expect_that!(
+            headers.get("x-client-only"),
+            some(eq(&HeaderValue::from_static("keep")))
+        );
+        expect_that!(
+            headers.get("traceparent"),
+            some(eq(&HeaderValue::from_static("00-trace-span-01")))
+        );
+    }
+
+    #[googletest::gtest]
+    fn test_customize_builder_without_extras_uses_client_headers() {
+        use googletest::prelude::*;
+        use reqwest::header::HeaderValue;
+
+        let mut client_headers = HeaderMap::new();
+        client_headers.insert(
+            reqwest::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer client-level"),
+        );
+
+        let gateway = HTTPGateway {
+            base_url: Url::parse("http://example.invalid/").expect("valid url"),
+            http_client: TensorzeroHttpClient::new_testing().expect("http client"),
+            headers: client_headers,
+            timeout: None,
+            verbose_errors: false,
+        };
+
+        let builder = gateway.http_client.post(gateway.base_url.clone());
+        let request = gateway
+            .customize_builder(builder)
+            .build_for_test()
+            .expect("request should build");
+
+        expect_that!(
+            request.headers().get(reqwest::header::AUTHORIZATION),
+            some(eq(&HeaderValue::from_static("Bearer client-level")))
         );
     }
 }
