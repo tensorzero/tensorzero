@@ -12,7 +12,7 @@ path = "tests/e2e/tests.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
-clap = { version = "4.6.0", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 hex = "0.4.3"
 http = "1.4.0"
 http-body-util = { workspace = true }
