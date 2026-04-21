@@ -1007,6 +1007,14 @@
       "created_at": "2026-04-17T14:11:13Z",
       "repoId": 829640443,
       "pullRequestNo": 7311
+    },
+    {
+      "name": "kimsehwan96",
+      "id": 59886140,
+      "comment_id": 4287220216,
+      "created_at": "2026-04-21T08:57:52Z",
+      "repoId": 829640443,
+      "pullRequestNo": 7322
     }
   ]
 }
