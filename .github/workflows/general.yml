@@ -13,6 +13,8 @@ concurrency:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  NEXTEST_EXPERIMENTAL_RECORD: 1
+  NEXTEST_USER_CONFIG_FILE: ${{ github.workspace }}/ci/nextest-record.toml
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -416,7 +418,7 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-hack
 
@@ -613,7 +615,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -653,7 +655,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -664,6 +666,18 @@ jobs:
           TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
         run: |
           cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
+
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-rust-test
+          path: crates/trace.json
 
   validate:
     needs: [detect-changes]
@@ -796,7 +810,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest,cargo-hack
 
@@ -876,7 +890,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-deny
 
@@ -953,7 +967,7 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest
 
@@ -989,6 +1003,18 @@ jobs:
       - name: Test (Rust)
         working-directory: crates
         run: cargo nextest run --filterset 'test(db::) & test(postgres)'
+
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-postgres-tests
+          path: crates/trace.json
 
       - name: Print docker compose logs
         if: always()
@@ -1041,7 +1067,7 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest
 
@@ -1107,6 +1133,18 @@ jobs:
         working-directory: crates
         run: cargo test-endpoints
 
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-endpoint-tests-${{ matrix.database }}
+          path: crates/trace.json
+
       - name: Print docker compose logs
         if: always()
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
@@ -1157,7 +1195,7 @@ jobs:
           save-if: false
           workspaces: "crates -> target"
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest
 
@@ -1204,6 +1242,18 @@ jobs:
       - name: Test (Rust)
         working-directory: crates
         run: cargo test-optimization-mock
+
+      - name: Export nextest chrome trace
+        if: always()
+        working-directory: crates
+        run: cargo nextest store export-chrome-trace latest -o trace.json
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-mock-optimization-tests
+          path: crates/trace.json
 
       - name: Print docker compose logs
         if: always()

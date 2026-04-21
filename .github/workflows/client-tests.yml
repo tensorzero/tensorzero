@@ -167,7 +167,7 @@ jobs:
           done
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@94cb46f8d6e437890146ffbd78a778b78e623fb2
         with:
           tool: cargo-nextest
 

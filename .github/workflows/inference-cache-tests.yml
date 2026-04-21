@@ -6,6 +6,8 @@ on:
 env:
   CARGO_INCREMENTAL: 0
   FORCE_COLOR: 1
+  NEXTEST_EXPERIMENTAL_RECORD: 1
+  NEXTEST_USER_CONFIG_FILE: ${{ github.workspace }}/ci/nextest-record.toml
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -81,12 +83,20 @@ jobs:
         run: |
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --no-deps --rm \
             -e TENSORZERO_CI=1 \
+            -e NEXTEST_EXPERIMENTAL_RECORD=1 \
             -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
             -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
             live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
-            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
-            --profile cache -E '${{ matrix.test_filter }}' -j 4"
+            sh -c "printf '[experimental]\nrecord = true\n[record]\nenabled = true\n' > /tmp/nextest-record.toml && cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
+            --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --user-config-file /tmp/nextest-record.toml \
+            --profile cache -E '${{ matrix.test_filter }}' -j 4; exitcode=\$?; cargo-nextest nextest store export-chrome-trace latest --user-config-file /tmp/nextest-record.toml -o /app/target/nextest/trace.json || true; exit \$exitcode"
+
+      - name: Upload nextest chrome trace
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: nextest-trace-cache-tests-${{ matrix.cache_backend }}
+          path: target/nextest/trace.json
 
       - name: Upload provider-proxy cache
         if: github.event_name == 'merge_group' && matrix.cache_backend == 'clickhouse'
