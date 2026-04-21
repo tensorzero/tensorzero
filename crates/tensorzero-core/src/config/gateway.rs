@@ -309,6 +309,7 @@ impl From<StoredOtlpTracesConfig> for OtlpTracesConfig {
             enabled: stored.enabled,
             format: stored.format.map(Into::into),
             extra_headers: stored.extra_headers.map(|h| h.into_iter().collect()),
+            include_content: stored.include_content,
         }
     }
 }
@@ -499,6 +500,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
                         enabled: traces.enabled,
                         format: traces.format.map(StoredOtlpTracesFormat::from),
                         extra_headers: traces.extra_headers.map(|h| h.into_iter().collect()),
+                        include_content: traces.include_content,
                     }),
                 }),
             }),
@@ -766,6 +768,7 @@ mod tests {
                             ("x-trace-header".to_string(), "value-1".to_string()),
                             ("x-other".to_string(), "value-2".to_string()),
                         ])),
+                        include_content: None,
                     }),
                 }),
             }),
