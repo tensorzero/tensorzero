@@ -1386,12 +1386,8 @@ async fn test_clean_clickhouse_start() {
 /// identifier in a `FROM db.table` clause.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_clean_clickhouse_start_hyphenated_db_name() {
-    let database = format!(
-        "tensorzero-e2e-tests-hyphen-{}",
-        Uuid::now_v7().simple()
-    );
-    let (clickhouse, _cleanup_db) =
-        get_clean_clickhouse_with_name(database, false).await;
+    let database = format!("tensorzero-e2e-tests-hyphen-{}", Uuid::now_v7().simple());
+    let (clickhouse, _cleanup_db) = get_clean_clickhouse_with_name(database, false).await;
     let is_manual = clickhouse.is_cluster_configured();
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
