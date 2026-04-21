@@ -276,11 +276,21 @@ jobs:
           done
         shell: bash
 
+      - name: "Python: PyO3 Client: import preflight"
+        working-directory: crates/tensorzero-python
+        run: |
+          # Build the extension and verify it still imports before we start timing pytest.
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///bad-tensorzero.sock \
+            uv run --config-setting 'build-args=--profile=dev --features e2e_tests' \
+            tests/import_failure.py
+
       - name: "Python: PyO3 Client: pytest (non-mock tests)"
         working-directory: crates/tensorzero-python
         run: |
-          # Start the test in background and capture its PID
-          bash ./test.sh --verbose -n 8 -m "not mock" &
+          # Time only the pytest phase. The import/build preflight above can take several minutes.
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4317 \
+            uv run --config-setting 'build-args=--profile=dev --features e2e_tests' \
+            pytest -n auto --reruns 3 --verbose -n 8 -m "not mock" &
           TEST_PID=$!
           echo "Started test.sh with PID: $TEST_PID"
 
@@ -374,7 +384,7 @@ jobs:
       - name: Print vLLM GPT-OSS modal logs
         if: always()
         continue-on-error: true
-        run: cat vllm_gpt_oss_modal_logs.txt
+        run: cat vllm_gpt_oss_modal_logs.txt || echo "No vLLM GPT-OSS modal logs available"
 
       - name: Upload client-tests provider-proxy cache
         # Only upload the cache from trusted runs (merge queue or cron)
