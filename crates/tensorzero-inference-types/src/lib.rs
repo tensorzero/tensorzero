@@ -13,6 +13,7 @@ pub mod extra_body;
 pub mod extra_headers;
 pub mod inference_response;
 pub(crate) mod serde_helpers;
+pub mod tool;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;

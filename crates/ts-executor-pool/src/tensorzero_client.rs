@@ -11,6 +11,9 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde_json::Value;
+use tensorzero_inference_types::tool::DynamicToolParams;
+use tensorzero_types::inference_params::InferenceParams;
 use tensorzero_types::{InferenceResponse, Input};
 use uuid::Uuid;
 
@@ -28,6 +31,9 @@ pub struct PoolInferenceParams {
     pub episode_id: Option<Uuid>,
     pub input: Input,
     pub tags: HashMap<String, String>,
+    pub params: InferenceParams,
+    pub dynamic_tool_params: DynamicToolParams,
+    pub output_schema: Option<Value>,
 }
 
 /// Minimal client trait for running TensorZero inference.

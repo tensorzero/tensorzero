@@ -63,8 +63,9 @@ use crate::model_table::ProviderType;
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
-use crate::tool::{FunctionTool, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
 use crate::utils::mock::get_mock_provider_api_base;
+use tensorzero_inference_types::tool::FunctionTool;
 
 use super::helpers::{JsonlBatchFileInfo, convert_stream_error, parse_jsonl_batch_file};
 

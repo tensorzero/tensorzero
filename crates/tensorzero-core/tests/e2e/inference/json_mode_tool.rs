@@ -23,8 +23,8 @@ use tensorzero::{
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::inference::types::Text;
-use tensorzero_core::tool::{DynamicToolParams, FunctionTool, Tool};
 use tensorzero_core::variant::JsonMode;
+use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 use tokio_stream::StreamExt;
 
 // Reusable output schema for tests

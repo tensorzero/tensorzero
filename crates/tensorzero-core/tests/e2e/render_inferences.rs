@@ -18,8 +18,9 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::tool::InferenceResponseToolCall;
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
-    tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
+    tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice},
 };
+use tensorzero_inference_types::tool::Tool;
 use uuid::Uuid;
 
 /// Test that the render_samples function works when given an empty array of stored inferences.

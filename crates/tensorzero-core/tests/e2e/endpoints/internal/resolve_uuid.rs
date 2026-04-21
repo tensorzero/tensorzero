@@ -11,7 +11,7 @@ use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System,
     Template, Text,
 };
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;

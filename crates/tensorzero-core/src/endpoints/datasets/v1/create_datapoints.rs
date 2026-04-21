@@ -123,10 +123,11 @@ mod tests {
         Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::JSONSchema;
-    use crate::tool::{DynamicToolParams, ToolChoice};
+    use crate::tool::ToolChoice;
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
+    use tensorzero_inference_types::tool::DynamicToolParams;
     use uuid::Uuid;
 
     /// Helper to create a test config with functions registered

@@ -11,7 +11,6 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
-use tensorzero_core::tool::Tool;
 use tensorzero_core::{
     db::clickhouse::{
         ClickHouseConnectionInfo, TableName, test_helpers::select_batch_model_inferences_clickhouse,
@@ -23,6 +22,7 @@ use tensorzero_core::{
     },
     tool::{ToolCall, ToolResult},
 };
+use tensorzero_inference_types::tool::Tool;
 use tokio::time::{Duration, sleep};
 use url::Url;
 use uuid::Uuid;

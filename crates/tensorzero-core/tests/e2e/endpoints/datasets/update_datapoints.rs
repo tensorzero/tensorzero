@@ -22,9 +22,10 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, System, Template, Text,
 };
 use tensorzero_core::tool::{
-    AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
+    AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope,
     ToolCallConfigDatabaseInsert, ToolChoice,
 };
+use tensorzero_inference_types::tool::Tool;
 
 use crate::common::get_gateway_endpoint;
 

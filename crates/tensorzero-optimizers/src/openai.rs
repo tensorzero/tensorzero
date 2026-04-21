@@ -127,8 +127,8 @@ impl<'a> OpenAISupervisedRow<'a> {
                 tools
                     .iter()
                     .filter_map(|dt| match &dt {
-                        tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_inference_types::tool::Tool::Function(func) => Some(func.into()),
+                        tensorzero_inference_types::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })
                     .collect()
             })
@@ -216,8 +216,8 @@ impl<'a> OpenAIReinforcementRow<'a> {
                 tools
                     .iter()
                     .filter_map(|dt| match &dt {
-                        tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
-                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                        tensorzero_inference_types::tool::Tool::Function(func) => Some(func.into()),
+                        tensorzero_inference_types::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })
                     .collect()
             })
@@ -425,8 +425,9 @@ mod tests {
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
-        tool::{DynamicToolParams, InferenceResponseToolCall},
+        tool::InferenceResponseToolCall,
     };
+    use tensorzero_inference_types::tool::DynamicToolParams;
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {

@@ -7,9 +7,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::tool::{
-    FunctionTool, InferenceResponseToolCall, OpenAICustomTool, Tool, ToolCallWrapper, ToolChoice,
-};
+use crate::tool::{InferenceResponseToolCall, OpenAICustomTool, ToolCallWrapper, ToolChoice};
+use tensorzero_inference_types::tool::{FunctionTool, Tool};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {

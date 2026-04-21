@@ -30,7 +30,7 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, Text,
 };
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 

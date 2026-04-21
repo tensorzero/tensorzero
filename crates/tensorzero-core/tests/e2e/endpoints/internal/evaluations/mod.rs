@@ -25,7 +25,7 @@ use tensorzero_core::endpoints::internal::evaluations::{
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System, Text,
 };
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tensorzero_types::FunctionType;
 use tokio::time::sleep;
 use uuid::Uuid;

@@ -17,6 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
+strum = { version = "0.28.0", features = ["derive"] }
 tensorzero-derive = { path = "../tensorzero-derive" }
 tokio.workspace = true
 tracing.workspace = true

@@ -23,7 +23,8 @@ use crate::inference::types::{
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
 };
-use crate::tool::{DynamicToolParams, StaticToolConfig};
+use crate::tool::StaticToolConfig;
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{

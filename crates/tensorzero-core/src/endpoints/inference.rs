@@ -64,12 +64,13 @@ use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::observability::request_logging::HttpMetricData;
 use crate::rate_limiting::{RateLimitingManager, ScopeInfo};
 use crate::relay::TensorzeroRelay;
-use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
+use crate::tool::{ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, Variant, VariantConfig, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tensorzero_types::inference_params::JsonMode;
 
 pub use tensorzero_types::{ChatInferenceResponse, InferenceResponse, JsonInferenceResponse};

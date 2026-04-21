@@ -15,7 +15,8 @@ use crate::endpoints::datasets::Datapoint;
 use crate::endpoints::stored_inferences::v1::types::ListInferencesRequest;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
+use crate::tool::{ProviderTool, ToolChoice};
+use tensorzero_inference_types::tool::{DynamicToolParams, Tool};
 
 /// The property to order datapoints by.
 /// This is flattened in the public API inside the `DatapointOrderBy` struct.

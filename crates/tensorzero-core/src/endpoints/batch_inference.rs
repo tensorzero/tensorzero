@@ -56,12 +56,13 @@ use crate::observability::internal_metrics::TENSORZERO_INFERENCES_TOTAL;
 use crate::rate_limiting::ScopeInfo;
 use crate::relay::TensorzeroRelay;
 use crate::tool::{
-    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
+    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
 use crate::utils::gateway::{AppState, AppStateData, ResolvedAppStateData, StructuredJson};
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant, VariantInfo};
 use tensorzero_auth::middleware::RequestApiKeyExtension;
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 /// The expected payload to the `/start_batch_inference` endpoint.
 /// It will be a JSON object with the following fields:
