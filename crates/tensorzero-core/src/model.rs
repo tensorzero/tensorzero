@@ -884,6 +884,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &InferenceClients,
         model_name: &'request str,
+        function_name: Option<&'request str>,
     ) -> Result<ModelInferenceResponse, Error> {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
@@ -916,6 +917,7 @@ impl ModelConfig {
                     provider_name,
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
+                    function_name,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -1029,6 +1031,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &InferenceClients,
         model_name: &'request str,
+        function_name: Option<&'request str>,
     ) -> Result<StreamResponseAndMessages, Error> {
         clients
             .otlp_config
@@ -1069,6 +1072,7 @@ impl ModelConfig {
                     provider_name,
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
+                    function_name,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -2623,6 +2627,10 @@ impl ModelProvider {
                     span.set_attribute("gen_ai.request.model", model_name.to_string());
                 }
 
+                if let Some(function_name) = request.function_name {
+                    span.set_attribute("gen_ai.agent.name", function_name.to_string());
+                }
+
                 if traces.include_content.unwrap_or(false) {
                     let messages = genai_conventions::to_genai_messages(&request.request.messages);
                     span.set_attribute(
@@ -3816,7 +3824,7 @@ mod tests {
         };
         let model_name = "test model";
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         let content = response.output;
@@ -3860,7 +3868,7 @@ mod tests {
             namespace: None,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -3960,6 +3968,7 @@ mod tests {
             provider_name: "test_provider",
             otlp_config: &Default::default(),
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         };
 
         // Should fail with RateLimitMissingMaxTokens
@@ -3988,6 +3997,7 @@ mod tests {
             provider_name: "test_provider",
             otlp_config: &Default::default(),
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         };
 
         let result = provider
@@ -4096,7 +4106,7 @@ mod tests {
 
         let model_name = "test model";
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
@@ -4212,7 +4222,7 @@ mod tests {
                 },
             messages: _input,
         } = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -4268,7 +4278,7 @@ mod tests {
             namespace: None,
         };
         let response = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await;
         assert!(response.is_err());
         let error = match response {
@@ -4402,7 +4412,7 @@ mod tests {
                 },
             messages: _,
         } = model_config
-            .infer_stream(&request, &clients, "my_model")
+            .infer_stream(&request, &clients, "my_model", None)
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
@@ -4513,7 +4523,7 @@ mod tests {
         };
         let model_name = "test model";
         let error = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4559,7 +4569,7 @@ mod tests {
             include_aggregated_response: false,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4651,7 +4661,7 @@ mod tests {
             ..Default::default()
         };
         let error = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -4697,7 +4707,7 @@ mod tests {
             include_aggregated_response: false,
         };
         let response = model_config
-            .infer(&request, &clients, model_name)
+            .infer(&request, &clients, model_name, None)
             .await
             .unwrap();
         assert_eq!(

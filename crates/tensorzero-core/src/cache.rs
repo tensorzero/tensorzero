@@ -238,6 +238,7 @@ pub struct BaseModelProviderRequest<'request, T> {
     pub provider_name: &'request str,
     pub otlp_config: &'request OtlpConfig,
     pub model_inference_id: Uuid,
+    pub function_name: Option<&'request str>,
 }
 
 // We need a manual impl to avoid adding a 'T: Copy' bound
@@ -287,6 +288,8 @@ impl EmbeddingModelProviderRequest<'_> {
             // since it's only used to construct the OTEL span.
             otlp_config: _,
             model_inference_id: _,
+            // Not part of cache key — purely span metadata.
+            function_name: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -317,6 +320,8 @@ impl ModelProviderRequest<'_> {
             // since it's only used to construct the OTEL span.
             otlp_config: _,
             model_inference_id: _,
+            // Not part of cache key — purely span metadata.
+            function_name: _,
         } = self;
         let mut hasher = blake3::Hasher::new();
         hasher.update(model_name.as_bytes());
@@ -765,6 +770,7 @@ mod tests {
             provider_name,
             otlp_config: &otlp_config,
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         }
         .get_cache_key()
         .expect("get_cache_key should not fail for a valid request")
@@ -1097,6 +1103,7 @@ mod tests {
             provider_name,
             otlp_config: &otlp_config,
             model_inference_id: Uuid::now_v7(),
+            function_name: None,
         }
         .get_cache_key()
         .expect("get_cache_key should not fail for a valid embedding request")
