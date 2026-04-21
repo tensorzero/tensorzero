@@ -122,7 +122,7 @@ schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
 blake3 = "1.8.4"
 moka = { version = "0.12.15", features = ["sync"] }
-durable = { git = "https://github.com/tensorzero/durable", rev = "b5f2664bc12e154a3ed00281c1a14a8c7406eae1" }
+durable = { git = "https://github.com/tensorzero/durable", rev = "06dece0a51bc7ca9a852a1ba26ef747768430352" }
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
