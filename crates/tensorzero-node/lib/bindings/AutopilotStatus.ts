@@ -12,5 +12,4 @@ export type AutopilotStatus =
   | { status: "waiting_for_auto_eval_example_labeling_answers" }
   | { status: "waiting_for_auto_eval_behavior_spec_answers" }
   | { status: "waiting_for_retry" }
-  | { status: "errored_in_progress" }
   | { status: "failed" };
