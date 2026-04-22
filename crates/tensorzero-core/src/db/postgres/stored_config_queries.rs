@@ -105,6 +105,44 @@ pub struct LoadedConfig {
     pub loading_errors: Vec<ConfigLoadingError>,
 }
 
+/// Loads an optional singleton config row and converts it via `convert`.
+///
+/// - If the row is absent, returns `T::default()`.
+/// - If the row is present and converts successfully, returns the converted value.
+/// - If conversion fails, pushes a `ConfigLoadingError` and returns `T::default()`
+///   so the gateway can still start with the built-in defaults.
+///
+/// `kind` is used as both the error `kind` and `name` (singleton rows have no
+/// user-facing name). It must stay in sync with the TS binding consumers.
+fn load_singleton_or_default<T, F>(
+    row: Option<VersionedConfigRow>,
+    kind: &'static str,
+    convert: F,
+    errors: &mut Vec<ConfigLoadingError>,
+) -> T
+where
+    T: Default,
+    F: FnOnce(i32, serde_json::Value) -> Result<T, Error>,
+{
+    let Some(row) = row else {
+        return T::default();
+    };
+    let raw_toml = json_to_toml_fragment(row.config.clone());
+    match convert(row.schema_revision, row.config) {
+        Ok(value) => value,
+        Err(error) => {
+            errors.push(ConfigLoadingError {
+                kind,
+                name: kind.to_string(),
+                parent: None,
+                error: error.to_string(),
+                raw_toml,
+            });
+            T::default()
+        }
+    }
+}
+
 /// Open a new REPEATABLE READ READ ONLY transaction on its own connection and
 /// import the given exported snapshot id, so the resulting transaction shares
 /// a snapshot with the leader transaction that called `pg_export_snapshot()`.
@@ -560,145 +598,76 @@ async fn rehydrate_loaded_config_rows(
 
     let mut loading_errors: Vec<ConfigLoadingError> = Vec::new();
 
-    let gateway = match gateway_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            let result = deserialize_gateway_config(row.schema_revision, row.config)
+    let gateway = load_singleton_or_default(
+        gateway_row,
+        "gateway_config",
+        |sr, c| {
+            deserialize_gateway_config(sr, c)
                 .map_err(schema_dispatch_error)
-                .and_then(|stored| stored.try_into());
-            match result {
-                Ok(g) => g,
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "gateway_config",
-                        name: "gateway_config".to_string(),
-                        parent: None,
-                        error: error.to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
-    let clickhouse = match clickhouse_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            match deserialize_clickhouse_config(row.schema_revision, row.config) {
-                Ok(stored) => stored.into(),
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "clickhouse_config",
-                        name: "clickhouse_config".to_string(),
-                        parent: None,
-                        error: schema_dispatch_error(error).to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
-    let postgres = match postgres_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            match deserialize_postgres_config(row.schema_revision, row.config) {
-                Ok(stored) => stored.into(),
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "postgres_config",
-                        name: "postgres_config".to_string(),
-                        parent: None,
-                        error: schema_dispatch_error(error).to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
-    let object_storage = match object_storage_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            match deserialize_storage_kind(row.schema_revision, row.config) {
-                Ok(stored) => Some(stored.into()),
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "object_storage_config",
-                        name: "object_storage_config".to_string(),
-                        parent: None,
-                        error: schema_dispatch_error(error).to_string(),
-                        raw_toml,
-                    });
-                    None
-                }
-            }
-        }
-        None => None,
-    };
-    let rate_limiting = match rate_limiting_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            let result = deserialize_rate_limiting_config(row.schema_revision, row.config)
+                .and_then(TryInto::try_into)
+        },
+        &mut loading_errors,
+    );
+    let clickhouse = load_singleton_or_default(
+        clickhouse_row,
+        "clickhouse_config",
+        |sr, c| {
+            deserialize_clickhouse_config(sr, c)
+                .map(Into::into)
                 .map_err(schema_dispatch_error)
-                .and_then(|stored| stored.try_into());
-            match result {
-                Ok(r) => r,
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "rate_limiting_config",
-                        name: "rate_limiting_config".to_string(),
-                        parent: None,
-                        error: error.to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
-    let autopilot = match autopilot_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            match deserialize_autopilot_config(row.schema_revision, row.config) {
-                Ok(stored) => stored.into(),
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "autopilot_config",
-                        name: "autopilot_config".to_string(),
-                        parent: None,
-                        error: schema_dispatch_error(error).to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
-    let provider_types = match provider_types_row {
-        Some(row) => {
-            let raw_toml = json_to_toml_fragment(row.config.clone());
-            match deserialize_provider_types_config(row.schema_revision, row.config) {
-                Ok(stored) => stored.into(),
-                Err(error) => {
-                    loading_errors.push(ConfigLoadingError {
-                        kind: "provider_types_config",
-                        name: "provider_types_config".to_string(),
-                        parent: None,
-                        error: schema_dispatch_error(error).to_string(),
-                        raw_toml,
-                    });
-                    Default::default()
-                }
-            }
-        }
-        None => Default::default(),
-    };
+        },
+        &mut loading_errors,
+    );
+    let postgres = load_singleton_or_default(
+        postgres_row,
+        "postgres_config",
+        |sr, c| {
+            deserialize_postgres_config(sr, c)
+                .map(Into::into)
+                .map_err(schema_dispatch_error)
+        },
+        &mut loading_errors,
+    );
+    let object_storage = load_singleton_or_default(
+        object_storage_row,
+        "object_storage_config",
+        |sr, c| {
+            deserialize_storage_kind(sr, c)
+                .map(|stored| Some(stored.into()))
+                .map_err(schema_dispatch_error)
+        },
+        &mut loading_errors,
+    );
+    let rate_limiting = load_singleton_or_default(
+        rate_limiting_row,
+        "rate_limiting_config",
+        |sr, c| {
+            deserialize_rate_limiting_config(sr, c)
+                .map_err(schema_dispatch_error)
+                .and_then(TryInto::try_into)
+        },
+        &mut loading_errors,
+    );
+    let autopilot = load_singleton_or_default(
+        autopilot_row,
+        "autopilot_config",
+        |sr, c| {
+            deserialize_autopilot_config(sr, c)
+                .map(Into::into)
+                .map_err(schema_dispatch_error)
+        },
+        &mut loading_errors,
+    );
+    let provider_types = load_singleton_or_default(
+        provider_types_row,
+        "provider_types_config",
+        |sr, c| {
+            deserialize_provider_types_config(sr, c)
+                .map(Into::into)
+                .map_err(schema_dispatch_error)
+        },
+        &mut loading_errors,
+    );
 
     let (model_map, model_errors) = rehydrate_named_collection(
         model_rows,
@@ -753,13 +722,13 @@ async fn rehydrate_loaded_config_rows(
     loading_errors.extend(evaluation_errors);
 
     let mut stored_functions = HashMap::new();
-    let mut function_raw_configs: HashMap<String, serde_json::Value> = HashMap::new();
     let mut variant_ids = HashSet::new();
     for function_row in &latest_function_rows {
         if function_row.deleted_at.is_some() {
             continue;
         }
-        let raw_toml = json_to_toml_fragment(function_row.config.clone());
+        // Only compute raw_toml on the error path — avoids the clone on the
+        // happy path (which is the vast majority of rows).
         let stored = match deserialize_function_config(
             function_row.schema_revision,
             function_row.config.clone(),
@@ -774,13 +743,12 @@ async fn rehydrate_loaded_config_rows(
                         "Failed to deserialize function version `{}`: {error}",
                         function_row.id
                     ),
-                    raw_toml,
+                    raw_toml: json_to_toml_fragment(function_row.config.clone()),
                 });
                 continue;
             }
         };
         collect_function_variant_ids(&stored, &mut variant_ids);
-        function_raw_configs.insert(function_row.name.clone(), function_row.config.clone());
         stored_functions.insert(function_row.name.clone(), stored);
     }
 
@@ -794,10 +762,13 @@ async fn rehydrate_loaded_config_rows(
         let stored = match deserialize_variant_config(row.schema_revision, row.config) {
             Ok(stored) => stored,
             Err(error) => {
-                // We don't know the parent function name at this point — that association
-                // is in the function config's variant refs. We record the variant UUID in
-                // the name so the error is still actionable. The function rehydration step
-                // will produce a follow-up "missing or broken variant" error with the name.
+                // We don't know the parent function name here — that association
+                // lives in the function config's variant refs. `name` is the
+                // variant's own name and the error message carries the version
+                // UUID so the operator can identify the specific row. The
+                // function rehydration step will later surface a correlated
+                // "Missing or broken variant version" error that includes the
+                // parent function name.
                 loading_errors.push(ConfigLoadingError {
                     kind: "variant",
                     name: row.name.clone(),
@@ -922,9 +893,7 @@ async fn rehydrate_loaded_config_rows(
                     name: function_row.name.clone(),
                     parent: None,
                     error: format!("Failed to rehydrate function: {error}"),
-                    raw_toml: function_raw_configs
-                        .get(&function_row.name)
-                        .and_then(|v| json_to_toml_fragment(v.clone())),
+                    raw_toml: json_to_toml_fragment(function_row.config),
                 });
             }
         }
@@ -1188,4 +1157,220 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<LoadedConfig, Vec<Erro
         config,
         loading_errors,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use serde_json::json;
+
+    // ─── json_value_to_toml ────────────────────────────────────────────────
+
+    #[gtest]
+    fn json_value_to_toml_null_returns_none() {
+        expect_that!(json_value_to_toml(serde_json::Value::Null), none());
+    }
+
+    #[gtest]
+    fn json_value_to_toml_bool_preserves_value() {
+        expect_that!(
+            json_value_to_toml(json!(true)),
+            some(eq(&toml::Value::Boolean(true)))
+        );
+        expect_that!(
+            json_value_to_toml(json!(false)),
+            some(eq(&toml::Value::Boolean(false)))
+        );
+    }
+
+    #[gtest]
+    fn json_value_to_toml_integer_preserves_value() {
+        expect_that!(
+            json_value_to_toml(json!(42)),
+            some(eq(&toml::Value::Integer(42)))
+        );
+        expect_that!(
+            json_value_to_toml(json!(-17)),
+            some(eq(&toml::Value::Integer(-17)))
+        );
+    }
+
+    #[gtest]
+    fn json_value_to_toml_float_preserves_value() {
+        let Some(toml::Value::Float(f)) = json_value_to_toml(json!(3.5)) else {
+            panic!("expected float toml value");
+        };
+        expect_that!(f, eq(3.5));
+    }
+
+    #[gtest]
+    fn json_value_to_toml_string_preserves_value() {
+        expect_that!(
+            json_value_to_toml(json!("hello")),
+            some(eq(&toml::Value::String("hello".to_string())))
+        );
+    }
+
+    #[gtest]
+    fn json_value_to_toml_array_filters_nulls() {
+        // Nulls inside arrays are silently dropped — TOML has no null.
+        let Some(toml::Value::Array(items)) = json_value_to_toml(json!([1, null, 2])) else {
+            panic!("expected array toml value");
+        };
+        expect_that!(items.len(), eq(2));
+        expect_that!(&items[0], eq(&toml::Value::Integer(1)));
+        expect_that!(&items[1], eq(&toml::Value::Integer(2)));
+    }
+
+    #[gtest]
+    fn json_value_to_toml_nested_object_preserves_shape() {
+        let input = json!({
+            "inner": {"key": "value", "n": 7},
+            "flag": true,
+        });
+        let Some(toml::Value::Table(table)) = json_value_to_toml(input) else {
+            panic!("expected table toml value");
+        };
+        expect_that!(table.get("flag"), some(eq(&toml::Value::Boolean(true))));
+        let Some(toml::Value::Table(inner)) = table.get("inner") else {
+            panic!("expected nested table");
+        };
+        expect_that!(
+            inner.get("key"),
+            some(eq(&toml::Value::String("value".to_string())))
+        );
+        expect_that!(inner.get("n"), some(eq(&toml::Value::Integer(7))));
+    }
+
+    #[gtest]
+    fn json_value_to_toml_object_drops_null_entries() {
+        // Null-valued keys are dropped, but the surrounding table survives.
+        let input = json!({"present": 1, "missing": null});
+        let Some(toml::Value::Table(table)) = json_value_to_toml(input) else {
+            panic!("expected table toml value");
+        };
+        expect_that!(table.len(), eq(1));
+        expect_that!(table.contains_key("missing"), eq(false));
+        expect_that!(table.get("present"), some(eq(&toml::Value::Integer(1))));
+    }
+
+    // ─── json_to_toml_fragment ─────────────────────────────────────────────
+
+    #[gtest]
+    fn json_to_toml_fragment_top_level_null_returns_none() {
+        expect_that!(json_to_toml_fragment(serde_json::Value::Null), none());
+    }
+
+    #[gtest]
+    fn json_to_toml_fragment_renders_object_as_toml() {
+        let fragment = json_to_toml_fragment(json!({
+            "type": "chat_completion",
+            "model": "gpt-4",
+        }))
+        .expect("object should render as toml");
+        expect_that!(&fragment, contains_substring(r#"model = "gpt-4""#));
+        expect_that!(&fragment, contains_substring(r#"type = "chat_completion""#));
+    }
+
+    #[gtest]
+    fn json_to_toml_fragment_drops_top_level_null_entries() {
+        // JSONB can contain nulls that TOML can't; they get silently dropped.
+        let fragment = json_to_toml_fragment(json!({
+            "kept": "value",
+            "dropped": null,
+        }))
+        .expect("object with nulls should still render");
+        expect_that!(&fragment, contains_substring(r#"kept = "value""#));
+        expect_that!(&fragment, not(contains_substring("dropped")));
+    }
+
+    // ─── load_singleton_or_default ────────────────────────────────────────
+
+    #[gtest]
+    fn load_singleton_or_default_returns_default_when_row_absent() {
+        let mut errors: Vec<ConfigLoadingError> = Vec::new();
+        let out: i32 = load_singleton_or_default(
+            None,
+            "test_kind",
+            |_sr, _c| panic!("convert should not be called when row is absent"),
+            &mut errors,
+        );
+        expect_that!(out, eq(0));
+        expect_that!(errors.is_empty(), eq(true));
+    }
+
+    #[gtest]
+    fn load_singleton_or_default_returns_converted_value_on_success() {
+        let mut errors: Vec<ConfigLoadingError> = Vec::new();
+        let row = VersionedConfigRow {
+            schema_revision: 1,
+            config: json!({"value": 99}),
+        };
+        let out: i32 = load_singleton_or_default(
+            Some(row),
+            "test_kind",
+            |sr, c| {
+                expect_that!(sr, eq(1));
+                expect_that!(c.get("value").and_then(|v| v.as_i64()), some(eq(99)));
+                Ok(42)
+            },
+            &mut errors,
+        );
+        expect_that!(out, eq(42));
+        expect_that!(errors.is_empty(), eq(true));
+    }
+
+    #[gtest]
+    fn load_singleton_or_default_records_error_and_returns_default_on_failure() {
+        let mut errors: Vec<ConfigLoadingError> = Vec::new();
+        let row = VersionedConfigRow {
+            schema_revision: 5,
+            config: json!({"bad": "data"}),
+        };
+        let out: i32 = load_singleton_or_default(
+            Some(row),
+            "broken_kind",
+            |_sr, _c| {
+                Err(Error::new(ErrorDetails::Config {
+                    message: "boom".to_string(),
+                }))
+            },
+            &mut errors,
+        );
+        expect_that!(out, eq(0));
+        assert_that!(errors.len(), eq(1));
+        expect_that!(errors[0].kind, eq("broken_kind"));
+        expect_that!(&errors[0].name, eq("broken_kind"));
+        expect_that!(errors[0].parent, none());
+        expect_that!(&errors[0].error, contains_substring("boom"));
+        // raw_toml should be populated from the row's JSONB.
+        expect_that!(
+            errors[0].raw_toml.as_deref(),
+            some(contains_substring(r#"bad = "data""#))
+        );
+    }
+
+    #[gtest]
+    fn load_singleton_or_default_with_option_type_returns_none_on_failure() {
+        // Mirrors the object_storage case: convert returns Option<T> and the
+        // fallback is None (via Option::default()).
+        let mut errors: Vec<ConfigLoadingError> = Vec::new();
+        let row = VersionedConfigRow {
+            schema_revision: 1,
+            config: json!({"whatever": true}),
+        };
+        let out: Option<i32> = load_singleton_or_default(
+            Some(row),
+            "optional_kind",
+            |_sr, _c| {
+                Err(Error::new(ErrorDetails::Config {
+                    message: "no".to_string(),
+                }))
+            },
+            &mut errors,
+        );
+        expect_that!(out, none());
+        assert_that!(errors.len(), eq(1));
+    }
 }

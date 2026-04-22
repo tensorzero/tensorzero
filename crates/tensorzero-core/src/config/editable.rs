@@ -239,4 +239,173 @@ mod tests {
             err(displays_as(contains_substring(removed_key)))
         );
     }
+
+    // ─── config_to_toml_with_errors ────────────────────────────────────────
+
+    #[gtest]
+    fn config_to_toml_with_errors_with_empty_list_matches_plain_config_to_toml() {
+        // No errors → output must be identical to config_to_toml.
+        let config = sample_uninitialized_config();
+        let (plain, plain_paths) =
+            config_to_toml(&config).expect("plain serialization should succeed");
+        let (annotated, annotated_paths) = config_to_toml_with_errors(&config, &[])
+            .expect("annotated serialization should succeed");
+
+        expect_that!(&annotated, eq(&plain));
+        expect_that!(&annotated_paths, eq(&plain_paths));
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_appends_broken_header_and_raw_fragment() {
+        let config = sample_uninitialized_config();
+        let errors = vec![ConfigLoadingError {
+            kind: "model",
+            name: "gpt-broken".to_string(),
+            parent: None,
+            error: "unsupported schema revision 999".to_string(),
+            raw_toml: Some("type = \"chat_completion\"\nmodel_name = \"gpt-broken\"".to_string()),
+        }];
+        let (annotated, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        // Header mentions kind, name, and the error message.
+        expect_that!(
+            &annotated,
+            contains_substring(r#"# BROKEN (model "gpt-broken"): unsupported schema revision 999"#)
+        );
+        // Raw TOML is emitted as commented-out lines.
+        expect_that!(
+            &annotated,
+            contains_substring(r#"# type = "chat_completion""#)
+        );
+        expect_that!(
+            &annotated,
+            contains_substring(r#"# model_name = "gpt-broken""#)
+        );
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_uses_parent_slash_name_label() {
+        let config = sample_uninitialized_config();
+        let errors = vec![ConfigLoadingError {
+            kind: "variant",
+            name: "primary".to_string(),
+            parent: Some("generate_draft".to_string()),
+            error: "missing variant version".to_string(),
+            raw_toml: None,
+        }];
+        let (annotated, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        expect_that!(
+            &annotated,
+            contains_substring(
+                r#"# BROKEN (variant "generate_draft / primary"): missing variant version"#
+            )
+        );
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_marks_missing_raw_toml() {
+        let config = sample_uninitialized_config();
+        let errors = vec![ConfigLoadingError {
+            kind: "tool",
+            name: "broken_tool".to_string(),
+            parent: None,
+            error: "bad parameters file".to_string(),
+            raw_toml: None,
+        }];
+        let (annotated, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        expect_that!(
+            &annotated,
+            contains_substring("# (raw config not available)")
+        );
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_appends_multiple_errors_in_order() {
+        let config = sample_uninitialized_config();
+        let errors = vec![
+            ConfigLoadingError {
+                kind: "model",
+                name: "first".to_string(),
+                parent: None,
+                error: "error one".to_string(),
+                raw_toml: None,
+            },
+            ConfigLoadingError {
+                kind: "function",
+                name: "second".to_string(),
+                parent: None,
+                error: "error two".to_string(),
+                raw_toml: None,
+            },
+        ];
+        let (annotated, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        let first_idx = annotated
+            .find(r#"# BROKEN (model "first"): error one"#)
+            .expect("first error header should appear");
+        let second_idx = annotated
+            .find(r#"# BROKEN (function "second"): error two"#)
+            .expect("second error header should appear");
+        expect_that!(first_idx < second_idx, eq(true));
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_round_trips_back_to_original_config() {
+        // The `# BROKEN:` annotations are TOML comments, so parsing the
+        // annotated output must reproduce the same config. This guards against
+        // regressions where the annotation format drifts into something that
+        // the TOML parser treats as non-comment content.
+        let config = sample_uninitialized_config();
+        let errors = vec![
+            ConfigLoadingError {
+                kind: "model",
+                name: "broken".to_string(),
+                parent: None,
+                error: "bad schema revision".to_string(),
+                raw_toml: Some(
+                    "type = \"chat_completion\"\nendpoint = \"https://x.test\"".to_string(),
+                ),
+            },
+            ConfigLoadingError {
+                kind: "variant",
+                name: "alt".to_string(),
+                parent: Some("generate_draft".to_string()),
+                error: "missing variant version".to_string(),
+                raw_toml: None,
+            },
+        ];
+        let (annotated, path_contents) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        let round_trip =
+            toml_to_config(&annotated, &path_contents).expect("annotated TOML should parse back");
+        expect_that!(&round_trip, eq(&config));
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_is_deterministic_for_cas_signature() {
+        // The CAS signature in the apply handler is computed over the TOML
+        // string returned by this function. Running it twice on the same
+        // inputs must produce byte-identical output.
+        let config = sample_uninitialized_config();
+        let errors = vec![ConfigLoadingError {
+            kind: "model",
+            name: "gpt-broken".to_string(),
+            parent: None,
+            error: "schema revision 999".to_string(),
+            raw_toml: Some("a = 1\nb = 2".to_string()),
+        }];
+
+        let (first, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("first serialization should succeed");
+        let (second, _) = config_to_toml_with_errors(&config, &errors)
+            .expect("second serialization should succeed");
+        expect_that!(&first, eq(&second));
+    }
 }
