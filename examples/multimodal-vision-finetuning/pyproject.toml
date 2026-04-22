@@ -9,7 +9,7 @@ dependencies = [
     "ipywidgets>=8.1.6",
     "pandas>=2.2.3",
     "pymupdf>=1.25.5",
-    "requests>=2.33.0",
+    "requests>=2.33.1",
     "tensorzero",
     "tqdm>=4.67.1",
 ]
