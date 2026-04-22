@@ -74,7 +74,7 @@ def test_traceparent_sync():
                 "system": {"assistant_name": "Alfred Pennyworth"},
                 "messages": [{"role": "user", "content": "What is 2+2?"}],
             },
-            headers={"traceparent": header},
+            gateway_http_headers={"traceparent": header},
         )
 
     assert isinstance(result, ChatInferenceResponse)
@@ -101,7 +101,7 @@ async def test_traceparent_async():
                 "system": {"assistant_name": "Alfred Pennyworth"},
                 "messages": [{"role": "user", "content": "What is 3+3?"}],
             },
-            headers={"traceparent": header},
+            gateway_http_headers={"traceparent": header},
         )
     finally:
         await client.close()
@@ -125,6 +125,6 @@ def test_invalid_header_name_raises():
                 "system": {"assistant_name": "Alfred Pennyworth"},
                 "messages": [{"role": "user", "content": "hi"}],
             },
-            headers={"bad header name with spaces": "value"},
+            gateway_http_headers={"bad header name with spaces": "value"},
         )
     client.close()

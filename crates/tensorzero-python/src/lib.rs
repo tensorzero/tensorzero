@@ -1172,7 +1172,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None, headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None, gateway_http_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1216,9 +1216,9 @@ impl TensorZeroGateway {
     /// :param otlp_traces_extra_resources: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                     Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-resources-".
     ///                                     Example: {"My-Resource": "My-Value"} becomes header "tensorzero-otlp-traces-extra-resource-My-Resource: My-Value"
-    /// :param headers: If set, attaches extra HTTP headers to the request sent to the TensorZero Gateway.
-    ///                 Useful for passing W3C `traceparent` / `tracestate` or other custom headers.
-    ///                 Only meaningful for HTTP-mode clients; ignored by embedded gateways.
+    /// :param gateway_http_headers: If set, attaches extra HTTP headers to the request sent to the TensorZero Gateway.
+    ///                              Useful for passing W3C `traceparent` / `tracestate` or other custom headers.
+    ///                              Only meaningful for HTTP-mode clients; ignored by embedded gateways.
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a generator that yields InferenceChunks as they come in.
     fn inference(
@@ -1253,7 +1253,7 @@ impl TensorZeroGateway {
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        headers: Option<HashMap<String, String>>,
+        gateway_http_headers: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let inference_params = BaseTensorZeroGateway::prepare_inference_params(
@@ -1290,7 +1290,7 @@ impl TensorZeroGateway {
         )?;
         let fut = async move {
             client
-                .inference_with_request_headers(inference_params, headers.as_ref())
+                .inference_with_request_headers(inference_params, gateway_http_headers.as_ref())
                 .await
         };
 
@@ -2148,7 +2148,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None, headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, namespace=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, include_raw_response=None, include_raw_usage=None, include_aggregated_response=None, otlp_traces_extra_headers=None, otlp_traces_extra_attributes=None, otlp_traces_extra_resources=None, internal_dynamic_variant_config=None, gateway_http_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -2186,9 +2186,9 @@ impl AsyncTensorZeroGateway {
     /// :param otlp_traces_extra_headers: If set, attaches custom HTTP headers to OTLP trace exports for this request.
     ///                                   Headers will be automatically prefixed with "tensorzero-otlp-traces-extra-header-".
     ///                                   Example: {"My-Header": "My-Value"} becomes header "tensorzero-otlp-traces-extra-header-My-Header: My-Value"
-    /// :param headers: If set, attaches extra HTTP headers to the request sent to the TensorZero Gateway.
-    ///                 Useful for passing W3C `traceparent` / `tracestate` or other custom headers.
-    ///                 Only meaningful for HTTP-mode clients; ignored by embedded gateways.
+    /// :param gateway_http_headers: If set, attaches extra HTTP headers to the request sent to the TensorZero Gateway.
+    ///                              Useful for passing W3C `traceparent` / `tracestate` or other custom headers.
+    ///                              Only meaningful for HTTP-mode clients; ignored by embedded gateways.
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns an async generator that yields InferenceChunks as they come in.
     fn inference<'a>(
@@ -2223,7 +2223,7 @@ impl AsyncTensorZeroGateway {
         otlp_traces_extra_attributes: Option<HashMap<String, String>>,
         otlp_traces_extra_resources: Option<HashMap<String, String>>,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        headers: Option<HashMap<String, String>>,
+        gateway_http_headers: Option<HashMap<String, String>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
@@ -2262,7 +2262,7 @@ impl AsyncTensorZeroGateway {
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let res = client
-                .inference_with_request_headers(params, headers.as_ref())
+                .inference_with_request_headers(params, gateway_http_headers.as_ref())
                 .await;
             // We need to interact with Python objects here (to build up a Python inference response),
             // so we need the GIL
