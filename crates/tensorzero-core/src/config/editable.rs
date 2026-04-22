@@ -53,10 +53,19 @@ pub fn config_to_toml_with_errors(
             Some(parent) => format!("{} / {}", parent, err.name),
             None => err.name.clone(),
         };
+        // Split the error message on newlines so a multi-line error (e.g. a
+        // serde path error) doesn't spill past the `#` and corrupt the TOML.
+        // `{:?}` on `label` escapes any embedded newlines in the parent/name
+        // fields themselves.
+        let mut error_lines = err.error.lines();
+        let first_error_line = error_lines.next().unwrap_or("");
         toml.push_str(&format!(
             "\n# BROKEN ({} {:?}): {}\n",
-            err.kind, label, err.error
+            err.kind, label, first_error_line
         ));
+        for line in error_lines {
+            toml.push_str(&format!("#   {line}\n"));
+        }
         if let Some(fragment) = &err.raw_toml {
             for line in fragment.lines() {
                 toml.push_str(&format!("# {line}\n"));
@@ -383,6 +392,44 @@ mod tests {
         let (annotated, path_contents) = config_to_toml_with_errors(&config, &errors)
             .expect("annotated serialization should succeed");
 
+        let round_trip =
+            toml_to_config(&annotated, &path_contents).expect("annotated TOML should parse back");
+        expect_that!(&round_trip, eq(&config));
+    }
+
+    #[gtest]
+    fn config_to_toml_with_errors_handles_multiline_error_messages() {
+        // Serde deserialization errors are frequently multi-line. Each line of
+        // the error must stay on a commented line so the annotated TOML still
+        // parses — otherwise the second line of a two-line error would become
+        // uncommented TOML content after the header's trailing newline.
+        let config = sample_uninitialized_config();
+        let errors = vec![ConfigLoadingError {
+            kind: "model",
+            name: "broken".to_string(),
+            parent: None,
+            error: "missing field `type`\nat line 3 column 1\nin table `[models.broken]`"
+                .to_string(),
+            raw_toml: Some("foo = 1".to_string()),
+        }];
+        let (annotated, path_contents) = config_to_toml_with_errors(&config, &errors)
+            .expect("annotated serialization should succeed");
+
+        // The first line appears on the header, subsequent lines are each
+        // prefixed with `#   `.
+        expect_that!(
+            &annotated,
+            contains_substring(r#"# BROKEN (model "broken"): missing field `type`"#)
+        );
+        expect_that!(&annotated, contains_substring("#   at line 3 column 1"));
+        expect_that!(
+            &annotated,
+            contains_substring("#   in table `[models.broken]`")
+        );
+
+        // And the annotated TOML must still round-trip: if a multi-line error
+        // leaked past the `#`, the parser would either fail or pick up the
+        // leaked text as config.
         let round_trip =
             toml_to_config(&annotated, &path_contents).expect("annotated TOML should parse back");
         expect_that!(&round_trip, eq(&config));

@@ -48,6 +48,10 @@ pub struct GetConfigTomlResponse {
     pub tags: HashMap<String, String>,
     /// Non-fatal errors encountered while loading the config from the database.
     /// Present when some config items failed to load but the gateway started anyway.
+    /// Serialized as an optional field — absent when the Vec is empty — so the
+    /// TS binding declares it optional.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<ConfigLoadingError>>"))]
     #[serde(skip_serializing_if = "Vec::is_empty", default, skip_deserializing)]
     pub loading_errors: Vec<ConfigLoadingError>,
 }

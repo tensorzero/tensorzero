@@ -28,6 +28,8 @@ export type GetConfigTomlResponse = {
   /**
    * Non-fatal errors encountered while loading the config from the database.
    * Present when some config items failed to load but the gateway started anyway.
+   * Serialized as an optional field — absent when the Vec is empty — so the
+   * TS binding declares it optional.
    */
-  loading_errors: Array<ConfigLoadingError>;
+  loading_errors?: Array<ConfigLoadingError>;
 };
