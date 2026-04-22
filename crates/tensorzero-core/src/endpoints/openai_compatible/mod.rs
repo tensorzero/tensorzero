@@ -18,6 +18,10 @@ use axum::Router;
 use axum::routing::post;
 
 use crate::endpoints::RouteHandlers;
+#[expect(
+    clippy::disallowed_types,
+    reason = "router extension trait must be implemented for Router<SwappableAppStateData>"
+)]
 use crate::utils::gateway::SwappableAppStateData;
 
 /// Constructs (but does not register) all of our OpenAI-compatible endpoints.
@@ -45,6 +49,10 @@ pub trait RouterExt {
     fn register_openai_compatible_routes(self) -> Self;
 }
 
+#[expect(
+    clippy::disallowed_types,
+    reason = "router extension trait must be implemented for Router<SwappableAppStateData>"
+)]
 impl RouterExt for Router<SwappableAppStateData> {
     fn register_openai_compatible_routes(mut self) -> Self {
         for (path, handler) in build_openai_compatible_routes().routes {

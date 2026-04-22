@@ -517,6 +517,35 @@ type = "exact_match"
             .expect("should convert to UninitializedConfig");
     }
 
+    /// Legacy stored configs predate the `include_content` field on
+    /// `[gateway.export.otlp.traces]` (added when GenAI content-capture span
+    /// attributes were introduced). They must still parse and convert cleanly
+    /// with `include_content = None`.
+    #[test]
+    fn test_historical_stored_otlp_traces_without_include_content() {
+        let toml_str = r#"
+            [gateway.export.otlp.traces]
+            enabled = true
+            format = "opentelemetry"
+        "#;
+
+        let stored: StoredConfig =
+            toml::from_str(toml_str).expect("legacy OTLP traces config should parse from snapshot");
+        let uninit: UninitializedConfig = stored
+            .try_into()
+            .expect("should convert to UninitializedConfig");
+
+        let traces = uninit
+            .gateway
+            .as_ref()
+            .and_then(|g| g.export.as_ref())
+            .and_then(|e| e.otlp.as_ref())
+            .and_then(|o| o.traces.as_ref())
+            .expect("traces config should be present");
+        assert_eq!(traces.enabled, Some(true));
+        assert!(traces.include_content.is_none());
+    }
+
     /// Historical GEPA snapshots with legacy `evaluation_name` should still parse.
     #[test]
     fn test_historical_stored_gepa_optimizer_with_evaluation_name() {

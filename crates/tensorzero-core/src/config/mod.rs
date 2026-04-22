@@ -32,9 +32,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tensorzero_derive::TensorZeroDeserialize;
 use tensorzero_stored_config::{
-    StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
-    StoredNonStreamingTimeouts, StoredPromptRef, StoredStreamingTimeouts, StoredTimeoutsConfig,
-    StoredToolConfig,
+    StoredFileRef, StoredMetricConfig, StoredMetricLevel, StoredMetricOptimize, StoredMetricType,
+    StoredNonStreamingTimeouts, StoredStreamingTimeouts, StoredTimeoutsConfig, StoredToolConfig,
 };
 use tracing::Span;
 use tracing::instrument;
@@ -77,6 +76,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
+pub mod editable;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -91,29 +91,9 @@ pub mod unwritten;
 
 pub use namespace::Namespace;
 
-tokio::task_local! {
-    /// When set, we skip performing credential validation in model providers
-    /// This is used when running in e2e test mode, and by the 'evaluations' binary
-    /// We need to access this from async code (e.g. when looking up GCP SDK credentials),
-    /// so this needs to be a tokio task-local (as a task may be moved between threads)
-    ///
-    /// Since this needs to be accessed from a `Deserialize` impl, it needs to
-    /// be stored in a `static`, since we cannot pass in extra parameters when calling `Deserialize::deserialize`
-    static SKIP_CREDENTIAL_VALIDATION: ();
-}
-
-pub fn skip_credential_validation() -> bool {
-    // tokio::task_local doesn't have an 'is_set' method, so we call 'try_with'
-    // (which returns an `Err` if the task-local is not set)
-    SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
-}
-
-/// Runs the provider future with credential validation disabled
-/// This is safe to repeatedly nest (e.g. `with_skip_credential_validation(async move { with_skip_credential_validation(f).await })`),
-/// the original credential validation behavior will be restored after the outermost future completes
-pub async fn with_skip_credential_validation<T>(f: impl Future<Output = T>) -> T {
-    SKIP_CREDENTIAL_VALIDATION.scope((), f).await
-}
+pub use tensorzero_inference_types::credential_validation::{
+    skip_credential_validation, with_skip_credential_validation,
+};
 
 /// Configuration for the autopilot system.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -287,6 +267,13 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     enabled: Option<bool>,
     base_path: Option<ResolvedTomlPathDirectory>,
+}
+
+impl TemplateFilesystemAccess {
+    /// Returns `true` if filesystem access is explicitly enabled or a base path is configured.
+    pub fn is_active(&self) -> bool {
+        self.enabled == Some(true) || self.base_path.is_some()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -541,6 +528,13 @@ impl ObservabilityConfig {
     pub fn writes_enabled(&self) -> bool {
         self.enabled.unwrap_or(true)
     }
+
+    /// Returns whether async writes are enabled.
+    /// Defaults to `true` in production, `false` in e2e tests (where tests
+    /// write data and immediately query for it).
+    pub fn async_writes(&self) -> bool {
+        self.async_writes.unwrap_or(!cfg!(feature = "e2e_tests"))
+    }
 }
 
 pub fn default_flush_interval_ms() -> u64 {
@@ -633,6 +627,23 @@ impl OtlpConfig {
         }
     }
 
+    /// Whether GenAI content-capture attributes (`gen_ai.input.messages`,
+    /// `gen_ai.output.messages`, `gen_ai.system_instructions`,
+    /// `gen_ai.tool.definitions`) should be emitted: OTLP traces enabled,
+    /// `include_content = true`, and `format = OpenTelemetry` (the default).
+    pub fn genai_content_capture_enabled(&self) -> bool {
+        let Some(traces) = &self.traces else {
+            return false;
+        };
+        if !traces.enabled.unwrap_or(false) {
+            return false;
+        }
+        if !traces.include_content.unwrap_or(false) {
+            return false;
+        }
+        matches!(traces.format, None | Some(OtlpTracesFormat::OpenTelemetry))
+    }
+
     /// Marks a span as being an OpenInference 'CHAIN' span.
     /// We use this for function/variant/model spans (but not model provider spans).
     /// At the moment, there doesn't seem to be a similar concept in the OpenTelemetry GenAI semantic conventions.
@@ -661,6 +672,11 @@ pub struct OtlpTracesConfig {
     pub format: Option<OtlpTracesFormat>,
     /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
     pub extra_headers: Option<HashMap<String, String>>,
+    /// When `format = "opentelemetry"`, emit the content-carrying GenAI semantic-convention attributes
+    /// (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`,
+    /// `gen_ai.tool.definitions`) on the `model_provider_inference` span. These contain full
+    /// prompt/response content and are opt-in even when traces are enabled. Defaults to `false`.
+    pub include_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1354,14 +1370,7 @@ async fn process_uninitialized_config(
     })
 }
 
-/// In e2e test mode, we skip credential validation by default.
-/// This can be overridden by setting the `TENSORZERO_E2E_CREDENTIAL_VALIDATION` environment variable to `1`.
-/// Outside of e2e test mode, we leave the behavior unchanged (other parts of the codebase might still
-/// skip credential validation, e.g. when running in relay mode).
-pub fn e2e_skip_credential_validation() -> bool {
-    cfg!(any(test, feature = "e2e_tests"))
-        && !std::env::var("TENSORZERO_E2E_CREDENTIAL_VALIDATION").is_ok_and(|x| x == "1")
-}
+pub use tensorzero_inference_types::credential_validation::e2e_skip_credential_validation;
 
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
@@ -1483,6 +1492,27 @@ impl Config {
 
         if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
             object_store.verify().await.map_err(|error| vec![error])?;
+        }
+
+        Ok(unwritten_config)
+    }
+
+    pub async fn load_from_uninitialized(
+        config: UninitializedConfig,
+        validate_credentials: bool,
+    ) -> Result<UnwrittenConfig, Error> {
+        let config = Box::new(config);
+        let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
+                ConfigInput::Database(config),
+            )))
+            .await?
+        } else {
+            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config))).await?
+        };
+
+        if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
+            object_store.verify().await?;
         }
 
         Ok(unwritten_config)
@@ -1801,9 +1831,11 @@ impl Config {
             .as_ref()
             .cloned()
             .unwrap_or_default();
-        if batch_writes.enabled && self.gateway.observability.async_writes.unwrap_or(false) {
+        if batch_writes.enabled && self.gateway.observability.async_writes() {
             return Err(ErrorDetails::Config {
-                message: "Batch writes and async writes cannot be enabled at the same time"
+                message: "Batch writes and async writes cannot be enabled at the same time. \
+                    Async writes are enabled by default; to use batch writes, set \
+                    `gateway.observability.async_writes = false`."
                     .to_string(),
             }
             .into());
@@ -2137,8 +2169,8 @@ pub struct UninitializedRelayConfig {
 
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
-struct UninitializedGlobbedConfig {
-    table: toml::Table,
+pub struct UninitializedGlobbedConfig {
+    pub table: toml::Table,
 }
 
 impl UninitializedConfig {
@@ -2266,7 +2298,7 @@ impl UninitializedConfig {
     }
 
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
-    fn read_toml_config(
+    pub fn read_toml_config(
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {
@@ -2947,28 +2979,21 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub(crate) fn prompt_templates_for_db(&self) -> [&ResolvedTomlPathData; 1] {
-        [&self.parameters]
-    }
-
     pub(crate) fn convert_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredToolConfig, Error> {
-        let template_key = self.parameters.get_template_key();
-        let Some(prompt_template_version_id) = prompt_template_version_ids.get(&template_key)
-        else {
+        let file_path = self.parameters.get_template_key();
+        let Some(file_version_id) = file_version_ids.get(&file_path) else {
             return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Missing prompt template version ID for template key `{template_key}`."
-                ),
+                message: format!("Missing stored file version ID for file path `{file_path}`."),
             }));
         };
         Ok(StoredToolConfig {
             description: self.description.clone(),
-            parameters: StoredPromptRef {
-                prompt_template_version_id: *prompt_template_version_id,
-                template_key,
+            parameters: StoredFileRef {
+                file_version_id: *file_version_id,
+                file_path,
             },
             name: self.name.clone(),
             strict: self.strict,
@@ -3154,9 +3179,9 @@ mod round_trip_tests {
     // ── UninitializedToolConfig ────────────────────────────────────────
     //
     // `UninitializedToolConfig` only has a forward conversion to
-    // `StoredToolConfig` (the reverse requires looking up a prompt template
+    // `StoredToolConfig` (the reverse requires looking up a stored file
     // by ID), so this verifies the forward conversion preserves all fields
-    // and resolves the prompt template version ID correctly.
+    // and resolves the stored file version ID correctly.
 
     #[gtest]
     fn test_uninitialized_tool_config_convert_for_db() {
@@ -3165,7 +3190,7 @@ mod round_trip_tests {
             PathBuf::from("tools/my_tool.json"),
             Some(parameters_json),
         );
-        let template_key = parameters.get_template_key();
+        let file_path = parameters.get_template_key();
 
         let original = UninitializedToolConfig {
             description: "Tool description".to_string(),
@@ -3175,21 +3200,18 @@ mod round_trip_tests {
         };
 
         let template_id = Uuid::now_v7();
-        let mut prompt_template_version_ids = HashMap::new();
-        prompt_template_version_ids.insert(template_key.clone(), template_id);
+        let mut file_version_ids = HashMap::new();
+        file_version_ids.insert(file_path.clone(), template_id);
 
         let stored = original
-            .convert_for_db(&prompt_template_version_ids)
+            .convert_for_db(&file_version_ids)
             .expect("conversion should succeed when template id is present");
 
         expect_that!(stored.description, eq(&original.description));
         expect_that!(stored.name.as_deref(), some(eq("my_tool")));
         expect_that!(stored.strict, eq(true));
-        expect_that!(stored.parameters.template_key, eq(&template_key));
-        expect_that!(
-            stored.parameters.prompt_template_version_id,
-            eq(template_id)
-        );
+        expect_that!(stored.parameters.file_path, eq(&file_path));
+        expect_that!(stored.parameters.file_version_id, eq(template_id));
     }
 
     #[gtest]

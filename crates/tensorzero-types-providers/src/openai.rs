@@ -6,18 +6,8 @@
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct OpenAIPromptTokensDetails {
-    pub cached_tokens: Option<u32>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAIUsage {
-    pub prompt_tokens: Option<u32>,
-    pub completion_tokens: Option<u32>,
-    #[serde(default)]
-    pub prompt_tokens_details: Option<OpenAIPromptTokensDetails>,
-}
+// Re-export usage types that were moved to tensorzero-types
+pub use tensorzero_types::{OpenAIPromptTokensDetails, OpenAIUsage};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]

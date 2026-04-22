@@ -22,16 +22,17 @@ pub mod dicl_queries;
 pub mod evaluation_queries;
 pub mod experimentation;
 pub mod feedback;
+mod file_writes;
 pub mod function_config_writes;
 mod howdy_queries;
 pub mod inference_queries;
 pub mod model_inferences;
 pub mod postgres_setup;
-mod prompt_template_writes;
 pub mod rate_limiting;
 mod resolve_uuid;
 pub mod stored_config_queries;
 pub mod stored_config_writes;
+mod variant_statistics;
 pub mod workflow_evaluation_queries;
 
 mod episode_queries;

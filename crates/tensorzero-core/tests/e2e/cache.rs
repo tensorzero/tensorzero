@@ -137,11 +137,11 @@ async fn test_dont_cache_invalid_tool_call(backend: CacheBackend) {
 
     // ClickHouse-specific: verify the `cached` column in model_inference
     if backend == CacheBackend::Clickhouse {
-        let clickhouse = &client
+        let clickhouse = client
             .get_app_state_data()
             .unwrap()
-            .clickhouse_connection_info;
-        let model_inference = select_model_inference_clickhouse(clickhouse, res.inference_id())
+            .clickhouse_connection_info();
+        let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
             .await
             .unwrap();
         assert_eq!(
@@ -225,11 +225,11 @@ async fn test_dont_cache_tool_call_schema_error(backend: CacheBackend) {
 
     // ClickHouse-specific: verify the `cached` column in model_inference
     if backend == CacheBackend::Clickhouse {
-        let clickhouse = &client
+        let clickhouse = client
             .get_app_state_data()
             .unwrap()
-            .clickhouse_connection_info;
-        let model_inference = select_model_inference_clickhouse(clickhouse, res.inference_id())
+            .clickhouse_connection_info();
+        let model_inference = select_model_inference_clickhouse(&clickhouse, res.inference_id())
             .await
             .unwrap();
         assert_eq!(

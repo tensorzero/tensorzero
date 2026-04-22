@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{
+    CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
+    VariantUsageTimePoint,
+};
 
 /// Response containing the count of distinct models used.
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -58,6 +61,28 @@ pub struct GetCacheStatisticsQueryParams {
 pub struct GetCacheStatisticsResponse {
     /// The cache statistics data points.
     pub data: Vec<CacheStatisticsTimePoint>,
+}
+
+/// Query parameters for the variant usage timeseries endpoint.
+#[derive(Debug, Deserialize)]
+pub struct GetVariantUsageQueryParams {
+    /// The time window granularity for grouping data.
+    pub time_window: TimeWindow,
+    /// Maximum number of time periods to return.
+    pub max_periods: u32,
+}
+
+/// Response containing variant usage timeseries data.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct GetVariantUsageResponse {
+    /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
+    /// is the backend, None on Postgres.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantiles: Option<Vec<f64>>,
+    /// The variant usage data points.
+    pub data: Vec<VariantUsageTimePoint>,
 }
 
 /// Response containing model latency quantile data.

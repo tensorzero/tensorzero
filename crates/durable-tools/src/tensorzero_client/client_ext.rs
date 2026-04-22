@@ -22,6 +22,9 @@ use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::db::variant_statistics::{
+    GetVariantStatisticsParams, GetVariantStatisticsResponse, VariantStatisticsQueries,
+};
 use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::feedback::internal::{
     GetFeedbackByTargetIdResponse, LatestFeedbackIdByMetricResponse, get_feedback_by_target_id,
@@ -31,6 +34,7 @@ use tensorzero_core::endpoints::internal::autopilot::list_sessions;
 use tensorzero_core::endpoints::openai_compatible::types::embeddings::{
     OpenAICompatibleEmbeddingParams, OpenAIEmbedding, OpenAIEmbeddingResponse,
 };
+use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::inference::types::Usage;
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 use tensorzero_optimizers::endpoints::{
@@ -209,7 +213,7 @@ impl TensorZeroClient for Client {
                 // Construct the full request with deployment_id from app state
                 // If starting a new session (nil session_id), include the current config hash
                 let config_snapshot_hash = if session_id.is_nil() {
-                    Some(gateway.handle.app_state.config.load().hash.to_string())
+                    Some(gateway.handle.app_state.config().load().hash.to_string())
                 } else {
                     None
                 };
@@ -643,9 +647,10 @@ impl TensorZeroClient for Client {
             } => {
                 let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                     Arc::new(gateway.handle.app_state.get_delegating_database());
+                let http_client = gateway.handle.app_state.http_client();
                 launch_optimization_workflow(
-                    &gateway.handle.app_state.http_client,
-                    gateway.handle.app_state.config.load(),
+                    &http_client,
+                    gateway.handle.app_state.config().load(),
                     &db,
                     params,
                 )
@@ -682,9 +687,10 @@ impl TensorZeroClient for Client {
                 gateway,
                 timeout: _,
             } => {
-                let config = gateway.handle.app_state.config.load();
+                let config = gateway.handle.app_state.config().load();
+                let http_client = gateway.handle.app_state.http_client();
                 poll_optimization(
-                    &gateway.handle.app_state.http_client,
+                    &http_client,
                     job_handle,
                     &config.models.default_credentials,
                     &config.provider_types,
@@ -838,6 +844,92 @@ impl TensorZeroClient for Client {
                 .map_err(|e| {
                     TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
                 }),
+        }
+    }
+
+    async fn get_variant_statistics(
+        &self,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(http) => {
+                let mut url = http.base_url.join("internal/variant_statistics").map_err(
+                    |e: url::ParseError| {
+                        TensorZeroClientError::Autopilot(AutopilotError::InvalidUrl(e))
+                    },
+                )?;
+
+                {
+                    let mut query_pairs = url.query_pairs_mut();
+                    query_pairs.append_pair("function_name", &function_name);
+                    if let Some(ref variant_names) = variant_names {
+                        for name in variant_names {
+                            query_pairs.append_pair("variant_names", name);
+                        }
+                    }
+                    if let Some(ref after) = after {
+                        query_pairs.append_pair("after", after);
+                    }
+                    if let Some(ref before) = before {
+                        query_pairs.append_pair("before", before);
+                    }
+                }
+
+                let response =
+                    http.http_client.get(url).send().await.map_err(|e| {
+                        TensorZeroClientError::Autopilot(AutopilotError::Request(e))
+                    })?;
+
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    let text = response.text().await.unwrap_or_default();
+                    return Err(TensorZeroClientError::Autopilot(AutopilotError::Http {
+                        status_code: status,
+                        message: text,
+                    }));
+                }
+
+                response
+                    .json()
+                    .await
+                    .map_err(|e| TensorZeroClientError::Autopilot(AutopilotError::Request(e)))
+            }
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => {
+                let parse_rfc3339 = |s: String, field: &str| {
+                    chrono::DateTime::parse_from_rfc3339(&s)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .map_err(|e| {
+                            TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                                source: Error::new(ErrorDetails::InvalidRequest {
+                                    message: format!(
+                                        "Invalid RFC 3339 datetime for `{field}`: {e}"
+                                    ),
+                                })
+                                .into(),
+                            })
+                        })
+                };
+                let after = after.map(|s| parse_rfc3339(s, "after")).transpose()?;
+                let before = before.map(|s| parse_rfc3339(s, "before")).transpose()?;
+                let db = gateway.handle.app_state.get_delegating_database();
+                let params = GetVariantStatisticsParams {
+                    function_name,
+                    variant_names,
+                    after,
+                    before,
+                };
+                let quantiles = db.get_variant_statistics_quantiles().map(|q| q.to_vec());
+                let data = db.get_variant_statistics(&params).await.map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+                })?;
+                Ok(GetVariantStatisticsResponse { quantiles, data })
+            }
         }
     }
 

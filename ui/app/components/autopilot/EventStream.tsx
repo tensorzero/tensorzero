@@ -990,6 +990,11 @@ function getStatusLabel(status: AutopilotStatus): {
       return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
+    case "errored_in_progress":
+      return {
+        text: "Something went wrong. Attempting to recover",
+        showEllipsis: true,
+      };
     case "failed":
       return {
         text: "Something went wrong. Please try again.",

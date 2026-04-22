@@ -47,6 +47,7 @@ function createMockConfig(hash: string): UiConfig {
     evaluations: {},
     model_names: [],
     config_hash: hash,
+    config_in_database: false,
   };
 }
 

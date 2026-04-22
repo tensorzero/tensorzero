@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use arc_swap::ArcSwap;
-
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::unwritten::UnwrittenConfig;
-use crate::config::{ConfigFileGlob, RuntimeOverlay, UninitializedConfig};
+use crate::config::{ConfigFileGlob, RuntimeOverlay};
 use crate::endpoints::openai_compatible::types::embeddings::OpenAICompatibleEmbeddingParams;
 use crate::endpoints::openai_compatible::types::embeddings::OpenAIEmbeddingResponse;
 use crate::http::TensorzeroResponseWrapper;
@@ -34,6 +32,8 @@ use url::Url;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use input_handling::resolved_input_to_client_input;
+mod tool_context;
+pub use tool_context::{ToolContextHelper, checkpointed_inference};
 
 pub use crate::cache::CacheParamsOptions;
 pub use crate::endpoints::feedback::FeedbackResponse;
@@ -604,13 +604,14 @@ impl ClientBuilder {
                                 source: e.log().into(),
                             })
                         })?;
-                let runtime_overlay = Arc::new(unwritten_config.runtime_overlay().clone());
-                let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.log().into() })
-                    })?;
+                let (config, runtime_overlay) =
+                    Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
+                        .await
+                        .map_err(|e| ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                            source: e.log().into(),
+                        }))?;
                 let config = Arc::new(config);
+                let runtime_overlay = Arc::new(runtime_overlay);
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = match postgres_config {
                     Some(PostgresConfig::Url(url)) => {
@@ -651,7 +652,6 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config,
-                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay,
                                 clickhouse_connection_info,
                                 postgres_connection_info,
@@ -661,6 +661,7 @@ impl ClientBuilder {
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
                                 HashSet::new(), // tool_whitelist not needed for embedded client
+                                false,
                             )
                             .await
                             .map_err(|e| {
@@ -696,7 +697,6 @@ impl ClientBuilder {
                         gateway: EmbeddedGateway {
                             handle: GatewayHandle::new_with_database_and_http_client(
                                 config.clone(),
-                                Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
                                 runtime_overlay.clone(),
                                 // We create a new independent `ClickHouseConnectionInfo` here,
                                 // and do *not* directly use the existing `clickhouse_connection_info`
@@ -713,6 +713,7 @@ impl ClientBuilder {
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
                                 HashSet::new(), // tool_whitelist not needed for embedded client
+                                false,
                             )
                             .await
                             .map_err(|e| {
@@ -790,7 +791,7 @@ impl ClientBuilder {
             })?;
 
         // Convert config_load_info into Config with hash
-        let config = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
+        let (config, _) = Box::pin(unwritten_config.into_config(&clickhouse_connection_info))
             .await
             .map_err(|e| {
                 ClientBuilderError::Clickhouse(TensorZeroError::Other {
@@ -1243,7 +1244,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     crate::endpoints::object_storage::get_object(
                         config.object_store_info.as_ref(),
                         storage_path,
@@ -1468,10 +1469,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_components_rejects_batch_writes() {
-        // Create a config that enables batch writes, which is not supported in embedded mode
+        // Create a config that enables batch writes, which is not supported in embedded mode.
+        // async_writes must be explicitly disabled since it defaults to true and conflicts.
         let config_str = r"
-        [gateway.observability.batch_writes]
-        enabled = true
+        [gateway.observability]
+        async_writes = false
+        batch_writes = { enabled = true }
         ";
         let tmp_config = NamedTempFile::new().unwrap();
         std::fs::write(tmp_config.path(), config_str).unwrap();

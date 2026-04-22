@@ -15,6 +15,7 @@ mod get_feedback_by_target_id;
 mod get_feedback_by_variant;
 mod get_inferences;
 mod get_latest_feedback_by_metric;
+mod get_variant_statistics;
 mod inference;
 mod launch_optimization_workflow;
 mod list_datapoints;
@@ -42,6 +43,7 @@ pub use get_inferences::{GetInferencesTool, GetInferencesToolParams};
 pub use get_latest_feedback_by_metric::{
     GetLatestFeedbackByMetricTool, GetLatestFeedbackByMetricToolParams,
 };
+pub use get_variant_statistics::{GetVariantStatisticsTool, GetVariantStatisticsToolParams};
 pub use inference::{InferenceTool, InferenceToolParams};
 pub use launch_optimization_workflow::{
     LaunchOptimizationWorkflowTool, LaunchOptimizationWorkflowToolOutput,

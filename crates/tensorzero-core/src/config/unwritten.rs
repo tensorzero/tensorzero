@@ -60,16 +60,19 @@ impl UnwrittenConfig {
     /// 2. Returns the `Config`
     ///
     /// The hash is used to track which config version was used for each inference request.
-    pub async fn into_config(self, db: &impl ConfigQueries) -> Result<Config, DelayedError> {
+    pub async fn into_config(
+        self,
+        db: &impl ConfigQueries,
+    ) -> Result<(Config, RuntimeOverlay), DelayedError> {
         let UnwrittenConfig {
             config,
             uninitialized_config: _,
             snapshot,
-            runtime_overlay: _,
+            runtime_overlay,
         } = self;
         #[expect(clippy::disallowed_methods)]
         db.write_config_snapshot(&snapshot).await?;
-        Ok(config)
+        Ok((config, runtime_overlay))
     }
 
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -79,6 +82,13 @@ impl UnwrittenConfig {
 
     pub fn dangerous_into_config_without_writing(self) -> Config {
         self.config
+    }
+
+    /// Returns the extra templates discovered from the filesystem during config loading.
+    /// These are templates resolved via MiniJinja `{% include %}` from the
+    /// `template_filesystem_access` base path.
+    pub fn extra_templates(&self) -> &HashMap<String, String> {
+        &self.snapshot.extra_templates
     }
 }
 

@@ -197,6 +197,9 @@ export default [
   // API Keys
   route("api-keys", "routes/api-keys/route.tsx"),
 
+  // Config editor
+  route("config", "routes/config/route.tsx"),
+
   // Health
   route("health", "routes/health/route.tsx"),
 ] satisfies RouteConfig;

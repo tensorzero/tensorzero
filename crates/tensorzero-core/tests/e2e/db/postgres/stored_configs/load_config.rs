@@ -31,9 +31,9 @@ use tensorzero_core::variant::chat_completion::{
     UninitializedChatCompletionConfig, UninitializedChatTemplate, UninitializedChatTemplates,
 };
 use tensorzero_stored_config::{
-    StoredEvaluationConfig, StoredEvaluatorConfig, StoredExactMatchConfig, StoredFunctionConfig,
-    StoredInferenceEvaluationConfig, StoredJsonFunctionConfig, StoredPromptRef, StoredToolConfig,
-    StoredVariantRef,
+    StoredEvaluationConfig, StoredEvaluatorConfig, StoredExactMatchConfig, StoredFileRef,
+    StoredFunctionConfig, StoredInferenceEvaluationConfig, StoredJsonFunctionConfig,
+    StoredToolConfig, StoredVariantRef,
 };
 
 fn empty_config() -> UninitializedConfig {
@@ -185,22 +185,22 @@ fn sample_evaluation() -> UninitializedEvaluationConfig {
     })
 }
 
-async fn insert_prompt_template(pool: &PgPool, template_key: &str, source_body: &str) -> Uuid {
+async fn insert_file(pool: &PgPool, file_path: &str, source_body: &str) -> Uuid {
     let id = Uuid::now_v7();
     let content_hash = blake3::hash(source_body.as_bytes()).as_bytes().to_vec();
     sqlx::query(
-        "INSERT INTO tensorzero.prompt_template_configs \
-         (id, template_key, source_body, content_hash, creation_source) \
+        "INSERT INTO tensorzero.stored_files \
+         (id, file_path, source_body, content_hash, creation_source) \
          VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(id)
-    .bind(template_key)
+    .bind(file_path)
     .bind(source_body)
     .bind(content_hash)
     .bind("test")
     .execute(pool)
     .await
-    .expect("prompt template insert should succeed");
+    .expect("stored file insert should succeed");
     id
 }
 
@@ -234,7 +234,7 @@ async fn load_config_from_db_round_trips_written_function_configs(pool: PgPool) 
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
 async fn load_config_from_db_loads_top_level_tools_and_evaluations(pool: PgPool) {
-    let tool_prompt_id = insert_prompt_template(
+    let tool_file_id = insert_file(
         &pool,
         "tools.search.parameters",
         "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}}}",
@@ -251,9 +251,9 @@ async fn load_config_from_db_loads_top_level_tools_and_evaluations(pool: PgPool)
     .bind(
         serde_json::to_value(StoredToolConfig {
             description: "Search docs".to_string(),
-            parameters: StoredPromptRef {
-                prompt_template_version_id: tool_prompt_id,
-                template_key: "tools.search.parameters".to_string(),
+            parameters: StoredFileRef {
+                file_version_id: tool_file_id,
+                file_path: "tools.search.parameters".to_string(),
             },
             name: Some("search".to_string()),
             strict: true,

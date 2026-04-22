@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use axum::{
-    Json, debug_handler,
+    Json,
     extract::{Path, State},
 };
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::{
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
     utils::{
-        gateway::{AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData},
+        gateway::{AppState, ResolvedAppStateData, StructuredJson},
         uuid::{
             WORKFLOW_EVALUATION_THRESHOLD, compare_timestamps,
             generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
@@ -39,7 +39,6 @@ pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
 }
 
-#[debug_handler(state = SwappableAppStateData)]
 pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
@@ -86,7 +85,6 @@ pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }
 
-#[debug_handler(state = SwappableAppStateData)]
 pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,
     Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,

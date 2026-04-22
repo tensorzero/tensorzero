@@ -21,7 +21,6 @@ use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
-use crate::cache::ModelProviderRequest;
 use crate::embeddings::EmbeddingEncodingFormat;
 use crate::embeddings::{
     Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
@@ -53,7 +52,8 @@ use crate::inference::types::{
     RequestMessage, Role, Text, TextChunk, Thought, Unknown, Usage,
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
 };
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::providers::helpers::{
     InjectedResponse, convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource_with_headers,
@@ -67,8 +67,7 @@ use crate::providers::openai::responses::{
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::tool::{
-    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice,
-    ToolConfigRef,
+    FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfigRef,
 };
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
@@ -294,13 +293,12 @@ impl WrappedProvider for OpenAIProvider {
 
     async fn make_body<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id: _,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => Ok(serde_json::to_value(
@@ -428,10 +426,10 @@ impl WrappedProvider for OpenAIProvider {
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = match self.api_type {
             OpenAIAPIType::Responses => {
@@ -582,16 +580,15 @@ impl InferenceProvider for OpenAIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let api_key = self
             .credentials
@@ -2404,19 +2401,6 @@ pub enum OpenAITool<'a> {
     Custom {
         custom: &'a OpenAICustomTool,
     },
-}
-
-impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        OpenAITool::Function {
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
-            },
-            strict: tool.strict(),
-        }
-    }
 }
 
 impl<'a> From<&'a FunctionToolDef> for OpenAITool<'a> {

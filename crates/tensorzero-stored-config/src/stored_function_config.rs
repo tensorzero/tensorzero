@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use tensorzero_types::ToolChoice;
 
-use crate::{StoredEvaluatorConfig, StoredPromptRef, StoredVariantRef};
+use crate::{StoredEvaluatorConfig, StoredFileRef, StoredVariantRef};
 
 pub const STORED_FUNCTION_CONFIG_SCHEMA_REVISION: i32 = 1;
 
@@ -20,10 +20,10 @@ pub enum StoredFunctionConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredChatFunctionConfig {
     pub variants: Option<BTreeMap<String, StoredVariantRef>>,
-    pub system_schema: Option<StoredPromptRef>,
-    pub user_schema: Option<StoredPromptRef>,
-    pub assistant_schema: Option<StoredPromptRef>,
-    pub schemas: Option<BTreeMap<String, StoredPromptRef>>,
+    pub system_schema: Option<StoredFileRef>,
+    pub user_schema: Option<StoredFileRef>,
+    pub assistant_schema: Option<StoredFileRef>,
+    pub schemas: Option<BTreeMap<String, StoredFileRef>>,
     pub tools: Option<Vec<String>>,
     pub tool_choice: Option<StoredToolChoice>,
     pub parallel_tool_calls: Option<bool>,
@@ -36,11 +36,11 @@ pub struct StoredChatFunctionConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredJsonFunctionConfig {
     pub variants: Option<BTreeMap<String, StoredVariantRef>>,
-    pub system_schema: Option<StoredPromptRef>,
-    pub user_schema: Option<StoredPromptRef>,
-    pub assistant_schema: Option<StoredPromptRef>,
-    pub schemas: Option<BTreeMap<String, StoredPromptRef>>,
-    pub output_schema: Option<StoredPromptRef>,
+    pub system_schema: Option<StoredFileRef>,
+    pub user_schema: Option<StoredFileRef>,
+    pub assistant_schema: Option<StoredFileRef>,
+    pub schemas: Option<BTreeMap<String, StoredFileRef>>,
+    pub output_schema: Option<StoredFileRef>,
     pub description: Option<String>,
     pub experimentation: Option<StoredExperimentationConfigWithNamespaces>,
     pub evaluators: Option<BTreeMap<String, StoredEvaluatorConfig>>,

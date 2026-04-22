@@ -1,0 +1,57 @@
+[package]
+name = "ts-executor-pool"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+bip39-uuid-substitution = { path = "../bip39-uuid-substitution" }
+durable.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+regex.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tensorzero-core.workspace = true
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
+tensorzero-ts-types = { path = "../tensorzero-ts-types" }
+tensorzero-types = { path = "../tensorzero-types" }
+deno_error = "0.7"
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+futures.workspace = true
+v8 = "147.0.0"
+# Work around https://github.com/denoland/rusty_v8/issues/1952
+icu_calendar = ">=2.1, <2.2"
+bb8 = "0.9.1"
+deno_core.workspace = true
+# `default-features = false` avoids the legacy `hyper 0.14` + `rustls 0.21`
+# stack pulled in by the crate's default `rustls` feature (which enables
+# `aws-smithy-runtime/tls-rustls`). See
+# https://github.com/smithy-lang/smithy-rs/issues/4576#issuecomment-4113177811
+# The feature list mirrors `aws-sdk-s3`'s defaults (`sigv4a`, `http-1x`,
+# `default-https-client`, `rt-tokio`) with `rustls` removed.
+aws-sdk-s3 = { version = "1.130.0", default-features = false, features = [
+    "sigv4a",
+    "http-1x",
+    "default-https-client",
+    "rt-tokio",
+] }
+
+[build-dependencies]
+blake3.workspace = true
+ureq = "3"
+# note: this must be the same as the deno_core dependency in the
+# [dependencies] section because we need to save / load the same version of V8
+deno_core.workspace = true
+
+[dev-dependencies]
+mockall = "0.14.0"
+proptest = "1"
+
+[lints]
+workspace = true

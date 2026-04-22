@@ -3,6 +3,11 @@
 //! This file should remain minimal, containing only endpoint path definitions and their handler mappings.
 //! Router construction logic belongs in `router.rs`. This constraint exists because CODEOWNERS
 //! requires specific review for route changes.
+// All functions here are router builders parameterized on `SwappableAppStateData` by axum's type system.
+#![expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
 
 use axum::{
     Router,

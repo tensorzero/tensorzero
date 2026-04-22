@@ -207,6 +207,13 @@ pub struct EvaluationCoreArgs {
     /// These tags will be added to each inference, with internal evaluation tags
     /// taking precedence in case of conflicts.
     pub tags: HashMap<String, String>,
+
+    /// Executor for running TypeScript judge evaluators. Always required;
+    /// callers without a specific configuration should use
+    /// [`TypescriptJudgeExecutor::with_defaults`].
+    ///
+    /// [`TypescriptJudgeExecutor::with_defaults`]: crate::evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults
+    pub ts_executor: crate::evaluators::typescript_judge::TypescriptJudgeExecutor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

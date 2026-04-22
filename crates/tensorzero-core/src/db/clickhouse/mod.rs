@@ -42,6 +42,7 @@ pub mod model_inferences;
 pub mod query_builder;
 mod resolve_uuid;
 mod table_name;
+mod variant_statistics;
 pub mod workflow_evaluation_queries;
 
 #[cfg(test)]

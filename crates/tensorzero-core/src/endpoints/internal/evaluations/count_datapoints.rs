@@ -8,12 +8,11 @@ use uuid::Uuid;
 use super::types::{CountDatapointsParams, DatapointStatsResponse};
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/evaluations/datapoint_count`
 ///
 /// Returns the count of unique datapoints across the specified evaluation runs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.count_datapoints", skip_all)]
 pub async fn count_datapoints_handler(
     State(app_state): AppState,

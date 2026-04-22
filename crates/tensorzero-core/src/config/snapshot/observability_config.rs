@@ -186,6 +186,28 @@ mod tests {
         );
     }
 
+    /// Historical: before async_writes defaulted to enabled, stored configs without
+    /// an `async_writes` field should still parse with `async_writes: false`.
+    #[test]
+    fn test_historical_no_async_writes_defaults_to_disabled() {
+        let toml_str = r"
+            enabled = true
+        ";
+
+        let stored: StoredObservabilityConfig =
+            toml::from_str(toml_str).expect("should parse without async_writes field");
+        assert!(
+            !stored.async_writes,
+            "stored snapshot without async_writes should default to false"
+        );
+        let config: ObservabilityConfig = stored.into();
+        assert_eq!(
+            config.async_writes,
+            Some(false),
+            "converted config should preserve disabled async_writes from stored snapshot"
+        );
+    }
+
     /// Stored configs that have an explicit `write_queue_capacity` should preserve it.
     #[test]
     fn test_explicit_write_queue_capacity() {

@@ -4,5 +4,7 @@
  * Wrapper type for directory paths (as opposed to file paths).
  * Currently only used for `gateway.template_filesystem_access.base_path`.
  * Unlike `ResolvedTomlPathData`, this doesn't eagerly load file contents since directories don't have contents.
+ * This path is always stored as an absolute filesystem path because runtime
+ * code needs to read from that directory after config loading.
  */
 export type ResolvedTomlPathDirectory = { __tensorzero_remapped_path: string };

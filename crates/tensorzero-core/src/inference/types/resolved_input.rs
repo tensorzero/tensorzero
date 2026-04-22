@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -38,25 +37,7 @@ pub struct LazyResolvedInputMessage {
     pub content: Vec<LazyResolvedInputMessageContent>,
 }
 
-pub use tensorzero_inference_types::{FileFuture, FileUrl, LazyFile};
-
-pub trait LazyFileExt {
-    async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error>;
-}
-
-impl LazyFileExt for LazyFile {
-    async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error> {
-        match self {
-            LazyFile::Url {
-                future,
-                file_url: _,
-            } => Ok(Cow::Owned(future.clone().await?)),
-            LazyFile::Base64(pending) => Ok(Cow::Borrowed(&pending.0)),
-            LazyFile::ObjectStoragePointer { future, .. } => Ok(Cow::Owned(future.clone().await?)),
-            LazyFile::ObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
-        }
-    }
-}
+pub use tensorzero_inference_types::{FileFuture, FileUrl, LazyFile, LazyFileExt};
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {

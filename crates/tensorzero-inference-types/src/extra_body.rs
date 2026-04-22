@@ -393,3 +393,69 @@ pub mod dynamic {
 }
 
 pub use dynamic::ExtraBody as DynamicExtraBody;
+
+// ─── Stored ↔ ExtraBody conversions ─────────────────────────────────────────
+
+use tensorzero_stored_config::{
+    StoredExtraBodyConfig, StoredExtraBodyReplacement, StoredExtraBodyReplacementKind,
+};
+
+impl From<StoredExtraBodyConfig> for ExtraBodyConfig {
+    fn from(stored: StoredExtraBodyConfig) -> Self {
+        ExtraBodyConfig {
+            data: stored
+                .data
+                .into_iter()
+                .map(ExtraBodyReplacement::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<StoredExtraBodyReplacement> for ExtraBodyReplacement {
+    fn from(stored: StoredExtraBodyReplacement) -> Self {
+        ExtraBodyReplacement {
+            pointer: stored.pointer,
+            kind: stored.kind.into(),
+        }
+    }
+}
+
+impl From<StoredExtraBodyReplacementKind> for ExtraBodyReplacementKind {
+    fn from(stored: StoredExtraBodyReplacementKind) -> Self {
+        match stored {
+            StoredExtraBodyReplacementKind::Value(v) => ExtraBodyReplacementKind::Value(v),
+            StoredExtraBodyReplacementKind::Delete => ExtraBodyReplacementKind::Delete,
+        }
+    }
+}
+
+impl From<&ExtraBodyConfig> for StoredExtraBodyConfig {
+    fn from(config: &ExtraBodyConfig) -> Self {
+        StoredExtraBodyConfig {
+            data: config
+                .data
+                .iter()
+                .map(StoredExtraBodyReplacement::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<&ExtraBodyReplacement> for StoredExtraBodyReplacement {
+    fn from(replacement: &ExtraBodyReplacement) -> Self {
+        StoredExtraBodyReplacement {
+            pointer: replacement.pointer.clone(),
+            kind: (&replacement.kind).into(),
+        }
+    }
+}
+
+impl From<&ExtraBodyReplacementKind> for StoredExtraBodyReplacementKind {
+    fn from(kind: &ExtraBodyReplacementKind) -> Self {
+        match kind {
+            ExtraBodyReplacementKind::Value(v) => StoredExtraBodyReplacementKind::Value(v.clone()),
+            ExtraBodyReplacementKind::Delete => StoredExtraBodyReplacementKind::Delete,
+        }
+    }
+}

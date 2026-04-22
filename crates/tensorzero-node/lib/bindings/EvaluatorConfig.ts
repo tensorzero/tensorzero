@@ -3,9 +3,11 @@ import type { ExactMatchConfig } from "./ExactMatchConfig";
 import type { LLMJudgeConfig } from "./LLMJudgeConfig";
 import type { RegexConfig } from "./RegexConfig";
 import type { ToolUseConfig } from "./ToolUseConfig";
+import type { TypescriptJudgeConfig } from "./TypescriptJudgeConfig";
 
 export type EvaluatorConfig =
   | ({ type: "exact_match" } & ExactMatchConfig)
   | ({ type: "llm_judge" } & LLMJudgeConfig)
   | ({ type: "tool_use" } & ToolUseConfig)
-  | ({ type: "regex" } & RegexConfig);
+  | ({ type: "regex" } & RegexConfig)
+  | ({ type: "typescript" } & TypescriptJudgeConfig);

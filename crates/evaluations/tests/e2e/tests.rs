@@ -5,6 +5,7 @@
 
 mod common;
 mod test_function_level_evaluator;
+mod test_typescript_judge_evaluator;
 
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{RunLLMJudgeEvaluatorParams, run_llm_judge_evaluator};
@@ -592,6 +593,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming
         concurrency: 10,
         inference_cache: CacheEnabledMode::On,
         tags: HashMap::new(),
+        ts_executor: common::build_test_ts_executor().await,
     };
 
     let result = run_evaluation_core_streaming(core_args, Some(10), HashMap::new()).await;
@@ -1824,6 +1826,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let clients = Arc::new(Clients {
         inference_executor,
         db: Arc::new(DelegatingDatabaseConnection::new_for_e2e_test().await),
+        ts_executor: common::build_test_ts_executor().await,
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
@@ -2023,6 +2026,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let clients = Arc::new(Clients {
         inference_executor,
         db: Arc::new(DelegatingDatabaseConnection::new_for_e2e_test().await),
+        ts_executor: common::build_test_ts_executor().await,
     });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
@@ -2852,7 +2856,7 @@ async fn test_evaluation_with_dynamic_variant() {
 
     let config: Arc<Config> = match tensorzero_client.mode() {
         tensorzero_core::client::ClientMode::EmbeddedGateway { gateway, .. } => {
-            gateway.handle.app_state.config.load()
+            gateway.handle.app_state.config().load()
         }
         tensorzero_core::client::ClientMode::HTTPGateway(_) => {
             panic!("Expected EmbeddedGateway mode")
@@ -2915,6 +2919,7 @@ async fn test_evaluation_with_dynamic_variant() {
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
         tags: HashMap::new(),
+        ts_executor: common::build_test_ts_executor().await,
     };
 
     let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await;
@@ -2981,6 +2986,7 @@ async fn test_max_datapoints_parameter() {
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
         tags: HashMap::new(),
+        ts_executor: common::build_test_ts_executor().await,
     };
 
     let max_datapoints = Some(3);
@@ -3081,6 +3087,7 @@ async fn test_precision_targets_parameter() {
         inference_cache: CacheEnabledMode::Off,
         concurrency: 5,
         tags: external_tags.clone(),
+        ts_executor: common::build_test_ts_executor().await,
     };
 
     // Run with precision targets

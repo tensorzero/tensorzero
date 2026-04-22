@@ -9,6 +9,7 @@ use tensorzero_stored_config::{
     StoredEvaluationConfig, StoredExactMatchConfig, StoredInferenceEvaluationConfig,
     StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat, StoredLLMJudgeOptimize,
     StoredLLMJudgeOutputType, StoredRegexConfig, StoredToolUseConfig,
+    StoredTypescriptJudgeOptimize, StoredTypescriptJudgeOutputType,
 };
 use uuid::Uuid;
 
@@ -83,6 +84,8 @@ pub enum EvaluatorConfig {
     LLMJudge(LLMJudgeConfig),
     ToolUse(ToolUseConfig),
     Regex(RegexConfig),
+    #[serde(rename = "typescript")]
+    TypescriptJudge(TypescriptJudgeConfig),
 }
 
 /// Minimal function configuration for evaluation purposes.
@@ -116,7 +119,9 @@ impl EvaluatorConfig {
         match self {
             EvaluatorConfig::ExactMatch(config) => config.cutoff,
             EvaluatorConfig::LLMJudge(config) => config.cutoff,
-            EvaluatorConfig::ToolUse(_) | EvaluatorConfig::Regex(_) => Option::None,
+            EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_)
+            | EvaluatorConfig::TypescriptJudge(_) => Option::None,
         }
     }
 
@@ -126,6 +131,7 @@ impl EvaluatorConfig {
             | EvaluatorConfig::ToolUse(_)
             | EvaluatorConfig::Regex(_) => MetricConfigOptimize::Max,
             EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
+            EvaluatorConfig::TypescriptJudge(config) => config.optimize.into(),
         }
     }
 
@@ -137,6 +143,9 @@ impl EvaluatorConfig {
             | EvaluatorConfig::Regex(_) => true,
             EvaluatorConfig::LLMJudge(config) => {
                 matches!(config.output_type, LLMJudgeOutputType::Boolean)
+            }
+            EvaluatorConfig::TypescriptJudge(config) => {
+                matches!(config.output_type, TypescriptJudgeOutputType::Boolean)
             }
         }
     }
@@ -156,6 +165,16 @@ impl EvaluatorConfig {
                 UninitializedEvaluatorConfig::ToolUse(config.clone())
             }
             EvaluatorConfig::Regex(config) => UninitializedEvaluatorConfig::Regex(config.clone()),
+            EvaluatorConfig::TypescriptJudge(config) => {
+                UninitializedEvaluatorConfig::TypescriptJudge(UninitializedTypescriptJudgeConfig {
+                    typescript_file: ResolvedTomlPathData::new_fake_path(
+                        "typescript_evaluator".to_string(),
+                        config.typescript_code.clone(),
+                    ),
+                    output_type: config.output_type,
+                    optimize: config.optimize,
+                })
+            }
         }
     }
 }
@@ -308,6 +327,55 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
     }
 }
 
+// ─── TypeScript judge types ──────────────────────────────────────────────────
+
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct TypescriptJudgeConfig {
+    pub typescript_code: String,
+    pub output_type: TypescriptJudgeOutputType,
+    pub optimize: TypescriptJudgeOptimize,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum TypescriptJudgeOutputType {
+    Float,
+    Boolean,
+}
+
+impl From<TypescriptJudgeOutputType> for MetricConfigType {
+    fn from(output_type: TypescriptJudgeOutputType) -> Self {
+        match output_type {
+            TypescriptJudgeOutputType::Float => MetricConfigType::Float,
+            TypescriptJudgeOutputType::Boolean => MetricConfigType::Boolean,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum TypescriptJudgeOptimize {
+    Min,
+    Max,
+}
+
+impl From<TypescriptJudgeOptimize> for MetricConfigOptimize {
+    fn from(optimize: TypescriptJudgeOptimize) -> Self {
+        match optimize {
+            TypescriptJudgeOptimize::Min => MetricConfigOptimize::Min,
+            TypescriptJudgeOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
 // ─── Stored → Uninitialized conversions (simple types) ───────────────────────
 
 impl From<StoredLLMJudgeInputFormat> for LLMJudgeInputFormat {
@@ -383,6 +451,44 @@ impl From<ToolUseConfig> for StoredToolUseConfig {
             ToolUseConfig::Any => StoredToolUseConfig::Any,
             ToolUseConfig::AnyOf { tools } => StoredToolUseConfig::AnyOf { tools },
             ToolUseConfig::AllOf { tools } => StoredToolUseConfig::AllOf { tools },
+        }
+    }
+}
+
+// ─── Stored ↔ TypeScript judge conversions ───────────────────────────────────
+
+impl From<StoredTypescriptJudgeOutputType> for TypescriptJudgeOutputType {
+    fn from(stored: StoredTypescriptJudgeOutputType) -> Self {
+        match stored {
+            StoredTypescriptJudgeOutputType::Float => TypescriptJudgeOutputType::Float,
+            StoredTypescriptJudgeOutputType::Boolean => TypescriptJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<TypescriptJudgeOutputType> for StoredTypescriptJudgeOutputType {
+    fn from(val: TypescriptJudgeOutputType) -> Self {
+        match val {
+            TypescriptJudgeOutputType::Float => StoredTypescriptJudgeOutputType::Float,
+            TypescriptJudgeOutputType::Boolean => StoredTypescriptJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<StoredTypescriptJudgeOptimize> for TypescriptJudgeOptimize {
+    fn from(stored: StoredTypescriptJudgeOptimize) -> Self {
+        match stored {
+            StoredTypescriptJudgeOptimize::Min => TypescriptJudgeOptimize::Min,
+            StoredTypescriptJudgeOptimize::Max => TypescriptJudgeOptimize::Max,
+        }
+    }
+}
+
+impl From<TypescriptJudgeOptimize> for StoredTypescriptJudgeOptimize {
+    fn from(val: TypescriptJudgeOptimize) -> Self {
+        match val {
+            TypescriptJudgeOptimize::Min => StoredTypescriptJudgeOptimize::Min,
+            TypescriptJudgeOptimize::Max => StoredTypescriptJudgeOptimize::Max,
         }
     }
 }
@@ -590,6 +696,18 @@ pub enum UninitializedEvaluatorConfig {
     LLMJudge(UninitializedLLMJudgeConfig),
     ToolUse(ToolUseConfig),
     Regex(RegexConfig),
+    #[serde(rename = "typescript")]
+    TypescriptJudge(UninitializedTypescriptJudgeConfig),
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedTypescriptJudgeConfig {
+    pub typescript_file: ResolvedTomlPathData,
+    pub output_type: TypescriptJudgeOutputType,
+    pub optimize: TypescriptJudgeOptimize,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
@@ -854,6 +972,23 @@ impl UninitializedEvaluatorConfig {
                     },
                 ))
             }
+            UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                let typescript_code = config.typescript_file.data().to_string();
+                Ok((
+                    EvaluatorConfig::TypescriptJudge(TypescriptJudgeConfig {
+                        typescript_code,
+                        output_type: config.output_type,
+                        optimize: config.optimize,
+                    }),
+                    None,
+                    MetricConfig {
+                        r#type: config.output_type.into(),
+                        optimize: config.optimize.into(),
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
         }
     }
 }
@@ -1104,42 +1239,42 @@ impl<'a> EvaluatorContext<'a> {
 // ── Stored-config conversion helpers ──────────────────────────────────────────
 
 impl UninitializedEvaluationConfig {
-    /// Collect all `ResolvedTomlPathData` references that need prompt-template rows.
-    pub(crate) fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+    /// Collect all `ResolvedTomlPathData` references that need stored file rows.
+    pub(crate) fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
         match self {
-            UninitializedEvaluationConfig::Inference(config) => config.prompt_templates_for_db(),
+            UninitializedEvaluationConfig::Inference(config) => config.files_for_db(),
         }
     }
 
     /// Convert to the stored representation for DB persistence.
     pub(crate) fn to_stored_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredEvaluationConfig, Error> {
         match self {
             UninitializedEvaluationConfig::Inference(config) => {
-                config.to_stored_for_db(prompt_template_version_ids)
+                config.to_stored_for_db(file_version_ids)
             }
         }
     }
 }
 
 impl UninitializedInferenceEvaluationConfig {
-    fn prompt_templates_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+    fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
         let mut templates = Vec::new();
         for evaluator in self.evaluators.values() {
-            evaluator.collect_prompt_templates(&mut templates);
+            evaluator.collect_files(&mut templates);
         }
         templates
     }
 
     fn to_stored_for_db(
         &self,
-        prompt_template_version_ids: &HashMap<String, Uuid>,
+        file_version_ids: &HashMap<String, Uuid>,
     ) -> Result<StoredEvaluationConfig, Error> {
         let stored_evaluators = crate::db::postgres::function_config_writes::convert_evaluators(
             &self.evaluators,
-            prompt_template_version_ids,
+            file_version_ids,
         )?;
         Ok(StoredEvaluationConfig::Inference(
             StoredInferenceEvaluationConfig {
@@ -1152,12 +1287,20 @@ impl UninitializedInferenceEvaluationConfig {
 }
 
 impl UninitializedEvaluatorConfig {
-    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
         match self {
             UninitializedEvaluatorConfig::LLMJudge(config) => {
                 for variant in config.variants.values() {
-                    variant.inner.collect_prompt_templates(templates);
+                    variant.inner.collect_files(templates);
                 }
+            }
+            UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                let UninitializedTypescriptJudgeConfig {
+                    typescript_file,
+                    output_type: _,
+                    optimize: _,
+                } = config;
+                templates.push(typescript_file);
             }
             UninitializedEvaluatorConfig::ExactMatch(_)
             | UninitializedEvaluatorConfig::ToolUse(_)
@@ -1167,7 +1310,7 @@ impl UninitializedEvaluatorConfig {
 }
 
 impl UninitializedLLMJudgeVariantConfig {
-    fn collect_prompt_templates<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
                 templates.push(&config.system_instructions);

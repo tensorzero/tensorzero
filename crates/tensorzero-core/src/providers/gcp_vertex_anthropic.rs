@@ -12,8 +12,6 @@ use tokio::time::Instant;
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::cache::ModelProviderRequest;
-use crate::config::{e2e_skip_credential_validation, skip_credential_validation};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
@@ -33,9 +31,12 @@ use crate::inference::types::{
     FunctionType, Latency, ModelInferenceRequestJsonMode,
     batch::StartBatchProviderInferenceResponse,
 };
-use crate::model::CredentialLocationWithFallback;
-use crate::model::ModelProvider;
-use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::credential_validation::{
+    e2e_skip_credential_validation, skip_credential_validation,
+};
+
+use crate::model_table::ProviderType;
 use crate::providers::anthropic::{
     AnthropicStreamMessage, AnthropicToolChoice, anthropic_to_tensorzero_stream_message,
     handle_anthropic_error,
@@ -112,16 +113,17 @@ impl GCPVertexAnthropicProvider {
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
-    //
-    // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(
+    /// Constructor that takes pre-resolved credentials directly.
+    /// Credential resolution from `ProviderTypeDefaultCredentials` lives in
+    /// `crate::model::build_gcp_vertex_anthropic_provider` so this file can
+    /// stay independent of core's credential infrastructure.
+    ///
+    /// `project_url_path` is *not* a full url - we append ':generateContent'
+    /// or ':streamGenerateContent' to the path as needed.
+    pub fn new_shorthand(
         project_url_path: String,
-        default_credentials: &ProviderTypeDefaultCredentials,
+        credentials: GCPVertexCredentials,
     ) -> Result<Self, Error> {
-        let credentials = GCPVertexAnthropicKind
-            .get_defaulted_credential(None, default_credentials)
-            .await?;
-
         // We only support model urls with the publisher 'anthropic'
         let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
         let (location, model_id) = match shorthand_url {
@@ -152,18 +154,13 @@ impl GCPVertexAnthropicProvider {
         })
     }
 
-    pub async fn new(
+    pub fn new(
         model_id: String,
         location: String,
         project_id: String,
-        api_key_location: Option<CredentialLocationWithFallback>,
-        default_credentials: &ProviderTypeDefaultCredentials,
+        credentials: GCPVertexCredentials,
         provider_tools: Vec<serde_json::Value>,
-    ) -> Result<Self, Error> {
-        let credentials = GCPVertexAnthropicKind
-            .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
-            .await?;
-
+    ) -> Self {
         let location_prefix = location_subdomain_prefix(&location);
 
         let request_url = format!(
@@ -174,14 +171,14 @@ impl GCPVertexAnthropicProvider {
         );
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
-        Ok(GCPVertexAnthropicProvider {
+        GCPVertexAnthropicProvider {
             model_id,
             request_url,
             streaming_request_url,
             audience,
             credentials,
             provider_tools,
-        })
+        }
     }
 
     pub fn model_id(&self) -> &str {
@@ -199,16 +196,15 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -298,16 +294,15 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -388,7 +383,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    model_provider: &ModelProvider,
+    model_provider: &ModelProviderRequestInfo,
     model_name: &str,
     provider_name: &str,
     raw_request: &str,

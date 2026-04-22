@@ -18,7 +18,6 @@ use super::aws_common::{
     sign_request, warn_if_credential_exfiltration_risk,
 };
 use super::helpers::{inject_extra_request_data, peek_first_chunk};
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
@@ -40,7 +39,8 @@ use crate::inference::types::{
     Usage, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{FinishReason, Thought, ThoughtChunk};
-use crate::model::ModelProvider;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 use tensorzero_inference_types::FunctionToolDef;
 
@@ -213,16 +213,15 @@ impl AWSBedrockProvider {
 impl InferenceProvider for AWSBedrockProvider {
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         // Prepare the request body
         let PreparedRequestBody {
@@ -340,16 +339,15 @@ impl InferenceProvider for AWSBedrockProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // Prepare the request body
         let PreparedRequestBody {
@@ -515,7 +513,7 @@ struct PreparedRequestBody {
 async fn prepare_request_body(
     model_id: &str,
     request: &ModelInferenceRequest<'_>,
-    model_provider: &ModelProvider,
+    model_provider: &ModelProviderRequestInfo,
     model_name: &str,
 ) -> Result<PreparedRequestBody, Error> {
     // Build the request body

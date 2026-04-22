@@ -68,6 +68,7 @@ async fn test_cache_write_and_read(conn: impl CacheQueries + Clone + 'static) {
         provider_name: "test_provider",
         otlp_config: &Default::default(),
         model_inference_id: Uuid::now_v7(),
+        function_name: None,
     };
 
     // Read (should be None)
@@ -216,6 +217,7 @@ async fn test_cache_stream_write_and_read(conn: impl CacheQueries + Clone + 'sta
         provider_name: "test_provider",
         otlp_config: &Default::default(),
         model_inference_id: Uuid::now_v7(),
+        function_name: None,
     };
 
     // Read (should be None)

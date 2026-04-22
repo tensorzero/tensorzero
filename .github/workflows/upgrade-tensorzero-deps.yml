@@ -1,10 +1,7 @@
 name: Upgrade TensorZero Dependencies
 
 on:
-  workflow_run:
-    workflows: ["Publish PyO3 client to PyPI"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 env:
@@ -14,8 +11,7 @@ jobs:
   upgrade-dependencies:
     name: Upgrade TensorZero dependencies across all projects
     runs-on: ubuntu-latest
-    # Only run if the PyPI publish workflow succeeded (or if manually triggered)
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    if: github.repository == 'tensorzero/tensorzero'
 
     permissions:
       contents: write
@@ -23,12 +19,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -36,7 +32,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Wait for PyPI availability (auto-trigger only)
-        if: github.event_name == 'workflow_run'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           echo "Waiting 60 seconds for PyPI to propagate the new version..."
           sleep 60

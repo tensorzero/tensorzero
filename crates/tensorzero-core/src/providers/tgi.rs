@@ -29,7 +29,6 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIToolType, StreamOptions, SystemOrDeveloper, get_chat_url,
     prepare_openai_messages,
 };
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::{DelayedError, Error, ErrorDetails};
@@ -49,7 +48,8 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::helpers::{
@@ -156,13 +156,12 @@ impl WrappedProvider for TGIProvider {
 
     async fn make_body<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name: _,
-            otlp_config: _,
             model_inference_id: _,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
         // TGI doesn't care about the `model_name` field, so we can hardcode it to "tgi"
 
@@ -226,10 +225,10 @@ impl WrappedProvider for TGIProvider {
 impl InferenceProvider for TGIProvider {
     async fn infer<'a>(
         &'a self,
-        model_provider_request: ModelProviderRequest<'a>,
+        model_provider_request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = self.make_body(model_provider_request).await?;
         let request_url = get_chat_url(&self.api_base)?;
@@ -305,16 +304,15 @@ impl InferenceProvider for TGIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request).await?)
             .map_err(|e| {

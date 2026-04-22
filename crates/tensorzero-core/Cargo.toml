@@ -10,9 +10,9 @@ exclude = ["tests/", "fixtures/"]
 [features]
 # Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
-e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests", "tensorzero-stored-config/e2e_tests"]
+e2e_tests = ["tensorzero/e2e_tests", "tensorzero-types/e2e_tests", "tensorzero-error/e2e_tests", "tensorzero-inference-types/e2e_tests", "tensorzero-stored-config/e2e_tests", "tensorzero-http/e2e_tests"]
 optimization_tests = ["e2e_tests"]
-pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-types/pyo3", "tensorzero-inference-types/pyo3", "tensorzero-http/pyo3"]
 ts-bindings = [
     "dep:ts-rs",
     "tensorzero-types/ts-bindings",
@@ -34,7 +34,18 @@ workspace = true
 [dependencies]
 async-stream = { workspace = true }
 async-trait = { workspace = true }
-aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+# `default-features = false` avoids the legacy `hyper 0.14` + `rustls 0.21`
+# stack pulled in by `aws-smithy-runtime/tls-rustls`. See
+# https://github.com/smithy-lang/smithy-rs/issues/4576#issuecomment-4113177811
+# The feature list mirrors `aws-config`'s defaults (`default-https-client`,
+# `rt-tokio`, `credentials-process`, `sso`) plus `behavior-version-latest`.
+aws-config = { version = "1.8", default-features = false, features = [
+    "behavior-version-latest",
+    "default-https-client",
+    "rt-tokio",
+    "credentials-process",
+    "sso",
+] }
 aws-smithy-types = { version = "1.4.7", features = [
     "serde-deserialize",
     "serde-serialize",
@@ -58,7 +69,7 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 json-pointer = { workspace = true }
-jsonschema = "0.45.1"
+jsonschema = "0.46.2"
 jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
@@ -93,6 +104,7 @@ tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
+tensorzero-http = { path = "../tensorzero-http" }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 minijinja-utils = { path = "../minijinja-utils" }
@@ -162,7 +174,7 @@ log = "0.4.29"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 redis-test = { workspace = true }
-rmcp = { version = "1.3.0", features = ["client", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "1.5.0", features = ["client", "transport-streamable-http-client-reqwest"] }
 
 [build-dependencies]
 built = "0.8.0"

@@ -18,9 +18,7 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, InputExt};
 use crate::jsonschema_util::JSONSchema;
 use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
-use crate::utils::gateway::{
-    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
-};
+use crate::utils::gateway::{AppState, ResolvedAppStateData, StructuredJson};
 
 use super::types::{
     UpdateChatDatapointRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
@@ -40,8 +38,6 @@ impl UpdateDatapointRequest {
 pub struct UpdateDatapointsPathParams {
     pub dataset_name: String,
 }
-
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.update_datapoints", skip(app_state, request))]
 pub async fn update_datapoints_handler(
     State(app_state): AppState,
@@ -389,8 +385,6 @@ async fn convert_input_to_stored_input(
 pub struct UpdateDatapointsMetadataPathParams {
     pub dataset_name: String,
 }
-
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "datasets.v1.update_datapoints_metadata",
     skip(app_state, request)

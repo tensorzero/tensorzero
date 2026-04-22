@@ -5,10 +5,13 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use evaluations::evaluators::typescript_judge::TypescriptJudgeExecutor;
 use tensorzero_core::config::Config;
 use tensorzero_core::db::datasets::DatasetQueries;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
-use tensorzero_core::db::feedback::{BooleanMetricFeedbackRow, FeedbackQueries, FeedbackRow};
+use tensorzero_core::db::feedback::{
+    BooleanMetricFeedbackRow, FeedbackQueries, FeedbackRow, FloatMetricFeedbackRow,
+};
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use uuid::Uuid;
@@ -22,6 +25,15 @@ pub fn init_tracing_for_tests() {
 /// Loads the E2E test configuration wrapped in Arc for use in tests.
 pub async fn get_config() -> Arc<Config> {
     Arc::new(tensorzero_core::test_helpers::get_e2e_config().await)
+}
+
+/// Builds a `TypescriptJudgeExecutor` with the default pool sizes for use in
+/// tests. Every `Clients` / `EvaluationCoreArgs` constructor in the test
+/// suite needs one, so share a single helper.
+pub async fn build_test_ts_executor() -> TypescriptJudgeExecutor {
+    TypescriptJudgeExecutor::with_defaults()
+        .await
+        .expect("failed to build TypescriptJudgeExecutor")
 }
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
@@ -61,6 +73,25 @@ pub async fn query_boolean_feedback(
             if metric_name.is_none() || Some(b.metric_name.as_str()) == metric_name =>
         {
             Some(b)
+        }
+        _ => None,
+    })
+}
+
+pub async fn query_float_feedback(
+    db: &DelegatingDatabaseConnection,
+    target_id: Uuid,
+    metric_name: Option<&str>,
+) -> Option<FloatMetricFeedbackRow> {
+    let rows = db
+        .query_feedback_by_target_id(target_id, None, None, None)
+        .await
+        .unwrap();
+    rows.into_iter().find_map(|row| match row {
+        FeedbackRow::Float(f)
+            if metric_name.is_none() || Some(f.metric_name.as_str()) == metric_name =>
+        {
+            Some(f)
         }
         _ => None,
     })
