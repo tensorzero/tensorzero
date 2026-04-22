@@ -68,6 +68,7 @@ fn bench_get_cache_key(c: &mut Criterion) {
     let otlp_config = OtlpConfig::default();
 
     c.bench_function("get_cache_key", |b| {
+        #[expect(clippy::expect_used)]
         b.iter(|| {
             let provider_request = ModelProviderRequest {
                 request: &request,
@@ -80,7 +81,7 @@ fn bench_get_cache_key(c: &mut Criterion) {
             provider_request
                 .get_cache_key()
                 .expect("get_cache_key should not fail")
-        })
+        });
     });
 }
 
