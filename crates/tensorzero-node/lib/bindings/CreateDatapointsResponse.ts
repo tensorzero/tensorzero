@@ -3,8 +3,9 @@
 /**
  * Response from creating datapoints.
  */
-export type CreateDatapointsResponse = { 
-/**
- * The IDs of the newly-generated datapoints.
- */
-ids: Array<string>, };
+export type CreateDatapointsResponse = {
+  /**
+   * The IDs of the newly-generated datapoints.
+   */
+  ids: Array<string>;
+};

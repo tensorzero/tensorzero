@@ -5,4 +5,11 @@
  * Provider-level settings (credentials) come from
  * `provider_types.openai` defaults in the gateway config.
  */
-export type UninitializedOpenAISFTConfig = { model: string, batch_size?: number, learning_rate_multiplier?: number, n_epochs?: number, seed?: bigint, suffix?: string, };
+export type UninitializedOpenAISFTConfig = {
+  model: string;
+  batch_size?: number;
+  learning_rate_multiplier?: number;
+  n_epochs?: number;
+  seed?: bigint;
+  suffix?: string;
+};

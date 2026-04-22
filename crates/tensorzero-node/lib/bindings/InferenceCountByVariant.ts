@@ -3,16 +3,17 @@
 /**
  * Inference count for a variant
  */
-export type InferenceCountByVariant = { 
-/**
- * The variant name
- */
-variant_name: string, 
-/**
- * Number of inferences for this variant
- */
-inference_count: bigint, 
-/**
- * ISO 8601 timestamp of the last inference
- */
-last_used_at: string, };
+export type InferenceCountByVariant = {
+  /**
+   * The variant name
+   */
+  variant_name: string;
+  /**
+   * Number of inferences for this variant
+   */
+  inference_count: bigint;
+  /**
+   * ISO 8601 timestamp of the last inference
+   */
+  last_used_at: string;
+};

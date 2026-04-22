@@ -3,4 +3,7 @@
 /**
  * Legacy `type = "uniform"` config. Converts to `StaticExperimentationConfig` with equal weights.
  */
-export type LegacyUniformExperimentationConfig = { candidate_variants?: Array<string>, fallback_variants?: Array<string>, };
+export type LegacyUniformExperimentationConfig = {
+  candidate_variants?: Array<string>;
+  fallback_variants?: Array<string>;
+};

@@ -4,4 +4,6 @@ import type { WorkflowEvaluationRunWithEpisodeCount } from "./WorkflowEvaluation
 /**
  * Response containing a list of workflow evaluation runs with episode counts.
  */
-export type ListWorkflowEvaluationRunsResponse = { runs: Array<WorkflowEvaluationRunWithEpisodeCount>, };
+export type ListWorkflowEvaluationRunsResponse = {
+  runs: Array<WorkflowEvaluationRunWithEpisodeCount>;
+};

@@ -4,8 +4,9 @@ import type { VariantPerformanceRow } from "./VariantPerformanceRow";
 /**
  * Response containing variant performance statistics
  */
-export type VariantPerformancesResponse = { 
-/**
- * Performance statistics for each (variant, time_period) combination
- */
-performances: Array<VariantPerformanceRow>, };
+export type VariantPerformancesResponse = {
+  /**
+   * Performance statistics for each (variant, time_period) combination
+   */
+  performances: Array<VariantPerformanceRow>;
+};

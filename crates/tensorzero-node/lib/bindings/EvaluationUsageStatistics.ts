@@ -3,4 +3,11 @@
 /**
  * Aggregated usage statistics for a single evaluation run.
  */
-export type EvaluationUsageStatistics = { evaluation_run_id: string, inference_count: number, total_input_tokens?: bigint, total_output_tokens?: bigint, total_cost?: number, avg_processing_time_ms?: number, };
+export type EvaluationUsageStatistics = {
+  evaluation_run_id: string;
+  inference_count: number;
+  total_input_tokens?: bigint;
+  total_output_tokens?: bigint;
+  total_cost?: number;
+  avg_processing_time_ms?: number;
+};

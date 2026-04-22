@@ -2,4 +2,6 @@
 import type { AutoEvalExampleSourceInference } from "./AutoEvalExampleSourceInference";
 import type { AutoEvalExampleSourceSynthetic } from "./AutoEvalExampleSourceSynthetic";
 
-export type AutoEvalExampleSource = { "type": "inference" } & AutoEvalExampleSourceInference | { "type": "synthetic" } & AutoEvalExampleSourceSynthetic;
+export type AutoEvalExampleSource =
+  | ({ type: "inference" } & AutoEvalExampleSourceInference)
+  | ({ type: "synthetic" } & AutoEvalExampleSourceSynthetic);

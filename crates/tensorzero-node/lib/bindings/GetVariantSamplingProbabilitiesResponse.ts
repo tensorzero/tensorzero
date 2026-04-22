@@ -3,9 +3,10 @@
 /**
  * Response containing variant sampling probabilities
  */
-export type GetVariantSamplingProbabilitiesResponse = { 
-/**
- * Map of variant names to their sampling probabilities (0.0 to 1.0)
- * Probabilities sum to 1.0
- */
-probabilities: { [key in string]: number }, };
+export type GetVariantSamplingProbabilitiesResponse = {
+  /**
+   * Map of variant names to their sampling probabilities (0.0 to 1.0)
+   * Probabilities sum to 1.0
+   */
+  probabilities: { [key in string]: number };
+};

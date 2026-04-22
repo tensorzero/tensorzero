@@ -4,4 +4,7 @@ import type { TimeComparisonOperator } from "./TimeComparisonOperator";
 /**
  * Filter by timestamp.
  */
-export type TimeFilter = { time: Date, comparison_operator: TimeComparisonOperator, };
+export type TimeFilter = {
+  time: Date;
+  comparison_operator: TimeComparisonOperator;
+};

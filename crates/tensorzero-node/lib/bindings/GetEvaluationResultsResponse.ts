@@ -4,4 +4,6 @@ import type { EvaluationResultRow } from "./EvaluationResultRow";
 /**
  * Response containing paginated evaluation results.
  */
-export type GetEvaluationResultsResponse = { results: Array<EvaluationResultRow>, };
+export type GetEvaluationResultsResponse = {
+  results: Array<EvaluationResultRow>;
+};

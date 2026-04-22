@@ -7,12 +7,13 @@ import type { AutoEvalBehaviorSpecQuestion } from "./AutoEvalBehaviorSpecQuestio
  * Contains two required free-response fields: a target behavior description
  * and additional context, both with optional pre-filled defaults.
  */
-export type EventPayloadAutoEvalBehaviorSpec = { 
-/**
- * The target behavior question.
- */
-target_behavior: AutoEvalBehaviorSpecQuestion, 
-/**
- * The additional context question.
- */
-additional_context: AutoEvalBehaviorSpecQuestion, };
+export type EventPayloadAutoEvalBehaviorSpec = {
+  /**
+   * The target behavior question.
+   */
+  target_behavior: AutoEvalBehaviorSpecQuestion;
+  /**
+   * The additional context question.
+   */
+  additional_context: AutoEvalBehaviorSpecQuestion;
+};

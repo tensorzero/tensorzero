@@ -3,12 +3,22 @@
 /**
  * A single row of aggregated variant statistics.
  */
-export type VariantStatisticsRow = { function_name: string, variant_name: string, inference_count: bigint, total_input_tokens?: bigint, total_output_tokens?: bigint, total_cost?: number | null, count_with_cost?: bigint, total_provider_cache_read_input_tokens?: bigint, total_provider_cache_write_input_tokens?: bigint, 
-/**
- * Latency quantiles — only populated from ClickHouse, None on Postgres.
- */
-processing_time_ms_quantiles?: Array<number | null>, 
-/**
- * TTFT quantiles — only populated from ClickHouse, None on Postgres.
- */
-ttft_ms_quantiles?: Array<number | null>, };
+export type VariantStatisticsRow = {
+  function_name: string;
+  variant_name: string;
+  inference_count: bigint;
+  total_input_tokens?: bigint;
+  total_output_tokens?: bigint;
+  total_cost?: number | null;
+  count_with_cost?: bigint;
+  total_provider_cache_read_input_tokens?: bigint;
+  total_provider_cache_write_input_tokens?: bigint;
+  /**
+   * Latency quantiles — only populated from ClickHouse, None on Postgres.
+   */
+  processing_time_ms_quantiles?: Array<number | null>;
+  /**
+   * TTFT quantiles — only populated from ClickHouse, None on Postgres.
+   */
+  ttft_ms_quantiles?: Array<number | null>;
+};

@@ -10,4 +10,7 @@ import type { WeightedVariants } from "./WeightedVariants";
  *
  * `fallback_variants` is optional and defaults to an empty list.
  */
-export type StaticExperimentationConfig = { candidate_variants: WeightedVariants, fallback_variants?: Array<string>, };
+export type StaticExperimentationConfig = {
+  candidate_variants: WeightedVariants;
+  fallback_variants?: Array<string>;
+};

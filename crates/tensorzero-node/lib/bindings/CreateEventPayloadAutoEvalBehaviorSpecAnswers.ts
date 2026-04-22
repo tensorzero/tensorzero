@@ -5,12 +5,13 @@ import type { UserQuestionAnswer } from "./UserQuestionAnswer";
  * Minimal input payload for submitting autoeval behavior spec answers.
  * The server enriches this with context from the original event before storing.
  */
-export type CreateEventPayloadAutoEvalBehaviorSpecAnswers = { 
-/**
- * Map from question UUID to response.
- */
-responses: { [key in string]: UserQuestionAnswer }, 
-/**
- * The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
- */
-auto_eval_behavior_spec_event_id: string, };
+export type CreateEventPayloadAutoEvalBehaviorSpecAnswers = {
+  /**
+   * Map from question UUID to response.
+   */
+  responses: { [key in string]: UserQuestionAnswer };
+  /**
+   * The event ID of the original `AutoEvalBehaviorSpec` event these answers correspond to.
+   */
+  auto_eval_behavior_spec_event_id: string;
+};

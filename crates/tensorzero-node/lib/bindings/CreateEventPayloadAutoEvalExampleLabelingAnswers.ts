@@ -5,12 +5,13 @@ import type { UserQuestionAnswer } from "./UserQuestionAnswer";
  * Minimal input payload for submitting autoeval example labeling answers.
  * The server enriches this with context from the original labeling event before storing.
  */
-export type CreateEventPayloadAutoEvalExampleLabelingAnswers = { 
-/**
- * Map from question UUID to response.
- */
-responses: { [key in string]: UserQuestionAnswer }, 
-/**
- * The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
- */
-auto_eval_example_labeling_event_id: string, };
+export type CreateEventPayloadAutoEvalExampleLabelingAnswers = {
+  /**
+   * Map from question UUID to response.
+   */
+  responses: { [key in string]: UserQuestionAnswer };
+  /**
+   * The event ID of the original `AutoEvalExampleLabeling` event these answers correspond to.
+   */
+  auto_eval_example_labeling_event_id: string;
+};

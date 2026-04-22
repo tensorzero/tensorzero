@@ -4,13 +4,14 @@ import type { VariantStatisticsRow } from "./VariantStatisticsRow";
 /**
  * Response type for the variant statistics endpoint.
  */
-export type GetVariantStatisticsResponse = { 
-/**
- * The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
- * is the backend, None on Postgres.
- */
-quantiles?: Array<number>, 
-/**
- * The aggregated variant statistics rows.
- */
-data: Array<VariantStatisticsRow>, };
+export type GetVariantStatisticsResponse = {
+  /**
+   * The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
+   * is the backend, None on Postgres.
+   */
+  quantiles?: Array<number>;
+  /**
+   * The aggregated variant statistics rows.
+   */
+  data: Array<VariantStatisticsRow>;
+};

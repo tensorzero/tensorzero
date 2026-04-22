@@ -3,8 +3,12 @@
 /**
  * A free-response question within an autoeval behavior spec.
  */
-export type AutoEvalBehaviorSpecQuestion = { id: string, header: string, question: string, 
-/**
- * Pre-filled text shown in the input. The user can edit or submit as-is.
- */
-default_value?: string, };
+export type AutoEvalBehaviorSpecQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  /**
+   * Pre-filled text shown in the input. The user can edit or submit as-is.
+   */
+  default_value?: string;
+};

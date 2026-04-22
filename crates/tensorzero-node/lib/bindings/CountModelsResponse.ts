@@ -3,8 +3,9 @@
 /**
  * Response containing the count of distinct models used.
  */
-export type CountModelsResponse = { 
-/**
- * The count of distinct models used.
- */
-model_count: number, };
+export type CountModelsResponse = {
+  /**
+   * The count of distinct models used.
+   */
+  model_count: number;
+};

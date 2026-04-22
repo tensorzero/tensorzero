@@ -6,24 +6,25 @@
  * preserves enough context for the UI to display the error and for operators
  * to copy/paste the raw config fragment for debugging.
  */
-export type ConfigLoadingError = { 
-/**
- * The type of config item (e.g. `"function"`, `"variant"`, `"model"`).
- */
-kind: string, 
-/**
- * The name of the broken item.
- */
-name: string, 
-/**
- * For variants: the parent function name.
- */
-parent?: string, 
-/**
- * Human-readable description of what went wrong.
- */
-error: string, 
-/**
- * Best-effort TOML fragment of the raw stored config, for copy/paste debugging.
- */
-raw_toml?: string, };
+export type ConfigLoadingError = {
+  /**
+   * The type of config item (e.g. `"function"`, `"variant"`, `"model"`).
+   */
+  kind: string;
+  /**
+   * The name of the broken item.
+   */
+  name: string;
+  /**
+   * For variants: the parent function name.
+   */
+  parent?: string;
+  /**
+   * Human-readable description of what went wrong.
+   */
+  error: string;
+  /**
+   * Best-effort TOML fragment of the raw stored config, for copy/paste debugging.
+   */
+  raw_toml?: string;
+};

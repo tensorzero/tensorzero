@@ -3,4 +3,8 @@
 /**
  * Information about a single workflow evaluation project.
  */
-export type WorkflowEvaluationProject = { name: string, count: number, last_updated: string, };
+export type WorkflowEvaluationProject = {
+  name: string;
+  count: number;
+  last_updated: string;
+};

@@ -3,8 +3,9 @@
 /**
  * Response containing the count of evaluation runs.
  */
-export type EvaluationRunStatsResponse = { 
-/**
- * The total count of evaluation runs.
- */
-count: bigint, };
+export type EvaluationRunStatsResponse = {
+  /**
+   * The total count of evaluation runs.
+   */
+  count: bigint;
+};

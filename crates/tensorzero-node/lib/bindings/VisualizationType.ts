@@ -5,4 +5,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * Types of visualizations that can be displayed.
  */
-export type VisualizationType = { "type": "top_k_evaluation" } & TopKEvaluationVisualization | JsonValue;
+export type VisualizationType =
+  | ({ type: "top_k_evaluation" } & TopKEvaluationVisualization)
+  | JsonValue;

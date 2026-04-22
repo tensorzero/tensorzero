@@ -4,4 +4,6 @@ import type { ModelInference } from "./ModelInference";
 /**
  * Response containing model inferences
  */
-export type GetModelInferencesResponse = { model_inferences: Array<ModelInference>, };
+export type GetModelInferencesResponse = {
+  model_inferences: Array<ModelInference>;
+};

@@ -7,20 +7,22 @@ import type { AutoEvalLabelQuestion } from "./AutoEvalLabelQuestion";
 /**
  * A single example to label, with context and a structured labeling question.
  */
-export type AutoEvalExampleLabeling = { 
-/**
- * Optional since some behaviors only depend on the response
- */
-maybe_excerpted_prompt: AutoEvalContentBlock | null, 
-/**
- * Mandatory since we always need the response for evals
- */
-maybe_excerpted_response: AutoEvalContentBlock, source: AutoEvalExampleSource, 
-/**
- * The multiple-choice labeling question for this example.
- */
-label_question: AutoEvalLabelQuestion, 
-/**
- * An optional free-response explanation question.
- */
-explanation_question?: AutoEvalExplanationQuestion, };
+export type AutoEvalExampleLabeling = {
+  /**
+   * Optional since some behaviors only depend on the response
+   */
+  maybe_excerpted_prompt: AutoEvalContentBlock | null;
+  /**
+   * Mandatory since we always need the response for evals
+   */
+  maybe_excerpted_response: AutoEvalContentBlock;
+  source: AutoEvalExampleSource;
+  /**
+   * The multiple-choice labeling question for this example.
+   */
+  label_question: AutoEvalLabelQuestion;
+  /**
+   * An optional free-response explanation question.
+   */
+  explanation_question?: AutoEvalExplanationQuestion;
+};

@@ -4,4 +4,6 @@
  * The property to order datapoints by.
  * This is flattened in the public API inside the `DatapointOrderBy` struct.
  */
-export type DatapointOrderByTerm = { "by": "timestamp" } | { "by": "search_relevance" };
+export type DatapointOrderByTerm =
+  | { by: "timestamp" }
+  | { by: "search_relevance" };

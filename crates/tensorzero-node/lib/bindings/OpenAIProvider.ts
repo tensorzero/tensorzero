@@ -3,4 +3,11 @@ import type { ContentBlockType } from "./ContentBlockType";
 import type { OpenAIAPIType } from "./OpenAIAPIType";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type OpenAIProvider = { model_name: string, api_base: string | null, include_encrypted_reasoning: boolean, api_type: OpenAIAPIType, provider_tools: Array<JsonValue>, content_type_overrides?: { [key in string]: ContentBlockType }, };
+export type OpenAIProvider = {
+  model_name: string;
+  api_base: string | null;
+  include_encrypted_reasoning: boolean;
+  api_type: OpenAIAPIType;
+  provider_tools: Array<JsonValue>;
+  content_type_overrides?: { [key in string]: ContentBlockType };
+};

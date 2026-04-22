@@ -3,16 +3,20 @@
 /**
  * Aggregated usage statistics for a completed evaluation run.
  */
-export type EvaluationRunUsageSummary = { 
-/**
- * Number of successful inferences
- */
-success_count: number, 
-/**
- * Number of failed inferences
- */
-error_count: number, total_input_tokens?: bigint, total_output_tokens?: bigint, total_cost?: number | null, 
-/**
- * Total wall-clock processing time in milliseconds
- */
-total_processing_time_ms: number, };
+export type EvaluationRunUsageSummary = {
+  /**
+   * Number of successful inferences
+   */
+  success_count: number;
+  /**
+   * Number of failed inferences
+   */
+  error_count: number;
+  total_input_tokens?: bigint;
+  total_output_tokens?: bigint;
+  total_cost?: number | null;
+  /**
+   * Total wall-clock processing time in milliseconds
+   */
+  total_processing_time_ms: number;
+};

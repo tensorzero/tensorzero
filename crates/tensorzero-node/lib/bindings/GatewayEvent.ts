@@ -6,4 +6,9 @@ import type { GatewayEventPayload } from "./GatewayEventPayload";
  *
  * Uses `GatewayEventPayload` which excludes `NotAvailable` authorization status.
  */
-export type GatewayEvent = { id: string, payload: GatewayEventPayload, session_id: string, created_at: string, };
+export type GatewayEvent = {
+  id: string;
+  payload: GatewayEventPayload;
+  session_id: string;
+  created_at: string;
+};

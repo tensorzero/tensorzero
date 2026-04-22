@@ -4,4 +4,6 @@ import type { EvaluationUsageStatistics } from "./EvaluationUsageStatistics";
 /**
  * Response containing evaluation usage statistics.
  */
-export type GetEvaluationUsageStatisticsResponse = { usage_statistics: Array<EvaluationUsageStatistics>, };
+export type GetEvaluationUsageStatisticsResponse = {
+  usage_statistics: Array<EvaluationUsageStatistics>;
+};

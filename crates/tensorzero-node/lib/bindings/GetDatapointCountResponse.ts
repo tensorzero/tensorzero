@@ -3,8 +3,9 @@
 /**
  * Response containing datapoint counts
  */
-export type GetDatapointCountResponse = { 
-/**
- * The count of datapoints for the dataset
- */
-datapoint_count: bigint, };
+export type GetDatapointCountResponse = {
+  /**
+   * The count of datapoints for the dataset
+   */
+  datapoint_count: bigint;
+};

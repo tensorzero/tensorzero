@@ -3,8 +3,9 @@
 /**
  * Query parameters for streaming events.
  */
-export type StreamEventsParams = { 
-/**
- * Resume streaming from this event ID (exclusive).
- */
-last_event_id?: string, };
+export type StreamEventsParams = {
+  /**
+   * Resume streaming from this event ID (exclusive).
+   */
+  last_event_id?: string;
+};

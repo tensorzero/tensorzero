@@ -3,4 +3,4 @@
 /**
  * Response from validating editable config TOML.
  */
-export type ValidateConfigTomlResponse = { valid: boolean, };
+export type ValidateConfigTomlResponse = { valid: boolean };

@@ -4,8 +4,9 @@ import type { OptimizationJobInfo } from "./OptimizationJobInfo";
 /**
  * Response from the optimization workflow tool.
  */
-export type LaunchOptimizationWorkflowToolOutput = { 
-/**
- * The final job info (Completed or Failed).
- */
-result: OptimizationJobInfo, };
+export type LaunchOptimizationWorkflowToolOutput = {
+  /**
+   * The final job info (Completed or Failed).
+   */
+  result: OptimizationJobInfo;
+};

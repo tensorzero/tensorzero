@@ -10,4 +10,7 @@ import type { System } from "./System";
  *
  * `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
  */
-export type StoredInput = { system?: System, messages: Array<StoredInputMessage>, };
+export type StoredInput = {
+  system?: System;
+  messages: Array<StoredInputMessage>;
+};

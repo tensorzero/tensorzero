@@ -4,8 +4,9 @@ import type { ModelUsageTimePoint } from "./ModelUsageTimePoint";
 /**
  * Response containing model usage timeseries data.
  */
-export type GetModelUsageResponse = { 
-/**
- * The model usage data points.
- */
-data: Array<ModelUsageTimePoint>, };
+export type GetModelUsageResponse = {
+  /**
+   * The model usage data points.
+   */
+  data: Array<ModelUsageTimePoint>;
+};
