@@ -27,6 +27,10 @@ name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
+[[bench]]
+name = "cache_key"
+harness = false
+
 [lints]
 workspace = true
 
@@ -158,6 +162,7 @@ rustls = { workspace = true }
 serde_with = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 googletest = { workspace = true }
 googletest-matchers = { path = "../googletest-matchers" }
 tempfile = { workspace = true }

@@ -328,34 +328,14 @@ impl ModelProviderRequest<'_> {
         hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
         hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
-        // Convert the request to a JSON Value, error if serialization fails
-
-        let mut request_value = serde_json::to_value(request).map_err(|e| {
+        // Serialize the request directly into the hasher (blake3::Hasher implements io::Write).
+        // inference_id is marked #[serde(skip)] on ModelInferenceRequest so it is excluded
+        // automatically — no intermediate Value allocation or String buffer needed.
+        serde_json::to_writer(&mut hasher, request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
         })?;
-
-        // Convert the Value to a mutable object and remove the inference_id field
-        // We remove inference_id since it's unique per request and would prevent cache hits
-        request_value
-            .as_object_mut()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::Serialization {
-                    message: "Failed to convert request to object".to_string(),
-                })
-            })?
-            .remove("inference_id");
-
-        // Convert the modified request back to a JSON string
-        let serialized_request = serde_json::to_string(&request_value).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize request: {e}"),
-            })
-        })?;
-        // Get the bytes of the serialized request to use in the hash
-        let request_bytes = serialized_request.as_bytes();
-        hasher.update(request_bytes);
         Ok(hasher.finalize().into())
     }
 }

@@ -1008,6 +1008,7 @@ pub enum ToolConfigRef<'a> {
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
+    #[serde(skip)]
     pub inference_id: Uuid,
     pub messages: Vec<RequestMessage>,
     pub system: Option<String>,
