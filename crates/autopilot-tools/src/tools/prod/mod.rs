@@ -61,5 +61,6 @@ pub use upload_dataset::{
 };
 pub use write_config::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
-    UpsertVariantPayload, WriteConfigTool, WriteConfigToolParams,
+    UpsertVariantPayload, WriteConfigErrorCode, WriteConfigTool, WriteConfigToolOutput,
+    WriteConfigToolParams,
 };
