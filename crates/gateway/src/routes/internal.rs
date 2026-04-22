@@ -278,6 +278,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
             post(endpoints::internal::autopilot::interrupt_session_handler),
         )
         .route(
+            "/internal/autopilot/v1/sessions/{session_id}/status_detail",
+            get(endpoints::internal::autopilot::status_detail_handler),
+        )
+        .route(
             "/internal/autopilot/v1/sessions/{session_id}/config-writes",
             get(endpoints::internal::autopilot::list_config_writes_handler),
         )
