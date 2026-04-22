@@ -43,6 +43,7 @@ ALLOWED_SKIP=(
   "client-tests"
   "inference-cache-tests"
   "Endpoint tests"
+  "k3d"
   "lint-rust"
   "live-tests"
   "live-tests-config-in-database"
