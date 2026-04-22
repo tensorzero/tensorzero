@@ -40,6 +40,5 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commands: |
             check-fork
-            autopilot-e2e
           # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations
           permission: none
