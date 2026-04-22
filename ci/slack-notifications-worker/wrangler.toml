@@ -1,6 +1,7 @@
 name = "tensorzero-slack-notifications"
 main = "worker.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 GITHUB_ORG = "tensorzero"

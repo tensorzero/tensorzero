@@ -27,17 +27,23 @@ export default {
     const body = await request.text();
 
     // Verify webhook signature using Octokit
+    const signature = request.headers.get("X-Hub-Signature-256");
+    if (!signature) {
+      return new Response("Unauthorized", { status: 401 });
+    }
     const app = createApp(env);
-    const isValid = await app.webhooks.verify(
-      body,
-      request.headers.get("X-Hub-Signature-256") || "",
-    );
+    const isValid = await app.webhooks.verify(body, signature);
     if (!isValid) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     const event = request.headers.get("X-GitHub-Event");
     const payload = JSON.parse(body);
+
+    // Only process events from the expected repository
+    if (payload.repository?.full_name !== "tensorzero/tensorzero") {
+      return new Response("OK (skipped: wrong repo)", { status: 200 });
+    }
 
     const notification = buildNotification(event, payload, env);
     if (!notification) {
@@ -185,15 +191,20 @@ async function shouldSkip(actor, env) {
       username: actor,
     });
     return true; // 204 = is a member
-  } catch {
-    return false; // 404 = not a member
+  } catch (err) {
+    if (err.status === 404 || err.status === 302) {
+      return false; // not a member
+    }
+    // For other errors (auth failures, rate limits, network), re-throw
+    // so we don't silently notify on all events during an outage.
+    throw err;
   }
 }
 
 // --- Post to Slack ---
 
 async function postToSlack(notification, env) {
-  await fetch("https://slack.com/api/chat.postMessage", {
+  const resp = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
@@ -205,4 +216,12 @@ async function postToSlack(notification, env) {
       blocks: notification.blocks,
     }),
   });
+
+  if (!resp.ok) {
+    throw new Error(`Slack API HTTP error: ${resp.status}`);
+  }
+  const data = await resp.json();
+  if (!data.ok) {
+    throw new Error(`Slack API error: ${data.error}`);
+  }
 }
