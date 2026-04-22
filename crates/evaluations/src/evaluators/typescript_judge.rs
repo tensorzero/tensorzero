@@ -111,6 +111,8 @@ mod imp {
     ///    [`build_code_execution_ambient_declarations`]
     /// 2. `Input` (and its transitive deps) from `tensorzero-ts-types`
     /// 3. `ContentBlockChatOutput` (and its transitive deps) from `tensorzero-ts-types`
+    /// 4. `EvaluatorParams`, the single-argument wrapper passed to
+    ///    `tensorzero_evaluator`.
     ///
     /// The `tensorzero-ts-types` bundles are generated at build time from the
     /// `ts-rs`-emitted `.ts` files under `crates/tensorzero-node/lib/bindings/`,
@@ -121,7 +123,11 @@ mod imp {
             "{stdlib}\n\
              // --- TensorZero evaluator ambient types (from `tensorzero-ts-types`) ---\n\
              {input}\n\n\
-             {content}\n",
+             {content}\n\n\
+             interface EvaluatorParams {{\n\
+             \x20   input: Input;\n\
+             \x20   output: ContentBlockChatOutput[];\n\
+             }}\n",
             input = tensorzero_ts_types::INPUT.as_str(),
             content = tensorzero_ts_types::CONTENT_BLOCK_CHAT_OUTPUT.as_str(),
         )
@@ -151,9 +157,11 @@ mod imp {
         // 2. Build wrapper code that calls the user's evaluator function.
         let wrapper_code = format!(
             "{user_code}\n\n\
-             const __t0_input: Input = {input_json};\n\
-             const __t0_output: ContentBlockChatOutput[] = {output_json};\n\
-             const __t0_result = await tensorzero_evaluator(__t0_input, __t0_output);\n\
+             const __t0_params: EvaluatorParams = {{\n\
+             \x20   input: {input_json},\n\
+             \x20   output: {output_json},\n\
+             }};\n\
+             const __t0_result = await tensorzero_evaluator(__t0_params);\n\
              FINAL(JSON.stringify(__t0_result));\n",
             user_code = config.typescript_code,
             input_json = input_json,

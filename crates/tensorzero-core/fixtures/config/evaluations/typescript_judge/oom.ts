@@ -7,10 +7,7 @@
 // so we allocate a chain of arrays whose combined retained size easily
 // exceeds that — a loop rather than one big allocation so the OOM trips
 // before any single `new Array(...)` succeeds.
-function tensorzero_evaluator(
-    _input: Input,
-    _output: ContentBlockChatOutput[],
-): boolean {
+function tensorzero_evaluator(_params: EvaluatorParams): boolean {
     const retained: number[][] = [];
     // Each chunk is ~8 MB on 64-bit V8 (1,000,000 × 8-byte tagged pointers).
     // Five such chunks retained in a parent array = ~40 MB, well past the
