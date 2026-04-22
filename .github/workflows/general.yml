@@ -1476,16 +1476,6 @@ jobs:
     needs: [build-gateway-container, build-mock-provider-api-container]
     secrets: inherit
 
-  autopilot-e2e:
-    permissions:
-      contents: read
-    if: needs.detect-changes.outputs.code == 'true' && github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [detect-changes, build-gateway-e2e-container, build-ui-container]
-    uses: ./.github/workflows/dispatch-autopilot-e2e.yml
-    secrets:
-      AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
-      AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
-
   check-docs-broken-links:
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.docs == 'true'
@@ -1562,7 +1552,6 @@ jobs:
     needs:
       [
         detect-changes,
-        autopilot-e2e,
         build-gateway-container,
         build-gateway-e2e-container,
         build-live-tests-container,
