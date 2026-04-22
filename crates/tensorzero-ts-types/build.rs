@@ -83,7 +83,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ),
     ("LIST_DATASETS_RESPONSE", "ListDatasetsResponse"),
     ("LIST_EPISODES_RESPONSE", "ListEpisodesResponse"),
-    ("RUN_EVALUATION_RESPONSE", "RunEvaluationResponse"),
+    ("RUN_EVALUATION_TOOL_OUTPUT", "RunEvaluationToolOutput"),
     ("UPDATE_DATAPOINTS_RESPONSE", "UpdateDatapointsResponse"),
     ("UPLOAD_DATASET_TOOL_OUTPUT", "UploadDatasetToolOutput"),
     ("GEPA_TOOL_OUTPUT", "GepaToolOutput"),

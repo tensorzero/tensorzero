@@ -53,7 +53,9 @@ pub use list_datapoints::{ListDatapointsTool, ListDatapointsToolParams};
 pub use list_datasets::{ListDatasetsTool, ListDatasetsToolParams};
 pub use list_episodes::{ListEpisodesTool, ListEpisodesToolParams};
 pub use list_inferences::{ListInferencesTool, ListInferencesToolParams};
-pub use run_evaluation::{RunEvaluationTool, RunEvaluationToolParams};
+pub use run_evaluation::{
+    EvaluationDiagnostic, RunEvaluationTool, RunEvaluationToolOutput, RunEvaluationToolParams,
+};
 pub use update_datapoints::{UpdateDatapointsTool, UpdateDatapointsToolParams};
 pub use upload_dataset::{
     UploadDatasetFormat, UploadDatasetTool, UploadDatasetToolOutput, UploadDatasetToolParams,
