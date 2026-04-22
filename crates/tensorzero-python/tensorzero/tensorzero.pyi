@@ -594,6 +594,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         include_raw_usage: Optional[bool] = None,
         include_aggregated_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        gateway_http_headers: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -1067,6 +1068,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         include_raw_usage: Optional[bool] = None,
         include_aggregated_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        gateway_http_headers: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
