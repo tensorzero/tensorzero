@@ -1469,10 +1469,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_components_rejects_batch_writes() {
-        // Create a config that enables batch writes, which is not supported in embedded mode
+        // Create a config that enables batch writes, which is not supported in embedded mode.
+        // async_writes must be explicitly disabled since it defaults to true and conflicts.
         let config_str = r"
-        [gateway.observability.batch_writes]
-        enabled = true
+        [gateway.observability]
+        async_writes = false
+        batch_writes = { enabled = true }
         ";
         let tmp_config = NamedTempFile::new().unwrap();
         std::fs::write(tmp_config.path(), config_str).unwrap();
