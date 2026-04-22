@@ -1,0 +1,324 @@
+//! Internal route definitions for the TensorZero Gateway API.
+//!
+//! These routes are for internal use. They are unstable and might change without notice,
+//! and do not export any OpenTelemetry spans.
+
+use axum::{
+    Router,
+    routing::{get, post},
+};
+use tensorzero_core::endpoints;
+use tensorzero_core::feature_flags;
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
+use tensorzero_core::utils::gateway::SwappableAppStateData;
+
+#[expect(
+    clippy::disallowed_types,
+    reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
+)]
+pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData> {
+    let router = Router::new()
+        .route(
+            "/internal/functions/{function_name}/variant_sampling_probabilities",
+            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/metrics",
+            get(endpoints::functions::internal::get_function_metrics_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/variant_performances",
+            get(endpoints::functions::internal::get_variant_performances_handler),
+        )
+        .route(
+            "/internal/functions/inference_counts",
+            get(endpoints::internal::inference_count::list_functions_with_inference_count_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference_count",
+            get(endpoints::internal::inference_count::get_inference_count_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/inference_count/{metric_name}",
+            get(endpoints::internal::inference_count::get_inference_with_feedback_count_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}",
+            get(endpoints::feedback::internal::get_feedback_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/bounds",
+            get(endpoints::feedback::internal::get_feedback_bounds_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/latest_id_by_metric",
+            get(endpoints::feedback::internal::get_latest_feedback_id_by_metric_handler),
+        )
+        .route(
+            "/internal/feedback/{target_id}/count",
+            get(endpoints::feedback::internal::count_feedback_by_target_id_handler),
+        )
+        .route(
+            "/internal/feedback/timeseries",
+            get(endpoints::feedback::internal::get_cumulative_feedback_timeseries_handler),
+        )
+        .route(
+            "/internal/feedback/{inference_id}/demonstrations",
+            get(endpoints::feedback::internal::get_demonstration_feedback_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/throughput_by_variant",
+            get(endpoints::internal::inference_count::get_function_throughput_by_variant_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/variant_usage",
+            get(endpoints::internal::models::get_variant_usage_handler),
+        )
+        .route(
+            "/internal/model_inferences/{inference_id}",
+            get(endpoints::internal::model_inferences::get_model_inferences_handler),
+        )
+        .route(
+            "/internal/inference_metadata",
+            get(endpoints::internal::inference_metadata::get_inference_metadata_handler),
+        )
+        .route(
+            "/internal/ui_config",
+            get(endpoints::ui::get_config::ui_config_handler),
+        )
+        .route(
+            "/internal/ui_config/{hash}",
+            get(endpoints::ui::get_config::ui_config_by_hash_handler),
+        )
+        .route(
+            "/internal/episodes",
+            get(endpoints::episodes::internal::list_episodes_handler)
+                .post(endpoints::episodes::internal::list_episodes_post_handler),
+        )
+        .route(
+            "/internal/episodes/bounds",
+            get(endpoints::episodes::internal::query_episode_table_bounds_handler),
+        )
+        .route(
+            "/internal/episodes/{episode_id}/inference_count",
+            get(endpoints::episodes::internal::get_episode_inference_count_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/clone",
+            post(endpoints::datasets::internal::clone_datapoints_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/count",
+            get(endpoints::datasets::internal::get_datapoint_count_handler),
+        )
+        .route(
+            "/internal/object_storage",
+            get(endpoints::object_storage::get_object_handler),
+        )
+        .route(
+            "/internal/datasets",
+            get(endpoints::datasets::v1::list_datasets_handler),
+        )
+         // Model statistics endpoints
+         .route(
+             "/internal/models/count",
+             get(endpoints::internal::models::count_models_handler),
+         )
+        // Evaluation endpoints
+        .route(
+            "/internal/evaluations/runs/count",
+            get(endpoints::internal::evaluations::count_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/datapoint_count",
+            get(endpoints::internal::evaluations::count_datapoints_handler),
+        )
+        .route(
+            "/internal/evaluations/runs",
+            get(endpoints::internal::evaluations::list_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/runs/search",
+            get(endpoints::internal::evaluations::search_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/evaluations/run_infos",
+            get(endpoints::internal::evaluations::get_evaluation_run_infos_handler),
+        )
+        .route(
+            "/internal/evaluations/datapoints/{datapoint_id}/run_infos",
+            get(endpoints::internal::evaluations::get_evaluation_run_infos_for_datapoint_handler),
+        )
+        .route(
+            "/internal/evaluations/statistics",
+            get(endpoints::internal::evaluations::get_evaluation_statistics_handler),
+        )
+        .route(
+            "/internal/evaluations/usage_statistics",
+            get(endpoints::internal::evaluations::get_evaluation_usage_statistics_handler),
+        )
+        .route(
+            "/internal/evaluations/results",
+            get(endpoints::internal::evaluations::get_evaluation_results_handler),
+        )
+        .route(
+            "/internal/evaluations/run_metadata",
+            get(endpoints::internal::evaluations::get_run_metadata_handler),
+        )
+        .route(
+            "/internal/evaluations/datapoints/{datapoint_id}/get_human_feedback",
+            post(endpoints::internal::evaluations::get_human_feedback_handler),
+        )
+        .route(
+            "/internal/evaluations/run",
+            post(super::evaluations::run_evaluation_handler),
+        )
+        // Workflow evaluation endpoints
+        .route(
+            "/internal/workflow_evaluations/projects",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_projects_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/projects/count",
+            get(
+                endpoints::workflow_evaluations::internal::get_workflow_evaluation_project_count_handler,
+            ),
+        )
+        .route(
+            "/internal/workflow_evaluations/list_runs",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/get_runs",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/runs/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/runs/search",
+            get(endpoints::workflow_evaluations::internal::search_workflow_evaluation_runs_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_statistics",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_statistics_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/episodes_by_task_name",
+            get(endpoints::workflow_evaluations::internal::list_workflow_evaluation_run_episodes_by_task_name_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/episodes_by_task_name/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_episodes",
+            get(endpoints::workflow_evaluations::internal::get_workflow_evaluation_run_episodes_handler),
+        )
+        .route(
+            "/internal/workflow_evaluations/run_episodes/count",
+            get(endpoints::workflow_evaluations::internal::count_workflow_evaluation_run_episodes_total_handler),
+        )
+        .route(
+            "/internal/models/usage",
+            get(endpoints::internal::models::get_model_usage_handler),
+        )
+        .route(
+            "/internal/models/latency",
+            get(endpoints::internal::models::get_model_latency_handler),
+        )
+        .route(
+            "/internal/models/cache_statistics",
+            get(endpoints::internal::models::get_cache_statistics_handler),
+        )
+        // Config snapshot endpoints
+        .route(
+            "/internal/config",
+            get(endpoints::internal::config::get_live_config_handler)
+                .post(endpoints::internal::config::write_config_handler),
+        )
+        .route(
+            "/internal/config/{hash}",
+            get(endpoints::internal::config::get_config_by_hash_handler),
+        )
+        // Inference count endpoint
+        .route(
+            "/internal/inferences/count",
+            post(endpoints::internal::count_inferences::count_inferences_handler),
+        )
+        // Action endpoint for executing with historical config snapshots
+        .route(
+            "/internal/action",
+            post(super::action::action_handler),
+        )
+        // Autopilot proxy endpoints
+        .route(
+            "/internal/autopilot/v1/sessions",
+            get(endpoints::internal::autopilot::list_sessions_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events",
+            get(endpoints::internal::autopilot::list_events_handler)
+                .post(endpoints::internal::autopilot::create_event_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/events/stream",
+            get(endpoints::internal::autopilot::stream_events_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/approve_all",
+            post(endpoints::internal::autopilot::approve_all_tool_calls_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/actions/interrupt",
+            post(endpoints::internal::autopilot::interrupt_session_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/config-writes",
+            get(endpoints::internal::autopilot::list_config_writes_handler),
+        )
+        .route(
+            "/internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload",
+            post(endpoints::internal::autopilot::s3_initiate_upload_handler),
+        )
+        // Variant statistics endpoint
+        .route(
+            "/internal/variant_statistics",
+            get(endpoints::internal::variant_statistics::get_variant_statistics_handler),
+        )
+        // Resolve UUID endpoint
+        .route(
+            "/internal/resolve_uuid/{id}",
+            get(endpoints::internal::resolve_uuid::resolve_uuid_handler),
+        )
+        // Other Autopilot endpoints
+        .route(
+            "/internal/autopilot/status",
+            get(endpoints::internal::autopilot::autopilot_status_handler),
+        );
+
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        router
+            .route(
+                "/internal/config_toml",
+                get(endpoints::internal::config_toml::get_latest_config_toml_handler),
+            )
+            // `apply` and `validate` accept the full editable config document in the request
+            // body, which can be large — we use `POST` instead of `GET` so callers don't have
+            // to URL-encode the entire TOML + referenced file contents into the query string.
+            .route(
+                "/internal/config_toml/apply",
+                post(endpoints::internal::config_toml::apply_config_toml_handler),
+            )
+            .route(
+                "/internal/config_toml/validate",
+                post(endpoints::internal::config_toml::validate_config_toml_handler),
+            )
+    } else {
+        router
+    }
+}

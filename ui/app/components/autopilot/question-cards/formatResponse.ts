@@ -1,0 +1,34 @@
+import type {
+  EventPayloadUserQuestion,
+  UserQuestionAnswer,
+} from "~/types/tensorzero";
+
+export function formatResponse(
+  response: UserQuestionAnswer | undefined,
+  question?: EventPayloadUserQuestion,
+): string {
+  if (!response) return "\u2014";
+  switch (response.type) {
+    case "multiple_choice": {
+      const labels = response.selected
+        .map((optId) => {
+          if (!question || question.type !== "multiple_choice") return optId;
+          return question.options.find((o) => o.id === optId)?.label ?? optId;
+        })
+        .join(", ");
+      if (response.free_response_text) {
+        const otherLabel = `Other: ${response.free_response_text}`;
+        return labels ? `${labels}, ${otherLabel}` : otherLabel;
+      }
+      return labels;
+    }
+    case "free_response":
+      return response.text || "\u2014";
+    case "skipped":
+      return "Skipped";
+    default: {
+      const _exhaustiveCheck: never = response;
+      return _exhaustiveCheck;
+    }
+  }
+}

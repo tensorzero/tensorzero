@@ -166,7 +166,6 @@ function FeedbackMetricValue({
         value={value}
         metricType={metricConfig.type}
         optimize={metricConfig.optimize}
-        cutoff={metricConfig.type === "boolean" ? 0.5 : undefined}
         isHumanFeedback={false}
       />
     );

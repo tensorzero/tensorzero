@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "thinking": {
+      "type": "string"
+    },
+    "secret": {
+      "type": "string"
+    }
+  },
+  "required": ["thinking", "secret"],
+  "additionalProperties": false
+}

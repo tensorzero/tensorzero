@@ -79,94 +79,33 @@ Please return the entities in the following JSON format:
 
 <Step title="Collect your optimization data">
 
-<Tabs>
-
-<Tab title="TensorZero Dataset">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
+After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [Postgres](/deployment/postgres), [build a dataset](/gateway/api-reference/datasets-datapoints) for the `extract_entities` function you configured.
 You can create datapoints from historical inferences or external/synthetic datasets.
 
-```python
-from tensorzero import ListDatapointsRequest
-
-datapoints = t0.list_datapoints(
-    dataset_name="extract_entities_dataset",
-    request=ListDatapointsRequest(
-        function_name="extract_entities",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=datapoints.datapoints,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-<Tab title="Historical Inferences">
-
-After deploying the [TensorZero Gateway](/deployment/tensorzero-gateway) with [ClickHouse](/deployment/clickhouse), make [inference calls](/gateway/call-any-llm) to the `extract_entities` function you configured.
-TensorZero automatically collects structured data about those inferences, which can later be used as training examples for GEPA.
-
-```python
-from tensorzero import ListInferencesRequest
-
-inferences_response = t0.list_inferences(
-    request=ListInferencesRequest(
-        function_name="extract_entities",
-        output_source="inference",
-    ),
-)
-
-rendered_samples = t0.experimental_render_samples(
-    stored_samples=inferences_response.inferences,
-    variants={"extract_entities": "baseline"},
-)
-```
-
-</Tab>
-
-</Tabs>
-
-GEPA requires two data splits: training (for template mutation) and validation (for Pareto frontier estimation).
-Let's split samples you queries above using numpy:
-
-```python
-import random
-
-random.shuffle(rendered_samples)
-split_idx = len(rendered_samples) // 2
-train_samples = rendered_samples[:split_idx]
-val_samples = rendered_samples[split_idx:]
-```
+When you launch GEPA with a single `dataset_name`, the dataset is automatically split 50/50 into training and validation sets.
+You can also provide separate `train_dataset_name` and `val_dataset_name` for explicit control over the split.
 
 </Step>
 
 <Step title="Configure an evaluation">
 
-GEPA template refinement is guided by evaluator scores.
-Define an [Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your TensorZero configuration.
+GEPA is guided by evaluator scores, so let's define an [Inference Evaluation](/evaluations/inference-evaluations/tutorial) in your TensorZero configuration.
 To demonstrate that GEPA works even with noisy evaluators, we don't provide demonstrations (labels), only an LLM judge.
 
 <Accordion title="Example: Data Extraction (Named Entity Recognition) — Evaluation">
 
 ```toml title="tensorzero.toml"
-[evaluations.extract_entities_eval]
-type = "inference"
-function_name = "extract_entities"
-
-[evaluations.extract_entities_eval.evaluators.judge_improvement]
+[functions.extract_entities.evaluators.judge_improvement]
 type = "llm_judge"
 output_type = "float"
 include = { reference_output = true }
 optimize = "max"
 description = "Compares generated output against reference output for NER quality. Scores: 1 (better), 0 (similar), -1 (worse). Evaluates: correctness (only proper nouns, no common nouns/numbers/metadata), schema compliance, completeness, verbatim entity extraction (exact spelling/capitalization), and absence of duplicate entities."
 
-[evaluations.extract_entities_eval.evaluators.judge_improvement.variants.baseline]
+[functions.extract_entities.evaluators.judge_improvement.variants.baseline]
 type = "chat_completion"
 model = "openai::gpt-5-mini"
-system_instructions = "evaluations/extract_entities/judge_improvement/system_instructions.txt"
+system_instructions = "functions/extract_entities/evaluators/judge_improvement/system_instructions.txt"
 json_mode = "strict"
 ```
 
@@ -235,28 +174,60 @@ GEPA supports evaluations with any number of evaluators and any evaluator type (
 
 </Step>
 
-<Step title="Configure GEPA">
+<Step title="Launch GEPA">
 
-Configure GEPA by specifying the name of your function and evaluation.
+Launch GEPA by specifying the name of your function, dataset, and evaluators.
 You are also free to choose the models used to analyze inferences and generate new templates.
 
 The `analysis_model` reflects on individual inferences, reports on whether they are optimal, need improvement, or are erroneous, and provides suggestions for prompt template improvement.
 The `mutation_model` generates new templates based on the collected analysis reports.
 We recommend using strong models for these tasks.
 
-```python
-from tensorzero import GEPAConfig
+<Tabs>
 
-optimization_config = GEPAConfig(
+<Tab title="Python">
+
+```python
+result = await t0.optimization.gepa.launch(
     function_name="extract_entities",
-    evaluation_name="extract_entities_eval",
+    dataset_name="extract_entities_dataset",
+    evaluators=["judge_improvement"],
     analysis_model="openai::gpt-5.2",
     mutation_model="openai::gpt-5.2",
     initial_variants=["baseline"],
     max_iterations=10,
-    max_tokens=16384,
 )
+
+task_id = result.task_id
 ```
+
+</Tab>
+
+<Tab title="HTTP">
+
+```bash
+curl -X POST http://localhost:3000/v1/optimization/gepa \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "extract_entities",
+    "dataset_name": "extract_entities_dataset",
+    "evaluators": ["judge_improvement"],
+    "analysis_model": "openai::gpt-5.2",
+    "mutation_model": "openai::gpt-5.2",
+    "initial_variants": ["baseline"],
+    "max_iterations": 10
+  }'
+```
+
+</Tab>
+
+</Tabs>
+
+<Note>
+
+The GEPA API requires the gateway to be configured with [Postgres](/deployment/postgres) for durable task execution.
+
+</Note>
 
 <Tip>
 
@@ -267,21 +238,50 @@ You can manually iterate further by setting `initial_variants` with the result o
 
 </Step>
 
-<Step title="Launch GEPA">
+<Step title="Poll for results">
 
-You can now launch your GEPA optimization job using the TensorZero Gateway:
+The launch endpoint returns a `task_id` that you can use to poll for results.
+The response will have one of three statuses: `pending`, `completed`, or `error`.
+
+<Tabs>
+
+<Tab title="Python">
 
 ```python
-job_handle = t0.experimental_launch_optimization(
-    train_samples=train_samples,
-    val_samples=val_samples,
-    optimization_config=optimization_config,
-)
+import asyncio
 
-job_info = t0.experimental_poll_optimization(
-    job_handle=job_handle
-)
+while True:
+    response = await t0.optimization.gepa.get(task_id=task_id)
+
+    if response["status"] == "completed":
+        print("GEPA optimization completed!")
+        break
+    elif response["status"] == "error":
+        print(f"GEPA optimization failed: {response['error']}")
+        return
+    else:
+        progress = response.get("progress")
+        if progress:
+            print(
+                f"Iteration {progress['current_iteration']}/{progress['max_iterations']}"
+                f" — {progress['current_step']}"
+            )
+        else:
+            print("Pending...")
+        await asyncio.sleep(10)
 ```
+
+</Tab>
+
+<Tab title="HTTP">
+
+```bash
+curl http://localhost:3000/v1/optimization/gepa/{task_id}
+```
+
+</Tab>
+
+</Tabs>
 
 </Step>
 
@@ -290,9 +290,16 @@ job_info = t0.experimental_poll_optimization(
 Review the generated templates and write them to your config directory:
 
 ```python
-variant_configs = job_info.output["content"]
+for variant_name, stats in response["statistics"].items():
+    print(f"\n# Variant: {variant_name}")
+    for evaluator_name, evaluator_stats in stats.items():
+        print(
+            f"  {evaluator_name}: mean={evaluator_stats['mean']:.3f}"
+            f" stdev={evaluator_stats['stdev']:.3f}"
+            f" (n={evaluator_stats['count']})"
+        )
 
-for variant_name, variant_config in variant_configs.items():
+for variant_name, variant_config in response["variants"].items():
     print(f"\n# Optimized variant: {variant_name}")
     for template_name, template in variant_config["templates"].items():
         print(f"## '{template_name}' template:")
@@ -316,44 +323,44 @@ You are an assistant performing **strict Named Entity Recognition (NER)**.
 
 ## Task
 Given an input text, extract entity strings and place each extracted string into exactly one bucket:
-- **person**: named individuals (e.g., “Gloria Steinem”, “D. Cox”, “I. Salisbury”)
-- **organization**: companies, institutions, agencies, government bodies, teams/clubs, political/armed groups (e.g., “Ford”, “KDPI”, “Durham”, “Mujahideen Khalq”)
-- **location**: named places (countries, cities, regions, geographic areas, venues) (e.g., “Paris”, “Weston-super-Mare”, “northern Iraq”)
-- **miscellaneous**: named things that are not person/organization/location, such as **named events/competitions/tournaments/cups/leagues**, works of art, products, laws, etc. (e.g., “Cup Winners’ Cup”)
+- **person**: named individuals (e.g., "Gloria Steinem", "D. Cox", "I. Salisbury")
+- **organization**: companies, institutions, agencies, government bodies, teams/clubs, political/armed groups (e.g., "Ford", "KDPI", "Durham", "Mujahideen Khalq")
+- **location**: named places (countries, cities, regions, geographic areas, venues) (e.g., "Paris", "Weston-super-Mare", "northern Iraq")
+- **miscellaneous**: named things that are not person/organization/location, such as **named events/competitions/tournaments/cups/leagues**, works of art, products, laws, etc. (e.g., "Cup Winners' Cup")
 
 ## Critical rules (follow exactly)
 1. **Default = proper-nouns / unique names only**: Prefer true names (usually capitalized) over generic phrases.
-   - Exclude roles/descriptions like: “one dealer”, “the market”, “a company”, “summer holidays”.
-   - Exclude document/section labels/headers/field names like: “Income Statement Data”, “Balance Sheet”, “Table”, “Date”.
+   - Exclude roles/descriptions like: "one dealer", "the market", "a company", "summer holidays".
+   - Exclude document/section labels/headers/field names like: "Income Statement Data", "Balance Sheet", "Table", "Date".
 
 2. **Dataset edge-case (salient coined concepts) — allow sparingly**:
-   - If a **distinctive coined/defined concept phrase** appears as a referential label in context (often in quotes or clearly treated as “a thing”), you **may** include it in **miscellaneous** even if not capitalized.
-   - Example of what this rule allows: “... this **artificial atmosphere** is very dangerous ...” → miscellaneous may include ["artificial atmosphere"].
+   - If a **distinctive coined/defined concept phrase** appears as a referential label in context (often in quotes or clearly treated as "a thing"), you **may** include it in **miscellaneous** even if not capitalized.
+   - Example of what this rule allows: "... this **artificial atmosphere** is very dangerous ..." → miscellaneous may include ["artificial atmosphere"].
    - Do **not** use this to extract ordinary noun phrases broadly; when unsure, **do not** add the phrase.
 
-3. **No numbers/metrics/metadata**: Do **NOT** extract standalone numbers, percentages, quantities, rankings, or statistical fragments (e.g., “35,563”, “11.7 percent”, “6-3”, “6-2”, “326”) **unless they are part of an official name**.
-   - Sports note: scoring/status terms like “not out” and standalone run/score numbers are **not entities**.
+3. **No numbers/metrics/metadata**: Do **NOT** extract standalone numbers, percentages, quantities, rankings, or statistical fragments (e.g., "35,563", "11.7 percent", "6-3", "6-2", "326") **unless they are part of an official name**.
+   - Sports note: scoring/status terms like "not out" and standalone run/score numbers are **not entities**.
 
 4. **Verbatim spans (exact copy)**: Copy each entity **exactly as it appears in the text** (same spelling, capitalization, punctuation). Do not normalize, shorten, translate, or paraphrase.
 
 5. **High recall for true entities**: Extract **ALL distinct entity mentions** that appear.
-   - Do **not** drop a specific mention in favor of a broader one (e.g., if “northern Iraq” appears, include “northern Iraq” rather than only “Iraq”).
+   - Do **not** drop a specific mention in favor of a broader one (e.g., if "northern Iraq" appears, include "northern Iraq" rather than only "Iraq").
 
 6. **Capitalized collective group labels are entities (avoid over-pruning)**:
-   - Treat multiword group labels (political/ethnic/religious/armed/opposition groups) as entities when they function as a specific group name in context, **even if the head noun is generic** (e.g., “oppositions”, “rebels”, “forces”).
+   - Treat multiword group labels (political/ethnic/religious/armed/opposition groups) as entities when they function as a specific group name in context, **even if the head noun is generic** (e.g., "oppositions", "rebels", "forces").
    - Extract the full verbatim span as written.
-   - Example: “... between Mujahideen Khalq and the Iranian Kurdish oppositions ...” → organization includes ["Mujahideen Khalq", "Iranian Kurdish oppositions"].
+   - Example: "... between Mujahideen Khalq and the Iranian Kurdish oppositions ..." → organization includes ["Mujahideen Khalq", "Iranian Kurdish oppositions"].
 
 7. **Geographic modifiers can be valid locations** when they denote a place/region in context.
-   - Examples to include as **location** when used as places: “northern Iraq”, “Iraqi Kurdish areas”.
+   - Examples to include as **location** when used as places: "northern Iraq", "Iraqi Kurdish areas".
 
 8. **No guessing / no hallucinations**:
-   - Do not add implied entities that do not appear verbatim (e.g., do not add “Iran” if only “Iranian” appears).
+   - Do not add implied entities that do not appear verbatim (e.g., do not add "Iran" if only "Iranian" appears).
    - If the text contains no clear extractable entities, return empty arrays.
 
 9. **Truncated / ellipsized input handling (strict gate)**:
-   - Add the literal sentinel string **"TRUNCATED_INPUT"** to **miscellaneous** **only** if the input contains an explicit ellipsis (“...”) or truncation marker, **OR** the text is so corrupted/incomplete that you **cannot confidently identify any** named entities.
-   - If the text is cut off but still contains clearly identifiable entities, extract those entities and **do NOT** add “TRUNCATED_INPUT”.
+   - Add the literal sentinel string **"TRUNCATED_INPUT"** to **miscellaneous** **only** if the input contains an explicit ellipsis ("...") or truncation marker, **OR** the text is so corrupted/incomplete that you **cannot confidently identify any** named entities.
+   - If the text is cut off but still contains clearly identifiable entities, extract those entities and **do NOT** add "TRUNCATED_INPUT".
 
 10. **No duplicates / no overlap**: Do not repeat the same string within a list, and do not place the same entity string in multiple categories.
 
@@ -393,72 +400,154 @@ You can roll out your new variants with confidence using [adaptive A/B testing](
 
 </Tip>
 
-## `GEPAConfig`
+## API Reference
 
-Configure GEPA optimization by creating a `GEPAConfig` object with the following parameters:
+### `POST /v1/optimization/gepa`
+
+Launch a GEPA optimization task. Returns a task ID for polling.
+
+#### Request
 
 {/* Required Parameters */}
 
-<ParamField body="analysis_model" type="str" required>
-  Model used to analyze inference results (e.g.
-  `"anthropic::claude-sonnet-4-5"`).
-</ParamField>
-
-<ParamField body="evaluation_name" type="str" required>
-  Name of the evaluation used to score candidate variants.
-</ParamField>
-
-<ParamField body="function_name" type="str" required>
+<ParamField body="function_name" type="string" required>
   Name of the TensorZero function to optimize.
 </ParamField>
 
-<ParamField body="mutation_model" type="str" required>
-  Model used to generate prompt mutations (e.g.
-  `"anthropic::claude-sonnet-4-5"`).
+<ParamField body="analysis_model" type="string" required>
+  Model used to analyze inference results (e.g. `"openai::gpt-5.2"`).
+</ParamField>
+
+<ParamField body="mutation_model" type="string" required>
+  Model used to generate prompt mutations (e.g. `"openai::gpt-5.2"`).
+</ParamField>
+
+<ParamField body="max_iterations" type="integer" required>
+  Maximum number of optimization iterations.
+</ParamField>
+
+{/* Dataset Parameters */}
+
+<ParamField body="dataset_name" type="string">
+  Single dataset name. The dataset is automatically split 50/50 into training
+  and validation sets. Mutually exclusive with
+  `train_dataset_name`/`val_dataset_name`.
+</ParamField>
+
+<ParamField body="train_dataset_name" type="string">
+  Training dataset name. Must be paired with `val_dataset_name`. Mutually
+  exclusive with `dataset_name`.
+</ParamField>
+
+<ParamField body="val_dataset_name" type="string">
+  Validation dataset name. Must be paired with `train_dataset_name`. Mutually
+  exclusive with `dataset_name`.
+</ParamField>
+
+{/* Evaluation Parameters */}
+
+<ParamField body="evaluators" type="list[string]">
+  List of evaluator names (defined under the function's configuration) used to
+  score candidate variants. Mutually exclusive with `evaluation_name`; exactly
+  one must be provided.
+</ParamField>
+
+<ParamField body="evaluation_name" type="string">
+  Name of a configured evaluation to use for scoring. Mutually exclusive with
+  `evaluators`; exactly one must be provided.
 </ParamField>
 
 {/* Optional Parameters */}
 
-<ParamField body="batch_size" type="int" default={5}>
-  Number of training samples to analyze per iteration.
-</ParamField>
-
-<ParamField body="include_inference_for_mutation" type="bool" default={true}>
-  Whether to include inference input/output in the analysis passed to the
-  mutation model. Useful for few-shot examples but can cause context overflow
-  with long conversations or outputs.
-</ParamField>
-
-<ParamField body="initial_variants" type="list[str]">
+<ParamField body="initial_variants" type="list[string]">
   List of variant names to initialize GEPA with. If not specified, uses all
   variants defined for the function.
 </ParamField>
 
-<ParamField body="max_concurrency" type="int" default={10}>
-  Maximum number of concurrent inference calls.
+<ParamField body="variant_prefix" type="string">
+  Prefix for naming newly generated variants.
 </ParamField>
 
-<ParamField body="max_iterations" type="int" default={1}>
-  Maximum number of optimization iterations.
+<ParamField body="batch_size" type="integer">
+  Number of training samples to analyze per iteration. Default: 5.
 </ParamField>
 
-<ParamField body="max_tokens" type="int">
-  Maximum tokens for analysis and mutation model calls. Required for Anthropic
-  models.
-</ParamField>
-
-<ParamField body="retries" type="RetryConfig">
-  Retry configuration for inference calls during optimization.
-</ParamField>
-
-<ParamField body="seed" type="int">
+<ParamField body="seed" type="integer">
   Random seed for reproducibility.
 </ParamField>
 
-<ParamField body="timeout" type="int" default={300}>
-  Client timeout in seconds for TensorZero gateway operations.
+<ParamField body="max_concurrency" type="integer">
+  Maximum number of concurrent inference calls. Default: 10.
 </ParamField>
 
-<ParamField body="variant_prefix" type="str">
-  Prefix for naming newly generated variants.
+<ParamField body="max_datapoints" type="integer">
+  Maximum number of datapoints to use from the dataset. Default: 1000.
 </ParamField>
+
+<ParamField body="include_inference_for_mutation" type="boolean">
+  Whether to include inference input/output in the analysis passed to the
+  mutation model. Useful for few-shot examples but can cause context overflow
+  with long conversations or outputs. Default: true.
+</ParamField>
+
+#### Response
+
+```json
+{
+  "task_id": "01970a5e-..."
+}
+```
+
+### `GET /v1/optimization/gepa/{task_id}`
+
+Poll the status of a GEPA optimization task.
+
+#### Request
+
+The request URL should include the `task_id` you received when launching the GEPA workflow.
+
+#### Response
+
+The response is a tagged union on the `status` field:
+
+**Pending**
+
+```json
+{
+  "status": "pending",
+  "progress": {
+    "current_iteration": 3,
+    "max_iterations": 10,
+    "current_step": "Evaluating variants"
+  }
+}
+```
+
+**Completed**
+
+```json
+{
+  "status": "completed",
+  "variants": {
+    "gepa-iter-5-baseline": { ... }
+  },
+  "statistics": {
+    "gepa-iter-5-baseline": {
+      "judge_improvement": {
+        "mean": 0.15,
+        "stdev": 0.72,
+        "count": 250
+      }
+    }
+  }
+}
+```
+
+**Error**
+
+```json
+{
+  "status": "error",
+  "error": "description of what went wrong"
+}
+```

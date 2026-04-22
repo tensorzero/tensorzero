@@ -20,10 +20,10 @@ jobs:
     # - R2_ENDPOINT_URL: Cloudflare R2 endpoint URL (e.g., https://ACCOUNT_ID.r2.cloudflarestorage.com)
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
         with:
           version: "latest"
 
@@ -33,11 +33,11 @@ jobs:
           echo "=== Extracting version from Cargo.toml ==="
           echo "Current directory: $(pwd)"
           echo "Cargo.toml contents (first 30 lines):"
-          head -30 Cargo.toml
+          head -30 crates/Cargo.toml
           echo ""
           echo "Looking for version line..."
           # Extract version from Cargo.toml workspace.package section
-          VERSION=$(grep -E '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          VERSION=$(grep -E '^version = ' crates/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Extracted version: ${VERSION}"
           echo "========================="

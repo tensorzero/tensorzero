@@ -8,6 +8,7 @@ import { StreamLanguage } from "@codemirror/language";
 import { jinja2 } from "@codemirror/legacy-modes/mode/jinja2";
 import { githubLightInit } from "@uiw/codemirror-theme-github";
 import { EditorView } from "@codemirror/view";
+import { search } from "@codemirror/search";
 import type { Extension } from "@codemirror/state";
 import { Button } from "./button";
 import { cn } from "~/utils/common";
@@ -71,10 +72,22 @@ export interface CodeEditorProps {
   showLineNumbers?: boolean;
   placeholder?: string;
   className?: string;
-  /** We should generally set a maxHeight to improve performance for large documents. */
+  /**
+   * Caps the editor height; the editor grows with content up to this value then scrolls.
+   * We should generally set this to improve performance for large documents.
+   * Note: if the parent has an explicit height (e.g. a `resize-y` wrapper), `"100%"` works —
+   * but the editor won't fill the container when content is shorter than the cap.
+   */
   maxHeight?: string;
+  /**
+   * Sets an exact editor height regardless of content length.
+   * Prefer this over `maxHeight` inside a `resize-y` wrapper so the editor always
+   * fills the full dragged area. Pass `"100%"` when the parent has an explicit height.
+   */
+  height?: string;
   /** Aria label for accessibility */
   ariaLabel?: string;
+  dataTestId?: string;
 }
 
 const LANGUAGE_EXTENSIONS = {
@@ -94,7 +107,15 @@ const CUSTOM_EDITOR_THEME = EditorView.theme({
   },
 });
 
-// Editor theme with monospace font
+// Editor theme with monospace font.
+//
+// IMPORTANT — Syntax highlighting depends on all CodeMirror/Lezer packages
+// sharing a single instance of `@lezer/highlight`. If multiple versions are
+// installed (check with `pnpm why @lezer/highlight`), the `Tag` objects used
+// by the language parser and the `HighlightStyle` will be different instances,
+// causing all tokens to render in the default foreground color (no colors).
+// Fix: add `"@lezer/highlight": "<version>"` to `pnpm.overrides` in the
+// workspace-root `package.json` to deduplicate.
 const THEME_MONO = githubLightInit({
   settings: {
     fontFamily: "var(--font-mono)",
@@ -115,7 +136,7 @@ function getExtensions(
   const key = `${language}-${wordWrap}-${readOnly}`;
   let exts = extensionCache.get(key);
   if (!exts) {
-    exts = [...LANGUAGE_EXTENSIONS[language], CUSTOM_EDITOR_THEME];
+    exts = [...LANGUAGE_EXTENSIONS[language], CUSTOM_EDITOR_THEME, search()];
     if (wordWrap) exts.push(EditorView.lineWrapping);
     if (readOnly) exts.push(EditorView.editable.of(false));
     extensionCache.set(key, exts);
@@ -134,7 +155,7 @@ function getBasicSetup(showLineNumbers: boolean, readOnly: boolean) {
       lineNumbers: showLineNumbers,
       foldGutter: showLineNumbers,
       autocompletion: !readOnly,
-      searchKeymap: !readOnly,
+      searchKeymap: true,
       closeBrackets: !readOnly,
       dropCursor: !readOnly,
       allowMultipleSelections: !readOnly,
@@ -217,7 +238,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   placeholder,
   className,
   maxHeight = "400px",
+  height,
   ariaLabel,
+  dataTestId,
 }) => {
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
@@ -320,7 +343,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
-    <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
+    <div
+      className={cn(
+        "group relative isolate min-w-0 rounded-sm",
+        height && "h-full",
+        className,
+      )}
+      data-testid={dataTestId}
+    >
       <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
         <Button
           variant="secondary"
@@ -383,7 +413,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       </div>
 
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
-      <div className="overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500">
+      <div
+        className={cn(
+          "overflow-clip rounded-sm bg-gray-50 transition focus-within:ring-2 focus-within:ring-blue-500",
+          height && "h-full",
+        )}
+      >
         <CodeMirror
           value={internalValue}
           onChange={handleChange}
@@ -392,8 +427,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           theme={theme}
           placeholder={placeholder}
           basicSetup={basicSetup}
-          maxHeight={maxHeight}
-          className="min-h-9 overflow-auto"
+          height={height}
+          maxHeight={height ? undefined : maxHeight}
+          className={cn("min-h-9 overflow-auto", height && "h-full")}
           aria-label={ariaLabel}
         />
       </div>

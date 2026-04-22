@@ -8,9 +8,11 @@
  * browser clients.
  */
 
+import { redirect } from "react-router";
 import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
+import { hexToDecimal } from "../common";
 import { logger } from "../logger";
 
 // Poll interval in milliseconds (5 seconds)
@@ -120,7 +122,10 @@ const defaultFunctionConfig: FunctionConfig = {
   parallel_tool_calls: null,
   description:
     "This is the default function for TensorZero. This function is used when you call a model directly without specifying a function name. It has no variants preconfigured because they are generated dynamically at inference time based on the model being called.",
-  experimentation: { base: { type: "uniform" }, namespaces: {} },
+  experimentation: {
+    base: { type: "static", candidate_variants: [], fallback_variants: [] },
+    namespaces: {},
+  },
 };
 
 /**
@@ -143,6 +148,14 @@ export async function getConfig(): Promise<UiConfig> {
 
   configCache = freshConfig;
   return configCache;
+}
+
+/**
+ * Clears all cached config state so the next read fetches from the gateway.
+ */
+export function invalidateConfigCache(): void {
+  configCache = undefined;
+  snapshotConfigCache.clear();
 }
 
 /**
@@ -172,6 +185,81 @@ export async function getAllFunctionConfigs(config?: UiConfig) {
 }
 
 // ============================================================================
+// Snapshot-aware config resolution from request
+// ============================================================================
+
+/**
+ * Reads `?snapshot_hash` from the request URL and resolves the appropriate
+ * config — either the historical snapshot or the current config.
+ *
+ * If the snapshot hash matches the current config hash (after converting
+ * hex→decimal), strips the param via redirect so the URL stays clean.
+ * Otherwise resolves the historical snapshot config (falling back to
+ * current on error).
+ */
+export async function getConfigFromRequest(
+  request: Request,
+): Promise<UiConfig> {
+  const url = new URL(request.url);
+  const snapshotHash = url.searchParams.get("snapshot_hash");
+  if (!snapshotHash) return getConfig();
+
+  const currentConfig = await getConfig();
+  const decimalHash = hexToDecimal(snapshotHash);
+
+  // Fast path: if the URL hash matches current config, strip it.
+  if (currentConfig.config_hash === decimalHash) {
+    url.searchParams.delete("snapshot_hash");
+    throw redirect(url.pathname + url.search);
+  }
+
+  return getConfigForSnapshot(snapshotHash);
+}
+
+// ============================================================================
+// Snapshot config fetching
+// ============================================================================
+
+const snapshotConfigCache = new Map<string, UiConfig>();
+const MAX_SNAPSHOT_CACHE_SIZE = 50;
+
+/**
+ * Fetches the config for a given snapshot hash. If the hash matches the current
+ * config, returns that. Otherwise fetches the historical config from the gateway
+ * and caches it. Falls back to the current config on error.
+ */
+export async function getConfigForSnapshot(
+  snapshotHash: string | undefined | null,
+): Promise<UiConfig> {
+  if (!snapshotHash) return getConfig();
+
+  const decimalHash = hexToDecimal(snapshotHash);
+
+  const currentConfig = await getConfig();
+  if (currentConfig.config_hash === decimalHash) return currentConfig;
+
+  const cached = snapshotConfigCache.get(decimalHash);
+  if (cached) return cached;
+
+  try {
+    const client = getTensorZeroClient();
+    const snapshotConfig = await client.getUiConfigByHash(decimalHash);
+    // eslint-disable-next-line no-restricted-syntax
+    snapshotConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
+
+    if (snapshotConfigCache.size >= MAX_SNAPSHOT_CACHE_SIZE) {
+      const firstKey = snapshotConfigCache.keys().next().value;
+      if (firstKey) snapshotConfigCache.delete(firstKey);
+    }
+    snapshotConfigCache.set(decimalHash, snapshotConfig);
+    return snapshotConfig;
+  } catch (error) {
+    logger.warn(`Failed to fetch config for snapshot ${snapshotHash}:`, error);
+    return currentConfig;
+  }
+}
+
+// ============================================================================
 // Testing utilities - exported for testing only
 // ============================================================================
 
@@ -183,6 +271,7 @@ export function _resetForTesting(): void {
   configCache = undefined;
   autopilotAvailableCache = undefined;
   pollingStarted = false;
+  snapshotConfigCache.clear();
 }
 
 /**

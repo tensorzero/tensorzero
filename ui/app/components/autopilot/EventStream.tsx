@@ -3,15 +3,18 @@ import {
   AlertTriangle,
   BarChart3,
   ChevronRight,
+  KeyRound,
+  Loader2,
   RotateCcw,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Component, type RefObject, useState } from "react";
+import { Component, type RefObject, useMemo, useState } from "react";
 import {
   AnimatedEllipsis,
   EllipsisMode,
 } from "~/components/ui/AnimatedEllipsis";
 import { Markdown, ReadOnlyCodeBlock } from "~/components/ui/markdown";
+import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { UuidLink } from "~/components/autopilot/UuidLink";
 import {
   remarkUuidLinks,
@@ -28,16 +31,25 @@ import {
 } from "~/components/ui/tooltip";
 import { useAutopilotSession } from "~/contexts/AutopilotSessionContext";
 import type {
+  AutoEvalContentBlock,
+  AutoEvalLabeledExample,
   AutopilotStatus,
   EventPayloadMessageContent,
+  EventPayloadUserQuestion,
   GatewayEvent,
   GatewayEventPayload,
-  TopKEvaluationVisualization,
+  UserQuestionAnswer,
   VisualizationType,
 } from "~/types/tensorzero";
+import { formatResponse } from "~/components/autopilot/question-cards/formatResponse";
+import { hasAnsweredResponse } from "~/components/autopilot/question-cards/responseStatus";
+import { Check, Cross } from "~/components/icons/Icons";
 import { cn } from "~/utils/common";
 import { ApplyConfigChangeButton } from "~/components/autopilot/ApplyConfigChangeButton";
-import TopKEvaluationViz from "./TopKEvaluationViz";
+import EventVisualization, {
+  detectEventVisualization,
+  type EventVisualizationData,
+} from "./EventVisualization";
 
 /**
  * Max height for expandable tool content (tool call arguments, tool results, errors).
@@ -77,6 +89,7 @@ type EventStreamProps = {
   onRetryLoad?: () => void;
   topSentinelRef?: RefObject<HTMLDivElement | null>;
   pendingToolCallIds?: Set<string>;
+  pendingUserQuestionIds?: Set<string>;
   optimisticMessages?: OptimisticMessage[];
   status?: AutopilotStatus;
   configApplyEnabled?: boolean;
@@ -154,12 +167,25 @@ export function getToolCallEventId(event: ToolEvent): string {
 
 /**
  * Type guard to check if an event is a config write event.
- * A config write event is a tool_call with name === "write_config".
+ * A config write event is a tool_call with name === "write_config",
+ * or a tool_result / tool_call_authorization whose tool_call_name === "write_config"
+ * (which supersedes the original tool_call in the event stream).
  */
 export function isConfigWriteEvent(event: GatewayEvent): boolean {
-  return (
-    event.payload.type === "tool_call" && event.payload.name === "write_config"
-  );
+  if (
+    event.payload.type === "tool_call" &&
+    event.payload.name === "write_config"
+  ) {
+    return true;
+  }
+  if (
+    (event.payload.type === "tool_result" ||
+      event.payload.type === "tool_call_authorization") &&
+    event.payload.tool_call_name === "write_config"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function getMessageText(content: EventPayloadMessageContent[]) {
@@ -184,45 +210,6 @@ function getVisualizationTitle(visualization: VisualizationType): string {
 }
 
 /**
- * Renders the appropriate visualization component based on the type.
- */
-function VisualizationRenderer({
-  visualization,
-}: {
-  visualization: VisualizationType;
-}) {
-  // Check for known visualization types
-  if (
-    typeof visualization === "object" &&
-    visualization !== null &&
-    "type" in visualization &&
-    visualization.type === "top_k_evaluation"
-  ) {
-    // Type assertion needed because TypeScript can't narrow through the untagged union
-    return (
-      <TopKEvaluationViz data={visualization as TopKEvaluationVisualization} />
-    );
-  }
-
-  // Unknown or malformed visualization - show raw JSON with a warning
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-fg-muted flex items-center gap-2 text-sm">
-        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-        <span>
-          Unknown visualization type. Your TensorZero deployment may be
-          outdated.
-        </span>
-      </div>
-      <ReadOnlyCodeBlock
-        code={JSON.stringify(visualization, null, 2)}
-        language="json"
-      />
-    </div>
-  );
-}
-
-/**
  * Format a tool error for display.
  * Extracts a human-readable message from the structured error JSON.
  */
@@ -236,6 +223,97 @@ function formatToolError(error: unknown): string {
   }
   // Fallback to JSON stringification
   return JSON.stringify(error);
+}
+
+type ToolStatusVariant =
+  | "success"
+  | "failure"
+  | "pending_execution"
+  | "pending_approval"
+  | "warning";
+
+type ToolStatusInfo = {
+  label: string;
+  variant: ToolStatusVariant;
+};
+
+function getToolEventStatus(event: GatewayEvent): ToolStatusInfo | null {
+  const { payload } = event;
+
+  if (payload.type === "tool_call") {
+    if (payload.requires_approval) {
+      return { label: "Pending Approval", variant: "pending_approval" };
+    }
+    return { label: "Pending Execution", variant: "pending_execution" };
+  }
+
+  if (payload.type === "tool_call_authorization") {
+    switch (payload.status.type) {
+      case "approved":
+        return { label: "Pending Execution", variant: "pending_execution" };
+      case "rejected":
+        return { label: "Rejected", variant: "failure" };
+      default: {
+        const _exhaustiveCheck: never = payload.status;
+        return _exhaustiveCheck;
+      }
+    }
+  }
+
+  if (payload.type === "tool_result") {
+    switch (payload.outcome.type) {
+      case "success":
+        return { label: "Success", variant: "success" };
+      case "failure":
+        return { label: "Error", variant: "failure" };
+      case "rejected":
+        return { label: "Rejected", variant: "failure" };
+      case "missing":
+        return { label: "Missing Tool", variant: "failure" };
+      case "unknown":
+        return { label: "Unknown", variant: "warning" };
+      default: {
+        const _exhaustiveCheck: never = payload.outcome;
+        return _exhaustiveCheck;
+      }
+    }
+  }
+
+  return null;
+}
+
+function ToolStatusIcon({ variant }: { variant: ToolStatusVariant }) {
+  switch (variant) {
+    case "success":
+      return <Check className="h-3 w-3 text-green-600 dark:text-green-400" />;
+    case "failure":
+      return <Cross className="h-3 w-3 text-red-400" />;
+    case "pending_execution":
+      return (
+        <Loader2 className="h-3 w-3 animate-spin text-gray-400 dark:text-gray-500" />
+      );
+    case "pending_approval":
+      return (
+        <KeyRound className="h-3 w-3 text-yellow-500 dark:text-yellow-400" />
+      );
+    case "warning":
+      return (
+        <AlertTriangle className="h-3 w-3 text-yellow-500 dark:text-yellow-400" />
+      );
+    default: {
+      const _exhaustiveCheck: never = variant;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+function ToolStatusBadge({ status }: { status: ToolStatusInfo }) {
+  return (
+    <span className="border-border bg-bg-primary text-fg-muted inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium">
+      <ToolStatusIcon variant={status.variant} />
+      {status.label}
+    </span>
+  );
 }
 
 function summarizeEvent(event: GatewayEvent): EventSummary {
@@ -254,17 +332,14 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return { description: JSON.stringify(payload.arguments, null, 2) };
     }
     case "tool_call_authorization":
-      return {
-        description:
-          payload.status.type === "rejected"
-            ? payload.status.reason
-            : undefined,
-      };
+      return {};
     case "tool_result":
       if (payload.outcome.type === "success") {
-        return {
-          description: JSON.stringify(payload.outcome.result, null, 2),
-        };
+        const description =
+          "result_value" in payload.outcome
+            ? JSON.stringify(payload.outcome.result_value, null, 2)
+            : payload.outcome.result;
+        return { description };
       }
       if (payload.outcome.type === "failure") {
         return {
@@ -276,12 +351,14 @@ function summarizeEvent(event: GatewayEvent): EventSummary {
       return {
         description: payload.message,
       };
-    case "visualization":
     case "user_questions":
     case "user_questions_answers":
+    case "auto_eval_example_labeling":
+    case "auto_eval_example_labeling_answers":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
+    case "visualization":
     case "unknown":
-      // Visualization events render their own content, no text description needed
-      // TODO (#6270): add a real component for `user_questions` and `user_responses`
       return {};
   }
 }
@@ -291,13 +368,10 @@ function renderEventTitle(event: GatewayEvent) {
 
   switch (payload.type) {
     case "message": {
-      const roleLabel =
-        payload.role === "user"
-          ? "User"
-          : payload.role === "assistant"
-            ? "Assistant"
-            : "Message";
-      return roleLabel;
+      if (payload.role === "user") return "User";
+      if (payload.role === "assistant") return "Assistant";
+      const _exhaustiveCheck: never = payload.role;
+      return _exhaustiveCheck;
     }
     case "status_update":
       return "Status Update";
@@ -310,128 +384,20 @@ function renderEventTitle(event: GatewayEvent) {
         </span>
       );
     case "tool_call_authorization":
-      switch (payload.status.type) {
-        case "approved":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Call Authorization
-              <DotSeparator />
-              Approved
-            </span>
-          );
-        case "rejected":
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Call Authorization
-              <DotSeparator />
-              Rejected
-            </span>
-          );
-        default:
-          // This branch should never be reached but we need it to keep ESLint happy...
-          {
-            const _exhaustiveCheck: never = payload.status; // TS compiler should yell if this branch is reachable
-          }
-          throw new Error(
-            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          );
-      }
     case "tool_result":
-      switch (payload.outcome.type) {
-        case "success":
-          // TODO: need tool name
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
+      return (
+        <span className="inline-flex items-center gap-2">
+          Tool Call
+          {payload.tool_call_name && (
+            <>
               <DotSeparator />
-              Success
-            </span>
-          );
-        case "failure":
-          // TODO: need tool name
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Failure
-            </span>
-          );
-        case "rejected":
-          // TODO: need tool name
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Rejected
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Tool rejected"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  {payload.outcome.reason}
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        case "missing":
-          // TODO: need tool name
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Missing Tool
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Missing tool warning"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  The agent requested a tool that your gateway does not support.
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        case "unknown":
-          // TODO: need tool name
-          return (
-            <span className="inline-flex items-center gap-2">
-              Tool Result
-              <DotSeparator />
-              Unknown
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="inline-flex cursor-help items-center text-yellow-600"
-                    aria-label="Unknown tool result"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-xs">
-                  The Autopilot API returned an unknown event. This likely means
-                  your TensorZero deployment version is outdated.
-                </TooltipContent>
-              </Tooltip>
-            </span>
-          );
-        default:
-          // This branch should never be reached but we need it to keep ESLint happy...
-          {
-            const _exhaustiveCheck: never = payload.outcome; // TS compiler should yell if this branch is reachable
-          }
-          throw new Error(
-            "Unknown tool call authorization status. This should never happen. Please open a bug report: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          );
-      }
+              <span className="font-mono font-medium">
+                {payload.tool_call_name}
+              </span>
+            </>
+          )}
+        </span>
+      );
     case "error":
       // TODO: handle errors better
       return "Error";
@@ -442,8 +408,46 @@ function renderEventTitle(event: GatewayEvent) {
           <span>{getVisualizationTitle(payload.visualization)}</span>
         </span>
       );
-    case "user_questions":
-    case "user_questions_answers":
+    case "user_questions": {
+      const questionCount = payload.questions.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {questionCount === 1 ? "Question" : "Questions"}
+        </span>
+      );
+    }
+    case "user_questions_answers": {
+      const answerCount = Object.keys(payload.responses).length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {answerCount === 1 ? "Question" : "Questions"}
+          <DotSeparator />
+          {hasAnsweredResponse(payload.responses) ? "Answered" : "Skipped"}
+        </span>
+      );
+    }
+    case "auto_eval_example_labeling":
+      return "Example Labeling";
+    case "auto_eval_example_labeling_answers": {
+      const exampleCount = payload.examples.length;
+      return (
+        <span className="inline-flex items-center gap-2">
+          {exampleCount === 1 ? "Example Label" : "Example Labels"}
+          <DotSeparator />
+          Submitted
+        </span>
+      );
+    }
+    case "auto_eval_behavior_spec":
+      return "Behavior Spec";
+    case "auto_eval_behavior_spec_answers":
+      return (
+        <span className="inline-flex items-center gap-2">
+          Behavior Spec
+          <DotSeparator />
+          Submitted
+        </span>
+      );
     case "unknown":
       return (
         <span className="inline-flex items-center gap-2">
@@ -521,21 +525,318 @@ class EventErrorBoundary extends Component<
   }
 }
 
+type UserQuestionsContentProps = {
+  questions: EventPayloadUserQuestion[];
+};
+
+function UserQuestionsContent({ questions }: UserQuestionsContentProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      {questions.map((q) => (
+        <div key={q.id} className="flex flex-col gap-0.5">
+          <span className="text-fg-muted text-xs font-medium">{q.header}</span>
+          <span className="text-fg-secondary text-sm">{q.question}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type UserQuestionsAnswersContentProps = {
+  responses: Record<string, UserQuestionAnswer>;
+  questions: EventPayloadUserQuestion[];
+};
+
+function UserQuestionsAnswersContent({
+  responses,
+  questions,
+}: UserQuestionsAnswersContentProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      {Object.entries(responses).map(([questionId, response]) => {
+        const question = questions.find((q) => q.id === questionId);
+        return (
+          <div key={questionId} className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {question?.header ?? questionId}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {formatResponse(response, question)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatLabelAnswer(
+  answer: UserQuestionAnswer,
+  example: AutoEvalLabeledExample,
+): string {
+  return formatResponse(answer, {
+    id: example.label_question.id,
+    header: example.label_question.header,
+    question: example.label_question.question,
+    type: "multiple_choice",
+    options: example.label_question.options,
+    multi_select: false,
+  });
+}
+
+function AutoEvalLabelingAnswersContent({
+  examples,
+}: {
+  examples: AutoEvalLabeledExample[];
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {examples.map((example, idx) => (
+        <div key={idx} className="flex flex-col gap-2">
+          {/* Context blocks */}
+          {[example.maybe_excerpted_prompt, example.maybe_excerpted_response]
+            .filter((block): block is AutoEvalContentBlock => block !== null)
+            .map((block, blockIdx) => (
+              <div key={blockIdx} className="flex flex-col gap-0.5">
+                {block.label && (
+                  <span className="text-fg-muted text-xs font-medium">
+                    {block.label}
+                  </span>
+                )}
+                {block.type === "markdown" ? (
+                  <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+                    {block.text}
+                  </p>
+                ) : (
+                  <pre className="text-fg-secondary overflow-x-auto rounded bg-black/5 p-2 text-xs dark:bg-white/5">
+                    {JSON.stringify(block.data, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
+          {/* Label answer */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-fg-muted text-xs font-medium">
+              {example.label_question.header}
+            </span>
+            <span className="text-fg-primary text-sm">
+              {formatLabelAnswer(example.label_answer, example)}
+            </span>
+          </div>
+          {/* Explanation answer */}
+          {example.explanation_question && example.explanation_answer && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-fg-muted text-xs font-medium">
+                {example.explanation_question.header}
+              </span>
+              <span className="text-fg-primary text-sm">
+                {formatResponse(example.explanation_answer, {
+                  id: example.explanation_question.id,
+                  header: example.explanation_question.header,
+                  question: example.explanation_question.question,
+                  type: "free_response",
+                })}
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type ToolResultPayload = Extract<GatewayEventPayload, { type: "tool_result" }>;
+type ToolCallAuthPayload = Extract<
+  GatewayEventPayload,
+  { type: "tool_call_authorization" }
+>;
+
+function ToolCallArgumentsSection({ arguments: args }: { arguments: unknown }) {
+  if (!args) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-fg-muted text-xs font-medium">Arguments</span>
+      <ReadOnlyCodeBlock code={JSON.stringify(args, null, 2)} language="json" />
+    </div>
+  );
+}
+
+function ToolResultContent({
+  payload,
+  description,
+}: {
+  payload: ToolResultPayload;
+  description?: string;
+}) {
+  const rejectionReason =
+    payload.outcome.type === "rejected" ? payload.outcome.reason : null;
+  const formattedDescription = useFormattedJson(description ?? "");
+
+  return (
+    <div className="flex flex-col gap-3">
+      {payload.tool_call_arguments && (
+        <ToolCallArgumentsSection arguments={payload.tool_call_arguments} />
+      )}
+      {description && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">Result</span>
+          <CodeEditor
+            value={formattedDescription}
+            readOnly
+            allowedLanguages={["json", "text"]}
+            showLineNumbers={false}
+          />
+        </div>
+      )}
+      {rejectionReason && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">
+            Rejection Reason
+          </span>
+          <ReadOnlyCodeBlock code={rejectionReason} language="text" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolCallAuthorizationContent({
+  payload,
+}: {
+  payload: ToolCallAuthPayload;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {payload.tool_call_arguments && (
+        <ToolCallArgumentsSection arguments={payload.tool_call_arguments} />
+      )}
+      {payload.status.type === "rejected" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-fg-muted text-xs font-medium">
+            Rejection Reason
+          </span>
+          <ReadOnlyCodeBlock code={payload.status.reason} language="text" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const uuidRemarkPlugins = [remarkUuidLinks];
 const uuidComponents = { [UUID_LINK_ELEMENT]: UuidLink };
 
-function EventItem({
-  event,
-  isPending = false,
-  configApplyEnabled = false,
-  sessionId,
-}: {
+interface EventItemContentProps {
   event: GatewayEvent;
-  isPending?: boolean;
+  description?: string;
+  visualizationData: EventVisualizationData | null;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+}
+
+function EventItemContent({
+  event,
+  description,
+  visualizationData,
+  questionsMap,
+}: EventItemContentProps) {
+  if (visualizationData) {
+    return <EventVisualization data={visualizationData} />;
+  }
+
+  if (event.payload.type === "user_questions") {
+    return <UserQuestionsContent questions={event.payload.questions} />;
+  }
+
+  if (event.payload.type === "user_questions_answers") {
+    return (
+      <UserQuestionsAnswersContent
+        responses={event.payload.responses}
+        questions={
+          questionsMap?.get(event.payload.user_questions_event_id) ?? []
+        }
+      />
+    );
+  }
+
+  if (event.payload.type === "auto_eval_example_labeling_answers") {
+    return <AutoEvalLabelingAnswersContent examples={event.payload.examples} />;
+  }
+
+  if (event.payload.type === "tool_result") {
+    return (
+      <ToolResultContent payload={event.payload} description={description} />
+    );
+  }
+
+  if (event.payload.type === "tool_call_authorization") {
+    return <ToolCallAuthorizationContent payload={event.payload} />;
+  }
+
+  if (!description) return null;
+
+  switch (event.payload.type) {
+    case "message":
+      return (
+        <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
+          {description}
+        </Markdown>
+      );
+
+    case "tool_call":
+      return <ToolCallArgumentsSection arguments={event.payload.arguments} />;
+
+    case "error":
+      return (
+        <p
+          className="text-fg-secondary overflow-y-auto text-sm whitespace-pre-wrap font-mono"
+          style={{ maxHeight: TOOL_CONTENT_MAX_HEIGHT }}
+        >
+          {description}
+        </p>
+      );
+
+    case "status_update":
+    case "visualization":
+    case "auto_eval_example_labeling":
+    case "auto_eval_behavior_spec":
+    case "auto_eval_behavior_spec_answers":
+    case "unknown":
+      return (
+        <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+          {description}
+        </p>
+      );
+
+    default: {
+      const _exhaustiveCheck: never = event.payload;
+      return _exhaustiveCheck;
+    }
+  }
+}
+
+type EventItemProps = {
+  event: GatewayEvent;
+  questionsMap?: Map<string, EventPayloadUserQuestion[]>;
+  isPendingToolCall?: boolean;
+  isPendingQuestion?: boolean;
   configApplyEnabled?: boolean;
   sessionId?: string;
-}) {
+};
+
+function EventItem({
+  event,
+  questionsMap,
+  isPendingToolCall = false,
+  isPendingQuestion = false,
+  configApplyEnabled = false,
+  sessionId,
+}: EventItemProps) {
   const { yoloMode } = useAutopilotSession();
+
+  const visualizationData = useMemo(
+    () => detectEventVisualization(event),
+    [event],
+  );
+
   const summary = summarizeEvent(event);
   const title = renderEventTitle(event);
   const eventIsToolEvent = isToolEvent(event);
@@ -544,46 +845,56 @@ function EventItem({
     event.payload.type === "tool_call" ||
     event.payload.type === "error" ||
     event.payload.type === "visualization" ||
+    event.payload.type === "user_questions" ||
+    event.payload.type === "user_questions_answers" ||
+    event.payload.type === "auto_eval_example_labeling_answers" ||
     (event.payload.type === "tool_call_authorization" &&
-      event.payload.status.type === "rejected") ||
+      (event.payload.status.type === "rejected" ||
+        event.payload.tool_call_arguments != null)) ||
     (event.payload.type === "tool_result" &&
       (event.payload.outcome.type === "success" ||
-        event.payload.outcome.type === "failure"));
-  const [isExpanded, setIsExpanded] = useState(false);
+        event.payload.outcome.type === "failure" ||
+        event.payload.outcome.type === "rejected" ||
+        event.payload.tool_call_arguments != null));
+  const [isExpanded, setIsExpanded] = useState(visualizationData != null);
   const shouldShowDetails = !isExpandable || isExpanded;
+  const toolStatus = getToolEventStatus(event);
   const label = <span className="text-sm font-medium">{title}</span>;
 
   return (
     <div className="border-border bg-bg-secondary flex flex-col gap-2 rounded-md border px-4 py-3">
       <div className="flex items-center justify-between gap-4">
-        {isExpandable ? (
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            aria-label={
-              isExpanded ? "Collapse tool details" : "Expand tool details"
-            }
-            className="inline-flex cursor-pointer items-center gap-2 text-left"
-            onClick={() => setIsExpanded((current) => !current)}
-          >
-            {label}
-            <span
-              className={cn(
-                "text-fg-muted inline-flex transition-transform duration-200",
-                isExpanded ? "rotate-90" : "rotate-0",
-              )}
+        <div className="flex min-w-0 items-center gap-2">
+          {isExpandable ? (
+            <button
+              type="button"
+              aria-expanded={isExpanded}
+              aria-label={
+                isExpanded ? "Collapse event details" : "Expand event details"
+              }
+              className="inline-flex cursor-pointer items-center gap-2 text-left"
+              onClick={() => setIsExpanded((current) => !current)}
             >
-              <ChevronRight className="h-4 w-4" />
-            </span>
-            {isPending && !yoloMode && (
-              <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
-                Action Required
+              {label}
+              <span
+                className={cn(
+                  "text-fg-muted inline-flex transition-transform duration-200",
+                  isExpanded ? "rotate-90" : "rotate-0",
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
               </span>
-            )}
-          </button>
-        ) : (
-          label
-        )}
+              {((isPendingToolCall && !yoloMode) || isPendingQuestion) && (
+                <span className="rounded bg-blue-200 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                  Action Required
+                </span>
+              )}
+            </button>
+          ) : (
+            label
+          )}
+          {toolStatus && <ToolStatusBadge status={toolStatus} />}
+        </div>
         <div className="text-fg-muted flex items-center gap-1.5 text-xs">
           {isConfigWrite && configApplyEnabled && sessionId && (
             <ApplyConfigChangeButton sessionId={sessionId} event={event} />
@@ -597,40 +908,13 @@ function EventItem({
           <TableItemTime timestamp={event.created_at} />
         </div>
       </div>
-      {shouldShowDetails && summary.description && (
-        <>
-          {event.payload.type === "message" &&
-          event.payload.role === "assistant" ? (
-            <Markdown
-              remarkPlugins={uuidRemarkPlugins}
-              components={uuidComponents}
-            >
-              {summary.description}
-            </Markdown>
-          ) : event.payload.type === "tool_call" ? (
-            <ReadOnlyCodeBlock code={summary.description} language="json" />
-          ) : (
-            <p
-              className={cn(
-                "text-fg-secondary text-sm whitespace-pre-wrap",
-                (event.payload.type === "tool_result" ||
-                  event.payload.type === "error") &&
-                  "overflow-y-auto font-mono",
-              )}
-              style={
-                event.payload.type === "tool_result" ||
-                event.payload.type === "error"
-                  ? { maxHeight: TOOL_CONTENT_MAX_HEIGHT }
-                  : undefined
-              }
-            >
-              {summary.description}
-            </p>
-          )}
-        </>
-      )}
-      {shouldShowDetails && event.payload.type === "visualization" && (
-        <VisualizationRenderer visualization={event.payload.visualization} />
+      {shouldShowDetails && (
+        <EventItemContent
+          event={event}
+          description={summary.description}
+          visualizationData={visualizationData}
+          questionsMap={questionsMap}
+        />
       )}
     </div>
   );
@@ -678,9 +962,9 @@ function OptimisticMessageItem({ message }: { message: OptimisticMessage }) {
         <span className="text-sm font-medium">User</span>
         <Skeleton className="h-4 w-32" />
       </div>
-      <p className="text-fg-secondary text-sm whitespace-pre-wrap">
+      <Markdown remarkPlugins={uuidRemarkPlugins} components={uuidComponents}>
         {message.text}
-      </p>
+      </Markdown>
     </div>
   );
 }
@@ -698,8 +982,19 @@ function getStatusLabel(status: AutopilotStatus): {
       return { text: "Waiting", showEllipsis: false };
     case "waiting_for_tool_execution":
       return { text: "Executing tool", showEllipsis: true };
+    case "waiting_for_user_questions_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_example_labeling_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
+    case "waiting_for_auto_eval_behavior_spec_answers":
+      return { text: "Waiting for your response", showEllipsis: false };
     case "waiting_for_retry":
       return { text: "Something went wrong. Retrying", showEllipsis: true };
+    case "errored_in_progress":
+      return {
+        text: "Something went wrong. Attempting to recover",
+        showEllipsis: true,
+      };
     case "failed":
       return {
         text: "Something went wrong. Please try again.",
@@ -746,11 +1041,64 @@ export default function EventStream({
   onRetryLoad,
   topSentinelRef,
   pendingToolCallIds,
+  pendingUserQuestionIds,
   optimisticMessages = [],
   status,
   configApplyEnabled = false,
   sessionId,
 }: EventStreamProps) {
+  // Map from user_questions event ID → questions array, used to resolve
+  // option labels when rendering user_questions_answers events.
+  const questionsMap = useMemo(() => {
+    const map = new Map<string, EventPayloadUserQuestion[]>();
+    for (const event of events) {
+      if (event.payload.type === "user_questions") {
+        map.set(event.id, event.payload.questions);
+      }
+    }
+    return map;
+  }, [events]);
+
+  // Set of event IDs that are superseded by a later "fat" event containing
+  // all the same information. We hide these to avoid redundancy in the stream.
+  //
+  // Sequences collapsed:
+  // - tool_call + tool_call_authorization → hidden when tool_result exists
+  //   (tool_result contains tool_call_name, arguments, and auth status)
+  // - tool_call → hidden when tool_call_authorization exists (but no result yet)
+  // - auto_eval_example_labeling → hidden when answers exist
+  // - auto_eval_behavior_spec → hidden when answers exist
+  const supersededEventIds = useMemo(() => {
+    const ids = new Set<string>();
+    // Track which tool_call_event_ids have an authorization event
+    const authByToolCallId = new Map<string, string>(); // tool_call_event_id → auth event's tool_call_event_id
+    for (const event of events) {
+      const { payload } = event;
+      if (payload.type === "tool_call_authorization") {
+        authByToolCallId.set(payload.tool_call_event_id, event.id);
+      }
+    }
+    for (const event of events) {
+      const { payload } = event;
+      if (payload.type === "tool_result") {
+        // tool_result supersedes both the tool_call and tool_call_authorization
+        ids.add(payload.tool_call_event_id);
+        const authEventId = authByToolCallId.get(payload.tool_call_event_id);
+        if (authEventId) {
+          ids.add(authEventId);
+        }
+      } else if (payload.type === "tool_call_authorization") {
+        // tool_call_authorization supersedes the tool_call
+        ids.add(payload.tool_call_event_id);
+      } else if (payload.type === "auto_eval_example_labeling_answers") {
+        ids.add(payload.auto_eval_example_labeling_event_id);
+      } else if (payload.type === "auto_eval_behavior_spec_answers") {
+        ids.add(payload.auto_eval_behavior_spec_event_id);
+      }
+    }
+    return ids;
+  }, [events]);
+
   // Determine what to show at the top: sentinel, error, or session start
   // Only show session start when there's content to display (events or optimistic messages)
   const showSessionStart =
@@ -779,16 +1127,20 @@ export default function EventStream({
         <EventSkeletons count={3} />
       )}
 
-      {events.map((event) => (
-        <EventErrorBoundary key={event.id} eventId={event.id}>
-          <EventItem
-            event={event}
-            isPending={pendingToolCallIds?.has(event.id)}
-            configApplyEnabled={configApplyEnabled}
-            sessionId={sessionId}
-          />
-        </EventErrorBoundary>
-      ))}
+      {events
+        .filter((event) => !supersededEventIds.has(event.id))
+        .map((event) => (
+          <EventErrorBoundary key={event.id} eventId={event.id}>
+            <EventItem
+              event={event}
+              questionsMap={questionsMap}
+              isPendingToolCall={pendingToolCallIds?.has(event.id)}
+              isPendingQuestion={pendingUserQuestionIds?.has(event.id)}
+              configApplyEnabled={configApplyEnabled}
+              sessionId={sessionId}
+            />
+          </EventErrorBoundary>
+        ))}
 
       {/* Optimistic messages at the end */}
       {optimisticMessages.map((message) => (

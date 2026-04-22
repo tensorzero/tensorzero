@@ -1,34 +1,37 @@
 {
   "scripts": {
-    "format": "prettier --write \"**/*.{md,mdx,yaml,yml,json}\"",
-    "format:check": "prettier --check \"**/*.{md,mdx,yaml,yml,json}\"",
-    "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
-    "generate-python-schemas": "cd clients/python && uv run --no-project generate_schema_types.py",
+    "format": "oxfmt \"**/*.{md,mdx,yaml,yml,json}\"",
+    "format:check": "oxfmt --check \"**/*.{md,mdx,yaml,yml,json}\"",
+    "build-bindings": "pnpm --filter=@tensorzero/tensorzero-node build-bindings",
+    "generate-python-schemas": "cd crates/tensorzero-python && uv run --no-project generate_schema_types.py",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
     "ui:test:e2e": "pnpm --filter=tensorzero-ui test-e2e",
     "ui:test:e2e-base-path": "pnpm --filter=tensorzero-ui test-e2e-base-path",
-    "tensorzero-node:test": "cd internal/tensorzero-node && pnpm test",
+    "tensorzero-node:test": "cd crates/tensorzero-node && pnpm test",
     "clean:node": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +"
   },
   "devDependencies": {
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.2"
+    "oxfmt": "^0.35.0",
+    "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.15.0",
+  "packageManager": "pnpm@10.33.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "msw"
     ],
     "overrides": {
+      "@codemirror/state": "6.5.4",
       "glob": ">=10.5.0",
       "js-yaml": ">=4.1.1",
       "on-headers": ">=1.1.0",
       "qs": ">=6.14.1",
       "react-router": ">=7.12.0",
-      "valibot": ">=1.2.0"
+      "lodash": ">=4.17.23",
+      "valibot": ">=1.2.0",
+      "@lezer/highlight": "1.2.3"
     }
   }
 }

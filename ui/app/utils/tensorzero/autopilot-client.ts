@@ -1,4 +1,5 @@
 import { BaseTensorZeroClient } from "./base-client";
+import { buildGatewayUrl } from "../gateway-url";
 import type {
   ApproveAllToolCallsGatewayRequest,
   ApproveAllToolCallsResponse,
@@ -21,6 +22,20 @@ import type {
  * A client for calling TensorZero Autopilot API endpoints.
  */
 export class AutopilotClient extends BaseTensorZeroClient {
+  private betaTools: string | null;
+  private extraHeaders: Record<string, string>;
+
+  constructor(
+    baseUrl: string,
+    apiKey?: string,
+    betaTools?: string,
+    extraHeaders?: Record<string, string>,
+  ) {
+    super(baseUrl, apiKey);
+    this.betaTools = betaTools ?? null;
+    this.extraHeaders = extraHeaders ?? {};
+  }
+
   /**
    * Lists autopilot sessions with optional pagination.
    */
@@ -83,9 +98,16 @@ export class AutopilotClient extends BaseTensorZeroClient {
     request: CreateEventGatewayRequest,
   ): Promise<CreateEventResponse> {
     const endpoint = `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events`;
+    const headers: Record<string, string> = {};
+    if (this.betaTools) {
+      headers["tensorzero-beta-tools"] = this.betaTools;
+    }
+    // Extra headers override betaTools on conflict
+    Object.assign(headers, this.extraHeaders);
     const response = await this.fetch(endpoint, {
       method: "POST",
       body: JSON.stringify(request),
+      headers,
     });
     if (!response.ok) {
       const message = await this.getErrorText(response);
@@ -122,11 +144,13 @@ export class AutopilotClient extends BaseTensorZeroClient {
     sessionId: string,
     params?: StreamEventsParams,
   ): AsyncGenerator<GatewayStreamUpdate, void, unknown> {
-    const searchParams = new URLSearchParams();
-    if (params?.last_event_id)
-      searchParams.set("last_event_id", params.last_event_id);
-    const queryString = searchParams.toString();
-    const url = `${this.baseUrl}/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream${queryString ? `?${queryString}` : ""}`;
+    const url = buildGatewayUrl(
+      this.baseUrl,
+      `/internal/autopilot/v1/sessions/${encodeURIComponent(sessionId)}/events/stream`,
+    );
+    if (params?.last_event_id) {
+      url.searchParams.set("last_event_id", params.last_event_id);
+    }
 
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
@@ -231,26 +255,43 @@ export async function listAllConfigWrites(
 /**
  * Extracts the EditPayload from a config write event.
  *
- * @param event - A GatewayEvent that should be a write_config tool call
+ * Accepts `tool_call`, `tool_result`, and `tool_call_authorization` events
+ * because the superseding logic in EventStream may hide the original
+ * `tool_call` and render the button on the surviving event instead.
+ *
+ * @param event - A GatewayEvent that should be a write_config tool event
  * @returns The EditPayload array from the event's arguments
- * @throws Error if the event is not a write_config tool call or has no edit payload
+ * @throws Error if the event is not a write_config event or has no edit payload
  */
 export function extractEditPayloadsFromConfigWrite(
   event: GatewayEvent,
 ): EditPayload[] {
-  if (event.payload.type !== "tool_call") {
+  let args: WriteConfigToolParams;
+
+  if (event.payload.type === "tool_call") {
+    if (event.payload.name !== "write_config") {
+      throw new Error(
+        `Expected write_config tool call but got ${event.payload.name} for event ${event.id}`,
+      );
+    }
+    args = event.payload.arguments as unknown as WriteConfigToolParams;
+  } else if (
+    event.payload.type === "tool_result" ||
+    event.payload.type === "tool_call_authorization"
+  ) {
+    if (event.payload.tool_call_name !== "write_config") {
+      throw new Error(
+        `Expected write_config tool event but got ${event.payload.tool_call_name} for event ${event.id}`,
+      );
+    }
+    args = event.payload
+      .tool_call_arguments as unknown as WriteConfigToolParams;
+  } else {
     throw new Error(
-      `Expected tool_call event but got ${event.payload.type} for event ${event.id}`,
+      `Expected tool_call, tool_result, or tool_call_authorization event but got ${event.payload.type} for event ${event.id}`,
     );
   }
 
-  if (event.payload.name !== "write_config") {
-    throw new Error(
-      `Expected write_config tool call but got ${event.payload.name} for event ${event.id}`,
-    );
-  }
-
-  const args = event.payload.arguments as unknown as WriteConfigToolParams;
   if (!args.edit) {
     throw new Error(
       `Config write event ${event.id} does not have an edit payload. Args: ${JSON.stringify(args)}`,

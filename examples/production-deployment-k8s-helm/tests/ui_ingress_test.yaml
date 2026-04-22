@@ -1,0 +1,35 @@
+suite: UI ingress tests
+templates:
+  - templates/ui-ingress.yaml
+tests:
+  - it: should create UI ingress when both ui.deploy and ui.ingress.enabled are true
+    set:
+      ui.deploy: true
+      ui.ingress.enabled: true
+      ui.ingress.hosts:
+        - host: tensorzero-ui.local
+          paths:
+            - path: /
+              pathType: Prefix
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-tensorzero-ui
+
+  - it: should not create UI ingress when ui.deploy is false
+    set:
+      ui.deploy: false
+      ui.ingress.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not create UI ingress when ui.ingress.enabled is false
+    set:
+      ui.deploy: true
+      ui.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

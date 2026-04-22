@@ -1,0 +1,206 @@
+[workspace]
+members = [
+    "autopilot-client",
+    "autopilot-tools",
+    "autopilot-worker",
+    "bip39-uuid-substitution",
+    "config-applier",
+    "durable-tools",
+    "durable-tools-spawn",
+    "evaluations",
+    "gateway",
+    "googletest-matchers",
+    "minijinja-utils",
+    "provider-proxy",
+    "reqwest-sse-stream",
+    "tensorzero-auth",
+    "tensorzero-client",
+    "tensorzero-config-paths",
+    "tensorzero-core",
+    "tensorzero-core/tests/load/feedback",
+    "tensorzero-core/tests/load/postgres-inference-load-test",
+    "tensorzero-core/tests/load/rate-limit-load-test",
+    "tensorzero-core/tests/mock-provider-api",
+    "tensorzero-derive",
+    "tensorzero-mcp",
+    "tensorzero-node",
+    "tensorzero-optimizers",
+    "tensorzero-stored-config",
+    "tensorzero-python",  # TODO: remove from workspace when we migrate to Stainless
+    "tensorzero-ts-types",
+    "tensorzero-types",
+    "tensorzero-types-providers",
+    "tensorzero-error",
+    "tensorzero-http",
+    "tensorzero-inference-types",
+    "tensorzero-unsafe-helpers",
+    "ts-executor-pool",
+]
+resolver = "2"
+
+[workspace.package]
+version = "2026.4.0"
+rust-version = "1.93.0"
+license = "Apache-2.0"
+edition = "2024"
+
+[workspace.dependencies]
+deno_core = "0.398.0"
+reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"] }
+serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde_path_to_error = "0.1.17"
+serde_with = { version = "3.18.0", default-features = false, features = ["macros"] }
+uuid = { version = "1.22.0", features = ["serde", "v7"] }
+serde_json = { version = "1.0.143", features = ["preserve_order"] }
+secrecy = { version = "0.10.2", features = ["serde"] }
+toml = { version = "1.0.6", features = ["preserve_order"] }
+async-stream = "0.3.5"
+async-trait = "0.1.89"
+http = "1.4.0"
+infer = "0.19.0"
+tokio-stream = "0.1.15"
+tokio = { version = "1.51.1", features = ["full"] }
+tokio-util = { version = "0.7.17", features = ["rt", "time"] }
+tracing = { version = "0.1.43", features = ["log"] }
+pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
+axum = { version = "0.8", features = ["macros", "http2"] }
+anyhow = "1.0.102"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
+http-body-util = "0.1.3"
+futures = "0.3.32"
+thiserror = "2.0.18"
+lazy_static = { version = "1.5.0" }
+sse-stream = "0.2.1"
+reqwest-sse-stream = { path = "reqwest-sse-stream" }
+minijinja = { version = "2.19.0", features = [
+    "loader",
+    "debug",
+    "json",
+    "loop_controls",
+    "builtins",
+    "unstable_machinery",
+] }
+url = { version = "2.5.8", features = ["serde"] }
+google-cloud-auth = "1.9.0"
+object_store = { version = "0.13.2", features = ["serde", "aws", "gcp"] }
+arrow = { version = "58.1.0", default-features = false, features = ["json"] }
+parquet = { version = "58.1.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
+rand = "0.10.1"
+ts-rs = { version = "12.0.1", features = [
+    "serde-compat",
+    "serde-json-impl",
+    "uuid-impl",
+    "url-impl",
+    "chrono-impl",
+    "no-serde-warnings",
+] }
+pin-project = "1.1.11"
+chrono = { version = "0.4.43", features = ["serde"] }
+tracing-opentelemetry-instrumentation-sdk = { version = "0.32.4", features = [
+    "tracing_level_info",
+] }
+tower-http = { version = "0.6.7", features = ["trace"] }
+mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
+    "serde1",
+] }
+sqlx = { version = "0.9.0-alpha.1", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "migrate",
+    "chrono",
+    "uuid",
+    "rust_decimal",
+    "sqlx-toml",
+] }
+rlt = "0.5.0"
+metrics-exporter-prometheus = { version = "0.18.1", features = [
+    "http-listener",
+], default-features = false }
+schemars = "1.1.0"
+serde_arrow = { version = "0.14", features = ["arrow-58"] }
+blake3 = "1.8.4"
+moka = { version = "0.12.15", features = ["sync"] }
+durable = { git = "https://github.com/tensorzero/durable", rev = "b5f2664bc12e154a3ed00281c1a14a8c7406eae1" }
+durable-tools-spawn = { path = "durable-tools-spawn" }
+tensorzero = { path = "tensorzero-client" }
+tensorzero-core = { path = "tensorzero-core" }
+regex = "1.12.2"
+redis = { version = "1.2.0", features = [
+    "tokio-comp",
+    "connection-manager",
+    "tls-rustls",
+    "tokio-rustls-comp",
+] }
+redis-test = { version = "1.0.3", features = ["aio"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+globset = "0.4.18"
+json-pointer = "0.3.4"
+rust_decimal = { version = "1.37", features = ["serde-float", "serde-with-float"] }
+walkdir = "2.5.0"
+tempfile = "3.27.0"
+toml_edit = "0.25"
+googletest = "0.14.2"
+derive_builder = "0.20.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+allow_attributes = "deny"
+dbg_macro = "deny"
+disallowed-types = "deny"
+# NB: Slowly making progress towards:
+# doc_markdown = "deny"
+expect_used = "deny"
+explicit_iter_loop = "deny"
+if_not_else = "deny"
+ignored_unit_patterns = "deny"
+inconsistent_struct_constructor = "deny"
+manual_assert = "deny"
+manual_string_new = "deny"
+match_bool = "deny"
+match_wildcard_for_single_variants = "deny"
+missing_panics_doc = "deny"
+needless_raw_string_hashes = "deny"
+or_fun_call = "deny"
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+semicolon-if-nothing-returned = "deny"
+todo = "deny"
+trivially_copy_pass_by_ref = "deny"
+unimplemented = "deny"
+uninlined_format_args = "deny"
+unnecessary_wraps = "deny"
+unreachable = "deny"
+unused_self = "deny"
+unwrap_used = "deny"
+large_futures = "deny"
+explicit_into_iter_loop = "deny"
+cloned_instead_of_copied = "deny"
+inefficient_to_string = "deny"
+assigning_clones = "deny"
+stable_sort_primitive = "deny"
+ref_option = "deny"
+unnecessary_literal_bound = "deny"
+unused_async = "deny"
+
+# The following pedantic lints are explicitly set to "allow" to give authors discretion on their use.
+default_trait_access = "allow"
+match_same_arms = "allow"
+must_use_candidate = "allow"
+single_match_else = "allow"
+
+# This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
+doc_lazy_continuation = "allow"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.performance]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+incremental = false

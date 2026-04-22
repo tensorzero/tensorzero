@@ -58,7 +58,7 @@ See the [Inference Caching](/gateway/guides/inference-caching) guide for more de
 - **Required:** no (default: no credentials)
 
 Each model provider in your TensorZero configuration can be configured to accept credentials at inference time by using the `dynamic` location (e.g. `dynamic::my_dynamic_api_key_name`).
-See the [configuration reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+See the [configuration reference](/gateway/configuration-reference/#models-model_name-providers-provider_name) for more details.
 The gateway expects the credentials to be provided in the `credentials` field of the request body as specified below.
 The gateway will return a 400 error if the credentials are not provided and the model provider has been configured with dynamic credentials.
 
@@ -311,11 +311,40 @@ See `tensorzero_raw_response` in the [response](#response) section for more deta
 
 If `true`, the response's `usage` object will include a `tensorzero_raw_usage` field containing an array of raw provider-specific usage data from each model inference.
 
-This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens` or Anthropic's `cache_read_input_tokens`.
+This is useful for accessing provider-specific usage fields that TensorZero normalizes away, such as OpenAI's `reasoning_tokens`.
 
 For streaming requests, this requires `stream_options.include_usage` to be `true` (or omitted, in which case it will be automatically enabled).
 
 See `tensorzero_raw_usage` in the [response](#response) section for more details.
+
+#### `tensorzero::namespace`
+
+- **Type:** string
+- **Required:** no
+
+Selects a namespace-specific experimentation config for this request.
+If the function has a matching namespace config, it will be used instead of the base experimentation config.
+If no matching config exists, the base config is used as a fallback.
+
+The namespace is also validated against namespaced models: if the selected variant uses a model scoped to a different namespace, the request will fail.
+
+The value must be a non-empty string.
+It is stored as the `tensorzero::namespace` tag on the inference record.
+Behaves the same as the [`namespace`](/gateway/api-reference/inference#namespace) parameter in the native API.
+
+Provide this as an extra body parameter:
+
+```python
+response = client.chat.completions.create(
+    model="tensorzero::function_name::draft_email",
+    messages=[...],
+    extra_body={
+        "tensorzero::namespace": "mobile",
+    },
+)
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
 
 #### `tensorzero::params`
 
@@ -392,7 +421,7 @@ Each object in the array has the following fields:
 When using OpenAI client libraries, pass this parameter via `extra_body`.
 
 This field allows for dynamic provider tool configuration at runtime.
-You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference)).
 Only use this field if dynamic provider tool configuration is necessary for your use case.
 
 <Accordion title="Example: OpenAI Web Search (Unscoped)">
@@ -540,7 +569,7 @@ If a content block has type `input_audio`, it must have the following additional
 
 The TensorZero-specific content block types are:
 
-- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
+- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text. Only works for user and assistant messages; for system messages, it is treated as plain text and will not bypass templates.
 - `tensorzero::template`: Explicitly specify a template to use. Must have `name` and `arguments` fields.
 
 #### `model`
@@ -693,7 +722,8 @@ If the following `stream_options` is provided...
   "usage": {
     "prompt_tokens": 123,
     "completion_tokens": 456,
-    "total_tokens": 579
+    "total_tokens": 579,
+    "tensorzero_cost": 0.0003
   }
   ...
 ```
@@ -810,6 +840,20 @@ This field is primarily used for testing or debugging purposes.
 
 This field should be provided as an extra body parameter in the request body.
 
+### Request Headers
+
+You can attach custom OTLP trace metadata to individual inference requests using HTTP headers.
+This allows you to extend TensorZero's OpenTelemetry integration with per-request metadata useful for other observability solutions.
+When using the OpenAI client SDKs, pass these as `extra_headers`.
+
+| Header prefix                             | Description                                                                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tensorzero-otlp-traces-extra-header-`    | Custom headers to include in OTLP trace exports. Merged with static headers from `export.otlp.traces.extra_headers` (dynamic values take precedence). |
+| `tensorzero-otlp-traces-extra-attribute-` | Custom span attributes to attach to OTLP trace exports.                                                                                               |
+| `tensorzero-otlp-traces-extra-resource-`  | Custom resource attributes to attach to OTLP trace exports.                                                                                           |
+
+See [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for more details and examples.
+
 ### Response
 
 <Tabs>
@@ -873,6 +917,12 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+- **`prompt_tokens_details`**: Object containing detailed prompt token breakdown (optional). Only present when the provider reports cache metrics.
+  - **`cached_tokens`**: Number of input tokens served from the provider's prompt cache (integer).
+- **`tensorzero_provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
+- **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 #### `tensorzero_extra_content`
 
@@ -999,6 +1049,12 @@ Contains token usage information for the request and response, with the followin
 - **`prompt_tokens`**: Number of tokens in the prompt (integer)
 - **`completion_tokens`**: Number of tokens in the completion (integer)
 - **`total_tokens`**: Total number of tokens used (integer)
+- **`prompt_tokens_details`**: Object containing detailed prompt token breakdown (optional). Only present when the provider reports cache metrics.
+  - **`cached_tokens`**: Number of input tokens served from the provider's prompt cache (integer).
+- **`tensorzero_provider_cache_write_input_tokens`**: Number of input tokens written to the provider's prompt cache (integer, optional). Only present when the provider reports cache metrics.
+- **`tensorzero_cost`**: The cost in dollars for the inference (number or null). Set to `null` when cost is not configured for the model provider or the provider does not report the relevant information.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 #### `tensorzero_raw_response`
 
@@ -1029,6 +1085,8 @@ An array of raw provider-specific usage data. Each entry contains:
 - `api_type`: The API type (`"chat_completions"`, `"responses"`, or `"embeddings"`).
 - `data` (optional): The raw usage object from the provider. The field is optional because some providers don't return usage.
 
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
 </Tab>
 </Tabs>
 
@@ -1046,8 +1104,7 @@ An array of raw provider-specific usage data. Each entry contains:
 
 ##### Configuration
 
-```toml mark="draft_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft_email"
 # ...
 [functions.draft_email]
 type = "chat"
@@ -1146,7 +1203,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1175,7 +1233,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1196,8 +1255,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml "weather_bot"
-// tensorzero.toml
+```toml title="tensorzero.toml" "weather_bot"
 # ...
 
 [functions.weather_bot]
@@ -1341,7 +1399,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1380,7 +1439,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1399,8 +1459,7 @@ Each JSON message has the following fields:
 
 ##### Configuration
 
-```toml mark="extract_email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="extract_email"
 # ...
 [functions.extract_email]
 type = "json"
@@ -1518,7 +1577,8 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```
@@ -1547,7 +1607,8 @@ Each JSON message has the following fields:
   "usage": {
     "prompt_tokens": 100,
     "completion_tokens": 100,
-    "total_tokens": 200
+    "total_tokens": 200,
+    "tensorzero_cost": 0.0003
   }
 }
 ```

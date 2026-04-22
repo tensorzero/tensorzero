@@ -2,11 +2,17 @@ import { test, expect } from "@playwright/test";
 
 test("should show the evaluation result page", async ({ page }) => {
   await page.goto(
-    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063%2C0196367b-c0bb-7f90-b651-f90eb9fba8f3",
+    "/evaluations/runs?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063%2C0196367b-c0bb-7f90-b651-f90eb9fba8f3",
   );
   await expect(page.getByText("Input")).toBeVisible();
   await expect(page.getByText("llama_8b_initial_prompt")).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+
+  // Assert that the Usage column header is visible
+  await expect(page.getByText("Usage")).toBeVisible();
+  // Assert that usage summary stats are rendered (token counts with "tok" suffix and inference counts with "n=" prefix)
+  await expect(page.getByText(/tok/).first()).toBeVisible();
+  await expect(page.getByText(/n=/).first()).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
@@ -14,7 +20,7 @@ test("should show the evaluation result page", async ({ page }) => {
 
 test("Navigate through ragged evaluation results", async ({ page }) => {
   await page.goto(
-    "/evaluations/haiku?evaluation_run_ids=0196374b-04a3-7013-9049-e59ed5fe3f74%2C01963691-9d3c-7793-a8be-3937ebb849c1",
+    "/evaluations/runs?evaluation_run_ids=0196374b-04a3-7013-9049-e59ed5fe3f74%2C01963691-9d3c-7793-a8be-3937ebb849c1",
   );
 
   // Wait for the table row containing the giant topic to be visible
@@ -27,7 +33,7 @@ test("Navigate through ragged evaluation results", async ({ page }) => {
 
   // Verify the URL contains the correct datapoint ID and evaluation run IDs
   await expect(page).toHaveURL(
-    "/evaluations/haiku/0196374a-d03f-7420-9da5-1561cba71ddb?evaluation_run_ids=0196374b-04a3-7013-9049-e59ed5fe3f74",
+    "/evaluations/results/0196374a-d03f-7420-9da5-1561cba71ddb?evaluation_run_ids=0196374b-04a3-7013-9049-e59ed5fe3f74",
   );
   await expect(page.getByText("soft, light, covering")).toHaveCount(2);
 
@@ -39,7 +45,7 @@ test("should be able to add float feedback from the evaluation result page", asy
   page,
 }) => {
   await page.goto(
-    "/evaluations/entity_extraction?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063",
+    "/evaluations/runs?evaluation_run_ids=0196367b-1739-7483-b3f4-f3b0a4bda063",
   );
 
   // Wait for the page to load
@@ -82,7 +88,7 @@ test("should be able to add boolean feedback from the evaluation result page", a
   page,
 }) => {
   await page.goto(
-    "/evaluations/haiku?evaluation_run_ids=0196367a-702c-75f3-b676-d6ffcc7370a1",
+    "/evaluations/runs?evaluation_run_ids=0196367a-702c-75f3-b676-d6ffcc7370a1",
   );
 
   // Wait for the page to load

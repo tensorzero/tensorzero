@@ -10,7 +10,7 @@ This directory contains the code for the **[Episodes](https://www.tensorzero.com
 uv sync
 ```
 
-2. Launch the TensorZero Gateway and ClickHouse database:
+2. Launch the TensorZero Gateway and Postgres database:
 
 ```bash
 docker compose up

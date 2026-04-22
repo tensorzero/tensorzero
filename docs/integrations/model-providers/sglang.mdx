@@ -89,7 +89,7 @@ The `api_key_location` field in your model provider configuration specifies how 
      ```
      The API key can then be passed in the inference request.
 
-See the [Credential Management](/operations/manage-credentials/) guide, the [Configuration Reference](/gateway/configuration-reference/), and the [API reference](/gateway/api-reference/inference/) for more details.
+See the [Credential Management](/operations/manage-credentials/) guide, the [Configuration Reference](/gateway/configuration-reference/), and the [API reference](/gateway/api-reference/inference-openai-compatible/) for more details.
 
 In this example, SGLang is running locally without authentication, so we use `api_key_location = "none"`.
 
@@ -108,7 +108,7 @@ services:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
     # environment:
-    #   - SGLANG_API_KEY=${SGLANG_API_KEY:?Environment variable SGLANG_API_KEY must be set.}
+    #   SGLANG_API_KEY: ${SGLANG_API_KEY:?Environment variable SGLANG_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -122,17 +122,15 @@ You can start the gateway with `docker compose up`.
 Make an inference request to the gateway:
 
 ```bash
-curl -X POST http://localhost:3000/inference \
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "function_name": "my_function_name",
-    "input": {
-      "messages": [
-        {
-          "role": "user",
-          "content": "What is the capital of Japan?"
-        }
-      ]
-    }
+    "model": "tensorzero::function_name::my_function_name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the capital of Japan?"
+      }
+    ]
   }'
 ```

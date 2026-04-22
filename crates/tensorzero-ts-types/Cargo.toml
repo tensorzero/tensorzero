@@ -1,0 +1,13 @@
+[package]
+name = "tensorzero-ts-types"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# No runtime dependencies needed - all work is done in build.rs
+[dependencies]
+
+[build-dependencies]

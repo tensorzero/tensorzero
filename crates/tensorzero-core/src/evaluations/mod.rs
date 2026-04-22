@@ -1,0 +1,2821 @@
+use std::collections::HashSet;
+use std::{collections::HashMap, sync::Arc};
+
+use schemars::JsonSchema;
+use serde::de::{self, Deserializer, MapAccess, Visitor};
+use serde::{Deserialize, Serialize};
+use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_stored_config::{
+    StoredEvaluationConfig, StoredExactMatchConfig, StoredInferenceEvaluationConfig,
+    StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat, StoredLLMJudgeOptimize,
+    StoredLLMJudgeOutputType, StoredRegexConfig, StoredToolUseConfig,
+    StoredTypescriptJudgeOptimize, StoredTypescriptJudgeOutputType,
+};
+use uuid::Uuid;
+
+use crate::variant::chain_of_thought::ChainOfThoughtConfig;
+
+use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
+use crate::experimentation::ExperimentationConfigWithNamespaces;
+use crate::utils::retries::RetryConfig;
+use crate::variant::Variant;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+use crate::{
+    config::{
+        MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
+        SchemaData, TimeoutsConfig, path::ResolvedTomlPathData,
+    },
+    error::{Error, ErrorDetails},
+    function::{FunctionConfig, FunctionConfigJson},
+    inference::types::{
+        chat_completion_inference_params::ServiceTier, extra_body::ExtraBodyConfig,
+        extra_headers::ExtraHeadersConfig,
+    },
+    jsonschema_util::JSONSchema,
+    tool::create_json_mode_tool_call_config,
+    variant::{
+        JsonMode, VariantConfig, VariantInfo,
+        best_of_n_sampling::{
+            UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
+        },
+        chat_completion::ChatCompletionConfig,
+        dicl::UninitializedDiclConfig,
+        mixture_of_n::{UninitializedFuserConfig, UninitializedMixtureOfNConfig},
+    },
+};
+
+pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");
+pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
+    include_str!("llm_judge_float_output_schema.json");
+pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
+    include_str!("llm_judge_boolean_output_schema.json");
+
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct InferenceEvaluationConfig {
+    pub evaluators: HashMap<String, EvaluatorConfig>,
+    pub function_name: String,
+    pub description: Option<String>,
+}
+
+/// Deprecated: Use `InferenceEvaluationConfig` instead
+pub type StaticEvaluationConfig = InferenceEvaluationConfig;
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum EvaluationConfig {
+    #[serde(alias = "static")]
+    Inference(InferenceEvaluationConfig),
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum EvaluatorConfig {
+    ExactMatch(ExactMatchConfig),
+    #[serde(rename = "llm_judge")]
+    LLMJudge(LLMJudgeConfig),
+    ToolUse(ToolUseConfig),
+    Regex(RegexConfig),
+    #[serde(rename = "typescript")]
+    TypescriptJudge(TypescriptJudgeConfig),
+}
+
+/// Minimal function configuration for evaluation purposes.
+/// Contains only the information needed to validate output schemas during evaluation.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum EvaluationFunctionConfig {
+    /// Chat function - no output schema validation needed
+    Chat,
+    /// JSON function - contains output schema for validation
+    Json { output_schema: JSONSchema },
+}
+
+impl From<&FunctionConfig> for EvaluationFunctionConfig {
+    fn from(config: &FunctionConfig) -> Self {
+        match config {
+            FunctionConfig::Chat(_) => EvaluationFunctionConfig::Chat,
+            FunctionConfig::Json(json_config) => EvaluationFunctionConfig::Json {
+                output_schema: json_config.output_schema.clone(),
+            },
+        }
+    }
+}
+
+impl EvaluatorConfig {
+    // TODO(shuyangli): Remove this config option and make it a CLI flag instead.
+    #[expect(deprecated)]
+    pub fn cutoff(&self) -> Option<f32> {
+        match self {
+            EvaluatorConfig::ExactMatch(config) => config.cutoff,
+            EvaluatorConfig::LLMJudge(config) => config.cutoff,
+            EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_)
+            | EvaluatorConfig::TypescriptJudge(_) => Option::None,
+        }
+    }
+
+    pub fn optimize(&self) -> MetricConfigOptimize {
+        match self {
+            EvaluatorConfig::ExactMatch(_)
+            | EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_) => MetricConfigOptimize::Max,
+            EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
+            EvaluatorConfig::TypescriptJudge(config) => config.optimize.into(),
+        }
+    }
+
+    /// Returns true if this evaluator produces Bernoulli (boolean) outputs
+    pub fn is_bernoulli(&self) -> bool {
+        match self {
+            EvaluatorConfig::ExactMatch(_)
+            | EvaluatorConfig::ToolUse(_)
+            | EvaluatorConfig::Regex(_) => true,
+            EvaluatorConfig::LLMJudge(config) => {
+                matches!(config.output_type, LLMJudgeOutputType::Boolean)
+            }
+            EvaluatorConfig::TypescriptJudge(config) => {
+                matches!(config.output_type, TypescriptJudgeOutputType::Boolean)
+            }
+        }
+    }
+
+    /// Converts this loaded evaluator config back to its uninitialized form.
+    /// Note: For LLMJudge evaluators, variant information cannot be reconstructed
+    /// as it's stored separately in the function table, so an empty variants map is used.
+    pub fn as_uninitialized(&self) -> UninitializedEvaluatorConfig {
+        match self {
+            EvaluatorConfig::ExactMatch(config) => {
+                UninitializedEvaluatorConfig::ExactMatch(config.clone())
+            }
+            EvaluatorConfig::LLMJudge(config) => {
+                UninitializedEvaluatorConfig::LLMJudge(config.as_uninitialized())
+            }
+            EvaluatorConfig::ToolUse(config) => {
+                UninitializedEvaluatorConfig::ToolUse(config.clone())
+            }
+            EvaluatorConfig::Regex(config) => UninitializedEvaluatorConfig::Regex(config.clone()),
+            EvaluatorConfig::TypescriptJudge(config) => {
+                UninitializedEvaluatorConfig::TypescriptJudge(UninitializedTypescriptJudgeConfig {
+                    typescript_file: ResolvedTomlPathData::new_fake_path(
+                        "typescript_evaluator".to_string(),
+                        config.typescript_code.clone(),
+                    ),
+                    output_type: config.output_type,
+                    optimize: config.optimize,
+                })
+            }
+        }
+    }
+}
+
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct ExactMatchConfig {
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
+    pub cutoff: Option<f32>,
+}
+
+/// Evaluator that checks whether an inference's tool calls match the expected behavior.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(tag = "behavior")] // NOTE: custom tag for human-readable config
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum ToolUseConfig {
+    /// The inference must not contain any tool calls.
+    None,
+    /// None of the listed tools may appear in the inference's tool calls.
+    NoneOf { tools: Vec<String> },
+    /// The inference must contain at least one tool call (any tool).
+    Any,
+    /// At least one of the listed tools must appear in the inference's tool calls.
+    AnyOf { tools: Vec<String> },
+    /// All of the listed tools must appear in the inference's tool calls.
+    AllOf { tools: Vec<String> },
+}
+
+impl std::fmt::Display for ToolUseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolUseConfig::None => write!(f, "none"),
+            ToolUseConfig::NoneOf { .. } => write!(f, "none_of"),
+            ToolUseConfig::Any => write!(f, "any"),
+            ToolUseConfig::AnyOf { .. } => write!(f, "any_of"),
+            ToolUseConfig::AllOf { .. } => write!(f, "all_of"),
+        }
+    }
+}
+
+/// Evaluator that checks whether an inference's text output matches regex patterns.
+///
+/// At least one of `must_match` or `must_not_match` must be specified.
+/// If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct RegexConfig {
+    /// Regex pattern that the inference output must match for the evaluation to pass.
+    pub must_match: Option<String>,
+    /// Regex pattern that the inference output must *not* match for the evaluation to pass.
+    pub must_not_match: Option<String>,
+}
+
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct LLMJudgeConfig {
+    pub input_format: LLMJudgeInputFormat,
+    pub output_type: LLMJudgeOutputType,
+    pub include: LLMJudgeIncludeConfig,
+    pub optimize: LLMJudgeOptimize,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
+    pub cutoff: Option<f32>,
+    pub description: Option<String>,
+}
+
+impl LLMJudgeConfig {
+    /// Converts this loaded LLM judge config back to its uninitialized form.
+    /// Note: Variant information cannot be reconstructed as it's stored separately
+    /// in the function table during loading, so an empty variants map is used.
+    #[expect(deprecated)]
+    pub fn as_uninitialized(&self) -> UninitializedLLMJudgeConfig {
+        UninitializedLLMJudgeConfig {
+            input_format: Some(self.input_format.clone()),
+            variants: HashMap::new(),
+            output_type: self.output_type,
+            optimize: self.optimize,
+            include: Some(self.include.clone()),
+            cutoff: self.cutoff,
+            description: self.description.clone(),
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(deny_unknown_fields)]
+pub struct LLMJudgeIncludeConfig {
+    #[serde(default)]
+    pub reference_output: bool,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum LLMJudgeInputFormat {
+    Serialized,
+    Messages,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum LLMJudgeOutputType {
+    Float,
+    Boolean,
+}
+
+impl From<LLMJudgeOutputType> for MetricConfigType {
+    fn from(output_type: LLMJudgeOutputType) -> Self {
+        match output_type {
+            LLMJudgeOutputType::Float => MetricConfigType::Float,
+            LLMJudgeOutputType::Boolean => MetricConfigType::Boolean,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum LLMJudgeOptimize {
+    Min,
+    Max,
+}
+
+impl From<LLMJudgeOptimize> for MetricConfigOptimize {
+    fn from(optimize: LLMJudgeOptimize) -> Self {
+        match optimize {
+            LLMJudgeOptimize::Min => MetricConfigOptimize::Min,
+            LLMJudgeOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
+// ─── TypeScript judge types ──────────────────────────────────────────────────
+
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[serde(deny_unknown_fields)]
+pub struct TypescriptJudgeConfig {
+    pub typescript_code: String,
+    pub output_type: TypescriptJudgeOutputType,
+    pub optimize: TypescriptJudgeOptimize,
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum TypescriptJudgeOutputType {
+    Float,
+    Boolean,
+}
+
+impl From<TypescriptJudgeOutputType> for MetricConfigType {
+    fn from(output_type: TypescriptJudgeOutputType) -> Self {
+        match output_type {
+            TypescriptJudgeOutputType::Float => MetricConfigType::Float,
+            TypescriptJudgeOutputType::Boolean => MetricConfigType::Boolean,
+        }
+    }
+}
+
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum TypescriptJudgeOptimize {
+    Min,
+    Max,
+}
+
+impl From<TypescriptJudgeOptimize> for MetricConfigOptimize {
+    fn from(optimize: TypescriptJudgeOptimize) -> Self {
+        match optimize {
+            TypescriptJudgeOptimize::Min => MetricConfigOptimize::Min,
+            TypescriptJudgeOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
+// ─── Stored → Uninitialized conversions (simple types) ───────────────────────
+
+impl From<StoredLLMJudgeInputFormat> for LLMJudgeInputFormat {
+    fn from(stored: StoredLLMJudgeInputFormat) -> Self {
+        match stored {
+            StoredLLMJudgeInputFormat::Serialized => LLMJudgeInputFormat::Serialized,
+            StoredLLMJudgeInputFormat::Messages => LLMJudgeInputFormat::Messages,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeOutputType> for LLMJudgeOutputType {
+    fn from(stored: StoredLLMJudgeOutputType) -> Self {
+        match stored {
+            StoredLLMJudgeOutputType::Float => LLMJudgeOutputType::Float,
+            StoredLLMJudgeOutputType::Boolean => LLMJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeOptimize> for LLMJudgeOptimize {
+    fn from(stored: StoredLLMJudgeOptimize) -> Self {
+        match stored {
+            StoredLLMJudgeOptimize::Min => LLMJudgeOptimize::Min,
+            StoredLLMJudgeOptimize::Max => LLMJudgeOptimize::Max,
+        }
+    }
+}
+
+impl From<StoredLLMJudgeIncludeConfig> for LLMJudgeIncludeConfig {
+    fn from(stored: StoredLLMJudgeIncludeConfig) -> Self {
+        LLMJudgeIncludeConfig {
+            reference_output: stored.reference_output,
+        }
+    }
+}
+
+#[expect(deprecated)]
+impl From<StoredExactMatchConfig> for ExactMatchConfig {
+    fn from(stored: StoredExactMatchConfig) -> Self {
+        ExactMatchConfig {
+            cutoff: stored.cutoff,
+        }
+    }
+}
+
+impl From<StoredRegexConfig> for RegexConfig {
+    fn from(stored: StoredRegexConfig) -> Self {
+        RegexConfig {
+            must_match: stored.must_match,
+            must_not_match: stored.must_not_match,
+        }
+    }
+}
+
+impl From<StoredToolUseConfig> for ToolUseConfig {
+    fn from(stored: StoredToolUseConfig) -> Self {
+        match stored {
+            StoredToolUseConfig::None => ToolUseConfig::None,
+            StoredToolUseConfig::NoneOf { tools } => ToolUseConfig::NoneOf { tools },
+            StoredToolUseConfig::Any => ToolUseConfig::Any,
+            StoredToolUseConfig::AnyOf { tools } => ToolUseConfig::AnyOf { tools },
+            StoredToolUseConfig::AllOf { tools } => ToolUseConfig::AllOf { tools },
+        }
+    }
+}
+
+impl From<ToolUseConfig> for StoredToolUseConfig {
+    fn from(stored: ToolUseConfig) -> Self {
+        match stored {
+            ToolUseConfig::None => StoredToolUseConfig::None,
+            ToolUseConfig::NoneOf { tools } => StoredToolUseConfig::NoneOf { tools },
+            ToolUseConfig::Any => StoredToolUseConfig::Any,
+            ToolUseConfig::AnyOf { tools } => StoredToolUseConfig::AnyOf { tools },
+            ToolUseConfig::AllOf { tools } => StoredToolUseConfig::AllOf { tools },
+        }
+    }
+}
+
+// ─── Stored ↔ TypeScript judge conversions ───────────────────────────────────
+
+impl From<StoredTypescriptJudgeOutputType> for TypescriptJudgeOutputType {
+    fn from(stored: StoredTypescriptJudgeOutputType) -> Self {
+        match stored {
+            StoredTypescriptJudgeOutputType::Float => TypescriptJudgeOutputType::Float,
+            StoredTypescriptJudgeOutputType::Boolean => TypescriptJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<TypescriptJudgeOutputType> for StoredTypescriptJudgeOutputType {
+    fn from(val: TypescriptJudgeOutputType) -> Self {
+        match val {
+            TypescriptJudgeOutputType::Float => StoredTypescriptJudgeOutputType::Float,
+            TypescriptJudgeOutputType::Boolean => StoredTypescriptJudgeOutputType::Boolean,
+        }
+    }
+}
+
+impl From<StoredTypescriptJudgeOptimize> for TypescriptJudgeOptimize {
+    fn from(stored: StoredTypescriptJudgeOptimize) -> Self {
+        match stored {
+            StoredTypescriptJudgeOptimize::Min => TypescriptJudgeOptimize::Min,
+            StoredTypescriptJudgeOptimize::Max => TypescriptJudgeOptimize::Max,
+        }
+    }
+}
+
+impl From<TypescriptJudgeOptimize> for StoredTypescriptJudgeOptimize {
+    fn from(val: TypescriptJudgeOptimize) -> Self {
+        match val {
+            TypescriptJudgeOptimize::Min => StoredTypescriptJudgeOptimize::Min,
+            TypescriptJudgeOptimize::Max => StoredTypescriptJudgeOptimize::Max,
+        }
+    }
+}
+
+pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
+    format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}")
+}
+
+pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
+    format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
+}
+
+pub fn get_function_llm_judge_function_name(function_name: &str, evaluator_name: &str) -> String {
+    format!("tensorzero::llm_judge::function_name::{function_name}::{evaluator_name}")
+}
+
+pub fn get_function_evaluator_metric_name(function_name: &str, evaluator_name: &str) -> String {
+    format!("tensorzero::function_name::{function_name}::evaluator_name::{evaluator_name}")
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum UninitializedEvaluationConfig {
+    Inference(UninitializedInferenceEvaluationConfig),
+}
+
+impl UninitializedEvaluationConfig {
+    pub fn load(
+        self,
+        functions: &HashMap<String, Arc<FunctionConfig>>,
+        evaluation_name: &str,
+    ) -> EvaluationLoadResult {
+        match self {
+            UninitializedEvaluationConfig::Inference(config) => {
+                config.load(functions, evaluation_name)
+            }
+        }
+    }
+}
+
+// Custom deserializer to log deprecation warning when "static" is used
+impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct EvaluationConfigVisitor;
+
+        impl<'de> Visitor<'de> for EvaluationConfigVisitor {
+            type Value = UninitializedEvaluationConfig;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct UninitializedEvaluationConfig")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<UninitializedEvaluationConfig, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut type_value: Option<String> = None;
+                let mut other_fields = serde_json::Map::new();
+
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "type" {
+                        type_value = Some(map.next_value()?);
+                    } else {
+                        let value: serde_json::Value = map.next_value()?;
+                        other_fields.insert(key, value);
+                    }
+                }
+
+                let type_str = type_value.ok_or_else(|| de::Error::missing_field("type"))?;
+
+                // Log deprecation warning if "static" is used
+                if type_str == "static" {
+                    crate::utils::deprecation_warning(
+                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version.",
+                    );
+                }
+
+                // Validate type
+                if type_str != "inference" && type_str != "static" {
+                    return Err(de::Error::unknown_variant(&type_str, &["inference"]));
+                }
+
+                // Deserialize the config
+                let config: UninitializedInferenceEvaluationConfig =
+                    serde_json::from_value(serde_json::Value::Object(other_fields))
+                        .map_err(de::Error::custom)?;
+
+                Ok(UninitializedEvaluationConfig::Inference(config))
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "UninitializedEvaluationConfig",
+            &["type"],
+            EvaluationConfigVisitor,
+        )
+    }
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedInferenceEvaluationConfig {
+    #[serde(default)]
+    pub evaluators: HashMap<String, UninitializedEvaluatorConfig>,
+    pub function_name: String,
+    pub description: Option<String>,
+}
+
+/// Deprecated: Use `UninitializedInferenceEvaluationConfig` instead
+pub type UninitializedStaticEvaluationConfig = UninitializedInferenceEvaluationConfig;
+
+type EvaluationLoadResult = Result<
+    (
+        InferenceEvaluationConfig,            // The evaluation itself
+        HashMap<String, Arc<FunctionConfig>>, // All functions which the evaluation needs {function_name -> function_config}
+        HashMap<String, MetricConfig>, // All metrics which the evaluation needs {metric_name -> metric_config}
+    ),
+    Error,
+>;
+
+impl UninitializedInferenceEvaluationConfig {
+    pub fn load(
+        self,
+        functions: &HashMap<String, Arc<FunctionConfig>>,
+        evaluation_name: &str,
+    ) -> EvaluationLoadResult {
+        if !functions.contains_key(&self.function_name) {
+            return Err(ErrorDetails::Config {
+                message: format!(
+                    "Function `{}` not found (referenced in `[evaluations.{evaluation_name}]`)",
+                    self.function_name
+                ),
+            }
+            .into());
+        }
+
+        // evaluation names cannot have "::" in them since we use it as a delimiter
+        if evaluation_name.contains("::") {
+            return Err(ErrorDetails::Config {
+                message: format!(
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.{evaluation_name}]`)"
+                ),
+            }
+            .into());
+        }
+
+        let evaluator_results = self
+            .evaluators
+            .into_iter()
+            .map(|(name, config)| {
+                config.load(Some(evaluation_name), None, &name).map(
+                    |(evaluation_config, func_config, metric_config)| {
+                        (name, evaluation_config, func_config, metric_config)
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        // When initializing evaluators, we also need to initialize:
+        // - Function configs for LLM judge evaluators
+        // - Metric configs for all evaluators
+        let mut evaluators = HashMap::new();
+        let mut function_configs = HashMap::new();
+        let mut metric_configs = HashMap::new();
+        for (evaluator_name, evaluator_config, function_config, metric_config) in evaluator_results
+        {
+            evaluators.insert(evaluator_name.clone(), evaluator_config);
+
+            if let Some(config) = function_config {
+                let function_name = get_llm_judge_function_name(evaluation_name, &evaluator_name);
+                function_configs.insert(function_name, Arc::new(config));
+            }
+
+            let metric_name = get_evaluator_metric_name(evaluation_name, &evaluator_name);
+            metric_configs.insert(metric_name, metric_config);
+        }
+        Ok((
+            InferenceEvaluationConfig {
+                evaluators,
+                function_name: self.function_name,
+                description: self.description,
+            },
+            function_configs,
+            metric_configs,
+        ))
+    }
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum UninitializedEvaluatorConfig {
+    ExactMatch(ExactMatchConfig),
+    #[serde(rename = "llm_judge")]
+    LLMJudge(UninitializedLLMJudgeConfig),
+    ToolUse(ToolUseConfig),
+    Regex(RegexConfig),
+    #[serde(rename = "typescript")]
+    TypescriptJudge(UninitializedTypescriptJudgeConfig),
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedTypescriptJudgeConfig {
+    pub typescript_file: ResolvedTomlPathData,
+    pub output_type: TypescriptJudgeOutputType,
+    pub optimize: TypescriptJudgeOptimize,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde_with::skip_serializing_none]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeConfig {
+    pub input_format: Option<LLMJudgeInputFormat>,
+    pub variants: HashMap<String, UninitializedLLMJudgeVariantInfo>,
+    pub output_type: LLMJudgeOutputType,
+    pub optimize: LLMJudgeOptimize,
+    pub include: Option<LLMJudgeIncludeConfig>,
+    #[deprecated(
+        note = "Evaluator config `cutoff` is deprecated. Use evaluations CLI `--cutoffs` instead."
+    )]
+    pub cutoff: Option<f32>,
+    pub description: Option<String>,
+}
+
+impl UninitializedEvaluatorConfig {
+    pub fn load(
+        self,
+        evaluation_name: Option<&str>,
+        function_name: Option<&str>,
+        evaluator_name: &str,
+    ) -> Result<(EvaluatorConfig, Option<FunctionConfig>, MetricConfig), Error> {
+        let evaluator_context = match (evaluation_name, function_name) {
+            (Some(eval_name), _) => EvaluatorContext::Evaluation(eval_name),
+            (None, Some(fn_name)) => EvaluatorContext::Function(fn_name),
+            (None, None) => {
+                return Err(ErrorDetails::Config {
+                    message: "Evaluator must be scoped to either an evaluation or a function"
+                        .to_string(),
+                }
+                .into());
+            }
+        };
+        let error_context = evaluator_context.error_context();
+
+        // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
+        if evaluator_name.contains("::") {
+            return Err(ErrorDetails::Config {
+                message: format!(
+                    "Evaluator names cannot contain \"::\" (referenced in {error_context})"
+                ),
+            }
+            .into());
+        }
+
+        match self {
+            UninitializedEvaluatorConfig::ExactMatch(params) => Ok((
+                EvaluatorConfig::ExactMatch(params),
+                None,
+                MetricConfig {
+                    r#type: MetricConfigType::Boolean,
+                    optimize: MetricConfigOptimize::Max,
+                    level: MetricConfigLevel::Inference,
+                    description: None,
+                },
+            )),
+            UninitializedEvaluatorConfig::LLMJudge(params) => {
+                let input_format = params
+                    .input_format
+                    .clone()
+                    .unwrap_or(LLMJudgeInputFormat::Serialized);
+                let user_schema_value: Option<serde_json::Value> = match input_format {
+                    LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::JsonSchema {
+                                message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
+                            })
+                        })?),
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                let user_schema = user_schema_value.map(JSONSchema::from_value).transpose()?;
+                let output_schema_str = match params.output_type {
+                    LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
+                    LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
+                };
+                let output_schema_value = serde_json::from_str(output_schema_str)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::JsonSchema {
+                            message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
+                        })
+                    })?;
+                let output_schema = JSONSchema::from_value(output_schema_value)?;
+                let json_mode_tool_call_config =
+                    create_json_mode_tool_call_config(output_schema.clone());
+
+                let mut variants = params
+                    .variants
+                    .into_iter()
+                    .map(|(name, variant)| {
+                        variant
+                            .load(
+                                &evaluator_context,
+                                evaluator_name,
+                                &input_format,
+                                &name,
+                                user_schema.clone(),
+                            )
+                            .map(|v| (name, v))
+                    })
+                    .collect::<Result<HashMap<_, _>, Error>>()?;
+                let nonzero_weights = variants
+                    .iter()
+                    // Treat a None weight as 0.0 for this check - we only care if we have multiple variants with an explicit positive weight
+                    .filter(|(_, variant)| variant.inner.weight().unwrap_or(0.0) > 0.0)
+                    .count();
+                if nonzero_weights != 1 && variants.len() > 1 {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in {error_context} must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                        ),
+                    }
+                    .into());
+                } else if variants.len() == 1 {
+                    // If there is only one variant, it should have weight 1.0
+                    let Some((_, variant)) = variants.iter_mut().next() else {
+                        return Err(ErrorDetails::Config {
+                            message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+                        }.into());
+                    };
+                    if let Some(weight) = variant.inner.weight()
+                        && weight == 0.0
+                    {
+                        return Err(ErrorDetails::Config {
+                                message: format!("Evaluator `{evaluator_name}` in {error_context} must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                            }
+                            .into());
+                    }
+                    match &mut variant.inner {
+                        VariantConfig::ChatCompletion(variant) => {
+                            variant.set_weight(Some(1.0));
+                        }
+                        VariantConfig::BestOfNSampling(variant) => {
+                            variant.set_weight(Some(1.0));
+                        }
+                        VariantConfig::MixtureOfN(variant) => {
+                            variant.set_weight(Some(1.0));
+                        }
+                        VariantConfig::Dicl(variant) => {
+                            variant.set_weight(Some(1.0));
+                        }
+                        VariantConfig::ChainOfThought(variant) => {
+                            variant.inner.set_weight(Some(1.0));
+                        }
+                    };
+                }
+                let variants: HashMap<_, _> = variants
+                    .into_iter()
+                    .map(|(name, variant)| (name, Arc::new(variant)))
+                    .collect();
+                let all_template_names: HashSet<String> = variants
+                    .values()
+                    .flat_map(|v| v.get_all_explicit_template_names())
+                    .collect();
+                let experimentation =
+                    ExperimentationConfigWithNamespaces::legacy_from_variants_map(&variants);
+                let function_config = FunctionConfig::Json(FunctionConfigJson {
+                    variants,
+                    schemas: SchemaData::load(
+                        user_schema,
+                        None,
+                        None,
+                        UninitializedSchemas::default(),
+                        &evaluator_context.schema_name(evaluator_name),
+                    )?,
+                    output_schema,
+                    json_mode_tool_call_config,
+                    description: None,
+                    all_explicit_template_names: all_template_names,
+                    experimentation,
+                    evaluators: HashMap::new(),
+                });
+                #[expect(deprecated)]
+                Ok((
+                    EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+                        input_format,
+                        output_type: params.output_type,
+                        include: params.include.unwrap_or_default(),
+                        optimize: params.optimize,
+                        cutoff: params.cutoff,
+                        description: params.description,
+                    }),
+                    Some(function_config),
+                    MetricConfig {
+                        r#type: params.output_type.into(),
+                        optimize: params.optimize.into(),
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+            UninitializedEvaluatorConfig::ToolUse(config) => {
+                match &config {
+                    ToolUseConfig::None | ToolUseConfig::Any => {}
+                    ToolUseConfig::NoneOf { tools }
+                    | ToolUseConfig::AnyOf { tools }
+                    | ToolUseConfig::AllOf { tools } => {
+                        if tools.is_empty() {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "Evaluator `{evaluator_name}` in {error_context}: \
+                                     `tools` must be a non-empty list when behavior is `{config}`",
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                }
+                Ok((
+                    EvaluatorConfig::ToolUse(config),
+                    None,
+                    MetricConfig {
+                        r#type: MetricConfigType::Boolean,
+                        optimize: MetricConfigOptimize::Max,
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+            UninitializedEvaluatorConfig::Regex(config) => {
+                if config.must_match.is_none() && config.must_not_match.is_none() {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in {error_context}: \
+                             at least one of `must_match` or `must_not_match` must be specified"
+                        ),
+                    }
+                    .into());
+                }
+                if let Some(pattern) = &config.must_match {
+                    regex::Regex::new(pattern).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Evaluator `{evaluator_name}` in {error_context}: \
+                                 invalid regex in `must_match`: {e}"
+                            ),
+                        })
+                    })?;
+                }
+                if let Some(pattern) = &config.must_not_match {
+                    regex::Regex::new(pattern).map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!(
+                                "Evaluator `{evaluator_name}` in {error_context}: \
+                                 invalid regex in `must_not_match`: {e}"
+                            ),
+                        })
+                    })?;
+                }
+                Ok((
+                    EvaluatorConfig::Regex(config),
+                    None,
+                    MetricConfig {
+                        r#type: MetricConfigType::Boolean,
+                        optimize: MetricConfigOptimize::Max,
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+            UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                let typescript_code = config.typescript_file.data().to_string();
+                Ok((
+                    EvaluatorConfig::TypescriptJudge(TypescriptJudgeConfig {
+                        typescript_code,
+                        output_type: config.output_type,
+                        optimize: config.optimize,
+                    }),
+                    None,
+                    MetricConfig {
+                        r#type: config.output_type.into(),
+                        optimize: config.optimize.into(),
+                        level: MetricConfigLevel::Inference,
+                        description: None,
+                    },
+                ))
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeVariantInfo {
+    #[serde(flatten)]
+    pub inner: UninitializedLLMJudgeVariantConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeouts: Option<TimeoutsConfig>,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub enum UninitializedLLMJudgeVariantConfig {
+    ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
+    #[serde(rename = "experimental_best_of_n_sampling")]
+    BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
+    #[serde(rename = "experimental_mixture_of_n")]
+    MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
+    #[serde(rename = "experimental_dynamic_in_context_learning")]
+    Dicl(UninitializedLLMJudgeDiclVariantConfig),
+    #[serde(rename = "experimental_chain_of_thought")]
+    ChainOfThought(UninitializedLLMJudgeChainOfThoughtVariantConfig),
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
+    pub active: Option<bool>,
+    pub model: Arc<str>,
+    pub system_instructions: ResolvedTomlPathData,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub seed: Option<u32>,
+    pub json_mode: JsonMode, // This is a JSON function
+    pub stop_sequences: Option<Vec<String>>,
+    pub reasoning_effort: Option<String>,
+    pub service_tier: Option<ServiceTier>,
+    pub thinking_budget_tokens: Option<i32>,
+    pub verbosity: Option<String>,
+    #[serde(default)]
+    pub retries: RetryConfig,
+
+    pub extra_body: Option<ExtraBodyConfig>,
+
+    pub extra_headers: Option<ExtraHeadersConfig>,
+}
+
+/// Converts a chat completion judge variant config to a chat completion config.
+/// This is factored out so that both the chain of thought and chat completion judges
+/// can use the same implementation.
+fn convert_chat_completion_judge_to_variant(
+    context: &EvaluatorContext<'_>,
+    evaluator_name: &str,
+    variant_name: &str,
+    input_format: &LLMJudgeInputFormat,
+    params: UninitializedLLMJudgeChatCompletionVariantConfig,
+    user_schema: Option<JSONSchema>,
+) -> Result<ChatCompletionConfig, Error> {
+    let system_instructions = params.system_instructions.data();
+    let templated_system_instructions = format!(
+        include_str!("llm_judge_system_instructions.txt"),
+        system_instructions = system_instructions,
+    );
+    let system_template_path = context.template_path(
+        evaluator_name,
+        variant_name,
+        "system",
+        templated_system_instructions,
+    );
+    let system_template = PathWithContents::from_path(system_template_path)?;
+    let user_template = match input_format {
+        LLMJudgeInputFormat::Serialized => {
+            Some(PathWithContents::from_path(context.template_path(
+                evaluator_name,
+                variant_name,
+                "user",
+                include_str!("llm_judge_user_template.minijinja").to_string(),
+            ))?)
+        }
+        LLMJudgeInputFormat::Messages => None,
+    };
+    UninitializedChatCompletionConfig {
+        assistant_template: None,
+        extra_body: params.extra_body,
+        extra_headers: params.extra_headers,
+        frequency_penalty: params.frequency_penalty,
+        input_wrappers: None,
+        json_mode: Some(params.json_mode),
+        max_tokens: params.max_tokens,
+        model: params.model,
+        presence_penalty: params.presence_penalty,
+        reasoning_effort: params.reasoning_effort,
+        retries: params.retries,
+        seed: params.seed,
+        service_tier: params.service_tier,
+        stop_sequences: params.stop_sequences,
+        system_template: Some(system_template.path),
+        temperature: params.temperature,
+        templates: Default::default(),
+        thinking_budget_tokens: params.thinking_budget_tokens,
+        top_p: params.top_p,
+        user_template: user_template.map(|t| t.path),
+        verbosity: params.verbosity,
+        weight: get_weight(params.active),
+    }
+    .load(
+        &SchemaData::load(
+            user_schema,
+            None,
+            None,
+            UninitializedSchemas::default(),
+            &context.schema_name(evaluator_name),
+        )?,
+        &ErrorContext {
+            function_name: "tensorzero::evaluator".to_string(),
+            variant_name: evaluator_name.to_string(),
+        },
+    )
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeBestOfNVariantConfig {
+    pub active: Option<bool>,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    pub timeout_s: Option<f64>,
+    #[serde(default)]
+    pub candidates: Vec<String>,
+    pub evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeMixtureOfNVariantConfig {
+    pub active: Option<bool>,
+    #[deprecated(note = "Use `[timeouts]` on your candidate variants instead (#2480 / 2026.2+)")]
+    pub timeout_s: Option<f64>,
+    #[serde(default)]
+    pub candidates: Vec<String>,
+    pub fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct UninitializedLLMJudgeDiclVariantConfig {
+    pub active: Option<bool>,
+    pub embedding_model: String,
+    pub k: u32, // k as in k-nearest neighbors
+    pub model: String,
+    pub system_instructions: Option<ResolvedTomlPathData>,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+    pub json_mode: Option<JsonMode>,
+    pub stop_sequences: Option<Vec<String>>,
+
+    pub extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    pub retries: RetryConfig,
+
+    pub extra_headers: Option<ExtraHeadersConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
+    #[serde(flatten)]
+    pub inner: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+/// Context for namespacing evaluator templates — either scoped to an evaluation or a function.
+pub(crate) enum EvaluatorContext<'a> {
+    /// Evaluator defined within an `[evaluations.X]` block
+    Evaluation(&'a str),
+    /// Evaluator defined on a function `[functions.X.evaluators]`
+    Function(&'a str),
+}
+
+impl<'a> EvaluatorContext<'a> {
+    fn error_context(&self) -> String {
+        match self {
+            EvaluatorContext::Evaluation(evaluation_name) => {
+                format!("`[evaluations.{evaluation_name}]`")
+            }
+            EvaluatorContext::Function(function_name) => {
+                format!("`[functions.{function_name}.evaluators]`")
+            }
+        }
+    }
+
+    fn schema_name(&self, evaluator_name: &str) -> String {
+        match self {
+            EvaluatorContext::Evaluation(eval_name) => {
+                format!("tensorzero::evaluator::{eval_name}::{evaluator_name}")
+            }
+            EvaluatorContext::Function(fn_name) => {
+                format!("tensorzero::evaluator::function_name::{fn_name}::{evaluator_name}")
+            }
+        }
+    }
+
+    fn template_path(
+        &self,
+        evaluator_name: &str,
+        variant_name: &str,
+        template_name: &str,
+        data: String,
+    ) -> ResolvedTomlPathData {
+        let path = match self {
+            EvaluatorContext::Evaluation(eval_name) => format!(
+                "tensorzero::llm_judge::{eval_name}::{evaluator_name}::{variant_name}::{template_name}"
+            ),
+            EvaluatorContext::Function(fn_name) => format!(
+                "tensorzero::llm_judge::function_name::{fn_name}::{evaluator_name}::{variant_name}::{template_name}"
+            ),
+        };
+        ResolvedTomlPathData::new_fake_path(path, data)
+    }
+}
+
+// ── Stored-config conversion helpers ──────────────────────────────────────────
+
+impl UninitializedEvaluationConfig {
+    /// Collect all `ResolvedTomlPathData` references that need stored file rows.
+    pub(crate) fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+        match self {
+            UninitializedEvaluationConfig::Inference(config) => config.files_for_db(),
+        }
+    }
+
+    /// Convert to the stored representation for DB persistence.
+    pub(crate) fn to_stored_for_db(
+        &self,
+        file_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredEvaluationConfig, Error> {
+        match self {
+            UninitializedEvaluationConfig::Inference(config) => {
+                config.to_stored_for_db(file_version_ids)
+            }
+        }
+    }
+}
+
+impl UninitializedInferenceEvaluationConfig {
+    fn files_for_db(&self) -> Vec<&ResolvedTomlPathData> {
+        let mut templates = Vec::new();
+        for evaluator in self.evaluators.values() {
+            evaluator.collect_files(&mut templates);
+        }
+        templates
+    }
+
+    fn to_stored_for_db(
+        &self,
+        file_version_ids: &HashMap<String, Uuid>,
+    ) -> Result<StoredEvaluationConfig, Error> {
+        let stored_evaluators = crate::db::postgres::function_config_writes::convert_evaluators(
+            &self.evaluators,
+            file_version_ids,
+        )?;
+        Ok(StoredEvaluationConfig::Inference(
+            StoredInferenceEvaluationConfig {
+                evaluators: Some(stored_evaluators),
+                function_name: self.function_name.clone(),
+                description: self.description.clone(),
+            },
+        ))
+    }
+}
+
+impl UninitializedEvaluatorConfig {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+        match self {
+            UninitializedEvaluatorConfig::LLMJudge(config) => {
+                for variant in config.variants.values() {
+                    variant.inner.collect_files(templates);
+                }
+            }
+            UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                let UninitializedTypescriptJudgeConfig {
+                    typescript_file,
+                    output_type: _,
+                    optimize: _,
+                } = config;
+                templates.push(typescript_file);
+            }
+            UninitializedEvaluatorConfig::ExactMatch(_)
+            | UninitializedEvaluatorConfig::ToolUse(_)
+            | UninitializedEvaluatorConfig::Regex(_) => {}
+        }
+    }
+}
+
+impl UninitializedLLMJudgeVariantConfig {
+    fn collect_files<'a>(&'a self, templates: &mut Vec<&'a ResolvedTomlPathData>) {
+        match self {
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(config) => {
+                templates.push(&config.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::BestOfNSampling(config) => {
+                templates.push(&config.evaluator.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(config) => {
+                templates.push(&config.fuser.system_instructions);
+            }
+            UninitializedLLMJudgeVariantConfig::Dicl(config) => {
+                if let Some(system_instructions) = &config.system_instructions {
+                    templates.push(system_instructions);
+                }
+            }
+            UninitializedLLMJudgeVariantConfig::ChainOfThought(config) => {
+                templates.push(&config.inner.system_instructions);
+            }
+        }
+    }
+}
+
+fn get_weight(active: Option<bool>) -> Option<f64> {
+    match active {
+        Some(active) => {
+            if active {
+                Some(1.0)
+            } else {
+                Some(0.0)
+            }
+        }
+        None => None,
+    }
+}
+
+impl UninitializedLLMJudgeVariantInfo {
+    pub(crate) fn load(
+        self,
+        context: &EvaluatorContext<'_>,
+        evaluator_name: &str,
+        input_format: &LLMJudgeInputFormat,
+        variant_name: &str,
+        user_schema: Option<JSONSchema>,
+    ) -> Result<VariantInfo, Error> {
+        let inner = match self.inner {
+            UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
+                VariantConfig::ChatCompletion(convert_chat_completion_judge_to_variant(
+                    context,
+                    evaluator_name,
+                    variant_name,
+                    input_format,
+                    params,
+                    user_schema,
+                )?)
+            }
+            UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
+                let evaluator_system_instructions = params.evaluator.system_instructions.data();
+                let templated_evaluator_system_instructions = format!(
+                    include_str!("llm_judge_system_instructions.txt"),
+                    system_instructions = evaluator_system_instructions,
+                );
+                let evaluator_system_template =
+                    PathWithContents::from_path(context.template_path(
+                        evaluator_name,
+                        variant_name,
+                        "system",
+                        templated_evaluator_system_instructions,
+                    ))?;
+                let evaluator_user_template = match input_format {
+                    LLMJudgeInputFormat::Serialized => {
+                        Some(PathWithContents::from_path(context.template_path(
+                            evaluator_name,
+                            variant_name,
+                            "user",
+                            include_str!("llm_judge_user_template.minijinja").to_string(),
+                        ))?)
+                    }
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                #[expect(deprecated)]
+                VariantConfig::BestOfNSampling(
+                    UninitializedBestOfNSamplingConfig {
+                        weight: get_weight(params.active),
+                        timeout_s: params.timeout_s,
+                        candidates: params.candidates,
+                        evaluator: UninitializedBestOfNEvaluatorConfig {
+                            inner: UninitializedChatCompletionConfig {
+                                assistant_template: None,
+                                extra_body: params.evaluator.extra_body,
+                                extra_headers: params.evaluator.extra_headers,
+                                frequency_penalty: params.evaluator.frequency_penalty,
+                                input_wrappers: None,
+                                json_mode: Some(params.evaluator.json_mode),
+                                max_tokens: params.evaluator.max_tokens,
+                                model: params.evaluator.model,
+                                presence_penalty: params.evaluator.presence_penalty,
+                                reasoning_effort: params.evaluator.reasoning_effort,
+                                retries: params.evaluator.retries,
+                                seed: params.evaluator.seed,
+                                service_tier: params.evaluator.service_tier,
+                                stop_sequences: params.evaluator.stop_sequences,
+                                system_template: Some(evaluator_system_template.path),
+                                temperature: params.evaluator.temperature,
+                                templates: Default::default(),
+                                thinking_budget_tokens: params.evaluator.thinking_budget_tokens,
+                                top_p: params.evaluator.top_p,
+                                user_template: evaluator_user_template.map(|t| t.path),
+                                verbosity: params.evaluator.verbosity,
+                                weight: None,
+                            },
+                        },
+                    }
+                    .load(
+                        &SchemaData::load(
+                            user_schema,
+                            None,
+                            None,
+                            UninitializedSchemas::default(),
+                            &context.schema_name(evaluator_name),
+                        )?,
+                        &ErrorContext {
+                            function_name: "tensorzero::evaluator".to_string(),
+                            variant_name: evaluator_name.to_string(),
+                        },
+                    )?,
+                )
+            }
+            UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
+                let fuser_system_instructions = params.fuser.system_instructions.data();
+                let templated_fuser_system_instructions = format!(
+                    include_str!("llm_judge_system_instructions.txt"),
+                    system_instructions = fuser_system_instructions,
+                );
+                let fuser_system_template = PathWithContents::from_path(context.template_path(
+                    evaluator_name,
+                    variant_name,
+                    "system",
+                    templated_fuser_system_instructions,
+                ))?;
+                let fuser_user_template = match input_format {
+                    LLMJudgeInputFormat::Serialized => {
+                        Some(PathWithContents::from_path(context.template_path(
+                            evaluator_name,
+                            variant_name,
+                            "user",
+                            include_str!("llm_judge_user_template.minijinja").to_string(),
+                        ))?)
+                    }
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                #[expect(deprecated)]
+                VariantConfig::MixtureOfN(
+                    UninitializedMixtureOfNConfig {
+                        weight: get_weight(params.active),
+                        timeout_s: params.timeout_s,
+                        candidates: params.candidates,
+                        fuser: UninitializedFuserConfig {
+                            inner: UninitializedChatCompletionConfig {
+                                assistant_template: None,
+                                extra_body: params.fuser.extra_body,
+                                extra_headers: params.fuser.extra_headers,
+                                frequency_penalty: params.fuser.frequency_penalty,
+                                input_wrappers: None,
+                                json_mode: Some(params.fuser.json_mode),
+                                max_tokens: params.fuser.max_tokens,
+                                model: params.fuser.model,
+                                presence_penalty: params.fuser.presence_penalty,
+                                reasoning_effort: params.fuser.reasoning_effort,
+                                retries: params.fuser.retries,
+                                seed: params.fuser.seed,
+                                service_tier: params.fuser.service_tier,
+                                stop_sequences: params.fuser.stop_sequences,
+                                system_template: Some(fuser_system_template.path),
+                                temperature: params.fuser.temperature,
+                                templates: Default::default(),
+                                thinking_budget_tokens: params.fuser.thinking_budget_tokens,
+                                top_p: params.fuser.top_p,
+                                user_template: fuser_user_template.map(|t| t.path),
+                                verbosity: params.fuser.verbosity,
+                                weight: None,
+                            },
+                        },
+                    }
+                    .load(
+                        &SchemaData::load(
+                            user_schema,
+                            None,
+                            None,
+                            UninitializedSchemas::default(),
+                            &context.schema_name(evaluator_name),
+                        )?,
+                        &ErrorContext {
+                            function_name: "tensorzero::evaluator".to_string(),
+                            variant_name: evaluator_name.to_string(),
+                        },
+                    )?,
+                )
+            }
+            UninitializedLLMJudgeVariantConfig::Dicl(params) => {
+                let dicl_system_instructions = params
+                    .system_instructions
+                    .map(|si| si.data().to_string())
+                    .map(|si| {
+                        format!(
+                            include_str!("llm_judge_system_instructions.txt"),
+                            system_instructions = si,
+                        )
+                    });
+
+                let uninitialized_config = UninitializedDiclConfig {
+                    weight: get_weight(params.active),
+                    embedding_model: params.embedding_model,
+                    k: params.k,
+                    model: params.model,
+                    system_instructions: dicl_system_instructions.map(|s| {
+                        ResolvedTomlPathData::new_fake_path("tensorzero::llm_judge".to_string(), s)
+                    }),
+                    temperature: params.temperature,
+                    top_p: params.top_p,
+                    presence_penalty: params.presence_penalty,
+                    frequency_penalty: params.frequency_penalty,
+                    max_tokens: params.max_tokens,
+                    seed: params.seed,
+                    json_mode: params.json_mode,
+                    extra_body: params.extra_body,
+                    extra_headers: params.extra_headers,
+                    retries: params.retries,
+                    stop_sequences: params.stop_sequences,
+                    max_distance: None,
+                    ..Default::default()
+                };
+                VariantConfig::Dicl(uninitialized_config.load()?)
+            }
+            UninitializedLLMJudgeVariantConfig::ChainOfThought(params) => {
+                tracing::warn!(
+                    "Deprecation Warning (#5298 / 2026.2+): We are deprecating `experimental_chain_of_thought` now that reasoning models are prevalent. Please use a different variant type (e.g. `chat_completion` with reasoning)."
+                );
+                VariantConfig::ChainOfThought(ChainOfThoughtConfig {
+                    inner: convert_chat_completion_judge_to_variant(
+                        context,
+                        evaluator_name,
+                        variant_name,
+                        input_format,
+                        params.inner,
+                        user_schema,
+                    )?,
+                })
+            }
+        };
+        Ok(VariantInfo {
+            inner,
+            timeouts: self.timeouts.unwrap_or_default(),
+            namespace: None,
+        })
+    }
+}
+
+/// NOTE: this function should not be called.
+/// In the code we already have a conversion from UninitializedLLMJudgeVariantConfig to VariantConfig.
+/// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
+/// This function should complain at compile time if we forget to update it when adding a new variant type.
+#[expect(dead_code)]
+#[expect(clippy::unnecessary_wraps)]
+fn check_convert_variant_to_llm_judge_variant(
+    variant: VariantConfig,
+) -> Result<UninitializedLLMJudgeVariantConfig, Error> {
+    match variant {
+        VariantConfig::ChatCompletion(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                UninitializedLLMJudgeChatCompletionVariantConfig {
+                    active: Some(false),
+                    model: variant.model().clone(),
+                    system_instructions: ResolvedTomlPathData::new_fake_path(
+                        String::new(),
+                        String::new(),
+                    ),
+                    temperature: variant.temperature(),
+                    top_p: variant.top_p(),
+                    max_tokens: variant.max_tokens(),
+                    presence_penalty: variant.presence_penalty(),
+                    frequency_penalty: variant.frequency_penalty(),
+                    seed: variant.seed(),
+                    json_mode: JsonMode::Off,
+                    retries: *variant.retries(),
+                    stop_sequences: variant.stop_sequences().cloned(),
+                    extra_body: variant.extra_body().cloned(),
+                    extra_headers: variant.extra_headers().cloned(),
+                    reasoning_effort: variant.reasoning_effort().cloned(),
+                    service_tier: variant.service_tier().cloned(),
+                    thinking_budget_tokens: variant.thinking_budget_tokens(),
+                    verbosity: variant.verbosity().cloned(),
+                },
+            ))
+        }
+        VariantConfig::BestOfNSampling(variant) => {
+            #[expect(deprecated)]
+            Ok(UninitializedLLMJudgeVariantConfig::BestOfNSampling(
+                UninitializedLLMJudgeBestOfNVariantConfig {
+                    active: Some(false),
+                    timeout_s: None, // Deprecated field
+                    candidates: variant.candidates().clone(),
+                    evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.evaluator().inner.model().clone(),
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
+                        temperature: variant.evaluator().inner.temperature(),
+                        top_p: variant.evaluator().inner.top_p(),
+                        max_tokens: variant.evaluator().inner.max_tokens(),
+                        presence_penalty: variant.evaluator().inner.presence_penalty(),
+                        frequency_penalty: variant.evaluator().inner.frequency_penalty(),
+                        seed: variant.evaluator().inner.seed(),
+                        json_mode: JsonMode::Off,
+                        retries: *variant.evaluator().inner.retries(),
+                        stop_sequences: variant.evaluator().inner.stop_sequences().cloned(),
+                        extra_body: variant.evaluator().inner.extra_body().cloned(),
+                        extra_headers: variant.evaluator().inner.extra_headers().cloned(),
+                        reasoning_effort: variant.evaluator().inner.reasoning_effort().cloned(),
+                        service_tier: variant.evaluator().inner.service_tier().cloned(),
+                        thinking_budget_tokens: variant.evaluator().inner.thinking_budget_tokens(),
+                        verbosity: variant.evaluator().inner.verbosity().cloned(),
+                    },
+                },
+            ))
+        }
+        VariantConfig::MixtureOfN(variant) => {
+            #[expect(deprecated)]
+            Ok(UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(
+                UninitializedLLMJudgeMixtureOfNVariantConfig {
+                    active: Some(false),
+                    timeout_s: None, // Deprecated field
+                    candidates: variant.candidates().clone(),
+                    fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.fuser().inner.model().clone(),
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
+                        temperature: variant.fuser().inner.temperature(),
+                        top_p: variant.fuser().inner.top_p(),
+                        max_tokens: variant.fuser().inner.max_tokens(),
+                        presence_penalty: variant.fuser().inner.presence_penalty(),
+                        frequency_penalty: variant.fuser().inner.frequency_penalty(),
+                        seed: variant.fuser().inner.seed(),
+                        json_mode: JsonMode::Off,
+                        retries: *variant.fuser().inner.retries(),
+                        stop_sequences: variant.fuser().inner.stop_sequences().cloned(),
+                        extra_body: variant.fuser().inner.extra_body().cloned(),
+                        extra_headers: variant.fuser().inner.extra_headers().cloned(),
+                        reasoning_effort: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        service_tier: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .service_tier
+                            .clone(),
+                        thinking_budget_tokens: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .thinking_budget_tokens,
+                        verbosity: variant.fuser().inner.inference_params_v2.verbosity.clone(),
+                    },
+                },
+            ))
+        }
+        VariantConfig::Dicl(variant) => Ok(UninitializedLLMJudgeVariantConfig::Dicl(
+            UninitializedLLMJudgeDiclVariantConfig {
+                active: Some(false),
+                embedding_model: variant.embedding_model().to_string(),
+                k: variant.k(),
+                model: variant.model().to_string(),
+                system_instructions: None,
+                temperature: variant.temperature(),
+                top_p: variant.top_p(),
+                presence_penalty: variant.presence_penalty(),
+                frequency_penalty: variant.frequency_penalty(),
+                max_tokens: variant.max_tokens(),
+                seed: variant.seed(),
+                json_mode: variant.json_mode().copied(),
+                extra_body: variant.extra_body().cloned(),
+                extra_headers: variant.extra_headers().cloned(),
+                retries: *variant.retries(),
+                stop_sequences: variant.stop_sequences().cloned(),
+            },
+        )),
+        VariantConfig::ChainOfThought(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChainOfThought(
+                UninitializedLLMJudgeChainOfThoughtVariantConfig {
+                    inner: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.inner.model().to_string().into(),
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
+                            String::new(),
+                            String::new(),
+                        ),
+                        temperature: variant.inner.temperature(),
+                        top_p: variant.inner.top_p(),
+                        max_tokens: variant.inner.max_tokens(),
+                        presence_penalty: variant.inner.presence_penalty(),
+                        frequency_penalty: variant.inner.frequency_penalty(),
+                        seed: variant.inner.seed(),
+                        json_mode: JsonMode::Off,
+                        retries: *variant.inner.retries(),
+                        stop_sequences: variant.inner.stop_sequences().cloned(),
+                        extra_body: variant.inner.extra_body().cloned(),
+                        extra_headers: variant.inner.extra_headers().cloned(),
+                        reasoning_effort: variant
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        service_tier: variant.inner.inference_params_v2.service_tier.clone(),
+                        thinking_budget_tokens: variant
+                            .inner
+                            .inference_params_v2
+                            .thinking_budget_tokens,
+                        verbosity: variant.inner.inference_params_v2.verbosity.clone(),
+                    },
+                },
+            ))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::matchers::{anything, has_entry};
+    use googletest::prelude::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[gtest]
+    fn test_uninitialized_evaluation_config_load() {
+        // Setup test fixtures
+        let evaluation_name = "test_evaluation";
+
+        // Prepare function configs map with a function referenced in the evaluation
+        let mut functions = HashMap::new();
+        let function_name = "generate_draft";
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema: create_test_schema(),
+            json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
+            description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
+            evaluators: HashMap::new(),
+        });
+        functions.insert(function_name.to_string(), Arc::new(function_config));
+
+        // Test case 1: Successful loading with exact match evaluator
+        {
+            let mut evaluators = HashMap::new();
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: Some("evaluation description".to_string()),
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_ok());
+
+            let (config, additional_functions, metric_configs) =
+                result.expect("exact match evaluation config should load successfully");
+            assert_eq!(config.function_name, function_name);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description")
+            );
+            assert_eq!(config.evaluators.len(), 1);
+            let EvaluatorConfig::ExactMatch(params) = config
+                .evaluators
+                .get("em_evaluator")
+                .expect("em_evaluator should exist")
+            else {
+                panic!("Expected ExactMatch evaluator")
+            };
+            #[expect(deprecated)]
+            let cutoff = params.cutoff;
+            assert_eq!(cutoff, Some(0.4));
+            // No additional function configs for exact match
+            assert_eq!(additional_functions.len(), 0);
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name = get_evaluator_metric_name(evaluation_name, "em_evaluator");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::em_evaluator"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist");
+            assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
+        }
+
+        // Test case 2: Successful loading with LLM judge evaluator
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions:
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include: Some(LLMJudgeIncludeConfig {
+                    reference_output: false,
+                }),
+                cutoff: None,
+                description: Some("llm judge description".to_string()),
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_evaluation".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: Some("evaluation description llm judge".to_string()),
+            };
+
+            let (config, additional_functions, metric_configs) = uninitialized_config
+                .load(&functions, evaluation_name)
+                .expect("LLM judge boolean evaluation config should load successfully");
+            assert_eq!(config.evaluators.len(), 1);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description llm judge")
+            );
+
+            // Verify LLM judge evaluator config
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_evaluation")
+                .expect("llm_judge_evaluation should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Boolean
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+            assert!(!judge_config.include.reference_output);
+            assert_eq!(
+                judge_config.description.as_deref(),
+                Some("llm judge description")
+            );
+
+            // Verify additional function config was created
+            assert_eq!(additional_functions.len(), 1);
+            let function_name =
+                get_llm_judge_function_name(evaluation_name, "llm_judge_evaluation");
+            assert!(additional_functions.contains_key(&function_name));
+
+            // Verify the function config has the correct type
+            let FunctionConfig::Json(json_config) = additional_functions[&function_name].as_ref()
+            else {
+                panic!("Expected Json function config")
+            };
+            assert_eq!(json_config.variants.len(), 1);
+            assert!(json_config.variants.contains_key("test_variant"));
+            assert!(json_config.schemas.get_implicit_system_schema().is_none());
+            assert!(json_config.schemas.get_implicit_user_schema().is_some());
+            assert!(json_config.output_schema.value.is_object());
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name =
+                get_evaluator_metric_name(evaluation_name, "llm_judge_evaluation");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_evaluation"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist for LLM judge boolean");
+            assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Min);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
+
+            // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
+            let EvaluatorConfig::LLMJudge(llm_judge_evaluation) = config
+                .evaluators
+                .get("llm_judge_evaluation")
+                .expect("llm_judge_evaluation should exist")
+            else {
+                panic!("Expected LLMJudge evaluator")
+            };
+            assert_eq!(
+                MetricConfigType::from(llm_judge_evaluation.output_type),
+                metric_config.r#type
+            );
+
+            // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
+            assert_eq!(
+                MetricConfigOptimize::from(llm_judge_evaluation.optimize),
+                metric_config.optimize
+            );
+        }
+
+        // Test case 2.1: Successful loading with LLM judge evaluator with Float output type
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions:
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Float,
+                optimize: LLMJudgeOptimize::Max,
+                include: Some(LLMJudgeIncludeConfig {
+                    reference_output: true,
+                }),
+                cutoff: None,
+                description: Some("llm judge description float".to_string()),
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_float".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: Some("evaluation description llm judge float".to_string()),
+            };
+
+            let (config, additional_functions, metric_configs) = uninitialized_config
+                .load(&functions, evaluation_name)
+                .expect("LLM judge float evaluation config should load successfully");
+            assert_eq!(config.evaluators.len(), 1);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description llm judge float")
+            );
+
+            // Verify LLM judge evaluator config
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_float")
+                .expect("llm_judge_float should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Float
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
+            assert!(judge_config.include.reference_output);
+            assert_eq!(
+                judge_config.description.as_deref(),
+                Some("llm judge description float")
+            );
+
+            // Verify additional function config was created
+            assert_eq!(additional_functions.len(), 1);
+            let function_name = get_llm_judge_function_name(evaluation_name, "llm_judge_float");
+            assert!(additional_functions.contains_key(&function_name));
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name = get_evaluator_metric_name(evaluation_name, "llm_judge_float");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_float"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs
+                .get(&metric_config_name)
+                .expect("metric config should exist for LLM judge float");
+            assert_eq!(metric_config.r#type, MetricConfigType::Float);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
+
+            // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
+            let EvaluatorConfig::LLMJudge(llm_judge_evaluation) = config
+                .evaluators
+                .get("llm_judge_float")
+                .expect("llm_judge_float should exist")
+            else {
+                panic!("Expected LLMJudge evaluator")
+            };
+            assert_eq!(
+                MetricConfigType::from(llm_judge_evaluation.output_type),
+                metric_config.r#type
+            );
+
+            // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
+            assert_eq!(
+                MetricConfigOptimize::from(llm_judge_evaluation.optimize),
+                metric_config.optimize
+            );
+        }
+
+        // Test case 3: Error when function doesn't exist
+        {
+            let mut evaluators = HashMap::new();
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: "nonexistent_function".to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_err());
+            assert!(matches!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config { .. }
+            ));
+        }
+
+        // Test case 4: Error when evaluation name contains "::"
+        {
+            let mut evaluators = HashMap::new();
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("em_evaluator".to_string(), exact_match);
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, "invalid::evaluation::name");
+            assert!(result.is_err());
+            assert!(matches!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config { .. }
+            ));
+        }
+
+        // Test case 5: Error when multiple variants are active in LLM judge
+        {
+            let mut test_variant1 = HashMap::new();
+            test_variant1.insert(
+                "test_variant1".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions:
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+                                    .into(),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            let mut test_variant2 = HashMap::new();
+            test_variant2.insert(
+                "test_variant2".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4"),
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
+                            temperature: Some(0.5),
+                            top_p: None,
+                            max_tokens: Some(200),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            // Combine the two variants
+            let mut variants = HashMap::new();
+            for (k, v) in test_variant1 {
+                variants.insert(k, v);
+            }
+            for (k, v) in test_variant2 {
+                variants.insert(k, v);
+            }
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include: Some(LLMJudgeIncludeConfig {
+                    reference_output: false,
+                }),
+                cutoff: Some(0.3),
+                description: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "multiple_active_variants".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_err());
+            assert_eq!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config {
+                    message: "Evaluator `multiple_active_variants` in `[evaluations.test_evaluation]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
+                }
+            );
+        }
+
+        // Test case 6: Error when evaluator name contains "::"
+        {
+            let evaluation_name = "test_evaluation";
+            let function_name = "test_function";
+
+            let mut functions = HashMap::new();
+            functions.insert(
+                function_name.to_string(),
+                Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                    variants: HashMap::new(),
+                    output_schema: create_test_schema(),
+                    schemas: SchemaData::default(),
+                    json_mode_tool_call_config: create_json_mode_tool_call_config(
+                        create_test_schema(),
+                    ),
+                    description: None,
+                    all_explicit_template_names: HashSet::new(),
+                    experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                        &HashMap::new(),
+                    ),
+                    evaluators: HashMap::new(),
+                })),
+            );
+
+            let mut evaluators = HashMap::new();
+            #[expect(deprecated)]
+            let exact_match =
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+            evaluators.insert("foo::invalid_name".to_string(), exact_match);
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_err());
+            assert_eq!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config {
+                    message:
+                        "Evaluator names cannot contain \"::\" (referenced in `[evaluations.test_evaluation]`)"
+                            .to_string(),
+                }
+            );
+        }
+
+        // Test case 7: Successful loading with LLM judge evaluator with reference_output = true
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(true),
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include: Some(LLMJudgeIncludeConfig {
+                    reference_output: true,
+                }),
+                cutoff: None,
+                description: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_with_ref".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_ok());
+
+            let (config, _additional_functions, _metric_configs) =
+                result.expect("LLM judge with reference_output should load successfully");
+
+            // Verify LLM judge evaluator config with reference_output = true
+            let EvaluatorConfig::LLMJudge(judge_config) = config
+                .evaluators
+                .get("llm_judge_with_ref")
+                .expect("llm_judge_with_ref should exist")
+            else {
+                panic!("Expected LLMJudge evaluator config")
+            };
+            assert!(matches!(
+                judge_config.output_type,
+                LLMJudgeOutputType::Boolean
+            ));
+            assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+            assert!(judge_config.include.reference_output);
+        }
+
+        // Test case 8: Single LLM Judge variant with no 'active' field specified (defaults to active)
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "default_active_variant".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: None, // No 'active' field specified
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Max,
+                include: None,
+                cutoff: None,
+                description: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_default_active".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_ok());
+
+            let (_config, additional_functions, _metric_configs) =
+                result.expect("LLM judge with default active variant should load successfully");
+            let function_config_name =
+                get_llm_judge_function_name(evaluation_name, "llm_judge_default_active");
+            let function_config = additional_functions
+                .get(&function_config_name)
+                .expect("function config should exist for llm_judge_default_active");
+            let FunctionConfig::Json(json_config) = function_config.as_ref() else {
+                panic!("Expected Json function config")
+            };
+            assert_eq!(json_config.variants.len(), 1);
+            let variant = json_config
+                .variants
+                .get("default_active_variant")
+                .expect("default_active_variant should exist");
+            // Check that the weight is Some(1.0) which indicates it defaulted to active
+            let VariantConfig::ChatCompletion(cc_config) = &variant.inner else {
+                panic!("Expected ChatCompletion variant config")
+            };
+            assert_eq!(cc_config.weight(), Some(1.0));
+        }
+
+        // Test case 9: Single LLM Judge variant explicitly set to inactive (active = false)
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "inactive_variant".to_string(),
+                UninitializedLLMJudgeVariantInfo {
+                    inner: UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                        UninitializedLLMJudgeChatCompletionVariantConfig {
+                            active: Some(false), // Explicitly inactive
+                            model: Arc::from("gpt-4.1-mini"),
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
+                                "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
+                            ), None),
+                            temperature: Some(0.7),
+                            top_p: None,
+                            max_tokens: Some(100),
+                            presence_penalty: None,
+                            frequency_penalty: None,
+                            seed: None,
+                            json_mode: JsonMode::Tool,
+                            retries: RetryConfig::default(),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            stop_sequences: None,
+                            reasoning_effort: None,
+                            service_tier: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
+                        },
+                    ),
+                    timeouts: None,
+                },
+            );
+
+            #[expect(deprecated)]
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: Some(LLMJudgeInputFormat::Serialized),
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Max,
+                include: None,
+                cutoff: None,
+                description: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_inactive".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
+                evaluators,
+                function_name: function_name.to_string(),
+                description: None,
+            };
+
+            let result = uninitialized_config.load(&functions, evaluation_name);
+            assert!(result.is_err());
+            assert_eq!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config {
+                    message: format!(
+                        "Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."
+                    ),
+                }
+            );
+        }
+    }
+
+    /// Test backward compatibility: verify deprecated "static" type still works
+    #[test]
+    fn test_backward_compatibility_static_type() {
+        // Setup: Create a function that the evaluation will reference
+        let mut functions = HashMap::new();
+        let function_name = "test_function";
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema: create_test_schema(),
+            json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
+            description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                &HashMap::new(),
+            ),
+            evaluators: HashMap::new(),
+        });
+        functions.insert(function_name.to_string(), Arc::new(function_config));
+
+        // Test TOML config with deprecated "static" type
+        let toml = format!(
+            r#"
+            type = "static"
+            function_name = "{function_name}"
+
+            [evaluators.test_evaluator]
+            type = "exact_match"
+        "#
+        );
+
+        // Deserialize the TOML
+        let uninitialized: UninitializedEvaluationConfig =
+            toml::from_str(&toml).expect("TOML with deprecated static type should parse");
+
+        // Verify it loads correctly despite using deprecated "static" type
+        let result = uninitialized.load(&functions, "test_backward_compat");
+        assert!(
+            result.is_ok(),
+            "Expected successful load with 'static' type"
+        );
+
+        let (config, additional_functions, metric_configs) =
+            result.expect("backward compatible static type should load successfully");
+
+        // Verify the config was loaded correctly
+        assert_eq!(config.function_name, function_name);
+        assert_eq!(config.evaluators.len(), 1);
+        assert!(config.evaluators.contains_key("test_evaluator"));
+
+        // Verify exact match evaluator was loaded
+        let EvaluatorConfig::ExactMatch(_) = config
+            .evaluators
+            .get("test_evaluator")
+            .expect("test_evaluator should exist")
+        else {
+            panic!("Expected ExactMatch evaluator")
+        };
+
+        // Verify no additional functions (exact match doesn't need them)
+        assert_eq!(additional_functions.len(), 0);
+
+        // Verify metric was created
+        assert_eq!(metric_configs.len(), 1);
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_must_match_only() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("(?i)please".to_string()),
+            must_not_match: None,
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(result.is_ok(), "must_match only should load successfully");
+        let (eval_config, func_config, metric_config) = result.expect("should succeed");
+        assert!(
+            matches!(eval_config, EvaluatorConfig::Regex(_)),
+            "should produce Regex evaluator config"
+        );
+        assert!(func_config.is_none(), "regex evaluator needs no function");
+        assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+        assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_must_not_match_only() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: Some("(?i)badword".to_string()),
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(
+            result.is_ok(),
+            "must_not_match only should load successfully"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_both_specified() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("(?i)please".to_string()),
+            must_not_match: Some("(?i)badword".to_string()),
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(
+            result.is_ok(),
+            "both must_match and must_not_match should load successfully"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_neither_specified() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: None,
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail when neither must_match nor must_not_match is specified"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least one of `must_match` or `must_not_match` must be specified"),
+            "error message should mention the requirement, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_invalid_must_match() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: Some("[invalid".to_string()),
+            must_not_match: None,
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail with invalid regex in must_match"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid regex in `must_match`"),
+            "error message should mention must_match, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_regex_evaluator_load_invalid_must_not_match() {
+        let config = UninitializedEvaluatorConfig::Regex(RegexConfig {
+            must_match: None,
+            must_not_match: Some("[invalid".to_string()),
+        });
+        let result = config.load(Some("test_eval"), None, "test_evaluator");
+        assert!(
+            result.is_err(),
+            "should fail with invalid regex in must_not_match"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid regex in `must_not_match`"),
+            "error message should mention must_not_match, got: {err}"
+        );
+    }
+
+    #[gtest]
+    fn test_evaluator_config_toml_deserialization() {
+        let toml_str = r#"
+            [evaluators.my_em]
+            type = "exact_match"
+        "#;
+        let table: toml::Table = toml::from_str(toml_str).expect("TOML should parse");
+        let evaluators: HashMap<String, UninitializedEvaluatorConfig> = table
+            .get("evaluators")
+            .and_then(|v| v.clone().try_into().ok())
+            .unwrap_or_default();
+        expect_that!(evaluators, has_entry("my_em".to_string(), anything()));
+        expect_that!(
+            evaluators.get("my_em"),
+            some(pat!(UninitializedEvaluatorConfig::ExactMatch(_)))
+        );
+    }
+
+    #[gtest]
+    fn test_function_level_evaluator_naming_helpers() {
+        expect_that!(
+            get_function_llm_judge_function_name("my_func", "my_judge"),
+            eq("tensorzero::llm_judge::function_name::my_func::my_judge")
+        );
+        expect_that!(
+            get_function_evaluator_metric_name("my_func", "my_judge"),
+            eq("tensorzero::function_name::my_func::evaluator_name::my_judge")
+        );
+    }
+
+    #[gtest]
+    fn test_load_function_level_exact_match() {
+        #[expect(deprecated)]
+        let config = UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        let (evaluator, function_config, metric) = config
+            .load(None, Some("my_func"), "my_em")
+            .expect("function-level exact match should load");
+        expect_that!(evaluator, pat!(EvaluatorConfig::ExactMatch(_)));
+        expect_that!(function_config, none());
+        expect_that!(metric.r#type, eq(MetricConfigType::Boolean));
+    }
+
+    #[gtest]
+    fn test_load_evaluator_rejects_double_colon() {
+        #[expect(deprecated)]
+        let config = UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None });
+        let result = config.load(None, Some("my_func"), "bad::name");
+        expect_that!(result, err(displays_as(contains_substring("::"))));
+    }
+
+    #[gtest]
+    fn test_inline_evaluation_metric_naming() {
+        let function_name = "generate_draft";
+        let mut functions = HashMap::new();
+        functions.insert(
+            function_name.to_string(),
+            Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                variants: HashMap::new(),
+                schemas: SchemaData::default(),
+                output_schema: create_test_schema(),
+                json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
+                description: None,
+                all_explicit_template_names: HashSet::new(),
+                experimentation: ExperimentationConfigWithNamespaces::legacy_from_variants_map(
+                    &HashMap::new(),
+                ),
+                evaluators: HashMap::new(),
+            })),
+        );
+
+        let mut evaluators = HashMap::new();
+        #[expect(deprecated)]
+        evaluators.insert(
+            "em_evaluator".to_string(),
+            UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let config = UninitializedInferenceEvaluationConfig {
+            evaluators,
+            function_name: function_name.to_string(),
+            description: None,
+        };
+
+        let (_inference_config, _functions, metrics) = config
+            .load(&functions, "test_eval")
+            .expect("inline evaluation should load");
+
+        let expected_metric_name =
+            "tensorzero::evaluation_name::test_eval::evaluator_name::em_evaluator";
+        expect_that!(
+            get_evaluator_metric_name("test_eval", "em_evaluator"),
+            eq(expected_metric_name)
+        );
+        expect_that!(
+            metrics,
+            has_entry(expected_metric_name.to_string(), anything())
+        );
+    }
+    // Helper functions for tests
+    fn create_test_schema() -> JSONSchema {
+        let schema_value = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "string"
+                }
+            },
+            "required": ["result"]
+        });
+        JSONSchema::from_value(schema_value).expect("test schema should be valid")
+    }
+}

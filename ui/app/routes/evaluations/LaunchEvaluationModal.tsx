@@ -1,6 +1,6 @@
-import { useLayoutEffect, useState, useEffect } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useFetcher, Link } from "react-router";
-import { CircleHelp } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -12,22 +12,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { HelpTooltip } from "~/components/ui/HelpTooltip";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
-import { useConfig, useFunctionConfig } from "~/context/config";
+  useAllFunctionConfigs,
+  useConfig,
+  useFunctionConfig,
+} from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 import { DatasetCombobox } from "~/components/dataset/DatasetCombobox";
 import { Combobox } from "~/components/ui/combobox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Evaluation } from "~/components/icons/Icons";
 import { GitBranch } from "lucide-react";
 import { useDatasetCounts } from "~/hooks/use-dataset-counts";
 import { toFunctionUrl } from "~/utils/urls";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "~/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -41,10 +54,23 @@ function EvaluationForm({
 }) {
   const fetcher = useFetcher();
   const config = useConfig();
+  const functions = useAllFunctionConfigs();
   const evaluation_names = Object.keys(config.evaluations);
+  const function_names = Object.keys(functions)
+    .filter((name) => !name.startsWith("tensorzero::"))
+    .sort((a, b) => a.localeCompare(b));
+  const [launchMode, setLaunchMode] = useState<LaunchMode>(
+    initialFormState?.launch_mode ?? "evaluators",
+  );
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
   >(initialFormState?.evaluation_name ?? null);
+  const [selectedFunctionName, setSelectedFunctionName] = useState<
+    string | null
+  >(initialFormState?.function_name ?? null);
+  const [selectedEvaluatorNames, setSelectedEvaluatorNames] = useState<
+    string[]
+  >(initialFormState?.evaluator_names ?? []);
   const [selectedDatasetName, setSelectedDatasetName] = useState<string | null>(
     initialFormState?.dataset_name ?? null,
   );
@@ -66,19 +92,40 @@ function EvaluationForm({
 
   let count = null;
   let isLoading = false;
-  let function_name = null;
-  let evaluatorNames: string[] = [];
-  if (selectedEvaluationName) {
-    function_name =
-      config.evaluations[selectedEvaluationName]?.function_name ?? null;
-    evaluatorNames = Object.keys(
-      config.evaluations[selectedEvaluationName]?.evaluators ?? {},
-    );
-  }
-  const functionConfig = useFunctionConfig(function_name);
+  const namedFunctionName = selectedEvaluationName
+    ? (config.evaluations[selectedEvaluationName]?.function_name ?? null)
+    : null;
+  const currentFunctionName =
+    launchMode === "evaluations-legacy"
+      ? namedFunctionName
+      : selectedFunctionName;
+  const evaluatorNames = useMemo(
+    () =>
+      launchMode === "evaluations-legacy"
+        ? selectedEvaluationName
+          ? Object.keys(
+              config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+            )
+          : []
+        : selectedEvaluatorNames,
+    [
+      config.evaluations,
+      launchMode,
+      selectedEvaluationName,
+      selectedEvaluatorNames,
+    ],
+  );
+  const functionConfig = useFunctionConfig(currentFunctionName);
+  const availableEvaluatorNames = useMemo(
+    () =>
+      functionConfig?.evaluators
+        ? Object.keys(functionConfig.evaluators).sort()
+        : [],
+    [functionConfig],
+  );
 
   const { data: datasets = [], isLoading: datasetsLoading } = useDatasetCounts(
-    function_name ?? undefined,
+    currentFunctionName ?? undefined,
   );
 
   // Get the count for the selected dataset from the datasets array
@@ -90,17 +137,30 @@ function EvaluationForm({
 
   // Validate that stored values still exist in the current config/datasets
   useEffect(() => {
-    // Validate evaluation name - if it doesn't exist in config, clear it
     if (
       selectedEvaluationName &&
       !evaluation_names.includes(selectedEvaluationName)
     ) {
       setSelectedEvaluationName(null);
-      setSelectedVariantName(null);
-      setPrecisionTargets({});
     }
 
-    // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
+    if (
+      selectedFunctionName &&
+      !function_names.includes(selectedFunctionName)
+    ) {
+      setSelectedFunctionName(null);
+    }
+
+    if (
+      selectedEvaluatorNames.some(
+        (name) => !availableEvaluatorNames.includes(name),
+      )
+    ) {
+      setSelectedEvaluatorNames((current) =>
+        current.filter((name) => availableEvaluatorNames.includes(name)),
+      );
+    }
+
     if (
       selectedDatasetName &&
       !datasetsLoading &&
@@ -109,7 +169,6 @@ function EvaluationForm({
       setSelectedDatasetName(null);
     }
 
-    // Validate variant name - if it doesn't exist in the function config, clear it
     if (
       selectedVariantName &&
       functionConfig &&
@@ -120,6 +179,10 @@ function EvaluationForm({
   }, [
     selectedEvaluationName,
     evaluation_names,
+    selectedFunctionName,
+    function_names,
+    selectedEvaluatorNames,
+    availableEvaluatorNames,
     selectedDatasetName,
     datasets,
     datasetsLoading,
@@ -127,27 +190,18 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Initialize precision targets with empty string for all evaluators when evaluation changes
   useEffect(() => {
-    if (selectedEvaluationName) {
-      const currentEvaluatorNames = Object.keys(
-        config.evaluations[selectedEvaluationName]?.evaluators ?? {},
-      );
-      const newLimits: Record<string, string> = {};
-
-      // Always initialize all evaluators with empty string (reset when evaluation changes)
-      for (const evaluatorName of currentEvaluatorNames) {
-        newLimits[evaluatorName] = "";
-      }
-
-      // Only update if the structure changed
-      const currentKeys = Object.keys(precisionTargets).sort().join(",");
-      const newKeys = Object.keys(newLimits).sort().join(",");
-      if (currentKeys !== newKeys) {
-        setPrecisionTargets(newLimits);
-      }
+    const newLimits: Record<string, string> = {};
+    for (const evaluatorName of evaluatorNames) {
+      newLimits[evaluatorName] = precisionTargets[evaluatorName] ?? "";
     }
-  }, [selectedEvaluationName, config.evaluations, precisionTargets]);
+
+    const currentKeys = Object.keys(precisionTargets).sort().join(",");
+    const newKeys = Object.keys(newLimits).sort().join(",");
+    if (currentKeys !== newKeys) {
+      setPrecisionTargets(newLimits);
+    }
+  }, [evaluatorNames, precisionTargets]);
 
   // Validate max_datapoints: must be empty or a positive integer
   const isMaxDatapointsValid =
@@ -166,9 +220,14 @@ function EvaluationForm({
     },
   );
 
+  const hasValidEvaluationSource =
+    launchMode === "evaluations-legacy"
+      ? selectedEvaluationName !== null
+      : currentFunctionName !== null && selectedEvaluatorNames.length > 0;
+
   // Check if all fields are filled and valid
   const isFormValid =
-    selectedEvaluationName !== null &&
+    hasValidEvaluationSource &&
     selectedVariantName !== null &&
     selectedDatasetName !== null &&
     count !== null &&
@@ -187,26 +246,104 @@ function EvaluationForm({
       }}
     >
       <div className="mt-4">
-        <label
-          htmlFor="evaluation_name"
-          className="mb-1 block text-sm font-medium"
-        >
-          Evaluation
-        </label>
+        <label className="mb-1 block text-sm font-medium">Mode</label>
       </div>
+      <input type="hidden" name="launch_mode" value={launchMode} />
+      <Tabs
+        value={launchMode}
+        onValueChange={(value) => setLaunchMode(value as LaunchMode)}
+      >
+        <TabsList className="grid w-full grid-cols-2 rounded-md border border-border-accent bg-bg-secondary p-1">
+          <TabsTrigger
+            value="evaluators"
+            className="text-fg-secondary data-[state=active]:bg-menu-highlight data-[state=active]:text-menu-highlight-foreground"
+          >
+            Evaluators
+          </TabsTrigger>
+          <TabsTrigger
+            value="evaluations-legacy"
+            className="text-fg-secondary data-[state=active]:bg-menu-highlight data-[state=active]:text-menu-highlight-foreground"
+          >
+            Evaluations (Legacy)
+          </TabsTrigger>
+        </TabsList>
 
-      <Combobox
-        name="evaluation_name"
-        selected={selectedEvaluationName}
-        onSelect={(value) => {
-          setSelectedEvaluationName(value);
-          setSelectedVariantName(null); // Reset variant selection when evaluation changes
-        }}
-        items={evaluation_names}
-        getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
-        placeholder="Select evaluation"
-        emptyMessage="No evaluations found"
-      />
+        {/*Evaluators*/}
+        <TabsContent value="evaluators" className="mt-4 space-y-4">
+          <div>
+            <label
+              htmlFor="function_name"
+              className="mb-1 block text-sm font-medium"
+            >
+              Function
+            </label>
+            <Combobox
+              name="function_name"
+              selected={selectedFunctionName}
+              onSelect={(value) => {
+                setSelectedFunctionName(value);
+                setSelectedVariantName(null);
+              }}
+              items={function_names}
+              placeholder="Select function"
+              emptyMessage="No functions found"
+              ariaLabel="Select function"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="evaluator_names"
+              className="mb-1 block text-sm font-medium"
+            >
+              Evaluators
+            </label>
+            <input
+              type="hidden"
+              name="evaluator_names"
+              value={JSON.stringify(selectedEvaluatorNames)}
+            />
+            <EvaluatorMultiSelect
+              selected={selectedEvaluatorNames}
+              onSelect={setSelectedEvaluatorNames}
+              items={availableEvaluatorNames}
+            />
+            {selectedEvaluatorNames.length > 0 && (
+              <div className="text-muted-foreground mt-2 mb-1 text-xs">
+                Evaluators:{" "}
+                <span className="font-medium">
+                  {selectedEvaluatorNames.join(", ")}
+                </span>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/*Evaluations (Legacy)*/}
+        <TabsContent value="evaluations-legacy" className="mt-4">
+          <div>
+            <label
+              htmlFor="evaluation_name"
+              className="mb-1 block text-sm font-medium"
+            >
+              Evaluation
+            </label>
+            <Combobox
+              name="evaluation_name"
+              selected={selectedEvaluationName}
+              onSelect={(value) => {
+                setSelectedEvaluationName(value);
+                setSelectedVariantName(null);
+              }}
+              items={evaluation_names}
+              getPrefix={() => <Evaluation className="h-4 w-4 shrink-0" />}
+              placeholder="Select evaluation"
+              emptyMessage="No evaluations found"
+              ariaLabel="Select evaluation"
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
+
       <div className="mt-4">
         <label
           htmlFor="dataset_name"
@@ -223,17 +360,20 @@ function EvaluationForm({
       />
 
       <DatasetCombobox
-        functionName={function_name ?? undefined}
+        functionName={currentFunctionName ?? undefined}
         selected={selectedDatasetName}
         onSelect={(name) => setSelectedDatasetName(name)}
-        disabled={!selectedEvaluationName}
+        disabled={!currentFunctionName}
+        ariaLabel="Select dataset"
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
         Function:{" "}
-        {function_name ? (
+        {currentFunctionName ? (
           <span className="font-medium">
-            <Link to={toFunctionUrl(function_name)}>{function_name}</Link>
+            <Link to={toFunctionUrl(currentFunctionName)}>
+              {currentFunctionName}
+            </Link>
           </span>
         ) : (
           <Skeleton className="inline-block h-3 w-16 align-middle" />
@@ -249,6 +389,7 @@ function EvaluationForm({
           <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
+
       <div className="mt-4">
         <label
           htmlFor="variant_name"
@@ -266,29 +407,19 @@ function EvaluationForm({
         getPrefix={() => <GitBranch className="h-4 w-4 shrink-0" />}
         placeholder="Select variant"
         emptyMessage="No variants found"
-        disabled={!selectedEvaluationName}
+        disabled={!currentFunctionName}
+        ariaLabel="Select variant"
       />
       <div className="mt-4">
         <div className="mb-1 flex items-center gap-1.5">
           <label htmlFor="concurrency_limit" className="text-sm font-medium">
             Concurrency
           </label>
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-help">
-                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="text-xs">
-                  The number of datapoints to evaluate in parallel. Increasing
-                  this value can speed up the evaluation run, but may trigger
-                  rate limiting from model providers.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <HelpTooltip>
+            The number of datapoints to evaluate in parallel. Increasing this
+            value can speed up the evaluation run, but may trigger rate limiting
+            from model providers.
+          </HelpTooltip>
         </div>
         <input
           type="number"
@@ -307,18 +438,9 @@ function EvaluationForm({
           <label htmlFor="max_datapoints" className="text-sm font-medium">
             Max Datapoints
           </label>
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-help">
-                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                Maximum number of datapoints to evaluate (optional)
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <HelpTooltip>
+            Leave empty to evaluate all datapoints in the dataset.
+          </HelpTooltip>
         </div>
         <Input
           type="text"
@@ -421,9 +543,14 @@ export default function LaunchEvaluationModal({
   );
 }
 
+type LaunchMode = "evaluations-legacy" | "evaluators";
+
 interface EvaluationsFormValues {
+  launch_mode: LaunchMode;
   dataset_name: string | null;
   evaluation_name: string | null;
+  function_name: string | null;
+  evaluator_names: string[];
   variant_name: string | null;
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
@@ -433,6 +560,73 @@ interface EvaluationsFormValues {
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
   renderKey: string;
+}
+
+function EvaluatorMultiSelect({
+  selected,
+  onSelect,
+  items,
+}: {
+  selected: string[];
+  onSelect: (value: string[]) => void;
+  items: string[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label="Select evaluators"
+          className="flex w-full items-center justify-between gap-2"
+        >
+          <span className="truncate">
+            {selected.length > 0
+              ? `${selected.length} evaluator${selected.length === 1 ? "" : "s"} selected`
+              : "Select evaluators"}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+        <Command>
+          <CommandInput placeholder="Search evaluators..." />
+          <CommandList>
+            <CommandEmpty>No evaluators found.</CommandEmpty>
+            <CommandGroup>
+              {items.map((item) => {
+                const isSelected = selected.includes(item);
+                return (
+                  <CommandItem
+                    key={item}
+                    value={item}
+                    onSelect={() => {
+                      onSelect(
+                        isSelected
+                          ? selected.filter((name) => name !== item)
+                          : [...selected, item],
+                      );
+                    }}
+                  >
+                    <Check
+                      className={`mr-2 h-4 w-4 ${
+                        isSelected ? "opacity-100" : "opacity-0"
+                      }`}
+                    />
+                    {item}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const LOCAL_STORAGE_KEY = "tensorzero:evaluationForm";
@@ -485,6 +679,26 @@ function getFromLocalStorage() {
     }
   } else if (typeof data.precision_targets !== "object") {
     data.precision_targets = {};
+  }
+
+  if (typeof data.evaluator_names === "string" && data.evaluator_names) {
+    try {
+      const parsedEvaluatorNames = JSON.parse(data.evaluator_names);
+      data.evaluator_names = Array.isArray(parsedEvaluatorNames)
+        ? parsedEvaluatorNames.filter((name) => typeof name === "string")
+        : [];
+    } catch {
+      data.evaluator_names = [];
+    }
+  } else if (!Array.isArray(data.evaluator_names)) {
+    data.evaluator_names = [];
+  }
+
+  if (
+    data.launch_mode !== "evaluations-legacy" &&
+    data.launch_mode !== "evaluators"
+  ) {
+    data.launch_mode = "evaluators";
   }
 
   // TODO: add validation

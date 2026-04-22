@@ -41,6 +41,8 @@ echo "Starting background ClickHouse wake-up..."
 curl --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
     "$TENSORZERO_CLICKHOUSE_URL" --data-binary 'SELECT 1' > /dev/null 2>&1 &
 
+REPO_ROOT="$(pwd)"
+
 # Set up cleanup function to run on exit
 cleanup_database() {
     if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
@@ -57,8 +59,8 @@ cleanup_database() {
             echo "Cleanup completed for database: $DB_NAME"
         fi
     fi
-    docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down -v || true
-    cat e2e_logs.txt || echo "e2e logs don't exist"
+    docker compose -f "$REPO_ROOT/crates/tensorzero-core/tests/e2e/docker-compose.yml" down -v || true
+    cat "$REPO_ROOT/crates/e2e_logs.txt" || echo "e2e logs don't exist"
 }
 
 # Register cleanup function to run on script exit (success or failure)
@@ -92,16 +94,28 @@ curl --proto '=https' --tlsv1.2 -sSf --retry 3 --retry-delay 5 --retry-all-error
 curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/0.9.27/install.sh | sh
 source $HOME/.local/bin/env
 curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
+# Install s5cmd for authenticated fixture downloads from R2
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    S5CMD_ARCH="64bit"
+elif [ "$ARCH" = "aarch64" ]; then
+    S5CMD_ARCH="arm64"
+else
+    echo "Unsupported architecture: $ARCH" && exit 1
+fi
+curl -fsSL --retry 3 --retry-delay 5 --retry-all-errors "https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-${S5CMD_ARCH}.tar.gz" \
+    | tar xz -C /usr/local/bin s5cmd
 uv run ./ui/fixtures/download-large-fixtures.py
 uv run ./ui/fixtures/download-small-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
 
 # Start postgres service for migrations
 # `cargo test-clickhouse` should not include any Postgres tests, but we're including it here to be safe.
-docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
+docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
+cd crates
 SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
@@ -129,7 +143,7 @@ export CLICKHOUSE_USER=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USER
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
 export CLICKHOUSE_SECURE=1
 export SQLX_OFFLINE=1
-cd ui/fixtures
+cd ../ui/fixtures
 max_retries=3
 for attempt in $(seq 1 $max_retries); do
     if ./load_fixtures.sh $DATABASE_NAME; then
@@ -142,7 +156,7 @@ for attempt in $(seq 1 $max_retries); do
     echo "load_fixtures.sh failed (attempt $attempt/$max_retries), retrying..."
     sleep 5
 done
-cd ../..
+cd ../../crates
 sleep 2
 
 # Wait for background test compilation to finish

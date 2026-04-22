@@ -1,0 +1,656 @@
+use std::collections::HashMap;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use tensorzero_stored_config::{StoredGEPAConfig, StoredRetryConfig};
+
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
+use crate::utils::retries::RetryConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
+
+// Default functions
+pub(crate) fn default_batch_size() -> usize {
+    5
+}
+
+pub(crate) fn default_max_iterations() -> u32 {
+    1
+}
+
+pub(crate) fn default_max_concurrency() -> u32 {
+    10
+}
+
+pub(crate) fn default_timeout() -> u64 {
+    300
+}
+
+pub(crate) fn default_include_inference_for_mutation() -> bool {
+    true
+}
+
+/// GEPA (Genetic Evolution with Pareto Analysis) optimization configuration
+///
+/// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
+/// of high-performing variants. It uses genetic programming techniques to evolve
+/// prompt templates based on evaluation results.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct GEPAConfig {
+    /// Name of the function being optimized
+    pub function_name: String,
+
+    /// Deprecated: name of the evaluation used to score candidate variants.
+    /// Prefer `evaluator_names` instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluation_name: Option<String>,
+
+    /// Names of evaluators defined on `function_name`, used to score candidate variants.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluator_names: Option<Vec<String>>,
+
+    /// Optional list of variant_names to initialize GEPA with.
+    /// If None, will use all variants defined for the function.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub initial_variants: Option<Vec<String>>,
+
+    /// Prefix for the name of the new optimized variants
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub variant_prefix: Option<String>,
+
+    /// Number of training samples to analyze per iteration
+    pub batch_size: usize,
+
+    /// Maximum number of training iterations
+    pub max_iterations: u32,
+
+    /// Maximum number of concurrent inference calls
+    pub max_concurrency: u32,
+
+    /// Model for analysis (e.g., "anthropic::claude-sonnet-4-5")
+    pub analysis_model: String,
+
+    /// Model for mutation (e.g., "anthropic::claude-sonnet-4-5")
+    pub mutation_model: String,
+
+    /// Optional random seed for reproducibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub seed: Option<u32>,
+
+    /// Client timeout in seconds for TensorZero gateway operations
+    pub timeout: u64,
+
+    /// Whether to include inference input and output in Analysis for mutation
+    ///
+    /// Inclusion can be helpful for adding few-shot examples.
+    ///
+    /// **Warning:** Use with caution, especially with:
+    /// - Multi-turn conversations (many input messages)
+    /// - Long inference outputs (many tokens)
+    /// - Large batch sizes (many analyses per mutation)
+    ///
+    /// These can cause context length overflow for the mutation model.
+    pub include_inference_for_mutation: bool,
+
+    /// Retry configuration for inference calls during GEPA optimization
+    /// Applies to analyze function calls, mutate function calls, and all mutated variants
+    pub retries: RetryConfig,
+
+    /// Maximum number of tokens to generate for analysis and mutation model calls
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub max_tokens: Option<u32>,
+}
+
+/// Uninitialized GEPA configuration (deserializable from TOML)
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
+pub struct UninitializedGEPAConfig {
+    pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluation_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub evaluator_names: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub initial_variants: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub variant_prefix: Option<String>,
+
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+
+    #[serde(default = "default_max_iterations")]
+    pub max_iterations: u32,
+
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: u32,
+
+    pub analysis_model: String,
+
+    pub mutation_model: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub seed: Option<u32>,
+
+    #[serde(default = "default_timeout")]
+    pub timeout: u64,
+
+    #[serde(default = "default_include_inference_for_mutation")]
+    pub include_inference_for_mutation: bool,
+
+    #[serde(default)]
+    pub retries: RetryConfig,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub max_tokens: Option<u32>,
+}
+
+impl std::fmt::Display for UninitializedGEPAConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl From<StoredGEPAConfig> for UninitializedGEPAConfig {
+    fn from(stored: StoredGEPAConfig) -> Self {
+        UninitializedGEPAConfig {
+            function_name: stored.function_name,
+            evaluation_name: stored.evaluation_name,
+            evaluator_names: stored.evaluator_names,
+            initial_variants: stored.initial_variants,
+            variant_prefix: stored.variant_prefix,
+            batch_size: stored.batch_size.unwrap_or_else(default_batch_size),
+            max_iterations: stored.max_iterations.unwrap_or_else(default_max_iterations),
+            max_concurrency: stored
+                .max_concurrency
+                .unwrap_or_else(default_max_concurrency),
+            analysis_model: stored.analysis_model,
+            mutation_model: stored.mutation_model,
+            seed: stored.seed,
+            timeout: stored.timeout.unwrap_or_else(default_timeout),
+            include_inference_for_mutation: stored
+                .include_inference_for_mutation
+                .unwrap_or_else(default_include_inference_for_mutation),
+            retries: stored.retries.map(RetryConfig::from).unwrap_or_default(),
+            max_tokens: stored.max_tokens,
+        }
+    }
+}
+
+impl From<UninitializedGEPAConfig> for StoredGEPAConfig {
+    fn from(config: UninitializedGEPAConfig) -> Self {
+        StoredGEPAConfig {
+            function_name: config.function_name,
+            evaluation_name: config.evaluation_name,
+            evaluator_names: config.evaluator_names,
+            initial_variants: config.initial_variants,
+            variant_prefix: config.variant_prefix,
+            batch_size: Some(config.batch_size),
+            max_iterations: Some(config.max_iterations),
+            max_concurrency: Some(config.max_concurrency),
+            analysis_model: config.analysis_model,
+            mutation_model: config.mutation_model,
+            seed: config.seed,
+            timeout: Some(config.timeout),
+            include_inference_for_mutation: Some(config.include_inference_for_mutation),
+            retries: Some(StoredRetryConfig::from(config.retries)),
+            max_tokens: config.max_tokens,
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UninitializedGEPAConfig {
+    #[new]
+    #[pyo3(signature = (
+        function_name,
+        evaluation_name,
+        analysis_model,
+        mutation_model,
+        evaluator_names=None,
+        initial_variants=None,
+        variant_prefix=None,
+        batch_size=None,
+        max_iterations=None,
+        max_concurrency=None,
+        seed=None,
+        timeout=None,
+        include_inference_for_mutation=None,
+        retries=None,
+        max_tokens=None,
+    ))]
+    #[expect(clippy::too_many_arguments)]
+    fn py_new(
+        function_name: String,
+        evaluation_name: Option<String>,
+        analysis_model: String,
+        mutation_model: String,
+        evaluator_names: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        max_iterations: Option<u32>,
+        max_concurrency: Option<u32>,
+        seed: Option<u32>,
+        timeout: Option<u64>,
+        include_inference_for_mutation: Option<bool>,
+        retries: Option<RetryConfig>,
+        max_tokens: Option<u32>,
+    ) -> Self {
+        Self {
+            function_name,
+            evaluation_name,
+            evaluator_names,
+            initial_variants,
+            variant_prefix,
+            batch_size: batch_size.unwrap_or_else(default_batch_size),
+            max_iterations: max_iterations.unwrap_or_else(default_max_iterations),
+            max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
+            analysis_model,
+            mutation_model,
+            seed,
+            timeout: timeout.unwrap_or_else(default_timeout),
+            include_inference_for_mutation: include_inference_for_mutation
+                .unwrap_or_else(default_include_inference_for_mutation),
+            retries: retries.unwrap_or_default(),
+            max_tokens,
+        }
+    }
+
+    /// Initialize the GEPAConfig.
+    ///
+    /// Required parameters: `function_name`, `analysis_model`, `mutation_model`, and exactly one
+    /// of `evaluation_name` or `evaluator_names`.
+    ///
+    /// :param function_name: Name of the function being optimized.
+    /// :param evaluation_name: Deprecated named evaluation used to score candidate variants.
+    /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5").
+    /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5").
+    /// :param evaluator_names: Optional list of function-scoped evaluator names.
+    /// :param initial_variants: Optional list of variant names to initialize GEPA with. If None, uses all variants defined for the function.
+    /// :param variant_prefix: Prefix for the name of the new optimized variants.
+    /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.
+    /// :param max_iterations: Maximum number of training iterations. Default: 1.
+    /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
+    /// :param seed: Optional random seed for reproducibility.
+    /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
+    /// :param include_inference_for_mutation: Whether to include inference input and output in Analysis for mutation. Inclusion can be helpful for adding few-shot examples. Use with caution for multi-turn conversations, long outputs, or large batch sizes. Default: True.
+    /// :param retries: Retry configuration for inference calls during GEPA optimization.
+    /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
+    #[expect(unused_variables, clippy::too_many_arguments)]
+    #[pyo3(signature = (*, function_name, evaluation_name=None, analysis_model, mutation_model, evaluator_names=None, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_for_mutation=None, retries=None, max_tokens=None))]
+    fn __init__(
+        this: Py<Self>,
+        function_name: String,
+        evaluation_name: Option<String>,
+        analysis_model: String,
+        mutation_model: String,
+        evaluator_names: Option<Vec<String>>,
+        initial_variants: Option<Vec<String>>,
+        variant_prefix: Option<String>,
+        batch_size: Option<usize>,
+        max_iterations: Option<u32>,
+        max_concurrency: Option<u32>,
+        seed: Option<u32>,
+        timeout: Option<u64>,
+        include_inference_for_mutation: Option<bool>,
+        retries: Option<RetryConfig>,
+        max_tokens: Option<u32>,
+    ) -> Py<Self> {
+        this
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self}")
+    }
+}
+
+impl UninitializedGEPAConfig {
+    pub fn load(self) -> GEPAConfig {
+        GEPAConfig {
+            function_name: self.function_name,
+            evaluation_name: self.evaluation_name,
+            evaluator_names: self.evaluator_names,
+            initial_variants: self.initial_variants,
+            variant_prefix: self.variant_prefix,
+            batch_size: self.batch_size,
+            max_iterations: self.max_iterations,
+            max_concurrency: self.max_concurrency,
+            analysis_model: self.analysis_model,
+            mutation_model: self.mutation_model,
+            seed: self.seed,
+            timeout: self.timeout,
+            include_inference_for_mutation: self.include_inference_for_mutation,
+            retries: self.retries,
+            max_tokens: self.max_tokens,
+        }
+    }
+}
+
+pub enum GepaEvaluationSource<'a> {
+    Named { evaluation_name: &'a str },
+    EvaluatorNames { evaluator_names: &'a [String] },
+}
+
+impl GEPAConfig {
+    pub fn evaluation_source(&self) -> Result<GepaEvaluationSource<'_>, &'static str> {
+        match (
+            self.evaluation_name.as_deref(),
+            self.evaluator_names.as_deref(),
+        ) {
+            (Some(name), None) => Ok(GepaEvaluationSource::Named {
+                evaluation_name: name,
+            }),
+            (None, Some(names)) => {
+                if names.is_empty() {
+                    Err("`evaluator_names` must not be empty in GEPA config")
+                } else {
+                    Ok(GepaEvaluationSource::EvaluatorNames {
+                        evaluator_names: names,
+                    })
+                }
+            }
+            _ => {
+                Err("Provide exactly one of `evaluation_name` or `evaluator_names` in GEPA config")
+            }
+        }
+    }
+
+    pub fn evaluation_label(&self) -> String {
+        if let Some(evaluation_name) = &self.evaluation_name {
+            return evaluation_name.clone();
+        }
+
+        self.evaluator_names
+            .as_ref()
+            .map(|names| names.join("__"))
+            .unwrap_or_else(|| "evaluators".to_string())
+    }
+}
+
+/// Job handle for GEPA optimization
+///
+/// Contains the final Pareto frontier of optimized variants or an error message.
+/// GEPA optimization is synchronous, so polling immediately returns the completed
+/// results or failure status.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct GEPAJobHandle {
+    /// Result of the GEPA optimization - either a map of variant names to their
+    /// configurations (the Pareto frontier) or an error message
+    pub result: Result<HashMap<String, UninitializedChatCompletionConfig>, String>,
+}
+
+impl std::fmt::Display for GEPAJobHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.result {
+            Ok(variants) => {
+                let json = serde_json::to_string_pretty(variants).map_err(|_| std::fmt::Error)?;
+                write!(f, "Success: {json}")
+            }
+            Err(msg) => write!(f, "Failed: {msg}"),
+        }
+    }
+}
+
+// Manual PartialEq implementation since UninitializedChatCompletionConfig doesn't derive PartialEq
+// We compare based on success/failure status and variant names (not the full configs)
+impl PartialEq for GEPAJobHandle {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.result, &other.result) {
+            (Ok(self_variants), Ok(other_variants)) => {
+                // Compare by checking if both have the same set of variant names
+                if self_variants.len() != other_variants.len() {
+                    return false;
+                }
+                self_variants.keys().all(|k| other_variants.contains_key(k))
+            }
+            (Err(self_msg), Err(other_msg)) => self_msg == other_msg,
+            _ => false,
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl GEPAJobHandle {
+    fn __repr__(&self) -> String {
+        format!("{self}")
+    }
+}
+
+// ── GEPA HTTP API types ──────────────────────────────────────────────
+
+/// The dataset config is either a single dataset (auto-split 50/50)
+/// or explicit train/val datasets.
+#[derive(Debug)]
+pub enum GepaDatasetConfig {
+    Single {
+        dataset_name: String,
+    },
+    Split {
+        train_dataset_name: String,
+        val_dataset_name: String,
+    },
+}
+
+/// The evaluation config is either a reference to a named evaluation
+/// or an inline list of evaluator names (top-level evaluators).
+#[derive(Debug)]
+pub enum GepaEvaluationConfig {
+    Named { evaluation_name: String },
+    Inline { evaluators: Vec<String> },
+}
+
+/// Raw launch request as deserialized from JSON.
+///
+/// Dataset fields (`dataset_name` vs `train_dataset_name`/`val_dataset_name`)
+/// and evaluation fields (`evaluation_name` vs `evaluators`) are represented as
+/// flat optional fields to avoid serde's flatten+untagged incompatibility.
+/// Use [`GepaLaunchRequest::dataset`] and [`GepaLaunchRequest::evaluation`] to
+/// resolve them into their typed enum forms.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GepaLaunchRequest {
+    pub function_name: String,
+    /// Single dataset name (auto-split 50/50). Mutually exclusive with
+    /// `train_dataset_name`/`val_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset_name: Option<String>,
+    /// Training dataset name. Must be paired with `val_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub train_dataset_name: Option<String>,
+    /// Validation dataset name. Must be paired with `train_dataset_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub val_dataset_name: Option<String>,
+    /// Named evaluation. Mutually exclusive with `evaluators`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation_name: Option<String>,
+    /// Inline list of evaluator names. Mutually exclusive with `evaluation_name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluators: Option<Vec<String>>,
+    pub analysis_model: String,
+    pub mutation_model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_variants: Option<Vec<String>>,
+    pub max_iterations: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant_prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch_size: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_inference_for_mutation: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrency: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_datapoints: Option<u32>,
+}
+
+impl GepaLaunchRequest {
+    /// Resolve the flat dataset fields into a typed enum.
+    pub fn dataset(&self) -> Result<GepaDatasetConfig, &'static str> {
+        match (
+            &self.dataset_name,
+            &self.train_dataset_name,
+            &self.val_dataset_name,
+        ) {
+            (Some(name), None, None) => Ok(GepaDatasetConfig::Single {
+                dataset_name: name.clone(),
+            }),
+            (None, Some(train), Some(val)) => Ok(GepaDatasetConfig::Split {
+                train_dataset_name: train.clone(),
+                val_dataset_name: val.clone(),
+            }),
+            _ => Err(
+                "Provide either `dataset_name` or both `train_dataset_name` and `val_dataset_name`",
+            ),
+        }
+    }
+
+    /// Resolve the flat evaluation fields into a typed enum.
+    pub fn evaluation(&self) -> Result<GepaEvaluationConfig, &'static str> {
+        match (&self.evaluation_name, &self.evaluators) {
+            (Some(name), None) => Ok(GepaEvaluationConfig::Named {
+                evaluation_name: name.clone(),
+            }),
+            (None, Some(evals)) => Ok(GepaEvaluationConfig::Inline {
+                evaluators: evals.clone(),
+            }),
+            (Some(_), Some(_)) => Err("Provide either `evaluation_name` or `evaluators`, not both"),
+            (None, None) => Err("Provide either `evaluation_name` or `evaluators`"),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+pub struct GepaLaunchResponse {
+    pub task_id: String,
+}
+
+/// GET response is a tagged enum on `status`.
+/// Serializes as: `{"status": "pending"}` | `{"status": "error", ...}` | `{"status": "completed", ...}`
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum GepaGetResponse {
+    Pending {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        progress: Option<GepaProgress>,
+    },
+    Error {
+        error: String,
+    },
+    Completed {
+        /// Map of variant_name to its configuration
+        variants: HashMap<String, UninitializedChatCompletionConfig>,
+        /// Map of variant_name to { evaluator_name to stats }
+        statistics: HashMap<String, HashMap<String, GepaEvaluatorStats>>,
+    },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+pub struct GepaProgress {
+    pub current_iteration: u32,
+    pub max_iterations: u32,
+    pub current_step: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+pub struct GepaEvaluatorStats {
+    pub mean: f64,
+    pub stdev: f64,
+    pub count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+
+    fn sample_full_config() -> UninitializedGEPAConfig {
+        UninitializedGEPAConfig {
+            function_name: "my_function".to_string(),
+            evaluation_name: Some("my_eval".to_string()),
+            evaluator_names: None,
+            initial_variants: Some(vec!["v1".to_string(), "v2".to_string()]),
+            variant_prefix: Some("gepa_".to_string()),
+            batch_size: 16,
+            max_iterations: 5,
+            max_concurrency: 4,
+            analysis_model: "anthropic::claude-sonnet-4-5".to_string(),
+            mutation_model: "anthropic::claude-sonnet-4-5".to_string(),
+            seed: Some(7),
+            timeout: 600,
+            include_inference_for_mutation: false,
+            retries: RetryConfig::default(),
+            max_tokens: Some(4096),
+        }
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_with_evaluation_name() {
+        let original = sample_full_config();
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_with_evaluator_names() {
+        let mut original = sample_full_config();
+        original.evaluation_name = None;
+        original.evaluator_names = Some(vec!["a".to_string(), "b".to_string()]);
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+
+    #[gtest]
+    fn test_gepa_config_round_trip_minimal() {
+        let original = UninitializedGEPAConfig {
+            function_name: "f".to_string(),
+            evaluation_name: Some("e".to_string()),
+            evaluator_names: None,
+            initial_variants: None,
+            variant_prefix: None,
+            batch_size: default_batch_size(),
+            max_iterations: default_max_iterations(),
+            max_concurrency: default_max_concurrency(),
+            analysis_model: "m".to_string(),
+            mutation_model: "m".to_string(),
+            seed: None,
+            timeout: default_timeout(),
+            include_inference_for_mutation: default_include_inference_for_mutation(),
+            retries: RetryConfig::default(),
+            max_tokens: None,
+        };
+        let stored: StoredGEPAConfig = original.clone().into();
+        let restored: UninitializedGEPAConfig = stored.into();
+        expect_that!(restored, eq(&original));
+    }
+}

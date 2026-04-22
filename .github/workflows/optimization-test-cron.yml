@@ -32,20 +32,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Cleanup disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        run: bash ci/free-disk-space.sh
 
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Install Rust
+      - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -57,31 +58,34 @@ jobs:
         shell: bash
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "optimization-test-cache"
+          workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
       - name: Launch ClickHouse container for optimization tests
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml up --wait
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml up --wait
 
       - name: Run daily optimization tests
+        working-directory: crates
         if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast -- --skip ${{ env.WEEKLY_TESTS }}
 
       - name: Run weekly optimization tests
+        working-directory: crates
         if: github.event.schedule == '0 2 * * 0'
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
 
       - name: Print ClickHouse container logs
         if: always()
         continue-on-error: true
-        run: docker compose -f tensorzero-optimizers/tests/docker-compose.yml logs -t
+        run: docker compose -f crates/tensorzero-optimizers/tests/docker-compose.yml logs -t
 
       - name: Log test completion
         if: always()
@@ -91,7 +95,7 @@ jobs:
 
       - name: Post to Slack on failure
         if: failure()
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}

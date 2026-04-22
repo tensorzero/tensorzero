@@ -274,6 +274,8 @@ function ImageContentBlock({
   isEditing,
   onChange,
 }: ImageContentBlockProps) {
+  const blobUrl = useBase64UrlToBlobUrl(block.data, block.mime_type);
+
   return (
     <div className="flex flex-col gap-1">
       <ContentBlockLabel
@@ -284,13 +286,13 @@ function ImageContentBlock({
       </ContentBlockLabel>
       <div className="flex flex-col">
         <Link
-          to={block.data}
+          to={blobUrl}
           target="_blank"
           rel="noopener noreferrer"
           download={`tensorzero_${block.storage_path.path}`}
           className="border-border bg-bg-tertiary text-fg-tertiary flex min-h-20 w-60 items-center justify-center rounded border p-2 text-xs"
         >
-          <img src={block.data} alt="Image" />
+          <img src={blobUrl} alt="Image" />
         </Link>
         <FileAdvancedAccordion
           filename={block.filename}
@@ -317,7 +319,7 @@ interface AudioContentBlockProps {
 
 /**
  * Renders audio files with player controls and metadata.
- * Converts base64 data URL to blob URL for audio playback.
+ * Converts raw base64 or data URLs to blob URLs for audio playback.
  */
 function AudioContentBlock({
   block,
@@ -369,7 +371,7 @@ interface GenericFileContentBlockProps {
 
 /**
  * Renders generic files with metadata and download/open actions.
- * Converts base64 data URL to blob URL for browser preview.
+ * Converts raw base64 or data URLs to blob URLs for browser preview.
  */
 function GenericFileContentBlock({
   block,
@@ -397,7 +399,7 @@ function GenericFileContentBlock({
           </div>
 
           <Link
-            to={block.data}
+            to={blobUrl}
             download={`tensorzero_${block.storage_path.path}`}
             aria-label={`Download ${block.storage_path.path}`}
           >

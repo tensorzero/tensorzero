@@ -8,13 +8,14 @@ import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources";
 import { v7 as uuidv7 } from "uuid";
+import { GATEWAY_URL } from "./helpers";
 
 let client: OpenAI;
 
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://127.0.0.1:3000/openai/v1",
+    baseURL: `${GATEWAY_URL}/openai/v1`,
   });
 });
 
@@ -26,7 +27,7 @@ describe("Raw Response", () => {
     expect(typeof entry.provider_type).toBe("string");
     expect(entry.api_type).toBeDefined();
     expect(["chat_completions", "responses", "embeddings"]).toContain(
-      entry.api_type
+      entry.api_type,
     );
     expect(entry.data).toBeDefined();
     expect(typeof entry.data).toBe("string");

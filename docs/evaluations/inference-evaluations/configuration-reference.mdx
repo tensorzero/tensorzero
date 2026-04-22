@@ -9,97 +9,72 @@ The configuration for TensorZero Evaluations should go in the same `tensorzero.t
 
 </Tip>
 
-## `[evaluations.evaluation_name]`
+## `[functions.function_name.evaluators.evaluator_name]`
 
-The `evaluations` sub-section of the config file defines the behavior of an evaluation in TensorZero.
-You can define multiple evaluations by including multiple `[evaluations.evaluation_name]` sections.
+Evaluators are defined as part of a function's configuration.
+You can define multiple evaluators by including multiple `[functions.function_name.evaluators.evaluator_name]` sections.
 
-If your `evaluation_name` is not a basic string, it can be escaped with quotation marks.
-For example, periods are not allowed in basic strings, so you can define an evaluation named `foo.bar` as `[evaluations."foo.bar"]`.
+If your `evaluator_name` is not a basic string, it can be escaped with quotation marks.
+For example, periods are not allowed in basic strings, so you can define an evaluator named `includes.jpg` as `[functions.my_function.evaluators."includes.jpg"]`.
 
-```toml mark="email-guardrails"
-// tensorzero.toml
-[evaluations.email-guardrails]
+```toml title="tensorzero.toml" mark="check-signature"
+[functions.draft-email.evaluators."includes.jpg"]
+# ...
+
+[functions.draft-email.evaluators.check-signature]
 # ...
 ```
 
 ### `type`
 
-- **Type:** Literal `"inference"` (we may add other options here later on)
-- **Required:** yes
-
-### `function_name`
-
 - **Type:** string
 - **Required:** yes
 
-This should be the name of a function defined in the `[functions]` section of the gateway config.
-This value sets which function this evaluation should evaluate when run.
+Defines the type of the evaluator. See [Evaluator Types](#evaluator-types) below.
 
 ### `description`
 
 - **Type:** string
 - **Required:** no
 
-An optional description for this evaluation.
-This can be used to document the purpose of the evaluation for automated workflows.
+An optional description of the evaluator.
+It helps TensorZero Autopilot understand the intent behind the evaluator.
 
-### `[evaluations.evaluation_name.evaluators.evaluator_name]`
+## Evaluator Types
 
-The `evaluators` sub-section defines the behavior of a particular evaluator that will be run as part of its parent evaluation.
-You can define multiple evaluators by including multiple `[evaluations.evaluation_name.evaluators.evaluator_name]` sections.
-
-If your `evaluator_name` is not a basic string, it can be escaped with quotation marks.
-For example, periods are not allowed in basic strings, so you can define `includes.jpg` as `[evaluations.evaluation_name.evaluators."includes.jpg"]`.
-
-```toml mark="draft-email"
-// tensorzero.toml
-[evaluations.email-guardrails]
-# ...
-
-[evaluations.email-guardrails.evaluators."includes.jpg"]
-# ...
-
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-```
-
-#### `type`
-
-- **Type:** string
-- **Required:** yes
-
-Defines the type of the evaluator.
-
-TensorZero currently supports the following variant types:
+TensorZero supports the following evaluator types:
 
 | Type          | Description                                                                                                       |
 | :------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `llm_judge`   | Use a TensorZero function as a judge                                                                              |
 | `exact_match` | Evaluates whether the generated output exactly matches the reference output (skips the datapoint if unavailable). |
+| `llm_judge`   | Uses a TensorZero function as a judge to evaluate outputs.                                                        |
+| `regex`       | Checks whether the generated text output matches (or doesn't match) a regex pattern.                              |
+| `tool_use`    | Checks whether the inference's tool calls match the expected behavior.                                            |
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-type = "llm_judge"
-# ...
+<Accordion title="exact_match" defaultOpen="true">
+
+Evaluates whether the generated output exactly matches the reference output.
+If the datapoint has no reference output, this evaluator is skipped.
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** yes
+
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-exact]
+type = "exact_match"
 ```
-
-<Accordion title='type: "exact_match"' defaultOpen="true">
-
-###### `cutoff`
-
-- **Type:** float
-- **Required:** no
-
-Sets a user defined threshold at which the test is passing.
-This can be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff, the evaluations binary will return a nonzero status code.
 
 </Accordion>
 
-<Accordion title='type: "llm_judge"' defaultOpen="true">
+<Accordion title="llm_judge" defaultOpen="true">
+
+Uses a TensorZero function as a judge to evaluate outputs.
+This is the most flexible evaluator type, supporting both float and boolean output types with configurable optimization direction.
+
+- **Metric type:** Configurable (`float` or `boolean`)
+- **Optimize:** Configurable (`max` or `min`)
+- **Requires reference output:** optional (configurable)
 
 ###### `input_format`
 
@@ -117,9 +92,8 @@ We only support evaluations with image data when `input_format` is set to `messa
 
 </Tip>
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 type = "llm_judge"
 input_format = "messages"
@@ -136,9 +110,8 @@ Defines the expected data type of the evaluation result from the LLM judge.
 - `float`: The judge is expected to return a floating-point number.
 - `boolean`: The judge is expected to return a boolean value.
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 type = "llm_judge"
 output_type = "float"
@@ -153,9 +126,8 @@ output_type = "float"
 If set to `true`, the reference output associated with the evaluation datapoint will be included in the input provided to the LLM judge.
 In these cases, the evaluation run will not run this evaluator for datapoints where there is no reference output.
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 type = "llm_judge"
 include = { reference_output = true }
@@ -172,31 +144,11 @@ Defines whether the metric produced by the LLM judge should be maximized or mini
 - `max`: Higher values are better.
 - `min`: Lower values are better.
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 type = "llm_judge"
 optimize = "max"
-# ...
-```
-
-###### `cutoff`
-
-- **Type:** float
-- **Required:** no
-
-Sets a user defined threshold at which the test is passing.
-This may be useful for applications where the evaluations are run as an automated test.
-If the average value of this evaluator is below the cutoff (when `optimize` is `max`) or above the cutoff (when `optimize` is `min`), the evaluations binary will return a nonzero status code.
-
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
-# ...
-type = "llm_judge"
-optimize = "max" # Example: Maximize score
-cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 # ...
 ```
 
@@ -205,37 +157,36 @@ cutoff = 0.8 # Example: Consider passing if average score is >= 0.8
 - **Type:** string
 - **Required:** no
 
-An optional description for this evaluator.
-This can be used to document the purpose of the evaluator for automated workflows.
+An optional description of the evaluator.
+It helps TensorZero Autopilot understand the intent behind the evaluator.
 
-###### `[evaluations.evaluation_name.evaluators.evaluator_name.variants.variant_name]`
+###### `[functions.function_name.evaluators.evaluator_name.variants.variant_name]`
 
 An LLM Judge evaluator defines a TensorZero function that is used to judge the output of another TensorZero function.
 Therefore, all the variant types that are available for a normal TensorZero function are also available for LLMs as judges &mdash; including all of our [inference-time optimizations](/gateway/guides/inference-time-optimizations/).
 
-You can include a standard [variant configuration](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) in this block, with two modifications:
+You can include a standard [variant configuration](/gateway/configuration-reference/#functions-function_name-variants-variant_name) in this block, with two modifications:
 
 - You must mark a single variant as `active`.
 - For `chat_completion` variants, instead of a `system_template` we require `system_instructions` as a text file and take no other templates.
 
-Here we list only the configuration for variants that differs from the configuration for a normal TensorZero function. Please refer the [variant configuration reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for the remaining options.
+Here we list only the configuration for variants that differs from the configuration for a normal TensorZero function. Please refer the [variant configuration reference](/gateway/configuration-reference/#functions-function_name-variants-variant_name) for the remaining options.
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 type = "llm_judge"
 optimize = "max"
 
-[evaluations.email-guardrails.evaluators.check-signature.variants.claude_sonnet_4_5]
+[functions.draft-email.evaluators.check-signature.variants.claude_sonnet_4_5]
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5"
 temperature = 0.1
-system_instructions = "./evaluations/email-guardrails/check-signature/system_instructions.txt"
+system_instructions = "./functions/draft-email/evaluators/check-signature/system_instructions.txt"
 # ... other chat completion configuration ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
-active = true  # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
+[functions.draft-email.evaluators.check-signature.variants.mix_of_3]
+active = true  # if we run the check-signature evaluator, this is the variant we'll use
 type = "experimental_mixture_of_n"
 candidates = ["claude_sonnet_4_5", "claude_sonnet_4_5", "claude_sonnet_4_5"]
 ```
@@ -247,13 +198,12 @@ candidates = ["claude_sonnet_4_5", "claude_sonnet_4_5", "claude_sonnet_4_5"]
 
 Sets which of the variants should be used for evaluation runs.
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
 
-[evaluations.email-guardrails.evaluators.check-signature.variants.mix_of_3]
-active = true # if we run the `email-guardrails` evaluation, this is the variant we'll use for the check-signature evaluator
+[functions.draft-email.evaluators.check-signature.variants.mix_of_3]
+active = true # this is the variant we'll use for the check-signature evaluator
 type = "experimental_mixture_of_n"
 # ...
 ```
@@ -270,16 +220,118 @@ This file should contain a text file with the system instructions for the LLM ju
 These instructions should instruct the judge to output a float or boolean value.
 We use JSON mode to enforce that the judge returns a JSON object of the form `{"thinking": "<thinking>", "score": <float or boolean>}` configured to the `output_type` of the evaluator.
 
-```text title="evaluations/email-guardrails/check-signature/claude_sonnet_4_5/system_instructions.txt"
+```text title="functions/draft-email/evaluators/check-signature/claude_sonnet_4_5/system_instructions.txt"
 Evaluate if the text follows the haiku structure of exactly three lines with a 5-7-5 syllable pattern, totaling 17 syllables. Verify only this specific syllable structure of a haiku without making content assumptions.
 ```
 
-```toml
-// tensorzero.toml
-[evaluations.email-guardrails.evaluators.check-signature]
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-signature]
 # ...
-system_instructions = "./evaluations/email-guardrails/check-signature/claude_sonnet_4_5/system_instructions.txt"
+system_instructions = "./functions/draft-email/evaluators/check-signature/claude_sonnet_4_5/system_instructions.txt"
 # ...
+```
+
+</Accordion>
+
+<Accordion title="regex" defaultOpen="true">
+
+Checks whether the inference's text output matches (or doesn't match) a regex pattern.
+This is useful for content filtering (e.g. profanity detection) and format validation (e.g. ensuring the model includes a specific phrase).
+
+For Chat responses, all text content blocks are concatenated.
+For JSON responses, the raw JSON string is used.
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** no
+
+At least one of `must_match` or `must_not_match` must be specified.
+If both are specified, the result is the logical AND: `must_match` matches AND `must_not_match` does not match.
+
+###### `must_match`
+
+- **Type:** string (regex pattern)
+- **Required:** no (but at least one of `must_match` or `must_not_match` must be specified)
+
+A regex pattern that the inference output must match for the evaluation to pass.
+Use inline flags like `(?i)` for case-insensitive matching.
+
+###### `must_not_match`
+
+- **Type:** string (regex pattern)
+- **Required:** no (but at least one of `must_match` or `must_not_match` must be specified)
+
+A regex pattern that the inference output must _not_ match for the evaluation to pass.
+Use inline flags like `(?i)` for case-insensitive matching.
+
+```toml title="tensorzero.toml"
+# Ensure the model says "please" (case-insensitive)
+[functions.draft-email.evaluators.says-please]
+type = "regex"
+must_match = "(?i)please"
+
+# Ensure the model doesn't use profanity
+[functions.draft-email.evaluators.no-profanity]
+type = "regex"
+must_not_match = "(?i)(profanity|badword)"
+
+# Both conditions: must say "please" and must not use profanity
+[functions.draft-email.evaluators.polite-and-clean]
+type = "regex"
+must_match = "(?i)please"
+must_not_match = "(?i)(profanity|badword)"
+```
+
+</Accordion>
+
+<Accordion title="tool_use" defaultOpen="true">
+
+Checks whether the inference's tool calls match the expected behavior.
+This evaluator only supports Chat inferences (tool calls do not exist in JSON inferences).
+
+- **Metric type:** Boolean
+- **Optimize:** Max
+- **Requires reference output:** no
+
+###### `behavior`
+
+- **Type:** string
+- **Required:** yes
+
+The matching rule to apply to the inference's tool calls.
+
+| Behavior  | Description                                                                   |
+| :-------- | ----------------------------------------------------------------------------- |
+| `none`    | The inference must not contain any tool calls.                                |
+| `any`     | The inference must contain at least one tool call (any tool).                 |
+| `none_of` | None of the listed `tools` may appear in the inference's tool calls.          |
+| `any_of`  | At least one of the listed `tools` must appear in the inference's tool calls. |
+| `all_of`  | All of the listed `tools` must appear in the inference's tool calls.          |
+
+###### `tools`
+
+- **Type:** list of strings
+- **Required:** Required for `none_of`, `any_of`, and `all_of` behaviors. Must not be specified for `none` and `any`.
+
+The tool names to match against.
+
+```toml title="tensorzero.toml"
+# Ensure the model doesn't call any tools
+[functions.my-assistant.evaluators.no-tool-calls]
+type = "tool_use"
+behavior = "none"
+
+# Ensure the model calls a specific tool
+[functions.my-assistant.evaluators.must-use-search]
+type = "tool_use"
+behavior = "any_of"
+tools = ["search", "web_search"]
+
+# Ensure the model calls all required tools
+[functions.my-assistant.evaluators.must-use-all]
+type = "tool_use"
+behavior = "all_of"
+tools = ["search", "summarize"]
 ```
 
 </Accordion>

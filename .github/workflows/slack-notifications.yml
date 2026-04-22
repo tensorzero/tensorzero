@@ -29,8 +29,8 @@ jobs:
         id: check-skip
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
         run: |
-          ACTOR="${{ github.actor }}"
 
           # Check if user is a bot (ends with [bot], case insensitive)
           ACTOR_LOWER=$(echo "$ACTOR" | tr '[:upper:]' '[:lower:]')
@@ -41,13 +41,12 @@ jobs:
           fi
 
           # Check if user is a member of the organization
-          MEMBER=$((gh api "orgs/tensorzero/members/$ACTOR" && echo 1) || echo 0)
-          if [ "$MEMBER" = "0" ]; then
-            echo "should_skip=false" >> $GITHUB_OUTPUT
-            echo "Sending notification for non-member: $ACTOR"
-          else
+          if gh api "orgs/tensorzero/members/$ACTOR" > /dev/null 2>&1; then
             echo "should_skip=true" >> $GITHUB_OUTPUT
             echo "Skipping notification for organization member: $ACTOR"
+          else
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "Sending notification for non-member: $ACTOR"
           fi
 
       - name: Build payload for new issue notification
@@ -84,7 +83,7 @@ jobs:
 
       - name: Send Slack notification for new issue
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -124,7 +123,7 @@ jobs:
 
       - name: Send Slack notification for issue comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issue_comment'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -164,7 +163,7 @@ jobs:
 
       - name: Send Slack notification for new pull request
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_target' && github.event.action == 'opened'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -172,7 +171,7 @@ jobs:
 
       - name: Build payload for pull request review notification
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.event.review.user.login == 'dependabot[bot]')
         id: build-pr-review-payload
         env:
           ACTOR: ${{ github.actor }}
@@ -205,8 +204,8 @@ jobs:
 
       - name: Send Slack notification for pull request review
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
-        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
-        uses: slackapi/slack-github-action@v2.1.1
+        if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.event.review.user.login == 'dependabot[bot]')
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -246,7 +245,7 @@ jobs:
 
       - name: Send Slack notification for new discussion
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion' && github.event.action == 'created'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -286,7 +285,7 @@ jobs:
 
       - name: Send Slack notification for discussion comment
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion_comment'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@91efab103c0de0a537f72a35f6b8cda0ee76bf0a # v2.1.1
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}

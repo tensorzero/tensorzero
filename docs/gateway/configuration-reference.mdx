@@ -48,6 +48,7 @@ Enable authentication for the TensorZero Gateway.
 When enabled, all gateway endpoints except `/status` and `/health` will require a valid API key.
 
 You must set up Postgres to use authentication features.
+The gateway will fail to start if authentication is enabled but `TENSORZERO_POSTGRES_URL` is not set.
 API keys can be created and managed through the TensorZero UI or CLI.
 
 ```toml title="tensorzero.toml"
@@ -77,12 +78,34 @@ You can bind the gateway to IPv4 and/or IPv6 addresses.
 To bind to an IPv6 address, you can set this field to a value like `[::]:3000`.
 Depending on the operating system, this value binds only to IPv6 (e.g. Windows) or to both (e.g. Linux by default).
 
+You can also set the bind address using the `--bind-address` CLI flag or the `TENSORZERO_GATEWAY_BIND_ADDRESS` environment variable.
+Only one of these methods can be used at a time.
+See [Customize the bind address and port](/deployment/tensorzero-gateway#customize-the-bind-address-and-port) for more details.
+
 ```toml title="tensorzero.toml"
 [gateway]
 # ...
 bind_address = "0.0.0.0:3000"
 # ...
 ```
+
+### `cache.valkey.ttl_s`
+
+- **Type:** integer
+- **Required:** no (default: `86400` = 24 hours)
+
+The time-to-live (TTL) in seconds for inference cache entries stored in Valkey.
+By default, cache entries expire after 24 hours (86400 seconds).
+This setting only applies when Valkey is available (i.e. `TENSORZERO_VALKEY_URL` is set); otherwise, the inference cache uses ClickHouse.
+
+```toml title="tensorzero.toml"
+[gateway.cache.valkey]
+ttl_s = 86400  # 24 hours (default)
+```
+
+If you use a single Valkey instance for both rate limiting and caching, see [Inference Caching](/gateway/guides/inference-caching#cache-backend) for recommended TTL settings.
+
+See [Inference Caching](/gateway/guides/inference-caching) for more details.
 
 ### `debug`
 
@@ -98,7 +121,7 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/deployment/tensorzero-gateway/#disabling-pseudonymous-usage-analytics).
+If set to `true`, TensorZero will not collect or share pseudonymous usage analytics.
 
 ### `export.otlp.traces.enabled`
 
@@ -178,19 +201,19 @@ Setting this value too low may cause legitimate requests to timeout before recei
 
 </Warning>
 
-### `metrics.tensorzero_inference_latency_overhead_seconds_histogram_buckets`
+### `metrics.tensorzero_inference_latency_overhead_seconds_buckets`
 
 - **Type:** array of floats
-- **Required:** no (default: disabled)
+- **Required:** no (default: `[0.001, 0.01, 0.1]`)
 
-Enable the `tensorzero_inference_latency_overhead_seconds_histogram` Prometheus metric with the specified histogram buckets.
+Configures the histogram buckets for the `tensorzero_inference_latency_overhead_seconds` Prometheus metric.
 This metric tracks the latency overhead introduced by TensorZero on HTTP requests.
 
 The buckets must be in strictly ascending order and contain at least one value.
 
 ```toml title="tensorzero.toml"
 [gateway.metrics]
-tensorzero_inference_latency_overhead_seconds_histogram_buckets = [0.001, 0.01, 0.1]
+tensorzero_inference_latency_overhead_seconds_buckets = [0.001, 0.005, 0.01, 0.05, 0.1]
 ```
 
 See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more details.
@@ -198,18 +221,28 @@ See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more 
 ### `observability.async_writes`
 
 - **Type:** boolean
-- **Required:** no (default: `false`)
+- **Required:** no (default: `true`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+By default, the gateway offloads the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 Each database insert is handled immediately in separate background tasks.
+
+To disable async writes and use synchronous writes instead, set `gateway.observability.async_writes = false`.
 
 See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
 
-You can't enable `async_writes` and `batch_writes` at the same time.
+You can't enable `async_writes` and `batch_writes` at the same time. Since `async_writes` is enabled by default, you must explicitly disable it to use `batch_writes`:
+
+```toml title="tensorzero.toml"
+[gateway]
+# ...
+observability.async_writes = false
+observability.batch_writes = { enabled = true }
+# ...
+```
 
 <Warning>
 
-If you enable this setting, make sure that the gateway lives long enough to complete the writes.
+Since async writes are enabled by default, make sure that the gateway lives long enough to complete the writes.
 This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
 
 </Warning>
@@ -219,7 +252,7 @@ This can be problematic in serverless environments that terminate the gateway in
 - **Type:** object
 - **Required:** no (default: disabled)
 
-Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to ClickHouse to a background task, instead of waiting for ClickHouse to complete the writes.
+Enabling this setting will improve the latency and throughput of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 With `batch_writes`, multiple records are collected and written together in batches to improve efficiency.
 
 The `batch_writes` object supports the following fields:
@@ -228,10 +261,12 @@ The `batch_writes` object supports the following fields:
 - `flush_interval_ms` (integer, optional): Maximum time in milliseconds to wait before flushing a batch (default: `100`)
 - `max_rows` (integer, optional): Maximum number of rows to collect before flushing a batch (default: `1000`)
 - `max_rows_postgres` (integer, optional): Maximum number of rows to collect before flushing a Postgres batch (default: `max_rows`)
+- `write_queue_capacity` (integer, optional): Maximum number of inferences each gateway instance can hold in memory per table type before dropping new rows to protect against out-of-memory crashes. When set, the write queue is bounded: if full, new rows are dropped and an error is logged. When unset (default), the queue is unbounded — all rows are buffered in memory. We recommend setting this for high-throughput production deployments, and monitoring your gateway instances' memory usage to determine an appropriate value
 
 ```toml tensorzero.toml
 [gateway]
 # ...
+observability.async_writes = false
 observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows = 500 }
 # ...
 ```
@@ -253,9 +288,9 @@ This can be problematic in serverless environments that terminate the gateway in
 - **Required:** no (default: `null`)
 
 Enable the observability features of the TensorZero Gateway.
-If `true`, the gateway will throw an error on startup if it fails to validate the ClickHouse connection.
-If `null`, the gateway will log a warning but continue if ClickHouse is not available, and it will use ClickHouse if available.
-If `false`, the gateway will not use ClickHouse.
+If `true`, the gateway will throw an error on startup if it fails to validate the database connection.
+If `null`, the gateway will log a warning but continue if a database is not available, and it will use the database if available (if both Postgres and ClickHouse are available, the gateway will use ClickHouse as the observability backend).
+If `false`, the gateway will not enable observability.
 
 ```toml title="tensorzero.toml"
 [gateway]
@@ -355,8 +390,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -416,6 +450,29 @@ The specified timeouts apply to the scope of an entire model inference request, 
 You can also set timeouts at the variant level and provider level.
 Multiple timeouts can be active simultaneously.
 
+### `namespace`
+
+- **Type:** string
+- **Required:** no
+
+Scopes this model to a specific namespace.
+When set, the model can only be used by variants that are reachable from a matching namespace experimentation config.
+This is validated at both config time and inference time.
+
+This is useful for per-customer fine-tuned models that should only be served when the correct namespace is provided at inference time.
+
+```toml title="tensorzero.toml"
+[models.customer-a-ft]
+routing = ["fireworks"]
+namespace = "customer_a"
+
+[models.customer-a-ft.providers.fireworks]
+type = "fireworks"
+model_name = "accounts/customer-a/models/ft-v1"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
+
 ## `[models.model_name.providers.provider_name]`
 
 The `providers` sub-section defines the behavior of a specific provider for a model.
@@ -424,8 +481,7 @@ You can define multiple providers by including multiple `[models.model_name.prov
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[models.model_name.providers."vllm.internal"]`.
 
-```toml mark="gpt-4o" mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="gpt-4o" mark="openai" mark="azure"
 [models.gpt-4o]
 # ...
 routing = ["openai", "azure"]
@@ -435,6 +491,155 @@ routing = ["openai", "azure"]
 # ...
 
 [models.gpt-4o.providers.azure]
+# ...
+```
+
+### `batch_cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from batch inference provider responses.
+This is used for cost tracking of [batch inferences](/gateway/guides/batch-inference).
+
+Many providers offer discounted pricing for batch inferences compared to real-time inferences.
+Use `batch_cost` to configure the batch-specific rates.
+If `batch_cost` is not configured, the gateway falls back to the regular `cost` configuration.
+
+Since batch inference responses are always non-streaming, `batch_cost` only supports a single `pointer` (not the `pointer_nonstreaming`/`pointer_streaming` split available in `cost`).
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's batch response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value.
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+# Real-time inference pricing
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 2.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.25 },
+]
+# Batch inference pricing (50% discount)
+batch_cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 1.25, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 5.00, required = true },
+]
+```
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
+### `cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from raw provider responses.
+This is used for cost tracking and [cost-based rate limiting](/operations/enforce-custom-rate-limits).
+
+Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to a numeric field in the provider's response, a rate to convert that value to dollars, and whether the field is required.
+
+Each entry has the following fields:
+
+- Pointer (exactly one of the following):
+  - `pointer` — a single JSON Pointer used for both streaming and non-streaming responses.
+  - `pointer_nonstreaming` and `pointer_streaming` — separate JSON Pointers for non-streaming and streaming responses respectively. Both must be provided together.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit (e.g. web search calls), or when the provider response contains a cost value directly (set to `1.0`).
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+Rates can be negative, which is useful when a provider double-counts cached tokens in its base token field (e.g. OpenAI includes cached tokens in `prompt_tokens`).
+In that case, use a negative rate to subtract the discount.
+Other providers (e.g. Anthropic) report cached tokens separately, so you sum them at their discounted rate instead.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
+
+<Accordion title="Example: Token-based pricing (e.g. OpenAI)">
+
+For providers that report token counts, configure cost entries with `cost_per_million`.
+Include optional fields for usage that may vary (e.g. cached input tokens).
+OpenAI includes cached tokens in `prompt_tokens`, so use a negative rate to subtract the discount.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o.providers.openai]
+type = "openai"
+model_name = "gpt-4o"
+cost = [
+  { pointer = "/usage/prompt_tokens", cost_per_million = 2.50, required = true },
+  { pointer = "/usage/completion_tokens", cost_per_million = 10.00, required = true },
+  # OpenAI includes cached tokens in prompt_tokens but bills them at half price.
+  # Use a negative rate to subtract the difference.
+  { pointer = "/usage/prompt_tokens_details/cached_tokens", cost_per_million = -1.25 },
+]
+```
+
+</Accordion>
+
+<Accordion title="Example: Split pointers for streaming vs. non-streaming">
+
+Some providers report usage differently in streaming and non-streaming responses.
+Use `pointer_nonstreaming` and `pointer_streaming` to handle this:
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+type = "openai"
+model_name = "my-model"
+cost = [
+  { pointer_nonstreaming = "/usage/prompt_tokens", pointer_streaming = "/usage/prompt_tokens", cost_per_million = 3.00, required = true },
+  { pointer_nonstreaming = "/usage/completion_tokens", pointer_streaming = "/usage/completion_tokens", cost_per_million = 15.00, required = true },
+]
+```
+
+</Accordion>
+
+<Accordion title="Example: Per-unit pricing (e.g. web search)">
+
+For features billed per invocation (e.g. web search calls), use `cost_per_unit` to set the price per occurrence.
+This example configures Anthropic's web search tool at $10 per 1,000 searches ($0.01 per search):
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+cost = [
+  { pointer = "/usage/input_tokens", cost_per_million = 3.00, required = true },
+  { pointer = "/usage/output_tokens", cost_per_million = 15.00, required = true },
+  # Anthropic reports cached tokens separately (not included in input_tokens),
+  # so add them at their discounted rates.
+  { pointer = "/usage/cache_read_input_tokens", cost_per_million = 0.30 },
+  { pointer = "/usage/cache_creation_input_tokens", cost_per_million = 3.75 },
+  # Web search: $10 per 1,000 searches = $0.01 per search
+  { pointer = "/usage/server_tool_use/web_search_requests", cost_per_unit = 0.01 },
+]
+```
+
+</Accordion>
+
+### `discard_unknown_chunks`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+When set to `true`, the gateway will silently discard streaming chunks with unknown or unsupported types instead of forwarding them.
+A warning is emitted for each discarded chunk.
+
+By default (`false`), unknown chunks are forwarded in the stream as-is.
+This is useful when a model provider introduces new chunk types that TensorZero doesn't yet support, and you'd prefer to drop them rather than receive unrecognized data.
+
+```toml title="tensorzero.toml"
+[models.my-model.providers.my-provider]
+# ...
+discard_unknown_chunks = true
 # ...
 ```
 
@@ -663,6 +868,28 @@ Overrides the base URL used for Anthropic Messages API requests. The value shoul
 # ...
 type = "anthropic"
 api_base = "https://example.com/v1/messages"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.anthropic]
+# ...
+type = "anthropic"
+model_name = "claude-sonnet-4-5"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 # ...
 ```
 
@@ -1032,7 +1259,7 @@ The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME
 See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 api_key_location = "dynamic::azure_api_key"
@@ -1051,10 +1278,10 @@ Defines the deployment ID of the Azure OpenAI deployment.
 See <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models" target="_blank">Azure OpenAI's documentation</a> for the list of available models.
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
-deployment_id = "gpt4o-mini-20240718"
+deployment_id = "gpt-5-mini"
 # ...
 ```
 
@@ -1066,7 +1293,7 @@ deployment_id = "gpt4o-mini-20240718"
 Defines the endpoint of the Azure OpenAI deployment (protocol and hostname).
 
 ```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-5-mini".providers.azure]
 # ...
 type = "azure"
 endpoint = "https://<your-endpoint>.openai.azure.com"
@@ -1244,6 +1471,30 @@ Defines the project ID of the GCP Vertex AI model.
 # ...
 type = "gcp_vertex"
 project_id = "your-project-id"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., Anthropic's web search tool).
+
+Each object in the array should contain the provider-specific tool configuration as defined by Anthropic's API.
+
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
+
+```toml title="tensorzero.toml"
+[models.claude-sonnet-4-5.providers.gcp_vertex]
+# ...
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "your-project-id"
+provider_tools = [{type = "web_search_20250305", name = "web_search"}]
 # ...
 ```
 
@@ -1594,6 +1845,39 @@ Set to `responses` to use the Responses API, which provides access to built-in t
 type = "openai"
 api_type = "responses"
 # ...
+```
+
+##### `content_type_overrides`
+
+- **Type:** map of string to string
+- **Required:** no (default: `{}`)
+
+Overrides the default MIME type to content block type mapping when serializing file inputs for the OpenAI API.
+
+By default, TensorZero maps `image/*` MIME types to `image_url` blocks, `audio/*` to `input_audio` blocks, and everything else to `file` blocks.
+Some OpenAI-compatible providers don't support `file` blocks but accept certain file types (e.g. PDFs) as `image_url` blocks with `data:` URIs.
+Use this option to override the mapping for specific MIME types.
+
+Each key is a MIME type string (e.g. `"application/pdf"`) and each value is one of: `"image_url"`, `"file"`, or `"input_audio"`.
+
+**Common use case: Vertex AI with PDFs.**
+When using Vertex AI's OpenAI-compatible endpoint (`type = "openai"` with `api_base` pointing at Vertex AI), sending PDFs fails with an error like:
+
+```
+Unrecognized 'type' field in an object element of an array 'content' field; found: 'file'.
+```
+
+This happens because TensorZero converts PDFs to `type: "file"` content blocks, but Vertex AI only accepts PDFs as `image_url` blocks with `data:application/pdf;base64,...` data URIs.
+To fix this, add a `content_type_overrides` entry that maps `"application/pdf"` to `"image_url"`:
+
+```toml title="tensorzero.toml"
+[models.gemini-flash.providers.vertex]
+type = "openai"
+model_name = "google/gemini-2.0-flash"
+api_base = "https://aiplatform.googleapis.com/v1beta1/projects/my-project/locations/us-central1/endpoints/openapi"
+
+[models.gemini-flash.providers.vertex.content_type_overrides]
+"application/pdf" = "image_url"  # Send PDFs as image_url blocks (required for Vertex AI)
 ```
 
 ##### `include_encrypted_reasoning`
@@ -1954,8 +2238,7 @@ A list of provider names to route requests to.
 The providers must be defined in the `providers` sub-section (see below).
 The TensorZero Gateway will attempt to route a request to the first provider in the list, and fallback to subsequent providers in order if the request is not successful.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -1994,8 +2277,7 @@ You can define multiple providers by including multiple `[embedding_models.model
 If your `provider_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `vllm.internal` as `[embedding_models.model_name.providers."vllm.internal"]`.
 
-```toml mark="openai" mark="azure"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="openai" mark="azure"
 [embedding_models.model-name]
 # ...
 routing = ["openai", "alternative-provider"]
@@ -2007,6 +2289,37 @@ routing = ["openai", "alternative-provider"]
 [embedding_models.model-name.providers.alternative-provider]
 # ...
 ```
+
+### `cost`
+
+- **Type:** array of objects
+- **Required:** no
+
+Configures how to extract cost information from raw embedding provider responses.
+This is used for cost tracking and [cost-based rate limiting](/operations/enforce-custom-rate-limits).
+
+Each entry in the array specifies a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to a numeric field in the provider's response, a rate to convert that value to dollars, and whether the field is required.
+
+Each entry has the following fields:
+
+- `pointer` (string) — a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) into the provider's response.
+- Rate (exactly one of the following):
+  - `cost_per_million` (number) — cost in dollars per million units of the extracted value. This is the most common option for token-based pricing.
+  - `cost_per_unit` (number) — cost in dollars per unit of the extracted value. This is useful for features billed per unit, or when the provider response contains a cost value directly (set to `1.0`).
+- `required` (boolean, default: `false`) — if `true` and the field is missing from the response, the cost for the entire request is reported as `null`. If `false`, missing fields contribute $0 to the total.
+
+The total cost is computed as the sum of `extracted_value * rate` across all entries.
+
+```toml title="tensorzero.toml"
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+cost = [
+  { pointer = "/usage/total_tokens", cost_per_million = 0.02, required = true },
+]
+```
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 ### `extra_body`
 
@@ -2036,6 +2349,29 @@ The values provided at inference-time take priority over the values in the confi
 type = "openai"
 extra_body = [
   { pointer = "/dimensions", value = 1536 }
+]
+```
+
+### `extra_headers`
+
+- **Type:** array of objects (see below)
+- **Required:** no
+
+The `extra_headers` field allows you to set or overwrite the request headers that TensorZero sends to an embedding model provider.
+This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
+
+Each object in the array must have two fields:
+
+- `name` (string): The name of the header to modify
+- One of the following:
+  - `value` (string): The value of the header
+  - `delete = true`: Deletes the header from the request, if present
+
+```toml title="tensorzero.toml"
+[embedding_models.openai-text-embedding-3-small.providers.openai]
+type = "openai"
+extra_headers = [
+  { name = "X-Custom-Header", value = "custom-value" }
 ]
 ```
 
@@ -2274,9 +2610,7 @@ credential_location = "dynamic::gcp_credentials_path"
 - **Type:** object
 - **Required:** no (default: `null`)
 
-The `batch` object allows you to configure batch processing for GCP Vertex models.
-Today we support batch inference through GCP Vertex using Google cloud storage as documented [here](https://cloud.google.com/vertex-ai/docs/tabular-data/classification-regression/get-batch-predictions#api:-cloud-storage).
-To do this you must also have object_storage (see the [object_storage](#object_storage) section) configured using GCP.
+The `batch` object allows you to configure [batch inference](/gateway/guides/batch-inference/) for GCP Vertex Gemini models using Google Cloud Storage.
 
 ```toml title="tensorzero.toml"
 [provider_types.gcp_vertex_gemini.batch]
@@ -2650,9 +2984,8 @@ assistant_template = "./functions/draft-email/prompt-v1/assistant_template.minij
 - **Type:** string
 - **Required:** no
 
-Defines a description of the function.
-
-In the future, this description will inform automated optimization recipes.
+An optional description of the function.
+It helps TensorZero Autopilot understand the intent behind the function.
 
 ```toml title="tensorzero.toml"
 [functions.extract_data]
@@ -2738,8 +3071,7 @@ The supported tool choice strategies are:
 - `required`: The model should use a tool. If multiple tools are available, the model decides which tool to use.
 - `{ specific = "tool_name" }`: The model should use a specific tool. The tool must be defined in the `tools` field (see below).
 
-```toml mark="run-python"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="run-python"
 [functions.solve-math-problem]
 # ...
 type = "chat"
@@ -2756,8 +3088,7 @@ tools = [
 
 ```
 
-```toml mark="query-database"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="query-database"
 [functions.generate-query]
 # ...
 type = "chat"
@@ -2782,8 +3113,7 @@ Determines the tools that the function can use.
 
 The supported tools are defined in `[tools.tool_name]` sections (see below).
 
-```toml mark="query-database"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="query-database"
 [functions.draft-email]
 # ...
 type = "chat"
@@ -2860,8 +3190,7 @@ You can define multiple variants by including multiple `[functions.function_name
 If your `variant_name` is not a basic string, it can be escaped with quotation marks.
 For example, periods are not allowed in basic strings, so you can define `llama-3.1-8b-instruct` as `[functions.function_name.variants."llama-3.1-8b-instruct"]`.
 
-```toml mark="draft-email"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="draft-email"
 [functions.draft-email]
 # ...
 
@@ -3183,6 +3512,7 @@ presence_penalty = 0.5
 
 Controls the reasoning effort level for reasoning models.
 
+For Anthropic, this enables adaptive thinking (`thinking.type: "adaptive"`) with the specified effort level via `output_config.effort`.
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingLevel`.
 
 <Warning>
@@ -3191,11 +3521,11 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
-<Tip>
+<Warning>
 
-Some providers (e.g. Anthropic) support `thinking_budget_tokens` instead.
+For Anthropic, `reasoning_effort` and `thinking_budget_tokens` are mutually exclusive. Use `reasoning_effort` for adaptive thinking or `thinking_budget_tokens` for manual thinking.
 
-</Tip>
+</Warning>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3306,7 +3636,7 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
-For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Anthropic, this value corresponds to `thinking.budget_tokens` (manual thinking mode with `thinking.type: "enabled"`).
 For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
 
 <Warning>
@@ -3315,9 +3645,15 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Warning>
+
+For Anthropic, `thinking_budget_tokens` and `reasoning_effort` are mutually exclusive. Use `thinking_budget_tokens` for manual thinking or `reasoning_effort` for adaptive thinking.
+
+</Warning>
+
 <Tip>
 
-Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+Some providers (e.g. OpenAI) support `reasoning_effort` instead. For Anthropic, both `reasoning_effort` and `thinking_budget_tokens` are supported but cannot be used together.
 
 </Tip>
 
@@ -3976,12 +4312,40 @@ Multiple timeouts can be active simultaneously.
 
 </Accordion>
 
+## `[functions.function_name.evaluators.evaluator_name]`
+
+Evaluators are defined as part of a function's configuration and specify how to evaluate the function's outputs.
+You can define multiple evaluators by including multiple `[functions.function_name.evaluators.evaluator_name]` sections.
+
+Evaluators are used by [TensorZero Evaluations](/evaluations/inference-evaluations/tutorial) to score and compare variants.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.evaluators.check-exact]
+type = "exact_match"
+
+[functions.draft-email.evaluators.check-signature]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[functions.draft-email.evaluators.check-signature.variants.claude_sonnet_4_5]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+system_instructions = "./functions/draft-email/evaluators/check-signature/system_instructions.txt"
+```
+
+<Tip>
+
+See the [Evaluations Configuration Reference](/evaluations/inference-evaluations/configuration-reference) for the full list of evaluator types and their configuration options.
+
+</Tip>
+
 ## `[functions.function_name.experimentation]`
 
 This section configures experimentation (A/B testing) over a set of variants in a function.
 
 At inference time, the gateway will sample a variant from the function to complete the request.
-By default, the gateway will sample a variant uniformly at random (`type = "uniform"`).
+By default, the gateway will sample a variant uniformly at random.
 
 TensorZero supports multiple types of experiments that can help you learn about the relative performance of the variants.
 
@@ -4001,50 +4365,51 @@ Determines the experiment type.
 
 TensorZero currently supports the following experiment types:
 
-| Type             | Description                                                                                                                                                                                                                     |
-| :--------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `uniform`        | Samples variants uniformly at random. For example, if there are three candidate variants, each will be sampled with probability `1/3`.                                                                                          |
-| `static_weights` | Samples variants according to user-specified weights. Weights must be nonnegative and are normalized to sum to 1. See the `candidate_variants` documentation below for how to specify weights.                                  |
-| `track_and_stop` | Samples variants according to probabilities that dynamically update based on accumulating feedback data. Designed to maximize experiment efficiency by minimizing the number of inferences needed to identify the best variant. |
+| Type       | Description                                                                                                                                                                                                                     |
+| :--------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `static`   | Samples variants according to fixed probabilities. Supports both uniform sampling (from a list of variant names) and weighted sampling (from a map of variant names to weights).                                                |
+| `adaptive` | Samples variants according to probabilities that dynamically update based on accumulating feedback data. Designed to maximize experiment efficiency by minimizing the number of inferences needed to identify the best variant. |
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 # ...
-type = "track_and_stop"
+type = "adaptive"
 # ...
 ```
 
-<Accordion title='type: "uniform"'>
+<Accordion title='type: "static"'>
 
-The `uniform` type samples variants uniformly at random.
+The `static` type samples variants according to fixed probabilities.
 This is the default behavior when no `[functions.function_name.experimentation]` section is specified.
 
 By default, all variants defined in the function are sampled with equal probability.
-You can optionally specify `candidate_variants` to sample uniformly from a subset of variants, and `fallback_variants` for sequential fallback behavior.
-The behavior depends on which fields are specified:
-
-| Configuration             | Behavior                                                                    |
-| :------------------------ | :-------------------------------------------------------------------------- |
-| No fields specified       | Samples uniformly from all variants in the function                         |
-| Only `candidate_variants` | Samples uniformly from specified candidates                                 |
-| Only `fallback_variants`  | Uses fallback variants sequentially (no uniform sampling)                   |
-| Both specified            | Samples uniformly from candidates; if all fail, uses fallbacks sequentially |
+You can specify `candidate_variants` as either a list of variant names (uniform sampling) or a map of variant names to weights (weighted sampling), and `fallback_variants` for sequential fallback behavior.
 
 ### `candidate_variants`
 
-- **Type:** array of strings
-- **Required:** no
+- **Type:** array of strings _or_ map of strings to floats
+- **Required:** yes
 
-An optional set of variants to sample uniformly from.
+The set of variants to sample from.
 Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
 
-If not specified (and `fallback_variants` is also not specified), all variants are sampled uniformly.
-If `fallback_variants` is specified but `candidate_variants` is not, no candidates are used (fallback-only mode).
+When specified as a **list** of variant names, each variant is sampled with equal probability (uniform sampling).
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
-type = "uniform"
-candidate_variants = ["variant-a", "variant-b"]
+type = "static"
+candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
+```
+
+When specified as a **map** of variant names to weights, variants are sampled according to their relative weights.
+Weights must be non-negative.
+The gateway automatically normalizes the weights to sum to 1.0.
+For example, weights of `{"variant-a" = 5.0, "variant-b" = 1.0}` result in sampling probabilities of `5/6` and `1/6` respectively.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "static"
+candidate_variants = {"prompt-v1" = 5.0, "prompt-v2" = 1.0}
 ```
 
 ### `fallback_variants`
@@ -4060,7 +4425,7 @@ This behaves like a ranked list where the first active fallback variant is alway
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["variant-a", "variant-b"]
 fallback_variants = ["fallback-variant"]
 ```
@@ -4083,78 +4448,38 @@ type = "chat"
 # ...
 ```
 
-**Explicit candidate variants:**
+**Explicit candidate variants (uniform):**
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
 # `variant-c` will not be sampled
+```
+
+**Weighted candidate variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "static"
+candidate_variants = {"variant-a" = 0.9, "variant-b" = 0.1}
 ```
 
 **With fallback variants:**
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
-type = "uniform"
+type = "static"
 candidate_variants = ["variant-a", "variant-b"]  # try these first, uniformly
 fallback_variants = ["variant-c"]  # use if both candidates fail
 ```
 
-**Fallback-only mode:**
-
-```toml title="tensorzero.toml"
-[functions.draft-email.experimentation]
-type = "uniform"
-fallback_variants = ["variant-a", "variant-b", "variant-c"]  # sequential
-```
-
 </Accordion>
 
-<Accordion title='type: "static_weights"'>
+<Accordion title='type: "adaptive"'>
 
-The `static_weights` type samples variants according to user-specified weights.
-This allows you to control the distribution of traffic across variants with fixed probabilities.
-
-### `candidate_variants`
-
-- **Type:** map of strings to floats
-- **Required:** yes
-
-A map from variant names to their sampling weights.
-Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
-
-Weights must be non-negative.
-The gateway automatically normalizes the weights to sum to 1.0.
-For example, weights of `{"variant-a" = 5.0, "variant-b" = 1.0}` result in sampling probabilities of `5/6` and `1/6` respectively.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.experimentation]
-type = "static_weights"
-candidate_variants = {"prompt-v1" = 5.0, "prompt-v2" = 1.0}
-# ...
-```
-
-### `fallback_variants`
-
-- **Type:** array of strings
-- **Required:** no
-
-An optional set of function variants to use as fallback options.
-
-Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
-If all candidate variants fail during inference, or if the total weight of active candidate variants is zero, the gateway will sample uniformly at random from `fallback_variants`.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.experimentation]
-type = "static_weights"
-candidate_variants = {"prompt-v1" = 2.0, "prompt-v2" = 1.0, "prompt-v3" = 0.5}
-fallback_variants = ["fallback-prompt-a", "fallback-prompt-b"]
-```
-
-</Accordion>
-
-<Accordion title='type: "track_and_stop"'>
+The `adaptive` type samples variants according to probabilities that dynamically update based on accumulating feedback data.
+It is designed to efficiently identify the best variant with a specified level of confidence.
 
 ### `candidate_variants`
 
@@ -4162,7 +4487,7 @@ fallback_variants = ["fallback-prompt-a", "fallback-prompt-b"]
 - **Required:** yes
 
 The set of function variants to include in the experiment.
-Each variant must be defined via `[functions.function_name.variants.variant_name]` in the the `variants` sub-section (see above).
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section (see above).
 Variants that are not included in `candidate_variants` will not be sampled.
 
 ```toml title="tensorzero.toml"
@@ -4189,7 +4514,7 @@ The value of `delta` must be a probability in the `(0, 1)` range.
 In simple terms, `delta` is the probability that the algorithm will incorrectly identify a variant as the winner.
 A commonly used value in experimentation settings is `0.05`, which caps the probability that an epsilon-best variant is not chosen as the winner at 5%.
 
-The `track_and_stop` algorithm aims to identify a "winner" variant that has the best average value for the chosen metric, or nearly the best (where "best" means highest if `optimize = "max"` or lowest if `optimize = "min"` for the chosen metric, and "nearly" is determined by a tolerance `epsilon`, defined below).
+The algorithm aims to identify a "winner" variant that has the best average value for the chosen metric, or nearly the best (where "best" means highest if `optimize = "max"` or lowest if `optimize = "min"` for the chosen metric, and "nearly" is determined by a tolerance `epsilon`, defined below).
 Once this variant is identified, random sampling ceases and the winner variant is used exclusively going forward.
 The value `delta` instantiates a trade-off between the speed of identification and the confidence in the identified variant.
 The smaller the value of `delta`, the higher the chance that the algorithm will correctly identify an epsilon-best variant, and the more data required to do so.
@@ -4215,7 +4540,7 @@ This field is for advanced users. The default value is sensible for most use cas
 The sub-optimality tolerance.
 The value must be nonnegative.
 
-The `track_and_stop` algorithm aims to identify a "winner" variant whose average metric value is either the highest, or within epsilon of the highest.
+The algorithm aims to identify a "winner" variant whose average metric value is either the highest, or within epsilon of the highest.
 Larger values of `epsilon` allow the algorithm to label a winner more quickly.
 As an example, consider an experiment over three function variants with underlying (unknown) mean metric values of `[0.6, 0.8, 0.85]` for a metric with `optimize = "max"`.
 If `delta = 0.05` and `epsilon = 0.05`, then the algorithm will label either the second or third variant as the winner with probability at least `1 - delta = 95%`.
@@ -4239,10 +4564,10 @@ epsilon = 0.03
 
 An optional set of function variants to use as fallback options.
 
-Each variant must be defined via `[functions.function_name.variants.variant_name]` in the the `variants` sub-section (see above).
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section (see above).
 If inference fails with all of the `candidate_variants`, then variants will be sampled uniformly at random from `fallback_variants`.
 
-Feedback for these variants will not be used in the experiment itself; for example, if the experiment type is `track_and_stop`, the sampling probabilities will be dynamically updated based only on feedback for the `candidate_variants`.
+Feedback for fallback variants will not be used in the experiment itself; the sampling probabilities will be dynamically updated based only on feedback for the `candidate_variants`.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -4260,7 +4585,7 @@ The metric that should be tracked during the experiment.
 The metric is used to dynamically update the sampling probabilities for the variants in a way that is designed to quickly identify high performing variants.
 
 This must be one of the metrics defined in the `[metrics]` section.
-`track_and_stop` can handle both inference-level and episode-level metrics.
+The adaptive algorithm can handle both inference-level and episode-level metrics.
 Plots based on the chosen metric are displayed in the `Experimentation` section of the `Functions` tab in the TensorZero UI.
 
 ```toml title="tensorzero.toml"
@@ -4285,8 +4610,8 @@ The minimum sampling probability for each candidate variant.
 The value must be nonnegative.
 Note that `min_prob` times the number of `candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants must sum to at most 1.0.
 
-The aim of a `track_and_stop` experiment is to identify an epsilon-best variant, without necessarily differentiating sub-optimal variants, so the primary use for this field is to enable the user to ensure that sufficient data is gathered to learn about the performance of sub-optimal variants.
-Note that this field has no effect once `track_and_stop` picks a winner variant, since at that point random sampling ceases and the winner variant is used exclusively.
+The aim of the adaptive algorithm is to identify an epsilon-best variant, without necessarily differentiating sub-optimal variants, so the primary use for this field is to enable the user to ensure that sufficient data is gathered to learn about the performance of sub-optimal variants.
+Note that this field has no effect once the algorithm picks a winner variant, since at that point random sampling ceases and the winner variant is used exclusively.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -4333,7 +4658,7 @@ The frequency, in seconds, with which sampling probabilities are updated.
 
 Lower values will lead to faster experiment convergence but will consume more computational resources.
 
-Updating the sampling probabilities requires reading the latest feedback data from ClickHouse.
+Updating the sampling probabilities requires reading the latest feedback data from your database.
 This is accomplished by a background task that interacts with the gateway instance.
 More frequent updates (smaller values of `update_period_s`) relative to the feedback throughput enable the algorithm to more quickly guide the sampling probabilities toward their theoretical optimum, which allows it to more quickly label the "winner" variant.
 For example, updating the sampling probabilities every ~100 inferences should lead to faster convergence than updating them every ~500 inferences.
@@ -4346,6 +4671,34 @@ update_period_s = 300
 ```
 
 </Accordion>
+
+### Namespace-Specific Experimentation
+
+You can override the base experimentation config for specific namespaces using the `namespaces` sub-section.
+Each namespace key maps to an experimentation config that follows the same schema as the base config (i.e. `type`, `candidate_variants`, etc.).
+
+When a request provides a namespace, the gateway uses the matching namespace config if one exists.
+If no matching namespace config is found, the base experimentation config is used as a fallback.
+
+```toml title="tensorzero.toml"
+# Base config: used when no namespace is provided or namespace has no specific config
+[functions.draft-email.experimentation]
+type = "static"
+candidate_variants = ["variant-a", "variant-b"]
+
+# Mobile namespace: always serve variant-a
+[functions.draft-email.experimentation.namespaces.mobile]
+type = "static"
+candidate_variants = {"variant-a" = 1.0}
+
+# Web namespace: run an adaptive experiment
+[functions.draft-email.experimentation.namespaces.web]
+type = "adaptive"
+candidate_variants = ["variant-a", "variant-b"]
+metric = "user-rating"
+```
+
+See [Scope experiments with namespaces](/experimentation/scope-experiments-with-namespaces) for a full guide.
 
 ## `[metrics]`
 
@@ -4366,6 +4719,21 @@ For example, periods are not allowed in basic strings, so you can define `beats-
 [metrics.user-rating]
 # fieldA = ...
 # fieldB = ...
+# ...
+```
+
+### `description`
+
+- **Type:** string
+- **Required:** no
+
+An optional description of the metric.
+It helps TensorZero Autopilot understand the intent behind the metric.
+
+```toml title="tensorzero.toml"
+[metrics.task-completed]
+# ...
+description = "Whether the task was completed successfully"
 # ...
 ```
 
@@ -4442,8 +4810,7 @@ For example, periods are not allowed in basic strings, so you can define `run-py
 
 You can enable a tool for a function by adding it to the function's `tools` field.
 
-```toml mark="get-temperature"
-// tensorzero.toml
+```toml title="tensorzero.toml" mark="get-temperature"
 [functions.weather-chatbot]
 # ...
 type = "chat"
@@ -4562,6 +4929,7 @@ If you set `type = "s3_compatible"`, the following fields are available.
 
 Defines the endpoint of the object storage service.
 You can use this field to specify a custom endpoint for the object storage service (e.g. GCP Cloud Storage, Cloudflare R2, and many more).
+You can also set it to `env::YOUR_ENVIRONMENT_VARIABLE` to read from the environment variable `YOUR_ENVIRONMENT_VARIABLE` on startup.
 
 ##### `bucket_name`
 
@@ -4631,18 +4999,6 @@ You can connect to Postgres by setting the `TENSORZERO_POSTGRES_URL` environment
 
 Defines the maximum number of connections in the Postgres connection pool.
 
-### `enabled`
-
-- **Type:** boolean
-- **Required:** no (default: `null`)
-
-Enable Postgres connectivity.
-If `true`, the gateway will throw an error on startup if it fails to connect to Postgres (requires `TENSORZERO_POSTGRES_URL` environment variable).
-If `false`, the gateway will not use Postgres even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
-If omitted, the gateway will connect to Postgres if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable Postgres with a warning.
-
-If you have features that require Postgres (e.g. adaptive experimentation, authentication) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
-
 ## `[rate_limiting]`
 
 The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
@@ -4650,13 +5006,28 @@ Rate limits help you control usage, manage costs, and prevent abuse.
 
 See [Enforce Custom Rate Limits](/operations/enforce-custom-rate-limits/) for a comprehensive guide on rate limiting.
 
+### `default_cost`
+
+- **Type:** number (dollars)
+- **Required:** no (default: `1.00`)
+
+The default cost in dollars used to estimate each request's cost upfront when cost rate limiting is active.
+After a request completes, the gateway adjusts the consumed budget based on the actual cost reported by the provider.
+If your model providers don't report cost information, the default estimate is used without adjustment.
+
+```toml
+[rate_limiting]
+default_cost = 0.50
+```
+
 ### `enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `true`)
 
 Enable or disable rate limiting enforcement.
-When set to `false`, rate limiting rules will not be enforced even if they are defined.
+When `true` and there are rate limiting rules, we validate that a valid rate limiting backend (Postgres or Valkey) is available, and fail gateway startup otherwise.
+When `false`, rate limiting rules will not be enforced even if they are defined.
 
 ```toml
 [rate_limiting]
@@ -4666,7 +5037,7 @@ enabled = true
 ### `[[rate_limiting.rules]]`
 
 Rate limiting rules are defined as an array of rule configurations.
-Each rule specifies rate limits for specific resources (model inferences, tokens), time windows, scopes, and priorities.
+Each rule specifies rate limits for specific resources (model inferences, tokens, cost), time windows, scopes, and priorities.
 
 #### Rate Limit Fields
 
@@ -4684,15 +5055,23 @@ You can set rate limits for different resources and time windows using the follo
 - `tokens_per_day`
 - `tokens_per_week`
 - `tokens_per_month`
+- `cost_per_second`
+- `cost_per_minute`
+- `cost_per_hour`
+- `cost_per_day`
+- `cost_per_week`
+- `cost_per_month`
 
 Each rate limit field can be specified in two formats:
 
-**Simple Format:** A single integer value that sets both the capacity and refill rate to the same value.
+**Simple Format:** A single value that sets both the capacity and refill rate to the same value.
+For `model_inferences` and `tokens`, this is an integer. For `cost`, this is a number in dollars.
 
 ```toml
 [[rate_limiting.rules]]
 model_inferences_per_minute = 100
 tokens_per_hour = 10000
+cost_per_day = 10.0
 ```
 
 **Bucket Format:** An object with explicit `capacity` and `refill_rate` fields for fine-grained control over the token bucket algorithm.
@@ -4700,6 +5079,7 @@ tokens_per_hour = 10000
 ```toml
 [[rate_limiting.rules]]
 tokens_per_minute = { capacity = 1000, refill_rate = 500 }
+cost_per_hour = { capacity = 5.0, refill_rate = 2.5 }
 ```
 
 <Note>

@@ -7,7 +7,7 @@ The TensorZero Gateway supports granular custom rate limits to help you control 
 
 Rate limit rules have three key components:
 
-- **Resources:** Define what you're limiting (like model inferences or tokens) and the time window (per second, hour, day, week, or month). For example, "1000 model inferences per day" or "500,000 tokens per hour".
+- **Resources:** Define what you're limiting (like model inferences, tokens, or cost) and the time window (per second, hour, day, week, or month). For example, "1000 model inferences per day", "500,000 tokens per hour", or "$10 per day".
 - **Priority:** Control which rules take precedence when multiple rules could apply to the same request. Higher priority numbers override lower ones.
 - **Scope:** Determine which requests the rule applies to. You can set global limits for all requests, or targeted limits using custom tags like user IDs.
 
@@ -39,8 +39,15 @@ For example:
 # ...
 model_inferences_per_day = 1_000
 tokens_per_second = 1_000_000
+cost_per_day = 10.0
 # ...
 ```
+
+The available resources are:
+
+- `model_inferences`: The number of model inferences made.
+- `tokens`: The number of tokens consumed. You must specify `max_tokens` for a request if a token limit applies to it.
+- `cost`: The cost in dollars. Cost values are specified as floating-point numbers (e.g. `10.0` for $10.00, `0.50` for $0.50).
 
 Time windows are sequential and non-overlapping (i.e. not a sliding window).
 They are aligned to when each rate limit bucket is first initialized (not sliding windows).
@@ -50,6 +57,17 @@ For example, if a rule with a `RESOURCE_per_minute` limit is first used at 10:30
 
 You must specify `max_tokens` for a request if a token limit applies to it.
 The gateway makes a reasonably conservative estimate of token usage and later records the actual usage.
+
+</Note>
+
+<Note>
+
+For cost rate limits, the gateway estimates the cost of each request upfront using a configurable `default_cost` (defaults to $1.00).
+After the request completes, the gateway adjusts the consumed budget based on the actual cost reported by the provider.
+If your model providers don't report cost information, the default estimate is used without adjustment.
+You should only use cost-based rate limiting if you've configured cost for the relevant model providers.
+
+See [Track usage and cost](/operations/track-usage-and-cost) for more information.
 
 </Note>
 
@@ -299,62 +317,17 @@ However, if we make two consecutive inference requests with `user_id = "ceo"`, b
 
 <Tabs>
 
-<Tab title="Python (TensorZero SDK)">
-
-```python
-from tensorzero import TensorZeroGateway
-
-t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
-
-
-def call_llm(user_id):
-    try:
-        return t0.inference(
-            model_name="openai::gpt-4.1-mini",
-            input={
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Tell me a fun fact.",
-                    }
-                ]
-            },
-            # We have rate limits on tokens, so we must be conservative and provide `max_tokens`
-            params={
-                "chat_completion": {
-                    "max_tokens": 1000,
-                }
-            },
-            tags={
-                "user_id": user_id,
-            },
-        )
-    except Exception as e:
-        print(f"Error calling LLM: {e}")
-
-
-# The second should fail
-print(call_llm("intern"))
-print(call_llm("intern"))  # should return None
-
-# Both should work
-print(call_llm("ceo"))
-print(call_llm("ceo"))
-```
-
-</Tab>
-
 <Tab title="Python (OpenAI SDK)">
 
 ```python
 from openai import OpenAI
 
-oai = OpenAI(base_url="http://localhost:3000/openai/v1")
+client = OpenAI(base_url="http://localhost:3000/openai/v1", api_key="not-used")
 
 
 def call_llm(user_id):
     try:
-        return oai.chat.completions.create(
+        return client.chat.completions.create(
             model="tensorzero::model_name::openai::gpt-4.1-mini",
             messages=[
                 {

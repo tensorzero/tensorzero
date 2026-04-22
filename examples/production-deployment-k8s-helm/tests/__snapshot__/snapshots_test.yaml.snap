@@ -1,0 +1,645 @@
+should match snapshot with all features enabled:
+  1: |
+    apiVersion: v1
+    data:
+      tensorzero.toml: |
+        [functions.my_function_name]
+        type = "chat"
+
+        [functions.my_function_name.variants.my_variant_name]
+        type = "chat_completion"
+        model = "openai::gpt-4o-mini"
+
+        # [object_storage]
+        # type = "filesystem"
+        # path = "/app/storage/"
+    kind: ConfigMap
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero
+  2: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: gateway.example.com
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: RELEASE-NAME-tensorzero-gateway
+                    port:
+                      number: 3000
+                path: /
+                pathType: Prefix
+  3: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      ports:
+        - name: http
+          port: 3000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/name: tensorzero
+      type: ClusterIP
+  4: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: gateway
+          app.kubernetes.io/instance: RELEASE-NAME
+          app.kubernetes.io/name: tensorzero
+      template:
+        metadata:
+          annotations:
+            checksum/config: d3bcf2a7076a69d0db895c669a05e87a63711843997a5d35679fdb281b865048
+          labels:
+            app.kubernetes.io/component: gateway
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: tensorzero
+        spec:
+          containers:
+            - args:
+                - --config-file=/app/config/tensorzero.toml
+              command:
+                - gateway
+              env:
+                - name: TENSORZERO_CLICKHOUSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_CLICKHOUSE_URL
+                      name: tensorzero-secret
+                - name: TENSORZERO_GATEWAY_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_GATEWAY_URL
+                      name: tensorzero-secret
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: OPENAI_API_KEY
+                      name: tensorzero-secret
+              image: tensorzero/gateway:2026.4.0
+              imagePullPolicy: IfNotPresent
+              name: tensorzero
+              ports:
+                - containerPort: 3000
+                  name: http
+                  protocol: TCP
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4096Mi
+                requests:
+                  cpu: 2000m
+                  memory: 4096Mi
+              volumeMounts:
+                - mountPath: /app/config
+                  name: config-volume
+                - mountPath: /app/storage
+                  name: storage-volume
+          securityContext:
+            fsGroup: 2000
+          serviceAccountName: gateway-sa
+          volumes:
+            - configMap:
+                name: RELEASE-NAME-tensorzero
+              name: config-volume
+            - name: storage-volume
+              persistentVolumeClaim:
+                claimName: RELEASE-NAME-tensorzero-storage
+  5: |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      labels:
+        app.kubernetes.io/component: storage
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-storage
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 50Gi
+      storageClassName: fast-ssd
+  6: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: ui.example.com
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: RELEASE-NAME-tensorzero-ui
+                    port:
+                      number: 4000
+                path: /
+                pathType: Prefix
+  7: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      ports:
+        - name: http
+          port: 4000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/name: tensorzero
+      type: ClusterIP
+  8: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: ui
+          app.kubernetes.io/instance: RELEASE-NAME
+          app.kubernetes.io/name: tensorzero
+      template:
+        metadata:
+          annotations:
+            checksum/config: d3bcf2a7076a69d0db895c669a05e87a63711843997a5d35679fdb281b865048
+          labels:
+            app.kubernetes.io/component: ui
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: tensorzero
+        spec:
+          containers:
+            - env:
+                - name: TENSORZERO_GATEWAY_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_GATEWAY_URL
+                      name: tensorzero-secret
+              image: tensorzero/ui:2026.4.0
+              imagePullPolicy: IfNotPresent
+              name: ui
+              ports:
+                - containerPort: 4000
+                  name: http
+                  protocol: TCP
+              resources:
+                limits:
+                  cpu: 1000m
+                  memory: 1024Mi
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - mountPath: /app/config
+                  name: config-volume
+          securityContext:
+            fsGroup: 2000
+          serviceAccountName: ui-sa
+          volumes:
+            - configMap:
+                name: RELEASE-NAME-tensorzero
+              name: config-volume
+should match snapshot with default values:
+  1: |
+    apiVersion: v1
+    data:
+      tensorzero.toml: |
+        [functions.my_function_name]
+        type = "chat"
+
+        [functions.my_function_name.variants.my_variant_name]
+        type = "chat_completion"
+        model = "openai::gpt-4o-mini"
+
+        # [object_storage]
+        # type = "filesystem"
+        # path = "/app/storage/"
+    kind: ConfigMap
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero
+  2: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      rules:
+        - host: tensorzero-gateway.local
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: RELEASE-NAME-tensorzero-gateway
+                    port:
+                      number: 3000
+                path: /
+                pathType: Prefix
+  3: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      ports:
+        - name: http
+          port: 3000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/name: tensorzero
+      type: ClusterIP
+  4: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: gateway
+          app.kubernetes.io/instance: RELEASE-NAME
+          app.kubernetes.io/name: tensorzero
+      template:
+        metadata:
+          annotations:
+            checksum/config: d3bcf2a7076a69d0db895c669a05e87a63711843997a5d35679fdb281b865048
+          labels:
+            app.kubernetes.io/component: gateway
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: tensorzero
+        spec:
+          containers:
+            - args:
+                - --config-file=/app/config/tensorzero.toml
+              command:
+                - gateway
+              env:
+                - name: TENSORZERO_CLICKHOUSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_CLICKHOUSE_URL
+                      name: tensorzero-secret
+                - name: TENSORZERO_GATEWAY_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_GATEWAY_URL
+                      name: tensorzero-secret
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: OPENAI_API_KEY
+                      name: tensorzero-secret
+              image: tensorzero/gateway:2026.4.0
+              imagePullPolicy: IfNotPresent
+              name: tensorzero
+              ports:
+                - containerPort: 3000
+                  name: http
+                  protocol: TCP
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4096Mi
+                requests:
+                  cpu: 2000m
+                  memory: 4096Mi
+              volumeMounts:
+                - mountPath: /app/config
+                  name: config-volume
+          securityContext:
+            fsGroup: 2000
+          volumes:
+            - configMap:
+                name: RELEASE-NAME-tensorzero
+              name: config-volume
+  5: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      rules:
+        - host: tensorzero-ui.local
+          http:
+            paths:
+              - backend:
+                  service:
+                    name: RELEASE-NAME-tensorzero-ui
+                    port:
+                      number: 4000
+                path: /
+                pathType: Prefix
+  6: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      ports:
+        - name: http
+          port: 4000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/name: tensorzero
+      type: ClusterIP
+  7: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app.kubernetes.io/component: ui
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-ui
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: ui
+          app.kubernetes.io/instance: RELEASE-NAME
+          app.kubernetes.io/name: tensorzero
+      template:
+        metadata:
+          annotations:
+            checksum/config: d3bcf2a7076a69d0db895c669a05e87a63711843997a5d35679fdb281b865048
+          labels:
+            app.kubernetes.io/component: ui
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: tensorzero
+        spec:
+          containers:
+            - env:
+                - name: TENSORZERO_GATEWAY_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_GATEWAY_URL
+                      name: tensorzero-secret
+              image: tensorzero/ui:2026.4.0
+              imagePullPolicy: IfNotPresent
+              name: ui
+              ports:
+                - containerPort: 4000
+                  name: http
+                  protocol: TCP
+              resources:
+                limits:
+                  cpu: 1000m
+                  memory: 1024Mi
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - mountPath: /app/config
+                  name: config-volume
+          securityContext:
+            fsGroup: 2000
+          volumes:
+            - configMap:
+                name: RELEASE-NAME-tensorzero
+              name: config-volume
+should match snapshot with minimal config (no UI, no ingress, no persistence):
+  1: |
+    apiVersion: v1
+    data:
+      tensorzero.toml: |
+        [functions.my_function_name]
+        type = "chat"
+
+        [functions.my_function_name.variants.my_variant_name]
+        type = "chat_completion"
+        model = "openai::gpt-4o-mini"
+
+        # [object_storage]
+        # type = "filesystem"
+        # path = "/app/storage/"
+    kind: ConfigMap
+    metadata:
+      labels:
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero
+  2: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      ports:
+        - name: http
+          port: 3000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/name: tensorzero
+      type: ClusterIP
+  3: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/instance: RELEASE-NAME
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: tensorzero
+        app.kubernetes.io/version: 2026.4.0
+        helm.sh/chart: tensorzero-0.0.0
+      name: RELEASE-NAME-tensorzero-gateway
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: gateway
+          app.kubernetes.io/instance: RELEASE-NAME
+          app.kubernetes.io/name: tensorzero
+      template:
+        metadata:
+          annotations:
+            checksum/config: d3bcf2a7076a69d0db895c669a05e87a63711843997a5d35679fdb281b865048
+          labels:
+            app.kubernetes.io/component: gateway
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/name: tensorzero
+        spec:
+          containers:
+            - args:
+                - --config-file=/app/config/tensorzero.toml
+              command:
+                - gateway
+              env:
+                - name: TENSORZERO_CLICKHOUSE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_CLICKHOUSE_URL
+                      name: tensorzero-secret
+                - name: TENSORZERO_GATEWAY_URL
+                  valueFrom:
+                    secretKeyRef:
+                      key: TENSORZERO_GATEWAY_URL
+                      name: tensorzero-secret
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: OPENAI_API_KEY
+                      name: tensorzero-secret
+              image: tensorzero/gateway:2026.4.0
+              imagePullPolicy: IfNotPresent
+              name: tensorzero
+              ports:
+                - containerPort: 3000
+                  name: http
+                  protocol: TCP
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4096Mi
+                requests:
+                  cpu: 2000m
+                  memory: 4096Mi
+              volumeMounts:
+                - mountPath: /app/config
+                  name: config-volume
+          securityContext:
+            fsGroup: 2000
+          volumes:
+            - configMap:
+                name: RELEASE-NAME-tensorzero
+              name: config-volume

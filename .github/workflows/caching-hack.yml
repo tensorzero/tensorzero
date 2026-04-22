@@ -33,14 +33,15 @@ jobs:
           - windows-latest
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Cleanup disk space
         if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
-      - name: Install Rust toolchain
+        run: bash ci/free-disk-space.sh
+      - name: Install Rust (from rust-toolchain.toml)
+        working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -50,23 +51,36 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           # We use this cache key from other jobs that need to build the gateway
           shared-key: "build-gateway-cache"
+          workspaces: "crates -> target"
       - name: Install uv
         if: runner.os == 'windows'
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
+
       - name: Install Python 3.10
         if: runner.os == 'windows'
         run: |
-          uv python install 3.10
+          for attempt in 1 2 3; do
+            if uv python install 3.10; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Python 3.10 after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
           echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
         shell: bash
-      - run: |
+
+      - working-directory: crates
+        run: |
           # Run both of these, as they build dependencies with different features
           cargo build --features e2e_tests --tests
           cargo build-e2e

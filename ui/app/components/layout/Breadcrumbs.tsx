@@ -9,6 +9,11 @@ import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 
 export interface BreadcrumbSegment {
+  /**
+   * Use singular labels in entity side sheets ("Inference", "Episode") since
+   * the sheet previews a single entity. Full pages use plural ("Inferences")
+   * since the breadcrumb represents the parent collection.
+   */
   label: string;
   /** If omitted, segment is non-clickable */
   href?: string;

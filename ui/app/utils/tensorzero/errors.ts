@@ -700,7 +700,7 @@ export function getErrorLabel(type: InfraErrorType): string {
     case InfraErrorType.GatewayUnavailable:
       return "Gateway Connection Error";
     case InfraErrorType.GatewayAuthFailed:
-      return "Auth Error";
+      return "Authentication Required";
     case InfraErrorType.GatewayEndpointNotFound:
       return "Route Error";
     case InfraErrorType.ClickHouseUnavailable:

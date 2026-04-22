@@ -1,24 +1,37 @@
 # Rust
 
+- The Cargo workspace root is `crates/`. Run all `cargo` commands from that directory (e.g. `cd crates && cargo check`).
 - Use `cargo check` for quick verification, restrict further (e.g. `cargo check --package tensorzero-core`) if appropriate. For complex changes, you might want to run `cargo check --all-targets --all-features`. Test suite compilation is slow.
-- If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=tensorzero-node build`. Run `cargo check` first to catch compilation errors.
+- If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` (from root), then rebuild the NAPI bindings with `pnpm --filter=@tensorzero/tensorzero-node build`. Run `cargo check` first to catch compilation errors.
 - If you change a signature of a struct, function, and so on, use `grep` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
 - Place crate imports at the top of the file or module using `use crate::...`. Avoid imports inside functions or tests. Avoid long inline crate paths.
-- Run tests with `cargo nextest`.
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
-- When writing tests, key assertions should include a custom message stating the expected behavior.
 - Use `#[expect(clippy::...)]` instead of `#[allow(clippy::...)]`.
+- Prefer early returns over nested `match`/`if` blocks. For example, use `let ... else { return Err(...) };` or `if !condition { return Err(...) }` to reduce nesting.
 - For internally-tagged enums (`#[serde(tag = "...")]`) without lifetimes, use `TensorZeroDeserialize` instead of `Deserialize` for better error messages via `serde_path_to_error`.
+- When converting between `Stored*` types and core types, use explicit match-based conversions (e.g. `From` impls or helper functions). Do not round-trip through `serde_json::to_value`/`serde_json::from_value` for type conversions — `serde_json` is only appropriate when the source is already a `serde_json::Value`.
+
+## Rust Testing
+
+- Run tests with `cargo nextest`.
+- Use `googletest` for new Rust tests.
+- Annotate new tests with `#[gtest]` (googletest crate).
+- Include descriptive messages: use `.expect("why")` over `.unwrap()`, and add custom messages to key assertions.
+- Prefer `expect_that!` to collect all failure messages; use `assert_that!` when subsequent code depends on the assertion.
+- To check a string is non-empty, use `not(eq(""))`.
+- Prefer `matches_pattern!` to assert on multiple struct fields at once rather than separate assertions per field.
+- Use `matches_json!` and `matches_json_literal!` from the `googletest_matchers` crate for JSON assertions.
+- Never compare serialized JSON strings directly — Postgres JSONB does not preserve key order, so parse to `serde_json::Value` and use `matches_json_literal!` instead.
 
 ## For APIs
 
 - Use `_` instead of `-` in API routes.
 - Prefer using `#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]` for ts-rs exports.
 - For any `Option` types visible from the frontend, include `#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so `None` values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
-- Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
+- Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up`.)
 - We use RFC 3339 as the standard format for datetime.
 
 ## The responsibility between API handlers and database interfaces
@@ -39,6 +52,7 @@
   - For aggregates that should be non-null, use the same pattern: `SELECT COUNT(*)::BIGINT as "total!"`.
 - After adding or modifying `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` macros, run `cargo sqlx prepare --workspace -- --all-features --all-targets` to regenerate the query cache. This requires a running Postgres database with up-to-date migrations. The generated `.sqlx` directory must be committed to version control.
 - Prefer "Postgres" instead of "PostgreSQL" in comments, error messages, docs, etc.
+- **Do not run `COUNT(*)` or other aggregations over full inference tables** (`chat_inferences`, `json_inferences`). These tables can be very large and full scans are expensive. Use pre-aggregated rollup tables (e.g. `inference_by_function_statistics`) or filtered partial indexes instead.
 
 # Python Dependencies
 
@@ -48,8 +62,8 @@ We use `uv` to manage Python dependencies.
 
 We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
-- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `internal/tensorzero-node/lib/bindings/`.
-- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`. The generated type definitions will live in `crates/tensorzero-node/lib/bindings/`.
+- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `crates/tensorzero-node` for UI, run `pnpm --filter=@tensorzero/tensorzero-node run build`.
 - Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 
 # CI/CD

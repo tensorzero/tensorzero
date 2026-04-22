@@ -1,0 +1,6 @@
+[project]
+name = "tensorzero-examples-docs-guides-gateway-call-llms-with-image-and-file-inputs"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["openai"]

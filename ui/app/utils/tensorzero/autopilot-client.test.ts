@@ -3,7 +3,10 @@ import type {
   GatewayEvent,
   GatewayListConfigWritesResponse,
 } from "~/types/tensorzero";
-import { listAllConfigWrites } from "./autopilot-client";
+import {
+  extractEditPayloadsFromConfigWrite,
+  listAllConfigWrites,
+} from "./autopilot-client";
 
 function makeEvent(id: string): GatewayEvent {
   return {
@@ -14,6 +17,7 @@ function makeEvent(id: string): GatewayEvent {
       type: "message",
       role: "assistant",
       content: [{ type: "text", text: `event-${id}` }],
+      metadata: {},
     },
   };
 }
@@ -29,6 +33,131 @@ function makeMockClient(pages: GatewayEvent[][]) {
   );
   return { listConfigWrites };
 }
+
+const EDIT_ARGS = {
+  config: {},
+  extra_templates: {},
+  edit: [
+    {
+      operation: "upsert_variant" as const,
+      function_name: "fn",
+      variant_name: "v",
+      variant: { type: "chat_completion" as const },
+    },
+  ],
+};
+
+describe("extractEditPayloadsFromConfigWrite", () => {
+  it("should extract edits from a tool_call event", () => {
+    const event: GatewayEvent = {
+      id: "evt-1",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "tool_call",
+        name: "write_config",
+        arguments: EDIT_ARGS,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        side_info: {} as any,
+        requires_approval: false,
+      },
+    };
+    const result = extractEditPayloadsFromConfigWrite(event);
+    expect(result).toEqual(EDIT_ARGS.edit);
+  });
+
+  it("should extract edits from a tool_result event", () => {
+    const event: GatewayEvent = {
+      id: "evt-2",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "tool_result",
+        tool_call_event_id: "evt-1",
+        outcome: { type: "success", result: "ok" },
+        tool_call_name: "write_config",
+        tool_call_arguments: EDIT_ARGS,
+        tool_call_authorization_source: { type: "automatic" },
+        tool_call_authorization_status: { type: "approved" },
+      },
+    };
+    const result = extractEditPayloadsFromConfigWrite(event);
+    expect(result).toEqual(EDIT_ARGS.edit);
+  });
+
+  it("should extract edits from a tool_call_authorization event", () => {
+    const event: GatewayEvent = {
+      id: "evt-3",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "tool_call_authorization",
+        source: { type: "ui" },
+        tool_call_event_id: "evt-1",
+        status: { type: "approved" },
+        tool_call_name: "write_config",
+        tool_call_arguments: EDIT_ARGS,
+      },
+    };
+    const result = extractEditPayloadsFromConfigWrite(event);
+    expect(result).toEqual(EDIT_ARGS.edit);
+  });
+
+  it("should throw for non-write_config tool_call", () => {
+    const event: GatewayEvent = {
+      id: "evt-4",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "tool_call",
+        name: "other_tool",
+        arguments: {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        side_info: {} as any,
+        requires_approval: false,
+      },
+    };
+    expect(() => extractEditPayloadsFromConfigWrite(event)).toThrow(
+      "Expected write_config tool call but got other_tool",
+    );
+  });
+
+  it("should throw for non-tool event types", () => {
+    const event: GatewayEvent = {
+      id: "evt-5",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "hello" }],
+        metadata: {},
+      },
+    };
+    expect(() => extractEditPayloadsFromConfigWrite(event)).toThrow(
+      "Expected tool_call, tool_result, or tool_call_authorization",
+    );
+  });
+
+  it("should throw when edit payload is missing", () => {
+    const event: GatewayEvent = {
+      id: "evt-6",
+      session_id: "s-1",
+      created_at: "2025-01-01T00:00:00Z",
+      payload: {
+        type: "tool_call",
+        name: "write_config",
+        arguments: { config: {}, extra_templates: {} },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        side_info: {} as any,
+        requires_approval: false,
+      },
+    };
+    expect(() => extractEditPayloadsFromConfigWrite(event)).toThrow(
+      "does not have an edit payload",
+    );
+  });
+});
 
 describe("listAllConfigWrites", () => {
   it("should return empty array when there are no config writes", async () => {

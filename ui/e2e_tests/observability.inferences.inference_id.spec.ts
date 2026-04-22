@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import {
+  installClipboardMock,
+  readMockClipboard,
+} from "./helpers/clipboard-helpers";
 import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test("should show the inference detail page", async ({ page }) => {
@@ -109,7 +113,7 @@ test("should display inferences with old image content", async ({ page }) => {
   await expect(fourthNewImage).toBeVisible();
 });
 
-test("tag navigation works by evaluation_name", async ({ page }) => {
+test("tag navigation works by evaluation_run_id", async ({ page }) => {
   await page.goto(
     "/observability/inferences/0196368f-1b05-7181-b50c-e2ea0acea312",
   );
@@ -117,21 +121,22 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
   // Wait for page to load
   await page.waitForLoadState("networkidle");
 
-  // Use a more specific selector for the code element with entity_extraction
-  // Look for a table cell containing the exact text "entity_extraction"
-  const entityExtractionCell = page
+  // Find the evaluation_run_id tag value and click it
+  const evaluationRunIdCell = page
     .locator("span")
-    .filter({ hasText: /^entity_extraction$/ })
+    .filter({ hasText: /^0196368f-19bd-7082-a677-1c0bf346ff24$/ })
     .first();
 
   // Wait for the element to be visible
-  await entityExtractionCell.waitFor({ state: "visible" });
+  await evaluationRunIdCell.waitFor({ state: "visible" });
 
   // Click the element
-  await entityExtractionCell.click();
+  await evaluationRunIdCell.click();
 
-  // Assert that the page is /evaluations/entity_extraction
-  await expect(page).toHaveURL("/evaluations/entity_extraction");
+  // Assert that the page navigates to the evaluation runs page
+  await expect(page).toHaveURL(
+    "/evaluations/runs?evaluation_run_ids=0196368f-19bd-7082-a677-1c0bf346ff24",
+  );
 });
 
 test("tag navigation works by datapoint_id", async ({ page }) => {
@@ -222,15 +227,14 @@ test("should be able to add boolean feedback via the inference page", async ({
   // Open the metric combobox
   await page.getByRole("combobox", { name: "Metric" }).click();
 
-  // Explicitly wait for the item to be visible before clicking
+  // Select the plain `exact_match` metric and ignore function-level evaluator
+  // metrics whose names are prefixed with `tensorzero::function_name::`.
   const metricItemLocator = page
-    .locator('div[role="dialog"]')
-    .locator('div[cmdk-item=""]')
+    .getByRole("option", { name: "exact_match" })
     .filter({
-      hasText: "exact_match",
+      hasNotText: "tensorzero::function_name::",
     });
   await metricItemLocator.waitFor({ state: "visible" });
-  // Click on the metric in the command list
   await metricItemLocator.click();
 
   // Wait for the radio button to be visible
@@ -635,6 +639,118 @@ test("should handle model inference with null input and output tokens", async ({
 
   // Verify the crab description output is visible in the sheet
   await expect(sheet.getByText("cartoon-style crab").first()).toBeVisible();
+});
+
+test("should display cost chip when cost data exists", async ({ page }) => {
+  // This inference has a model inference with cost = 0.0000348
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the cost chip is visible in the BasicInfo usage section
+  await expect(
+    page.getByText("$0.0000348", { exact: true }).first(),
+  ).toBeVisible();
+
+  // Click on the model inference ID to open the detail sheet
+  await page.getByText("0196367a-8434-7bb3-8f53-3aab0e39ae22").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify cost chip is visible in the model inference sheet
+  await expect(sheet.getByText("$0.0000348", { exact: true })).toBeVisible();
+});
+
+test("should not display cost chip when cost data is missing", async ({
+  page,
+}) => {
+  // This inference has null input/output tokens and no cost field
+  await page.goto(
+    "/observability/inferences/01954435-76a5-7331-8a3a-16296a0ba5b6",
+  );
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // Verify the inference page loads
+  await expect(
+    page.getByText("01954435-76a5-7331-8a3a-16296a0ba5b6").first(),
+  ).toBeVisible();
+
+  // Verify no cost chip is displayed (no dollar sign in usage area)
+  await expect(page.getByText(/^\$\d/)).not.toBeVisible();
+
+  // Click on the model inference ID to open the detail sheet
+  await page.getByText("01954435-76ab-78b1-a76e-d5676b0dd2f9").click();
+
+  // Wait for the sheet/dialog to appear
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor({ state: "visible" });
+
+  // Verify no cost chip in the sheet either
+  await expect(sheet.getByText(/^\$\d/)).not.toBeVisible();
+});
+
+test("should copy messages to clipboard as JSON", async ({ page }) => {
+  await installClipboardMock(page);
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+  await page.waitForLoadState("networkidle");
+
+  // Wait for the button to render (behind Suspense/Await)
+  const copyButton = page.getByRole("button", { name: "Copy Messages" });
+  await expect(copyButton).toBeVisible({ timeout: 10000 });
+  await copyButton.click();
+
+  // Select "JSON" from the dropdown
+  await page.getByRole("menuitem", { name: "JSON" }).click();
+
+  // Verify the success toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains valid JSON with input and output
+  const clipboardText = await readMockClipboard(page);
+  const data = JSON.parse(clipboardText);
+  expect(data).toHaveProperty("input");
+  expect(data).toHaveProperty("output");
+});
+
+test("should copy messages to clipboard as Markdown", async ({ page }) => {
+  await installClipboardMock(page);
+  await page.goto(
+    "/observability/inferences/0196367a-842d-74c2-9e62-67e058632503",
+  );
+  await page.waitForLoadState("networkidle");
+
+  // Wait for the button to render (behind Suspense/Await)
+  const copyButton = page.getByRole("button", { name: "Copy Messages" });
+  await expect(copyButton).toBeVisible({ timeout: 10000 });
+  await copyButton.click();
+
+  // Select "Markdown" from the dropdown
+  await page.getByRole("menuitem", { name: "Markdown" }).click();
+
+  // Verify the success toast appears
+  await expect(
+    page
+      .getByRole("region", { name: /notifications/i })
+      .getByText("Copied to clipboard"),
+  ).toBeVisible();
+
+  // Verify clipboard contains markdown with role headers
+  const clipboardText = await readMockClipboard(page);
+  expect(clipboardText).toContain("## user");
+  expect(clipboardText).toContain("## assistant");
 });
 
 // TODO(#5691): Run all UI e2e tests against Postgres-backed gateway too.

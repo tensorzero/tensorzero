@@ -9,7 +9,7 @@ import type {
   FunctionConfig,
   EvaluationFunctionConfig,
 } from "~/types/tensorzero";
-import { getConfig } from "./config/index.server";
+import { getConfig, getFunctionConfig } from "./config/index.server";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 /**
@@ -35,14 +35,33 @@ const INFERENCE_CACHE_SETTINGS = [
 export type InferenceCacheSetting = (typeof INFERENCE_CACHE_SETTINGS)[number];
 
 interface RunningEvaluationInfo {
+  abortController: AbortController;
   errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
+  cancelled?: boolean;
   started: Date;
 }
 
 // This is a map of evaluation run id to running evaluation info
 const runningEvaluations = new Map<string, RunningEvaluationInfo>();
+
+type RunningEvaluationView = Omit<RunningEvaluationInfo, "abortController">;
+
+/** @internal Exposed for testing only — injects an entry into the in-memory map. */
+export function _test_registerRunningEvaluation(
+  id: string,
+  abortController: AbortController,
+  options?: { variantName?: string; completed?: Date },
+): void {
+  runningEvaluations.set(id, {
+    abortController,
+    errors: [],
+    variantName: options?.variantName ?? "test-variant",
+    started: new Date(),
+    completed: options?.completed,
+  });
+}
 
 /**
  * Returns the running information for a specific evaluation run.
@@ -51,12 +70,33 @@ const runningEvaluations = new Map<string, RunningEvaluationInfo>();
  */
 export function getRunningEvaluation(
   evaluationRunId: string,
-): RunningEvaluationInfo | undefined {
-  return runningEvaluations.get(evaluationRunId);
+): RunningEvaluationView | undefined {
+  const info = runningEvaluations.get(evaluationRunId);
+  if (!info) return undefined;
+  const { abortController: _, ...view } = info;
+  return view;
+}
+
+/**
+ * Cancels a running evaluation by aborting its HTTP connection to the gateway.
+ * Idempotent: returns true if the evaluation exists (whether still running or
+ * already completed), false if not found. Calling abort() on an already-finished
+ * controller is a no-op.
+ */
+export function cancelEvaluation(evaluationRunId: string): boolean {
+  const evaluation = runningEvaluations.get(evaluationRunId);
+  if (!evaluation) {
+    return false;
+  }
+  evaluation.cancelled = true;
+  if (!evaluation.completed) {
+    evaluation.abortController.abort();
+    evaluation.completed = new Date();
+  }
+  return true;
 }
 
 const evaluationFormDataSchema = z.object({
-  evaluation_name: z.string().min(1),
   dataset_name: z.string().min(1),
   variant_name: z.string().min(1),
   concurrency_limit: z
@@ -96,44 +136,84 @@ const evaluationFormDataSchema = z.object({
       },
     ),
 });
-export type EvaluationFormData = z.infer<typeof evaluationFormDataSchema>;
+const legacyEvaluationsFormDataSchema = evaluationFormDataSchema.extend({
+  launch_mode: z.literal("evaluations-legacy"),
+  evaluation_name: z.string().min(1),
+});
+
+const evaluatorsFormDataSchema = evaluationFormDataSchema.extend({
+  launch_mode: z.literal("evaluators"),
+  function_name: z.string().min(1),
+  evaluator_names: z
+    .string()
+    .transform((val) => {
+      try {
+        return JSON.parse(val) as string[];
+      } catch {
+        return [];
+      }
+    })
+    .refine(
+      (val) =>
+        Array.isArray(val) &&
+        val.length > 0 &&
+        val.every((name) => typeof name === "string" && name.length > 0),
+      {
+        message: "At least one evaluator name is required",
+      },
+    ),
+});
+
+const launchEvaluationFormDataSchema = z.union([
+  legacyEvaluationsFormDataSchema,
+  evaluatorsFormDataSchema,
+]);
+
+export type EvaluationFormData = z.infer<typeof launchEvaluationFormDataSchema>;
 
 export function parseEvaluationFormData(
-  data: Record<keyof EvaluationFormData, FormDataEntryValue | null>,
+  data: Record<string, FormDataEntryValue | null>,
 ): EvaluationFormData | null {
-  const result = evaluationFormDataSchema.safeParse(data);
+  const result = launchEvaluationFormDataSchema.safeParse(data);
   return result.success ? result.data : null;
 }
 
 export async function runEvaluation(
-  evaluationName: string,
-  datasetName: string,
-  variantName: string,
-  concurrency: number,
-  inferenceCache: InferenceCacheSetting,
-  maxDatapoints?: number,
-  precisionTargets?: Record<string, number>,
+  params:
+    | {
+        launchMode: "evaluations-legacy";
+        evaluationName: string;
+        datasetName: string;
+        variantName: string;
+        concurrency: number;
+        inferenceCache: InferenceCacheSetting;
+        maxDatapoints?: number;
+        precisionTargets?: Record<string, number>;
+      }
+    | {
+        launchMode: "evaluators";
+        functionName: string;
+        evaluatorNames: string[];
+        datasetName: string;
+        variantName: string;
+        concurrency: number;
+        inferenceCache: InferenceCacheSetting;
+        maxDatapoints?: number;
+        precisionTargets?: Record<string, number>;
+      },
 ): Promise<EvaluationStartInfo> {
   const startTime = new Date();
+  const abortController = new AbortController();
   let evaluationRunId: string | null = null;
   let startResolved = false;
 
-  // Get config and look up evaluation and function configs
   const config = await getConfig();
-  const evaluationConfig = config.evaluations[evaluationName];
-  if (!evaluationConfig) {
-    throw new Error(`Evaluation '${evaluationName}' not found in config`);
-  }
-  // eslint-disable-next-line no-restricted-syntax
-  const functionConfig = config.functions[evaluationConfig.function_name];
-  if (!functionConfig) {
-    throw new Error(
-      `Function '${evaluationConfig.function_name}' not found in config`,
-    );
-  }
-
-  // Convert to minimal EvaluationFunctionConfig
-  const evaluationFunctionConfig = toEvaluationFunctionConfig(functionConfig);
+  const datasetName = params.datasetName;
+  const variantName = params.variantName;
+  const concurrency = params.concurrency;
+  const inferenceCache = params.inferenceCache;
+  const maxDatapoints = params.maxDatapoints;
+  const precisionTargets = params.precisionTargets;
 
   let resolveStart: (value: EvaluationStartInfo) => void = () => {};
   let rejectStart: (reason?: unknown) => void = () => {};
@@ -157,6 +237,7 @@ export async function runEvaluation(
 
         evaluationRunId = startInfo.data.evaluation_run_id;
         runningEvaluations.set(evaluationRunId, {
+          abortController,
           variantName,
           errors: [],
           started: startTime,
@@ -214,18 +295,63 @@ export async function runEvaluation(
 
   // Use the HTTP client instead of native bindings
   const client = getTensorZeroClient();
-  const evaluationPromise = client.runEvaluationStreaming({
-    evaluationConfig,
-    functionConfig: evaluationFunctionConfig,
-    evaluationName,
-    datasetName,
-    variantName,
-    concurrency,
-    inferenceCache,
-    maxDatapoints,
-    precisionTargets,
-    onEvent: handleEvent,
-  });
+  const evaluationPromise =
+    params.launchMode === "evaluations-legacy"
+      ? (async () => {
+          const evaluationConfig = config.evaluations[params.evaluationName];
+          if (!evaluationConfig) {
+            throw new Error(
+              `Evaluation '${params.evaluationName}' not found in config`,
+            );
+          }
+          const functionConfig = await getFunctionConfig(
+            evaluationConfig.function_name,
+            config,
+          );
+          if (!functionConfig) {
+            throw new Error(
+              `Function '${evaluationConfig.function_name}' not found in config`,
+            );
+          }
+
+          return client.runEvaluationStreaming({
+            evaluationConfig,
+            functionConfig: toEvaluationFunctionConfig(functionConfig),
+            evaluationName: params.evaluationName,
+            datasetName,
+            variantName,
+            concurrency,
+            inferenceCache,
+            maxDatapoints,
+            precisionTargets,
+            onEvent: handleEvent,
+            signal: abortController.signal,
+          });
+        })()
+      : (async () => {
+          const functionConfig = await getFunctionConfig(
+            params.functionName,
+            config,
+          );
+          if (!functionConfig) {
+            throw new Error(
+              `Function '${params.functionName}' not found in config`,
+            );
+          }
+
+          return client.runEvaluationStreaming({
+            functionName: params.functionName,
+            evaluatorNames: params.evaluatorNames,
+            datasetName,
+            variantName,
+            concurrency,
+            inferenceCache,
+            maxDatapoints,
+            precisionTargets,
+            onEvent: handleEvent,
+            signal: abortController.signal,
+          });
+        })();
 
   void evaluationPromise
     .then(() => {
@@ -237,6 +363,13 @@ export async function runEvaluation(
       }
     })
     .catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (!startResolved) {
+          rejectStart(error);
+          startResolved = true;
+        }
+        return;
+      }
       if (!startResolved) {
         rejectStart(error);
         startResolved = true;

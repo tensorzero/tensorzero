@@ -19,6 +19,8 @@ interface Env {
   TENSORZERO_GATEWAY_URL: string;
   TENSORZERO_API_KEY?: string;
   TENSORZERO_UI_CONFIG_FILE?: string;
+  TENSORZERO_AUTOPILOT_BETA_TOOLS?: string;
+  autopilotHeaders: Record<string, string>;
 }
 
 let _env: Env | undefined;
@@ -68,12 +70,27 @@ export function getEnv(): Env {
     hasLoggedClickhouseUrlDeprecation = true;
   }
 
+  // Collect TENSORZERO_HEADER_* env vars as autopilot headers.
+  // e.g. TENSORZERO_HEADER_BETA_TOOLS=value -> tensorzero-beta-tools: value
+  const autopilotHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("TENSORZERO_HEADER_") && value) {
+      const headerName =
+        "tensorzero-" +
+        key.slice("TENSORZERO_HEADER_".length).toLowerCase().replace(/_/g, "-");
+      autopilotHeaders[headerName] = value;
+    }
+  }
+
   _env = {
     TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
     TENSORZERO_GATEWAY_URL,
     TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY,
     TENSORZERO_UI_CONFIG_FILE: process.env.TENSORZERO_UI_CONFIG_FILE,
+    TENSORZERO_AUTOPILOT_BETA_TOOLS:
+      process.env.TENSORZERO_AUTOPILOT_BETA_TOOLS,
+    autopilotHeaders,
   };
 
   return _env;

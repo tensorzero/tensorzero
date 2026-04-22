@@ -1,17 +1,21 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   Database,
   FileQuestion,
   KeyRound,
+  Loader2,
   Server,
   Unplug,
 } from "lucide-react";
-import { isRouteErrorResponse } from "react-router";
+import { isRouteErrorResponse, useFetcher } from "react-router";
 import {
   InfraErrorType,
   type ClassifiedError,
   getPageErrorInfo,
 } from "~/utils/tensorzero/errors";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
   ErrorContentCard,
   ErrorContentHeader,
@@ -71,21 +75,104 @@ function GatewayUnavailableContent() {
 }
 
 function GatewayAuthContent() {
+  const fetcher = useFetcher<{ success?: boolean; error?: string }>();
+  const [apiKey, setApiKey] = useState("");
+  const isBusy = fetcher.state !== "idle";
+  const error = fetcher.data?.error;
+
+  // On success the fetcher's Set-Cookie response stores the key in the
+  // browser. React Router then auto-revalidates the root loader, which
+  // succeeds with the cookie → infraError becomes null → dialog disappears.
+
+  const handleSubmit = () => {
+    if (apiKey.trim()) {
+      fetcher.submit(
+        { apiKey },
+        { method: "post", action: "/api/auth/set_gateway_key" },
+      );
+    }
+  };
+
   return (
-    <ErrorContentCard>
-      <ErrorContentHeader
-        icon={KeyRound}
-        title="Authentication Failed"
-        description="Unable to authenticate with the TensorZero Gateway."
-      />
-      <TroubleshootingSection>
-        <>
-          Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is set
-          correctly
-        </>
-        <>Ensure the API key has not expired or been revoked</>
-        <>Check Gateway logs for authentication details</>
-      </TroubleshootingSection>
+    <ErrorContentCard className="w-[22rem]">
+      <div className="flex flex-col items-center px-6 pt-9 pb-6 text-center">
+        <KeyRound className="mb-5 h-8 w-8 text-orange-500 dark:text-orange-400" />
+        <h2 className="text-foreground text-lg font-medium">
+          TensorZero Gateway requires
+          <br />
+          an API key
+        </h2>
+        <ol className="text-muted-foreground mt-4 space-y-2 text-left text-sm">
+          <li className="flex items-start gap-2">
+            <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+              1
+            </span>
+            <span>
+              Verify <ErrorInlineCode>TENSORZERO_API_KEY</ErrorInlineCode> is
+              set on the UI server
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+              2
+            </span>
+            <span>Ensure gateway key has not expired or been revoked</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="bg-muted text-muted-foreground flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs">
+              3
+            </span>
+            <span>Check gateway logs for authentication details</span>
+          </li>
+        </ol>
+      </div>
+      <div className="px-6">
+        <div className="flex items-center gap-3">
+          <div className="border-border flex-1 border-t" />
+          <span className="text-muted-foreground/60 text-xs font-medium uppercase">
+            or
+          </span>
+          <div className="border-border flex-1 border-t" />
+        </div>
+      </div>
+      <div className="px-6 pt-4 pb-6">
+        <label
+          htmlFor="gateway-api-key"
+          className="text-foreground text-sm font-medium"
+        >
+          Authenticate this browser
+        </label>
+        <div className="mt-2">
+          <Input
+            id="gateway-api-key"
+            type="password"
+            placeholder="sk-t0-..."
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            disabled={isBusy}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+            }}
+          />
+          {/* Animate height to prevent layout jump when error appears */}
+          <div
+            className="grid transition-[grid-template-rows] duration-200 ease-out"
+            style={{ gridTemplateRows: error ? "1fr" : "0fr" }}
+          >
+            <p className="overflow-hidden text-destructive text-sm">
+              {error && <span className="mt-1.5 block">{error}</span>}
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          className="mt-4 w-full"
+          disabled={isBusy || !apiKey.trim()}
+          onClick={handleSubmit}
+        >
+          {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect"}
+        </Button>
+      </div>
     </ErrorContentCard>
   );
 }

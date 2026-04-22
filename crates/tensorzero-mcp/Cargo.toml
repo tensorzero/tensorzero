@@ -1,0 +1,30 @@
+[package]
+name = "tensorzero-mcp"
+version.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tensorzero-core = { path = "../tensorzero-core" }
+autopilot-tools = { path = "../autopilot-tools" }
+autopilot-client = { path = "../autopilot-client" }
+durable-tools = { path = "../durable-tools" }
+rmcp = { version = "1.5.0", features = [
+    "server",
+    "macros",
+    "transport-streamable-http-server",
+] }
+async-trait = { workspace = true }
+axum = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+
+[features]
+e2e_tests = []
+
+[lints]
+workspace = true

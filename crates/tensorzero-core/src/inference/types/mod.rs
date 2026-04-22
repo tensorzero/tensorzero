@@ -1,0 +1,3154 @@
+//! Main TensorZero types for inference requests and responses
+//!
+//! During inference processing, we transform between several different input types:
+//! * Input/InputMessage/InputMessageContent:
+//!
+//!   These types hold an input request deserialized directly from the client.
+//!   At this point, we have not fetched any network resources (e.g. file urls),
+//!   and we may have various legacy input types (e.g. `{"type": "text", "value": ...}`).
+//!   Templates have not yet been applied
+//! * `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent`:
+//!
+//!   These types hold input with legacy input types normalized
+//!   (e.g. a `{"type": "text", "value": ...}` block is converted to a `{"type": "text", "template": <role>, "arguments": {}}` block
+//!   with the template name chosen based on the message role).
+//!   We also construct (but do not yet `.await`) and store futures to fetch any file urls in the input.
+//!   Templates have not yet been applied
+//! * `ResolvedInput/ResolvedInputMessage/ResolvedInputMessageContent`:
+//!
+//!  These types are almost the same as the `LazyResolvedInput`/`LazyResolvedInputMessage`/`LazyResolvedInputMessageContent` types,
+//!  but each file future is now resolved to an in-memory file. No network requests are needed to resolve any data
+//!  within these input types.
+//!  Templates have been not yet been applied.
+//! * `RequestMessage/ContentBlock`:
+//!
+//!  These types hold input specialized for a particular variant.
+//!  Templating has been applied, which prevents converting back to a `LazyResolvedInput`/`ResolvedInput` type.
+//!  All files are fully resolved to in-memory files.
+//! * `StoredInput/StoredInputMessage/StoredInputMessageContent`:
+//!
+//!  These types represent the actual data written to `ChatInference`/`JsonInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
+//! * `StoredRequestMessage/StoredContentBlock`:
+//!
+//!  These types represent the actual data written to `ModelInference` in ClickHouse.
+//!  Files are stored as object store paths, without the actual file contents (since we only write paths to ClickHouse)
+//!  Templating has been applied.
+//!
+//! During normal inference processing, the types are transformed as:
+//!
+//!                                                   -> `RequestMessage` -> `StoredRequestMessage`
+//! `Input` -> `LazyResolvedInput` -> `ResolvedInput`
+//!                                                   -> `StoredInput`
+//!
+//! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
+//! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
+
+use extra_body::UnfilteredInferenceExtraBody;
+
+pub use file::{
+    Base64File, Base64FileMetadata, Detail, File, FileExt, ObjectStorageError, ObjectStorageFile,
+    ObjectStoragePointer, UrlFile,
+};
+// Re-export content types from tensorzero-types
+pub use tensorzero_types::{
+    Arguments, ContentBlockChatOutput, FunctionType, JsonInferenceOutput, RawText, System,
+    Template, Text, Thought, ThoughtSummaryBlock, Unknown,
+};
+// Re-export message types from tensorzero-types
+use futures::FutureExt;
+use futures::future::{join_all, try_join_all};
+use itertools::Itertools;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+pub use resolved_input::{
+    LazyFileExt, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use tensorzero_derive::TensorZeroDeserialize;
+pub use tensorzero_types::{Input, InputMessage, InputMessageContent, TextKind, ToolCallWrapper};
+use uuid::Uuid;
+
+use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::ObjectStoreInfo;
+use crate::config::snapshot::SnapshotHash;
+use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
+use crate::endpoints::object_storage::get_object;
+use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
+use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
+use crate::inference::types::resolved_input::{
+    LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent, write_file,
+};
+use crate::inference::types::storage::{StorageKind, StorageKindExt};
+use crate::inference::types::stored_input::StoredFile;
+use crate::inference::types::usage::aggregate_usage_across_model_inferences;
+use crate::rate_limiting::{
+    EstimatedRateLimitResourceUsage, RateLimitResource, RateLimitResourceUsage,
+    RateLimitedInputContent, RateLimitedRequest, RateLimitingConfig, decimal_cost_to_nano_cost,
+    get_estimated_tokens,
+};
+use crate::serde_util::{deserialize_optional_json_string, serialize_optional_json_string};
+use crate::tool::{
+    InferenceResponseToolCall, InferenceResponseToolCallExt, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolResult, deserialize_optional_tool_info,
+};
+use crate::variant::{InferenceConfig, JsonMode};
+
+pub mod batch;
+pub mod chat_completion_inference_params;
+pub mod extra_body;
+pub mod extra_headers;
+pub mod extra_stuff;
+pub mod file;
+#[cfg(feature = "pyo3")]
+pub mod pyo3_helpers;
+pub mod resolved_input;
+pub mod role;
+pub mod storage;
+pub mod stored_input;
+pub mod streams;
+pub mod usage;
+
+pub use resolved_input::ResolvedRequestMessage;
+pub use role::Role;
+pub use stored_input::{
+    StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
+};
+pub use streams::{
+    ChatInferenceResultChunk, CollectChunksArgs, InferenceResultChunk, InferenceResultStream,
+    JsonInferenceResultChunk, collect_chunks, stream_with_deadline,
+};
+pub use usage::{ApiType, RawResponseEntry, RawUsageEntry, Usage};
+
+pub use tensorzero_inference_types::{
+    AllowedTools, AllowedToolsChoice, BatchStatus, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, FileFuture, FileUrl, FinishReason, FlattenUnknown, FunctionToolDef,
+    Latency, LazyFile, ModelInferenceRequest, ModelInferenceRequestBuilder,
+    ModelInferenceRequestJsonMode, OpenAICustomTool, OpenAICustomToolFormat,
+    OpenAIGrammarDefinition, OpenAIGrammarSyntax, PeekableProviderInferenceResponseStream,
+    PendingObjectStoreFile, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
+    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, ProviderTool,
+    ProviderToolCallConfig, ProviderToolScope, ProviderToolScopeModelProvider, RequestMessage,
+    StartBatchProviderInferenceResponse, TextChunk, ThoughtChunk, ToolConfigRef, UnknownChunk,
+};
+
+/*
+ * Data flow in TensorZero
+ *
+ * The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
+ * Most of them are defined below.
+ */
+
+#[derive(Copy, Clone)]
+pub struct FetchContext<'a> {
+    pub client: &'a TensorzeroHttpClient,
+    pub object_store_info: &'a Option<ObjectStoreInfo>,
+}
+
+/// Extension trait for `Input` that provides core-specific transformation methods.
+pub trait InputExt {
+    fn into_lazy_resolved_input(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInput, Error>;
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error>;
+}
+
+impl InputExt for Input {
+    fn into_lazy_resolved_input(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInput, Error> {
+        Ok(LazyResolvedInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(|message| message.into_lazy_resolved_input_message(context))
+                .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+
+    fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(InputMessage::into_stored_input_message_without_file_handling)
+                .try_collect()?,
+        })
+    }
+}
+
+impl LazyResolvedInput {
+    /// Resolves any nested network resources in the input.
+    /// Currently, this resolves input image urls into base64-encoded images.
+    pub async fn resolve(self) -> Result<ResolvedInput, Error> {
+        let messages = futures::future::try_join_all(
+            self.messages
+                .into_iter()
+                .map(resolved_input::LazyResolvedInputMessage::resolve),
+        )
+        .await?;
+        Ok(ResolvedInput {
+            system: self.system,
+            messages,
+        })
+    }
+
+    /// Turns the input into a StoredInput, avoiding resolving network resources if possible.
+    pub async fn into_stored_input(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInput, Error> {
+        let stored_messages = futures::future::try_join_all(
+            self.messages
+                .into_iter()
+                .map(|message| message.into_stored_input_message(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInput {
+            system: self.system,
+            messages: stored_messages,
+        })
+    }
+}
+
+/// Extension trait for `InputMessage` that provides core-specific transformation methods.
+pub trait InputMessageExt {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessage, Error>;
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error>;
+}
+
+impl InputMessageExt for InputMessage {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessage, Error> {
+        Ok(LazyResolvedInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(|content| content.into_lazy_resolved_input_message(context))
+                .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+
+    fn into_stored_input_message_without_file_handling(self) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .try_collect()?,
+        })
+    }
+}
+
+impl LazyResolvedInputMessage {
+    /// Turns the input into a ResolvedInputMessage by fetching network resources for Files.
+    pub async fn resolve(self) -> Result<ResolvedInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content
+                .into_iter()
+                .map(resolved_input::LazyResolvedInputMessageContent::resolve),
+        )
+        .await?;
+        Ok(ResolvedInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+
+    /// Turns the input into a StoredInputMessage by converting Files to StoredFiles, bypassing resolving network resources if possible.
+    pub async fn into_stored_input_message(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content
+                .into_iter()
+                .map(|content| content.into_stored_input_message_content(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+}
+
+/// Extracts the `StorageKind` from the `FetchContext`, or returns an error if the object store is not configured.
+fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
+    let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::ObjectStoreUnconfigured {
+            block_type: "file".to_string(),
+        })
+    })?;
+    Ok(object_store_info.kind.clone())
+}
+
+/// Extension trait for `InputMessageContent` that provides core-specific transformation methods.
+pub trait InputMessageContentExt {
+    /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
+    /// we can remove the `role` parameter.
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessageContent, Error>;
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error>;
+}
+
+impl InputMessageContentExt for InputMessageContent {
+    fn into_lazy_resolved_input_message(
+        self,
+        context: &FetchContext<'_>,
+    ) -> Result<LazyResolvedInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                LazyResolvedInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(raw_text)
+            }
+            InputMessageContent::Thought(thought) => {
+                LazyResolvedInputMessageContent::Thought(thought)
+            }
+            InputMessageContent::Template(template) => {
+                LazyResolvedInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                LazyResolvedInputMessageContent::ToolCall(tool_call.into_tool_call())
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                LazyResolvedInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match &file {
+                    // User provided a file URL.
+                    // We create a lazy future that will fetch the file when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows model providers that support URL forwarding to skip the fetch entirely.
+                    // When the future does run, it:
+                    // 1. Fetches the file from the URL
+                    // 2. Computes a content-addressed `storage_path`
+                    // 3. Returns a `ObjectStorageFile` with the data
+                    File::Url(UrlFile {
+                        url,
+                        mime_type,
+                        detail,
+                        filename,
+                    }) => {
+                        // Check that we have an object store *outside* of the future that we're going to store in
+                        // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
+                        // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
+                        let storage_kind = get_storage_kind(context)?;
+                        let client = context.client.clone();
+                        // Construct a future that will actually fetch the file URL from the network.
+                        // Important: we do *not* use `tokio::spawn` here. As a result, the future
+                        // will not actually begin executing (including opening the network connection)
+                        // until the first time the `Shared` wrapper is `.await`ed.
+                        // This ensures that if we never actually need to download the file
+                        // (due to model providers forwarding image urls, and object store observability being disabled),
+                        // we will skip downloading the file entirely.
+                        let url = url.clone();
+                        let mime_type = mime_type.clone();
+                        let detail_clone = detail.clone();
+                        let detail_for_future = detail.clone();
+                        let filename_for_future = filename.clone();
+                        let filename_clone = filename.clone();
+                        let delayed_file_future = async move {
+                            let base64_file = file.take_or_fetch(&client).await?;
+                            let path = storage_kind.file_path(&base64_file)?;
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: base64_file.source_url.clone(),
+                                    mime_type: base64_file.mime_type.clone(),
+                                    storage_path: path,
+                                    detail: detail_for_future,
+                                    filename: filename_for_future,
+                                },
+                                data: base64_file.data().to_string(),
+                            })
+                        };
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
+                            file_url: FileUrl {
+                                url,
+                                mime_type,
+                                detail: detail_clone,
+                                filename: filename_clone,
+                            },
+                            future: delayed_file_future.boxed().shared(),
+                        }))
+                    }
+                    // User provided base64-encoded file data.
+                    // We immediately:
+                    // 1. Compute a content-addressed `storage_path` from the data
+                    // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
+                    // The data is ready to use but not yet persisted to object storage.
+                    // The write will happen later in `into_stored_input_message_content`.
+                    File::Base64(base64_file) => {
+                        let source_url = &base64_file.source_url;
+                        let mime_type = &base64_file.mime_type;
+                        let data = base64_file.data();
+                        let detail = &base64_file.detail;
+                        let filename = &base64_file.filename;
+
+                        let storage_kind = get_storage_kind(context)?;
+                        let base64_file_for_path = Base64File::new(
+                            source_url.clone(),
+                            Some(mime_type.clone()),
+                            data.to_string(),
+                            // We explicitly set detail to None when computing the storage path.
+                            // This is intentional for content-addressing: the detail parameter controls
+                            // how providers process the image (resolution/token cost), but shouldn't
+                            // affect the file's hash or storage location. The same image file with
+                            // different detail values should map to the same storage path for deduplication.
+                            None,
+                            // We also set filename to None when computing the storage path for the same reason.
+                            // The filename is metadata that shouldn't affect the file's hash or storage location.
+                            None,
+                        )?;
+                        let path = storage_kind.file_path(&base64_file_for_path)?;
+
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
+                            PendingObjectStoreFile(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url.clone(),
+                                    mime_type: mime_type.clone(),
+                                    storage_path: path,
+                                    detail: detail.clone(),
+                                    filename: filename.clone(),
+                                },
+                                data: data.to_string(),
+                            }),
+                        )))
+                    }
+                    // # File::ObjectStoragePointer
+                    //
+                    // User provided a reference to a file already in object storage.
+                    // We create a lazy future that will fetch the file data when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
+                    // When the future does run, it fetches the file from object storage.
+                    //
+                    // # File::ObjectStorageError
+                    //
+                    // User provided a failed that we previously attempted and failed to fetch from object storage.
+                    // Here, we disregard the previous attempt and retry, as if the user had only sent the pointer.
+                    File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        let source_url_for_future = file.source_url.clone();
+                        let object_store_info = context.object_store_info.clone();
+                        let owned_storage_path = file.storage_path.clone();
+                        let mime_type_for_closure = file.mime_type.clone();
+                        let detail_for_future = file.detail.clone();
+                        let filename_for_future = file.filename.clone();
+                        let filename_clone = file.filename.clone();
+                        // Construct a future that will fetch the file from the object store.
+                        // Important: the future will not actually begin executing (including opening the network connection)
+                        // until the first time the `Shared` wrapper is `.await`ed.
+                        let delayed_file_future = async move {
+                            let object_response =
+                                get_object(object_store_info.as_ref(), owned_storage_path.clone())
+                                    .await?;
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url_for_future,
+                                    mime_type: mime_type_for_closure,
+                                    storage_path: owned_storage_path,
+                                    detail: detail_for_future,
+                                    filename: filename_for_future,
+                                },
+                                data: object_response.data,
+                            })
+                        };
+                        LazyResolvedInputMessageContent::File(Box::new(
+                            LazyFile::ObjectStoragePointer {
+                                metadata: Base64FileMetadata {
+                                    source_url: file.source_url.clone(),
+                                    mime_type: file.mime_type.clone(),
+                                    detail: file.detail.clone(),
+                                    filename: filename_clone,
+                                },
+                                storage_path: file.storage_path.clone(),
+                                future: delayed_file_future.boxed().shared(),
+                            },
+                        ))
+                    }
+                    // User provided a file reference with data already in memory.
+                    // This typically comes from roundtripping (e.g., `get_datapoints` → `update_datapoints`).
+                    // The file is already persisted at `storage_path`, and we have the data available.
+                    // No fetch or write is needed - we can use it directly.
+                    File::ObjectStorage(resolved_file) => LazyResolvedInputMessageContent::File(
+                        Box::new(LazyFile::ObjectStorage(resolved_file.clone())),
+                    ),
+                }
+            }
+            InputMessageContent::Unknown(unknown) => {
+                LazyResolvedInputMessageContent::Unknown(unknown)
+            }
+        })
+    }
+
+    fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                StoredInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
+            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
+            InputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call.into_tool_call())
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match file {
+                    // If `file` is external, we cannot convert it directly to a StoredFile.
+                    File::Url(_) | File::Base64(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Cannot resolve file input without a fetch context. Please provide a fetch context when creating the input.".to_string()
+                        }));
+                    }
+                    // If `file` is present in our object storage, even if it's an error, we can represent it as a StoredFile.
+                    File::ObjectStorage(ObjectStorageFile { file, .. })
+                    | File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                    }
+                }
+            }
+            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
+        })
+    }
+}
+
+impl LazyResolvedInputMessageContent {
+    /// Converts lazy content into fully resolved content by executing any pending operations.
+    /// For files, this means fetching data if needed (from URLs or object storage).
+    /// This is used when we need the actual file data (e.g., for inference with providers
+    /// that don't support URL forwarding, or for observability).
+    pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
+        Ok(match self {
+            LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
+            LazyResolvedInputMessageContent::Template(template) => {
+                ResolvedInputMessageContent::Template(template)
+            }
+            LazyResolvedInputMessageContent::ToolCall(tool_call) => {
+                ResolvedInputMessageContent::ToolCall(tool_call)
+            }
+            LazyResolvedInputMessageContent::ToolResult(tool_result) => {
+                ResolvedInputMessageContent::ToolResult(tool_result)
+            }
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                ResolvedInputMessageContent::RawText(raw_text)
+            }
+            LazyResolvedInputMessageContent::Thought(thought) => {
+                ResolvedInputMessageContent::Thought(thought)
+            }
+            LazyResolvedInputMessageContent::File(file) => match *file {
+                // File from URL: await the fetch future to get the data.
+                // This performs the network request and returns the file data.
+                LazyFile::Url {
+                    future,
+                    file_url: _,
+                } => ResolvedInputMessageContent::File(Box::new(future.await?)),
+                // Base64 file: unwrap from `PendingObjectStoreFile`.
+                // The data is already in memory, just needs type conversion.
+                LazyFile::Base64(pending) => ResolvedInputMessageContent::File(Box::new(pending.0)),
+                // File from object storage: await the fetch future to get the data.
+                // This fetches the file from object storage and returns the file data.
+                LazyFile::ObjectStoragePointer { future, .. } => {
+                    ResolvedInputMessageContent::File(Box::new(future.await?))
+                }
+                // Already resolved file: data is in memory, return it directly.
+                LazyFile::ObjectStorage(resolved) => {
+                    ResolvedInputMessageContent::File(Box::new(resolved))
+                }
+            },
+            LazyResolvedInputMessageContent::Unknown(unknown) => {
+                ResolvedInputMessageContent::Unknown(unknown)
+            }
+        })
+    }
+
+    /// Converts the message content into a StoredInputMessageContent for database storage.
+    /// This method optimizes file handling by:
+    /// - Skipping fetches when the file is already in object storage (`ObjectStoragePointer`, `ObjectStorageFile`)
+    /// - Only writing files that aren't already persisted (`Url`, `Base64`)
+    /// This enables efficient roundtripping: data from the database can be passed back
+    /// to new requests without re-fetching or re-writing files.
+    pub async fn into_stored_input_message_content(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            LazyResolvedInputMessageContent::File(file) => match *file {
+                // File reference to object storage without data in memory.
+                // Origin: User provided File::ObjectStorage (e.g., from list_datapoints)
+                // The file is already persisted at storage_path, so we skip both fetch and write.
+                // We discard the future without awaiting (avoiding the pending fetch operation)
+                // and directly convert the metadata and storage_path into a StoredFile.
+                LazyFile::ObjectStoragePointer {
+                    metadata,
+                    storage_path,
+                    future: _,
+                } => StoredInputMessageContent::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: metadata.source_url,
+                    mime_type: metadata.mime_type,
+                    storage_path,
+                    detail: metadata.detail,
+                    filename: metadata.filename,
+                }))),
+                // File reference to object storage with data in memory.
+                // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
+                //         User provided File::ObjectStorageFile with file data attached
+                // The file is already persisted at storage_path, so we skip the write.
+                // We drop the in-memory data and keep only the metadata for storage.
+                LazyFile::ObjectStorage(resolved) => {
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+                }
+                // File from a URL that needs to be fetched and stored.
+                // Origin: User provided File::Url
+                // We fetch the file from the URL, then write it to object storage.
+                LazyFile::Url {
+                    future,
+                    file_url: _,
+                } => {
+                    let resolved_file = future.await?;
+                    let base64_file = Base64File::new(
+                        resolved_file.file.source_url.clone(),
+                        Some(resolved_file.file.mime_type.clone()),
+                        resolved_file.data.clone(),
+                        resolved_file.file.detail.clone(),
+                        resolved_file.file.filename.clone(),
+                    )?;
+                    write_file(
+                        object_store_info,
+                        base64_file,
+                        resolved_file.file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved_file.file)))
+                }
+                // Base64-encoded file data that needs to be written to storage.
+                // Origin: User provided File::Base64 (fresh file data)
+                // We write the base64 data to object storage.
+                // The PendingObjectStoreFile wrapper type signals this write requirement.
+                LazyFile::Base64(pending) => {
+                    let base64_file = Base64File::new(
+                        pending.0.file.source_url.clone(),
+                        Some(pending.0.file.mime_type.clone()),
+                        pending.0.data.clone(),
+                        pending.0.file.detail.clone(),
+                        pending.0.file.filename.clone(),
+                    )?;
+                    write_file(
+                        object_store_info,
+                        base64_file,
+                        pending.0.file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(StoredFile(pending.0.file)))
+                }
+            },
+            // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
+            other => other.resolve().await?.into_stored_input_message_content(),
+        })
+    }
+}
+
+impl From<StoredInputMessage> for InputMessage {
+    fn from(stored_input_message: StoredInputMessage) -> Self {
+        InputMessage {
+            role: stored_input_message.role,
+            content: stored_input_message
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
+    }
+}
+
+// RateLimitedInputContent impls for types re-exported from tensorzero-types
+impl RateLimitedInputContent for Text {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Text { text } = self;
+        get_estimated_tokens(text)
+    }
+}
+
+impl RateLimitedInputContent for RawText {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.value)
+    }
+}
+
+impl RateLimitedInputContent for Thought {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Thought {
+            text,
+            signature,
+            // We intentionally do *not* count the summary towards the token usage
+            // Even though OpenAI responses requires passing the summaries back in a multi-turn
+            // conversation, we expect that the actual model will ignore them, since they're
+            // not the internal model thoughts.
+            summary: _,
+            provider_type: _,
+            // We don't count extra_data towards token usage as it's opaque provider data
+            extra_data: _,
+        } = self;
+        text.as_ref().map_or(0, |text| get_estimated_tokens(text))
+            + signature
+                .as_ref()
+                .map_or(0, |signature| get_estimated_tokens(signature))
+    }
+}
+
+impl RateLimitedInputContent for Template {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let Template { name, arguments } = self;
+        let args = &arguments.0;
+        let args_tokens: u64 = args
+            .iter()
+            .map(|(key, value)| {
+                get_estimated_tokens(key) + get_estimated_tokens(&value.to_string())
+            })
+            .sum();
+        get_estimated_tokens(name) + args_tokens
+    }
+}
+
+impl RateLimitedInputContent for ToolCallWrapper {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ToolCallWrapper::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ToolCallWrapper::InferenceResponseToolCall(tool_call) => {
+                get_estimated_tokens(&tool_call.raw_name)
+                    + get_estimated_tokens(&tool_call.raw_arguments)
+            }
+        }
+    }
+}
+
+impl RateLimitedInputContent for File {
+    fn estimated_input_token_usage(&self) -> u64 {
+        // TODO: improve this estimate
+        10_000
+    }
+}
+
+impl RateLimitedInputContent for InputMessageContent {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            InputMessageContent::Text(text) => text.estimated_input_token_usage(),
+            InputMessageContent::Template(template) => template.estimated_input_token_usage(),
+            InputMessageContent::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            InputMessageContent::ToolResult(tool_result) => {
+                tool_result.estimated_input_token_usage()
+            }
+            InputMessageContent::RawText(raw_text) => raw_text.estimated_input_token_usage(),
+            InputMessageContent::Thought(thought) => thought.estimated_input_token_usage(),
+            InputMessageContent::File(file) => file.estimated_input_token_usage(),
+            InputMessageContent::Unknown(_) => 0,
+        }
+    }
+}
+
+impl RateLimitedInputContent for InputMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        self.content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
+pub trait ContentBlockExt {
+    async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error>;
+    async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error>;
+}
+
+impl ContentBlockExt for ContentBlock {
+    async fn into_stored_content_block(self) -> Result<StoredContentBlock, Error> {
+        match self {
+            ContentBlock::Text(text) => Ok(StoredContentBlock::Text(text)),
+            ContentBlock::ToolCall(tool_call) => Ok(StoredContentBlock::ToolCall(tool_call)),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(StoredContentBlock::ToolResult(tool_result))
+            }
+            ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?.clone().into_owned();
+                Ok(StoredContentBlock::File(Box::new(
+                    File::ObjectStorage(resolved_file).into_stored_file()?,
+                )))
+            }
+            ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
+            ContentBlock::Unknown(unknown) => Ok(StoredContentBlock::Unknown(unknown)),
+        }
+    }
+
+    async fn into_resolved_content_block(self) -> Result<ResolvedContentBlock, Error> {
+        match self {
+            ContentBlock::Text(text) => Ok(ResolvedContentBlock::Text(text)),
+            ContentBlock::ToolCall(tool_call) => Ok(ResolvedContentBlock::ToolCall(tool_call)),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(ResolvedContentBlock::ToolResult(tool_result))
+            }
+            ContentBlock::File(file) => Ok(ResolvedContentBlock::File(Box::new(
+                file.resolve().await?.clone().into_owned(),
+            ))),
+            ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
+            ContentBlock::Unknown(unknown) => Ok(ResolvedContentBlock::Unknown(unknown)),
+        }
+    }
+}
+
+impl std::fmt::Display for ResolvedRequestMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl RateLimitedInputContent for ContentBlock {
+    fn estimated_input_token_usage(&self) -> u64 {
+        match self {
+            ContentBlock::Text(text) => text.estimated_input_token_usage(),
+            ContentBlock::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
+            ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
+            ContentBlock::File(file) => file.estimated_input_token_usage(),
+            ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
+            ContentBlock::Unknown(_) => 0,
+        }
+    }
+}
+
+/// The version of `ContentBlock` that is stored in ClickHouse.
+/// This is almost identical to `ContentBlock`, but without `File` data.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum StoredContentBlock {
+    Text(Text),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    #[serde(alias = "image")]
+    File(Box<StoredFile>),
+    Thought(Thought),
+    Unknown(Unknown),
+}
+
+/// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
+/// As a result, it can implement both `Serialize` and `Deserialize`
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum ResolvedContentBlock {
+    Text(Text),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    File(Box<ObjectStorageFile>),
+    Thought(Thought),
+    Unknown(Unknown),
+}
+
+impl ResolvedContentBlock {
+    /// Converts a `ResolvedContentBlock` into a `ContentBlock`.
+    pub fn into_content_block(self) -> ContentBlock {
+        match self {
+            ResolvedContentBlock::Text(text) => ContentBlock::Text(text),
+            ResolvedContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
+            ResolvedContentBlock::ToolResult(tool_result) => ContentBlock::ToolResult(tool_result),
+            ResolvedContentBlock::File(resolved) => {
+                ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
+            }
+            ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
+            ResolvedContentBlock::Unknown(unknown) => ContentBlock::Unknown(unknown),
+        }
+    }
+}
+
+/// Holds the variants types of `ContentBlockOutput` without any data
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ContentBlockOutputType {
+    Text,
+    ToolCall,
+    Thought,
+    Unknown,
+}
+
+/// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
+/// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
+///
+/// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
+/// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
+/// and re-validate.
+pub async fn validate_content_block_chat_output(
+    output: ContentBlockChatOutput,
+    tool_call_config: Option<&ToolCallConfig>,
+) -> ContentBlockChatOutput {
+    if let ContentBlockChatOutput::ToolCall(input_tool_call) = output {
+        let unvalidated_tool_call = ToolCall {
+            name: input_tool_call.raw_name,
+            arguments: input_tool_call.raw_arguments,
+            id: input_tool_call.id,
+        };
+        let validated_tool_call =
+            InferenceResponseToolCall::new_from_tool_call(unvalidated_tool_call, tool_call_config)
+                .await;
+        ContentBlockChatOutput::ToolCall(validated_tool_call)
+    } else {
+        output
+    }
+}
+
+pub trait RequestMessageExt {
+    async fn into_stored_message(self) -> Result<StoredRequestMessage, Error>;
+    async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error>;
+}
+
+impl RequestMessageExt for RequestMessage {
+    async fn into_stored_message(self) -> Result<StoredRequestMessage, Error> {
+        Ok(StoredRequestMessage {
+            role: self.role,
+            content: try_join_all(
+                self.content
+                    .into_iter()
+                    .map(ContentBlockExt::into_stored_content_block),
+            )
+            .await?,
+        })
+    }
+
+    async fn into_resolved_message(self) -> Result<ResolvedRequestMessage, Error> {
+        Ok(ResolvedRequestMessage {
+            role: self.role,
+            content: try_join_all(
+                self.content
+                    .into_iter()
+                    .map(ContentBlockExt::into_resolved_content_block),
+            )
+            .await?,
+        })
+    }
+}
+
+impl RateLimitedInputContent for RequestMessage {
+    fn estimated_input_token_usage(&self) -> u64 {
+        let RequestMessage {
+            #[expect(unused_variables)]
+            role,
+            content,
+        } = self;
+        content
+            .iter()
+            .map(RateLimitedInputContent::estimated_input_token_usage)
+            .sum()
+    }
+}
+
+impl RateLimitedRequest for ModelInferenceRequest<'_> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+        rate_limiting_config: &RateLimitingConfig,
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
+        let ModelInferenceRequest {
+            inference_id: _,
+            messages,
+            system,
+            tool_config: _, // TODO: should we account for this in advance?
+            temperature: _,
+            top_p: _,
+            max_tokens,
+            presence_penalty: _,
+            frequency_penalty: _,
+            seed: _,
+            stop_sequences: _,
+            stream: _,
+            json_mode: _,
+            function_type: _,
+            output_schema: _,
+            extra_body: _,
+            fetch_and_encode_input_files_before_inference: _,
+            extra_headers: _,
+            extra_cache_key: _,
+            inference_params_v2: _,
+        } = self;
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            let system_tokens = system
+                .as_ref()
+                .map(|s| get_estimated_tokens(s))
+                .unwrap_or(0);
+            let messages_tokens: u64 = messages
+                .iter()
+                .map(RateLimitedInputContent::estimated_input_token_usage)
+                .sum();
+            let output_tokens =
+                max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
+            Some(system_tokens + messages_tokens + output_tokens)
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        let nano_cost = if resources.contains(&RateLimitResource::Cost) {
+            Some(rate_limiting_config.default_nano_cost)
+        } else {
+            None
+        };
+
+        Ok(EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
+            nano_cost,
+        })
+    }
+}
+
+/// For use in rendering for optimization purposes
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+pub struct ModelInput {
+    pub system: Option<String>,
+    pub messages: Vec<ResolvedRequestMessage>,
+}
+
+impl std::fmt::Display for ModelInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ModelInput {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+pub trait ProviderInferenceResponseExt {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error>;
+}
+
+impl ProviderInferenceResponseExt for ProviderInferenceResponse {
+    fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+        let nano_cost = self.usage.cost.map(decimal_cost_to_nano_cost);
+        match self.usage.total_tokens() {
+            Some(tokens) => Ok(RateLimitResourceUsage::Exact {
+                model_inferences: 1,
+                tokens: tokens as u64,
+                nano_cost,
+            }),
+            None => Ok(RateLimitResourceUsage::UnderEstimate {
+                model_inferences: 1,
+                tokens: 0,
+                nano_cost,
+            }),
+        }
+    }
+}
+
+/// Runtime type for model inference responses during inference execution.
+///
+/// After a ProviderInferenceResponse is returned to the Model,
+/// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+pub struct ModelInferenceResponse {
+    pub id: Uuid,
+    pub output: Vec<ContentBlockOutput>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub provider_latency: Latency,
+    pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
+    pub cached: bool,
+    pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries passed through from gateway relay.
+    /// When present, these should be used instead of generating new entries.
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    /// Populated when a model has multiple providers and earlier ones fail before a later one succeeds.
+    pub failed_raw_response: Vec<RawResponseEntry>,
+}
+
+/// Runtime type for model inference responses with full metadata during inference execution.
+///
+/// In the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
+/// that includes additional metadata (such as the model name).
+///
+/// This is NOT the type stored in ClickHouse - see [`StoredModelInference`] for the storage type.
+/// To convert this runtime type to a storage type, use [`StoredModelInference::new`].
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+pub struct ModelInferenceResponseWithMetadata {
+    pub id: Uuid,
+    pub output: Vec<ContentBlockOutput>,
+    pub system: Option<String>,
+    pub input_messages: RequestMessagesOrBatch,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
+    pub model_provider_name: Arc<str>,
+    pub provider_type: Arc<str>,
+    pub model_name: Arc<str>,
+    pub cached: bool,
+    pub finish_reason: Option<FinishReason>,
+    /// Raw usage entries for `include_raw_usage` feature.
+    pub raw_usage: Option<Vec<RawUsageEntry>>,
+    /// Raw response entries passed through from relay.
+    /// When present, these should be used instead of generating new entries.
+    pub relay_raw_response: Option<Vec<RawResponseEntry>>,
+    /// Raw response entries from failed provider attempts during fallback.
+    pub failed_raw_response: Vec<RawResponseEntry>,
+}
+
+/// Holds `RequestMessage`s or `StoredRequestMessage`s. This used to avoid the need to duplicate types
+/// that are used by batch inferences (where we read `StoredRequestMessage` from the database)
+/// and normal inference code (where we pass around `RequestMessage`s in order to strip out image data
+/// from our `raw_request` before writing to ClickHouse).
+///
+/// This is separate from any 're-resolution' logic (converting from a `StoredRequestMessage`
+/// back to a `RequestMessage` by looking up image data from the object store).
+/// We don't currently have re-resolution implemented in Rust, but we'll need to do so when
+/// we move more ui code to Rust
+#[derive(Clone, Debug)]
+#[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+pub enum RequestMessagesOrBatch {
+    /// The typical case - we have normal `RequestMessages` from client input
+    Message(Vec<RequestMessage>),
+    /// We've deserialized `StoredRequestMessage` from a batch inference row in the databsae
+    /// This is only used when constructing our final result in `write_completed_batch_inference`
+    BatchInput(Vec<StoredRequestMessage>),
+}
+
+impl ModelInferenceResponseWithMetadata {
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn usage_considering_cached(&self) -> Usage {
+        if self.cached {
+            Usage::zero()
+        } else {
+            self.usage
+        }
+    }
+}
+
+/* As a Variant might make use of multiple model inferences, we then combine
+ * one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
+ * In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
+ * See below for streaming case.
+ */
+
+/// This type contains the result of running a variant of a function
+#[derive(Clone, Debug)]
+//#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InferenceResult {
+    Chat(ChatInferenceResult),
+    Json(JsonInferenceResult),
+}
+
+#[derive(Clone, Debug)]
+pub struct ChatInferenceResult {
+    pub inference_id: Uuid,
+    pub created: u64,
+    pub content: Vec<ContentBlockChatOutput>,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub inference_params: InferenceParams,
+    pub original_response: Option<String>,
+    pub finish_reason: Option<FinishReason>,
+}
+
+#[derive(Clone, Debug)]
+pub struct JsonInferenceResult {
+    pub inference_id: Uuid,
+    pub created: u64,
+    pub output: InternalJsonInferenceOutput,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub output_schema: Value,
+    pub inference_params: InferenceParams,
+    pub original_response: Option<String>,
+    pub finish_reason: Option<FinishReason>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InternalJsonInferenceOutput {
+    pub raw: Option<String>,
+    pub parsed: Option<Value>,
+    pub auxiliary_content: Vec<ContentBlockOutput>,
+    // index of the JSON block in the original content blocks
+    // generated by the inference
+    pub json_block_index: Option<usize>,
+}
+
+/*
+In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
+converted into an InferenceResponseChunk and sent to the client.
+We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
+
+Alongside the response, we also store information about what happened during the request.
+For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and StoredModelInferences,
+which are written to ClickHouse tables of the same name asynchronously.
+*/
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "function_type", rename_all = "snake_case")]
+pub enum TaggedInferenceDatabaseInsert {
+    Chat(ChatInferenceDatabaseInsert),
+    Json(JsonInferenceDatabaseInsert),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ChatInferenceDatabaseInsert {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    #[serde(deserialize_with = "deserialize_optional_tool_info")]
+    #[serde(flatten)]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
+    pub processing_time_ms: Option<u32>,
+    pub ttft_ms: Option<u32>,
+    pub tags: HashMap<String, String>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct JsonInferenceDatabaseInsert {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub input: Option<StoredInput>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<JsonInferenceOutput>,
+    // We at one point wrote empty auxiliary content to the database as "" but now write it as []
+    // In either case, we want to deserialize it as [] if empty
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub auxiliary_content: Option<Vec<ContentBlockOutput>>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub inference_params: Option<InferenceParams>,
+    pub processing_time_ms: Option<u32>,
+    pub output_schema: Option<Value>,
+    pub ttft_ms: Option<u32>,
+    pub tags: HashMap<String, String>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub extra_body: Option<UnfilteredInferenceExtraBody>,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum InferenceDatabaseInsert {
+    Chat(ChatInferenceDatabaseInsert),
+    Json(JsonInferenceDatabaseInsert),
+}
+
+/// Stored model inference data for ClickHouse.
+///
+/// This type is used both for inserting model inferences into ClickHouse
+/// and for deserializing them when querying.
+///
+/// Note: The `timestamp` field is a materialized column in ClickHouse
+/// (computed from `UUIDv7ToDateTime(id)`), so it's only populated during reads.
+///
+/// The `input_messages` and `output` fields are stored as JSON strings in ClickHouse.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StoredModelInference {
+    pub id: Uuid,
+    pub inference_id: Uuid,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub function_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub variant_name: String,
+    pub raw_request: Option<String>,
+    pub raw_response: Option<String>,
+    pub system: Option<String>,
+    /// Input messages - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
+    )]
+    pub input_messages: Option<Vec<StoredRequestMessage>>,
+    /// Output content blocks - stored as JSON string in ClickHouse
+    #[serde(
+        serialize_with = "serialize_optional_json_string",
+        deserialize_with = "deserialize_optional_json_string"
+    )]
+    pub output: Option<Vec<ContentBlockOutput>>,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_read_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_cache_write_input_tokens: Option<u32>,
+    pub response_time_ms: Option<u32>,
+    pub model_name: String,
+    pub model_provider_name: String,
+    pub ttft_ms: Option<u32>,
+    pub cached: bool,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub cost: Option<Decimal>,
+    pub finish_reason: Option<FinishReason>,
+    pub snapshot_hash: Option<SnapshotHash>,
+    /// Materialized column in ClickHouse - only present when reading from the database.
+    /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).
+    #[serde(default, skip_serializing)]
+    pub timestamp: Option<String>,
+}
+
+#[cfg(test)]
+impl From<String> for ResolvedInputMessageContent {
+    fn from(text: String) -> Self {
+        ResolvedInputMessageContent::Text(Text { text })
+    }
+}
+
+#[cfg(test)]
+impl From<String> for LazyResolvedInputMessageContent {
+    fn from(text: String) -> Self {
+        LazyResolvedInputMessageContent::Text(Text { text })
+    }
+}
+
+impl From<String> for StoredContentBlock {
+    fn from(text: String) -> Self {
+        StoredContentBlock::Text(Text { text })
+    }
+}
+
+impl ModelInferenceResponse {
+    pub fn new(
+        provider_inference_response: ProviderInferenceResponse,
+        model_provider_name: Arc<str>,
+        provider_type: Arc<str>,
+        cached: bool,
+    ) -> Self {
+        Self {
+            id: provider_inference_response.id,
+            output: provider_inference_response.output,
+            system: provider_inference_response.system,
+            input_messages: provider_inference_response.input_messages,
+            raw_request: provider_inference_response.raw_request,
+            raw_response: provider_inference_response.raw_response,
+            usage: provider_inference_response.usage,
+            provider_latency: provider_inference_response.provider_latency,
+            finish_reason: provider_inference_response.finish_reason,
+            model_provider_name,
+            provider_type,
+            cached,
+            raw_usage: provider_inference_response.raw_usage,
+            relay_raw_response: provider_inference_response.relay_raw_response,
+            failed_raw_response: vec![],
+        }
+    }
+
+    pub fn from_cache(
+        cache_lookup: CacheData<NonStreamingCacheData>,
+        request: &ModelInferenceRequest<'_>,
+        model_provider_name: &str,
+        provider_type: Arc<str>,
+    ) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            output: cache_lookup.output.blocks,
+            system: request.system.clone(),
+            input_messages: request.messages.clone(),
+            raw_request: cache_lookup.raw_request,
+            raw_response: cache_lookup.raw_response,
+            usage: Usage {
+                input_tokens: cache_lookup.input_tokens,
+                output_tokens: cache_lookup.output_tokens,
+                provider_cache_read_input_tokens: None,
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
+            provider_latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            finish_reason: cache_lookup.finish_reason,
+            model_provider_name: Arc::from(model_provider_name),
+            provider_type,
+            cached: true,
+            // TensorZero cache hits are excluded from raw_usage and raw_response lists
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }
+    }
+}
+
+impl ModelInferenceResponseWithMetadata {
+    pub fn new(model_inference_response: ModelInferenceResponse, model_name: Arc<str>) -> Self {
+        Self {
+            id: model_inference_response.id,
+            output: model_inference_response.output,
+            system: model_inference_response.system,
+            input_messages: RequestMessagesOrBatch::Message(
+                model_inference_response.input_messages,
+            ),
+            raw_request: model_inference_response.raw_request,
+            raw_response: model_inference_response.raw_response,
+            usage: model_inference_response.usage,
+            latency: model_inference_response.provider_latency,
+            finish_reason: model_inference_response.finish_reason,
+            model_provider_name: model_inference_response.model_provider_name,
+            provider_type: model_inference_response.provider_type,
+            model_name,
+            cached: model_inference_response.cached,
+            raw_usage: model_inference_response.raw_usage,
+            relay_raw_response: model_inference_response.relay_raw_response,
+            failed_raw_response: model_inference_response.failed_raw_response,
+        }
+    }
+}
+
+impl StoredModelInference {
+    /// Create a new StoredModelInference from a runtime ModelInferenceResponseWithMetadata.
+    /// Used when inserting into the database.
+    pub async fn new(
+        result: ModelInferenceResponseWithMetadata,
+        inference_id: Uuid,
+        function_name: String,
+        variant_name: String,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<Self, Error> {
+        let (latency_ms, ttft_ms) = match result.latency {
+            Latency::Streaming {
+                ttft,
+                response_time,
+            } => (
+                Some(response_time.as_millis() as u32),
+                Some(ttft.as_millis() as u32),
+            ),
+            Latency::NonStreaming { response_time } => {
+                (Some(response_time.as_millis() as u32), None)
+            }
+            Latency::Batch => (None, None),
+        };
+
+        // A usage of 0 indicates that something went wrong, since a model
+        // should always consume and produce at least one token.
+        // We store this as `null` in ClickHouse, so that we can easily filter
+        // out these values from aggregation queries.
+        let input_tokens = match result.usage.input_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
+        };
+        let output_tokens = match result.usage.output_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
+        };
+        // None = provider doesn't support cache token reporting.
+        // Some(0) = provider supports caching but no tokens were cached for this request.
+        let provider_cache_read_input_tokens = result.usage.provider_cache_read_input_tokens;
+        let provider_cache_write_input_tokens = result.usage.provider_cache_write_input_tokens;
+
+        let cost = if result.cached {
+            Some(Decimal::ZERO)
+        } else {
+            result.usage.cost
+        };
+
+        let stored_input_messages = match result.input_messages {
+            RequestMessagesOrBatch::Message(input_messages) => {
+                // In the the future, we might want to support writing 'partially broken' input messages to ClickHouse,
+                // so that we write something even if one of the input files fails to resolve.
+                try_join_all(
+                    input_messages
+                        .into_iter()
+                        .map(RequestMessage::into_stored_message),
+                )
+                .await?
+            }
+            RequestMessagesOrBatch::BatchInput(stored) => stored,
+        };
+
+        Ok(Self {
+            id: Uuid::now_v7(),
+            inference_id,
+            function_name,
+            variant_name,
+            raw_request: Some(result.raw_request),
+            raw_response: Some(result.raw_response),
+            system: result.system,
+            output: Some(result.output),
+            input_tokens,
+            output_tokens,
+            provider_cache_read_input_tokens,
+            provider_cache_write_input_tokens,
+            response_time_ms: latency_ms,
+            ttft_ms,
+            model_provider_name: result.model_provider_name.to_string(),
+            model_name: result.model_name.to_string(),
+            cached: result.cached,
+            cost,
+            finish_reason: result.finish_reason,
+            input_messages: Some(stored_input_messages),
+            snapshot_hash: Some(snapshot_hash),
+            // timestamp is a materialized column, not set during insert
+            timestamp: None,
+        })
+    }
+}
+
+impl InferenceResult {
+    pub fn model_inference_results(&self) -> &Vec<ModelInferenceResponseWithMetadata> {
+        match self {
+            InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => &json_result.model_inference_results,
+        }
+    }
+
+    /// Get the model inferences as `StoredModelInference` structs ready for database insertion.
+    /// Any errors during construction are logged and the result is skipped.
+    pub async fn get_model_inferences(
+        &self,
+        function_name: &str,
+        variant_name: &str,
+        snapshot_hash: SnapshotHash,
+    ) -> Vec<StoredModelInference> {
+        let model_inference_responses = self.model_inference_results();
+        let inference_id = match self {
+            InferenceResult::Chat(chat_result) => chat_result.inference_id,
+            InferenceResult::Json(json_result) => json_result.inference_id,
+        };
+        let function_name = function_name.to_string();
+        let variant_name = variant_name.to_string();
+        join_all(model_inference_responses.iter().map(|r| {
+            let snapshot_hash = snapshot_hash.clone();
+            let function_name = function_name.clone();
+            let variant_name = variant_name.clone();
+            async move {
+                match StoredModelInference::new(
+                    r.clone(),
+                    inference_id,
+                    function_name,
+                    variant_name,
+                    snapshot_hash,
+                )
+                .await
+                {
+                    Ok(model_inference) => Some(model_inference),
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!("Failed to construct StoredModelInference: {e:?}"),
+                        }
+                        .log();
+                        None
+                    }
+                }
+            }
+        }))
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    /// Aggregates the usage of all model inference results, considering cached results.
+    /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
+    pub fn usage_considering_cached(&self) -> Usage {
+        aggregate_usage_across_model_inferences(
+            self.model_inference_results()
+                .iter()
+                .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
+        )
+    }
+
+    pub fn set_original_response(&mut self, original_response: Option<String>) {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.original_response = original_response,
+            InferenceResult::Json(json_result) => json_result.original_response = original_response,
+        }
+    }
+
+    pub fn mut_model_inference_results(&mut self) -> &mut Vec<ModelInferenceResponseWithMetadata> {
+        match self {
+            InferenceResult::Chat(chat_result) => &mut chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => &mut json_result.model_inference_results,
+        }
+    }
+
+    pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata> {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => json_result.model_inference_results,
+        }
+    }
+}
+
+impl JsonInferenceResult {
+    #[expect(clippy::too_many_arguments)]
+    pub fn new(
+        inference_id: Uuid,
+        raw: Option<String>,
+        parsed: Option<Value>,
+        json_block_index: Option<usize>,
+        auxiliary_content: Vec<ContentBlockOutput>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+        output_schema: Value,
+        inference_params: InferenceParams,
+        original_response: Option<String>,
+    ) -> Self {
+        let output = InternalJsonInferenceOutput {
+            raw,
+            parsed,
+            auxiliary_content,
+            json_block_index,
+        };
+        let finish_reason = get_finish_reason(&model_inference_results);
+        Self {
+            inference_id,
+            created: current_timestamp(),
+            output,
+            model_inference_results,
+            output_schema,
+            inference_params,
+            original_response,
+            finish_reason,
+        }
+    }
+}
+
+impl ChatInferenceResult {
+    pub async fn new(
+        inference_id: Uuid,
+        raw_content: Vec<ContentBlockOutput>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+        tool_config: Option<&ToolCallConfig>,
+        inference_params: InferenceParams,
+        original_response: Option<String>,
+        json_mode: Option<JsonMode>,
+    ) -> Self {
+        let created = current_timestamp();
+        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
+        let finish_reason = get_finish_reason(&model_inference_results);
+        Self {
+            inference_id,
+            created,
+            content,
+            model_inference_results,
+            inference_params,
+            original_response,
+            finish_reason,
+        }
+    }
+}
+
+/// Get the finish reason from the last model inference result sorted by ID (or None if it is not present)
+fn get_finish_reason(
+    model_inference_results: &[ModelInferenceResponseWithMetadata],
+) -> Option<FinishReason> {
+    // Sort by id (UUIDv7 encodes timestamp) to get the latest result
+    model_inference_results
+        .iter()
+        .sorted_by_key(|r| r.id)
+        .next_back()
+        .and_then(|r| r.finish_reason)
+}
+
+pub async fn parse_chat_output(
+    content: Vec<ContentBlockOutput>,
+    tool_config: Option<&ToolCallConfig>,
+    json_mode: Option<JsonMode>,
+) -> Vec<ContentBlockChatOutput> {
+    if content.is_empty() {
+        Error::new(ErrorDetails::Inference {
+            message: "No content blocks in inference result".to_string(),
+        });
+    }
+
+    let mut output = Vec::new();
+    for content in content {
+        match content {
+            ContentBlockOutput::Text(text) => {
+                output.push(ContentBlockChatOutput::Text(text));
+            }
+            ContentBlockOutput::ToolCall(tool_call) => {
+                // If using json_mode="tool", convert tool call arguments to text
+                if json_mode == Some(JsonMode::Tool) {
+                    output.push(ContentBlockChatOutput::Text(Text {
+                        text: tool_call.arguments,
+                    }));
+                } else {
+                    // Normal tool call handling
+                    let inference_response_tool_call =
+                        InferenceResponseToolCall::new_from_tool_call(tool_call, tool_config).await;
+                    output.push(ContentBlockChatOutput::ToolCall(
+                        inference_response_tool_call,
+                    ));
+                }
+            }
+            ContentBlockOutput::Thought(thought) => {
+                output.push(ContentBlockChatOutput::Thought(thought));
+            }
+            ContentBlockOutput::Unknown(unknown) => {
+                output.push(ContentBlockChatOutput::Unknown(unknown));
+            }
+        }
+    }
+    output
+}
+
+impl ChatInferenceDatabaseInsert {
+    pub fn new(
+        chat_result: ChatInferenceResult,
+        input: Option<StoredInput>,
+        metadata: InferenceDatabaseInsertMetadata,
+    ) -> Self {
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
+
+        let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
+        let inference_params = chat_result.inference_params;
+
+        Self {
+            id: chat_result.inference_id,
+            function_name: metadata.function_name,
+            variant_name: metadata.variant_name,
+            episode_id: metadata.episode_id,
+            input,
+            tool_params,
+            inference_params: Some(inference_params),
+            output: Some(chat_result.content),
+            processing_time_ms,
+            tags: metadata.tags,
+            ttft_ms: metadata.ttft_ms,
+            extra_body: Some(metadata.extra_body),
+            snapshot_hash: Some(metadata.snapshot_hash),
+        }
+    }
+}
+
+impl JsonInferenceDatabaseInsert {
+    pub fn new(
+        json_result: JsonInferenceResult,
+        input: Option<StoredInput>,
+        metadata: InferenceDatabaseInsertMetadata,
+    ) -> Self {
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
+
+        let inference_params = json_result.inference_params;
+        let InternalJsonInferenceOutput {
+            raw,
+            parsed,
+            auxiliary_content,
+            ..
+        } = json_result.output;
+        let output = JsonInferenceOutput { raw, parsed };
+
+        Self {
+            id: json_result.inference_id,
+            function_name: metadata.function_name,
+            variant_name: metadata.variant_name,
+            episode_id: metadata.episode_id,
+            input,
+            auxiliary_content: Some(auxiliary_content),
+            inference_params: Some(inference_params),
+            output: Some(output),
+            processing_time_ms,
+            output_schema: Some(json_result.output_schema),
+            tags: metadata.tags,
+            extra_body: Some(metadata.extra_body),
+            ttft_ms: metadata.ttft_ms,
+            snapshot_hash: Some(metadata.snapshot_hash),
+        }
+    }
+}
+
+// Function to get the current timestamp in seconds
+#[expect(clippy::missing_panics_doc)]
+pub fn current_timestamp() -> u64 {
+    #[expect(clippy::expect_used)]
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
+
+/// Serializes a value that implements `Serialize` into a JSON string.
+/// If serialization fails, it logs the error and returns an empty string.
+///
+/// # Arguments
+///
+/// * `value` - A reference to the value to be serialized.
+///
+/// # Returns
+///
+/// A `String` containing the serialized JSON, or an empty string if serialization fails.
+pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
+    match serde_json::to_string(value) {
+        Ok(serialized) => serialized,
+        Err(e) => {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize value: {e}"),
+            });
+            String::new()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jsonschema_util::JSONSchema;
+    use crate::providers::test_helpers::get_temperature_tool_config;
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
+    use serde_json::json;
+
+    #[test]
+    fn test_rate_limited_input_message_content_estimation() {
+        let args_value = json!({"foo": "bar", "n": 1});
+        let args_map = args_value
+            .as_object()
+            .expect("template arguments should be object")
+            .clone();
+        let template = Template {
+            name: "tmpl".to_string(),
+            arguments: Arguments(args_map.clone()),
+        };
+
+        let tool_call = InferenceResponseToolCall {
+            id: "tool-1".to_string(),
+            raw_name: "raw_name".to_string(),
+            raw_arguments: "{\"x\":1}".to_string(),
+            name: Some("parsed".to_string()),
+            arguments: Some(json!({"x": 1})),
+        };
+
+        let foo_value = args_map
+            .get("foo")
+            .expect("expected foo argument")
+            .to_string();
+        let n_value = args_map.get("n").expect("expected n argument").to_string();
+        let template_expected = get_estimated_tokens("tmpl")
+            + get_estimated_tokens("foo")
+            + get_estimated_tokens(&foo_value)
+            + get_estimated_tokens("n")
+            + get_estimated_tokens(&n_value);
+        let tool_call_expected = get_estimated_tokens(&tool_call.raw_name)
+            + get_estimated_tokens(&tool_call.raw_arguments);
+
+        assert_eq!(
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage(),
+            template_expected,
+            "Template token estimation mismatch: expected {}, got {}",
+            template_expected,
+            InputMessageContent::Template(template.clone()).estimated_input_token_usage()
+        );
+        assert_eq!(
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage(),
+            tool_call_expected,
+            "ToolCall token estimation mismatch: expected {}, got {}",
+            tool_call_expected,
+            InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                tool_call.clone()
+            ))
+            .estimated_input_token_usage()
+        );
+
+        let message = InputMessage {
+            role: Role::User,
+            content: vec![
+                InputMessageContent::Template(template),
+                InputMessageContent::ToolCall(ToolCallWrapper::InferenceResponseToolCall(
+                    tool_call,
+                )),
+                InputMessageContent::Text(Text {
+                    text: "hi".to_string(),
+                }),
+            ],
+        };
+        let message_expected = template_expected + tool_call_expected + get_estimated_tokens("hi");
+        assert_eq!(message.estimated_input_token_usage(), message_expected);
+    }
+
+    #[tokio::test]
+    async fn test_create_chat_inference_response() {
+        // Case 1: No output schema
+        let inference_id = Uuid::now_v7();
+        let content = vec!["Hello, world!".to_string().into()];
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+        let raw_request = "raw request".to_string();
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            finish_reason: None,
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content.clone(),
+            model_inference_responses,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let output_content = ["Hello, world!".to_string().into()];
+        assert_eq!(chat_inference_response.content, output_content);
+        assert_eq!(chat_inference_response.model_inference_results.len(), 1);
+        assert_eq!(chat_inference_response.finish_reason, None);
+        let model_inference_result = chat_inference_response
+            .model_inference_results
+            .first()
+            .unwrap();
+        assert_eq!(&*model_inference_result.model_name, "test_model");
+        assert_eq!(
+            &*model_inference_result.model_provider_name,
+            "test_provider"
+        );
+        assert_eq!(model_inference_result.raw_request, raw_request);
+
+        // Case 2: A tool call that fails argument validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            finish_reason: Some(FinishReason::Stop),
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let weather_tool_config = get_temperature_tool_config();
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
+        match tool_call_block {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.arguments, None);
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+        assert_eq!(
+            chat_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
+        // Case 3: A tool call that fails name validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "bad name".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            finish_reason: Some(FinishReason::Stop),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
+        match tool_call_block {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "bad name");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, None);
+                assert_eq!(tool_call.arguments, None);
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 4: A tool call that passes validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            finish_reason: Some(FinishReason::ToolCall),
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+        assert_eq!(
+            chat_inference_response.finish_reason,
+            Some(FinishReason::ToolCall)
+        );
+        let tool_call_block = chat_inference_response.content.first().unwrap();
+        match tool_call_block {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "the moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "the moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 5: Parallel tool calls
+        let inference_id = Uuid::now_v7();
+        let content = vec![
+            ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+                id: "0".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "mars", "units": "celsius"}"#.to_string(),
+                id: "1".to_string(),
+            }),
+        ];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            finish_reason: None,
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 2);
+
+        // Verify first tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Verify second tool call
+        match &chat_inference_response.content[1] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "mars", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "mars", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 5b: Parallel tool calls with one invalid call
+        let inference_id = Uuid::now_v7();
+        let content = vec![
+            ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+                id: "0".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"invalid": "args"}"#.to_string(),
+                id: "1".to_string(),
+            }),
+        ];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            finish_reason: None,
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 2);
+
+        // Verify first tool call (valid)
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Verify second tool call (invalid arguments)
+        match &chat_inference_response.content[1] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(tool_call.raw_arguments, r#"{"invalid": "args"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.arguments, None); // Arguments should be None due to validation failure
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 6: Additional tools
+        let inference_id = Uuid::now_v7();
+        let additional_tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::None,
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
+                    name: "custom_tool".to_string(),
+                    description: "A custom tool".to_string(),
+                    parameters: JSONSchema::compile_background(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "input": {"type": "string"}
+                        },
+                        "required": ["input"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
+        };
+
+        // Test valid arguments for additional tool
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "custom_tool".to_string(),
+            arguments: r#"{"input": "test"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            finish_reason: None,
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&additional_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify valid tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "custom_tool");
+                assert_eq!(tool_call.raw_arguments, r#"{"input": "test"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("custom_tool".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(serde_json::from_str(r#"{"input": "test"}"#).unwrap())
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Test invalid arguments for additional tool
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "custom_tool".to_string(),
+            arguments: r#"{"wrong": "field"}"#.to_string(),
+            id: "1".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            finish_reason: None,
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&additional_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify invalid tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "custom_tool");
+                assert_eq!(tool_call.raw_arguments, r#"{"wrong": "field"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("custom_tool".to_string()));
+                assert_eq!(tool_call.arguments, None); // Arguments should be None due to validation failure
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 7: Allowed tools restriction
+        let inference_id = Uuid::now_v7();
+        let restricted_tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::None,
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
+                    name: "weather_tool".to_string(),
+                    description: "Get weather information".to_string(),
+                    parameters: JSONSchema::compile_background(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"},
+                            "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                        },
+                        "required": ["location"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
+        };
+
+        // Test allowed tool call
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "weather_tool".to_string(),
+            arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            finish_reason: None,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&restricted_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify allowed tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "weather_tool");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("weather_tool".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Test disallowed tool call
+        let content = vec![ContentBlockOutput::ToolCall(ToolCall {
+            name: "get_humidity".to_string(), // This tool is not in the restricted config
+            arguments: r#"{"location": "moon"}"#.to_string(),
+            id: "1".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            output: content.clone(),
+            finish_reason: None,
+            raw_request: raw_request.clone(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test_model".into(),
+            cached: false,
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            model_inference_responses,
+            Some(&restricted_tool_config),
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify disallowed tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_humidity");
+                assert_eq!(tool_call.raw_arguments, r#"{"location": "moon"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, None); // Name should be None since tool is not allowed
+                assert_eq!(tool_call.arguments, None); // Arguments should be None since tool is not allowed
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_input_message() {
+        // Test case for single string content
+        let input = json!({
+            "role": "user",
+            "content": "Hello, world!"
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello, world!");
+            }
+            _ => panic!("Expected Text content: {message:?}"),
+        }
+
+        // Test case for object content (should be converted to Template)
+        let input = json!({
+            "role": "assistant",
+            "content": {"key": "value"}
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::Assistant);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            InputMessageContent::Template(template) => {
+                assert_eq!(template.name, "assistant");
+                assert_eq!(
+                    &template.arguments.0,
+                    json!({"key": "value"}).as_object().unwrap()
+                );
+            }
+            _ => panic!("Expected Template content"),
+        }
+
+        // Test case for multiple content items
+        let input = json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Hello"},
+                {"type": "tool_call", "id": "123", "name": "test_tool", "arguments": "{}"}
+            ]
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello");
+            }
+            _ => panic!("Expected Text content"),
+        }
+        match &message.content[1] {
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, "test_tool");
+                    assert_eq!(tc.arguments, "{}");
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
+                }
+            },
+            _ => panic!("Expected ToolCall content"),
+        }
+        // Test case for multiple content items with JSON object in text block
+        let input = json!({
+            "role": "user",
+            "content": [
+                {"type": "template", "name": "user", "arguments": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": {"key": "value"}}
+            ]
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            InputMessageContent::Template(Template { name, arguments }) => {
+                assert_eq!(name, "user");
+                assert_eq!(
+                    &arguments.0,
+                    json!({"complex": "json", "with": ["nested", "array"]})
+                        .as_object()
+                        .unwrap()
+                );
+            }
+            _ => panic!("Expected Text content with JSON object"),
+        }
+        match &message.content[1] {
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, "another_tool");
+                    assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
+                }
+            },
+            _ => panic!("Expected ToolCall content"),
+        }
+
+        // Test case for invalid role
+        let input = json!({
+            "role": "invalid_role",
+            "content": "Hello"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for missing role
+        let input = json!({
+            "content": "Hello"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for missing content
+        let input = json!({
+            "role": "user"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for empty content array
+        let input = json!({
+            "role": "user",
+            "content": []
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 0);
+
+        // Test case for invalid content type
+        let input = json!({
+            "role": "user",
+            "content": [{"type": "invalid_type", "value": "test"}]
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+    }
+
+    /// Test that usage_considering_cached properly propagates None values
+    /// If any of the model inference results have None for input_tokens or output_tokens,
+    /// the aggregated result should also have None for those fields
+    #[tokio::test]
+    async fn test_usage_considering_cached_none_propagation() {
+        let inference_id = Uuid::now_v7();
+
+        // Helper function to create a ModelInferenceResponseWithMetadata with specified usage
+        let create_model_response =
+            |usage: Usage, cached: bool| ModelInferenceResponseWithMetadata {
+                id: Uuid::now_v7(),
+                system: None,
+                input_messages: RequestMessagesOrBatch::Message(vec![]),
+                output: vec!["test".to_string().into()],
+                raw_request: String::new(),
+                raw_response: String::new(),
+                usage,
+                latency: Latency::NonStreaming {
+                    response_time: Duration::default(),
+                },
+                finish_reason: None,
+                model_provider_name: "test_provider".into(),
+                provider_type: Arc::from("dummy"),
+                model_name: "test_model".into(),
+                cached,
+                raw_usage: None,
+                relay_raw_response: None,
+                failed_raw_response: vec![],
+            };
+
+        // Test Case 1: All values are Some() - should aggregate correctly
+        let model_responses_all_some = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_some = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_some,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_all_some = InferenceResult::Chat(chat_result_all_some);
+        let usage_all_some = result_all_some.usage_considering_cached();
+        assert_eq!(usage_all_some.input_tokens, Some(25));
+        assert_eq!(usage_all_some.output_tokens, Some(45));
+
+        // Test Case 2: Some input_tokens are None - should propagate None for input_tokens
+        let model_responses_input_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_input_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_input_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_input_none = InferenceResult::Chat(chat_result_input_none);
+        let usage_input_none = result_input_none.usage_considering_cached();
+        assert_eq!(usage_input_none.input_tokens, None);
+        assert_eq!(usage_input_none.output_tokens, Some(45));
+
+        // Test Case 3: Some output_tokens are None - should propagate None for output_tokens
+        let model_responses_output_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_output_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_output_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_output_none = InferenceResult::Chat(chat_result_output_none);
+        let usage_output_none = result_output_none.usage_considering_cached();
+        assert_eq!(usage_output_none.input_tokens, Some(25));
+        assert_eq!(usage_output_none.output_tokens, None);
+
+        // Test Case 4: All values are None - should result in all None
+        let model_responses_all_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_none,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_all_none = InferenceResult::Chat(chat_result_all_none);
+        let usage_all_none = result_all_none.usage_considering_cached();
+        assert_eq!(usage_all_none.input_tokens, None);
+        assert_eq!(usage_all_none.output_tokens, None);
+
+        // Test Case 5: Mixed cached and non-cached with None values
+        // Cached results return Usage::zero()
+        let model_responses_mixed = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                true,
+            ), // This will be treated as 0/0 due to cached=true
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                    provider_cache_read_input_tokens: None,
+                    provider_cache_write_input_tokens: None,
+                    cost: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_mixed = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_mixed,
+            None,
+            InferenceParams::default(),
+            None,
+            None,
+        )
+        .await;
+        let result_mixed = InferenceResult::Chat(chat_result_mixed);
+        let usage_mixed = result_mixed.usage_considering_cached();
+        assert_eq!(usage_mixed.input_tokens, None); // None propagates
+        assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
+    }
+
+    #[test]
+    fn test_unknown_deserialize() {
+        // New format
+        let u: Unknown =
+            serde_json::from_value(json!({"data": {}, "model_name": "m", "provider_name": "p"}))
+                .unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Provider-agnostic (no targeting)
+        let u: Unknown = serde_json::from_value(json!({"data": {}})).unwrap();
+        assert!(u.model_name.is_none() && u.provider_name.is_none());
+
+        // Legacy FQN - simple
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Legacy FQN - model with colons (e.g. dummy::echo)
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::dummy::echo::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
+
+        // Invalid legacy FQN - errors
+        assert!(
+            serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "bad"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<Unknown>(
+                json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+            )
+            .is_err()
+        );
+
+        // Conflict: both old and new fields
+        assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
+    }
+
+    #[test]
+    fn test_get_finish_reason_sorts_by_id() {
+        // Create UUIDs sequentially - UUIDv7 encodes timestamp so later UUIDs are greater
+        let id_oldest = Uuid::now_v7();
+        let id_middle = Uuid::now_v7();
+        let id_newest = Uuid::now_v7();
+
+        // Verify our assumption that sequential UUIDv7s are ordered
+        assert!(
+            id_oldest < id_middle && id_middle < id_newest,
+            "UUIDv7s created sequentially should be monotonically increasing"
+        );
+
+        let usage = Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+            provider_cache_read_input_tokens: None,
+            provider_cache_write_input_tokens: None,
+            cost: None,
+        };
+
+        // Create responses with different finish reasons and IDs
+        let response_oldest = ModelInferenceResponseWithMetadata {
+            id: id_oldest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Stop),
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        };
+
+        let response_middle = ModelInferenceResponseWithMetadata {
+            id: id_middle,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::ToolCall),
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        };
+
+        let response_newest = ModelInferenceResponseWithMetadata {
+            id: id_newest,
+            output: vec![],
+            system: None,
+            input_messages: RequestMessagesOrBatch::Message(vec![]),
+            raw_request: String::new(),
+            raw_response: String::new(),
+            usage,
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test".into(),
+            provider_type: Arc::from("dummy"),
+            model_name: "test".into(),
+            cached: false,
+            finish_reason: Some(FinishReason::Length),
+            raw_usage: None,
+            relay_raw_response: None,
+            failed_raw_response: vec![],
+        };
+
+        // Test: passing results in order newest-first should still return newest's finish_reason
+        let results_newest_first = vec![
+            response_newest.clone(),
+            response_middle.clone(),
+            response_oldest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_newest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID (newest)"
+        );
+
+        // Test: passing results in order oldest-first should still return newest's finish_reason
+        let results_oldest_first = vec![
+            response_oldest.clone(),
+            response_middle.clone(),
+            response_newest.clone(),
+        ];
+        assert_eq!(
+            get_finish_reason(&results_oldest_first),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: passing results in mixed order should still return newest's finish_reason
+        let results_mixed = vec![response_middle, response_newest.clone(), response_oldest];
+        assert_eq!(
+            get_finish_reason(&results_mixed),
+            Some(FinishReason::Length),
+            "Should return finish_reason from the entry with the largest ID regardless of input order"
+        );
+
+        // Test: single element
+        let results_single = vec![response_newest];
+        assert_eq!(
+            get_finish_reason(&results_single),
+            Some(FinishReason::Length),
+            "Single element should return its finish_reason"
+        );
+
+        // Test: empty slice
+        let results_empty: Vec<ModelInferenceResponseWithMetadata> = vec![];
+        assert_eq!(
+            get_finish_reason(&results_empty),
+            None,
+            "Empty slice should return None"
+        );
+    }
+}
