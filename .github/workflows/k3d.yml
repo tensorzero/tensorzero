@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Run 'examples/production-deployment-k8s-helm' on k3d
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install k3d
         run: |
@@ -25,7 +25,7 @@ jobs:
           k3d cluster create tensorzero --wait
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
