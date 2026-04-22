@@ -288,7 +288,18 @@ pub async fn apply_config_toml_handler(
         .filter(|(k, _)| !canonical_path_contents.contains_key(k.as_str()))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    let all_new_paths: HashSet<String> = request.path_contents.keys().cloned().collect();
+    // The set of paths that must remain active after this apply: everything
+    // the client sent, unioned with everything the canonical config
+    // references. The union guards against a client apply that omits a
+    // canonical file from `path_contents` — without it, the tombstone step
+    // in `write_free_files_in_tx` would tombstone a still-referenced file's
+    // active row.
+    let all_new_paths: HashSet<String> = request
+        .path_contents
+        .keys()
+        .cloned()
+        .chain(canonical_path_contents.keys().cloned())
+        .collect();
 
     // `write_stored_config_in_tx` validates `edited_config` internally and
     // returns the resulting `UnwrittenConfig`, so we can hot-swap the live
