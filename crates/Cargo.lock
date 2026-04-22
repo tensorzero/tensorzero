@@ -544,7 +544,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "autopilot-client"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "chrono",
  "durable-tools-spawn",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-tools"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "arrow",
@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "autopilot-worker"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1282,7 +1282,7 @@ dependencies = [
 
 [[package]]
 name = "bip39-uuid-substitution"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "blake3",
  "proptest",
@@ -1821,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "config-applier"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "pathdiff",
  "schemars 1.2.1",
@@ -2654,7 +2654,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2689,7 +2689,7 @@ dependencies = [
 
 [[package]]
 name = "durable-tools-spawn"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-trait",
  "durable",
@@ -2863,7 +2863,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2977,7 +2977,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3246,7 +3246,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-stream",
  "autopilot-client",
@@ -3472,7 +3472,7 @@ dependencies = [
 
 [[package]]
 name = "googletest-matchers"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "googletest",
  "serde_json",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "minijinja",
  "serde",
@@ -5612,7 +5612,7 @@ dependencies = [
 
 [[package]]
 name = "postgres-inference-load-test"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6231,7 +6231,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6572,7 +6572,7 @@ dependencies = [
 
 [[package]]
 name = "reqwest-sse-stream"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-stream",
  "futures",
@@ -6884,9 +6884,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.12"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -7963,7 +7963,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-trait",
  "clap",
@@ -7990,7 +7990,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "axum",
  "chrono",
@@ -8010,7 +8010,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-config-paths"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "googletest",
  "thiserror 2.0.18",
@@ -8020,7 +8020,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -8152,7 +8152,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-error"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "autopilot-client",
  "axum",
@@ -8175,7 +8175,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-http"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "axum",
  "bytes",
@@ -8200,7 +8200,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-inference-types"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "derive_builder 0.20.2",
  "futures",
@@ -8230,7 +8230,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-mcp"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-trait",
  "autopilot-client",
@@ -8248,7 +8248,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "config-applier",
  "napi",
@@ -8263,7 +8263,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -8300,7 +8300,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "evaluations",
  "futures",
@@ -8318,7 +8318,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-stored-config"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "futures",
  "googletest",
@@ -8335,11 +8335,11 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-ts-types"
-version = "2026.4.0"
+version = "2026.4.1"
 
 [[package]]
 name = "tensorzero-types"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "anyhow",
  "aws-smithy-types",
@@ -8369,7 +8369,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-types-providers"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -8380,7 +8380,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-unsafe-helpers"
-version = "2026.4.0"
+version = "2026.4.1"
 
 [[package]]
 name = "termcolor"
@@ -8953,7 +8953,7 @@ dependencies = [
 
 [[package]]
 name = "ts-executor-pool"
-version = "2026.4.0"
+version = "2026.4.1"
 dependencies = [
  "async-trait",
  "aws-sdk-s3",

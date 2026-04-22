@@ -545,6 +545,14 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
+    /// Builds the underlying `reqwest::Request` without sending it. Intended for tests that
+    /// need to inspect the configured headers/URL/body before dispatch. Note that OTLP
+    /// propagation headers are only injected at `send`/`eventsource` time, so the returned
+    /// request will not include them.
+    pub fn build_for_test(self) -> Result<reqwest::Request, reqwest::Error> {
+        self.builder.build()
+    }
+
     // We call this method just before sending the request, so that we capture the OpenTelemetry Context (including the parent span)
     // as close to the request callsite as possible.
     #[must_use]

@@ -1,9 +1,12 @@
+# UNUSED: autopilot integration is disabled. The `/autopilot-e2e` slash
+# command has been unregistered in `slash-command-dispatch.yml`, the
+# `repository_dispatch` trigger has been removed here, and the job is
+# guarded with `if: false` so even a manual `workflow_dispatch` is a no-op.
+# Kept on disk for historical reference.
 name: Trigger Autopilot E2E from slash command
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [autopilot-e2e-command]
 
 permissions:
   pull-requests: write
@@ -12,10 +15,10 @@ permissions:
 jobs:
   trigger-autopilot-e2e:
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: false # autopilot integration disabled; see header comment
     steps:
       - name: Add initial reaction
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
@@ -23,7 +26,7 @@ jobs:
           reactions: eyes
 
       - name: Generate GitHub App token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
@@ -32,7 +35,7 @@ jobs:
           repositories: autopilot
 
       - name: Dispatch to autopilot
-        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           repository: tensorzero/autopilot
@@ -98,7 +101,7 @@ jobs:
 
       - name: Comment with workflow link
         if: always()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
@@ -110,7 +113,7 @@ jobs:
 
       - name: Add success reaction
         if: success()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
@@ -119,7 +122,7 @@ jobs:
 
       - name: Add failure reaction
         if: failure()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}

@@ -1698,6 +1698,8 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
 
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name == "gcp-gemini-2.5-flash" {
+        200
     } else {
         100
     };
@@ -2901,6 +2903,8 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
         1000
+    } else if provider.model_name == "gcp-gemini-2.5-flash" {
+        200
     } else {
         100
     };

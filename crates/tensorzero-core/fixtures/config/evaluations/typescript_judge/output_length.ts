@@ -3,10 +3,7 @@
 //
 // Used in evaluations e2e tests to verify that the typescript judge
 // receives the real inference output and can return a non-trivial float.
-function tensorzero_evaluator(
-    _input: Input,
-    output: ContentBlockChatOutput[],
-): number {
+function tensorzero_evaluator({ output }: EvaluatorParams): number {
     for (const block of output) {
         if (block.type === "text") {
             return block.text.length;

@@ -22,7 +22,8 @@ use autopilot_client::{
     CreateEventRequest, CreateEventResponse, EventPayloadMessageContent,
     EventPayloadMessageMetadata, GatewayListConfigWritesResponse, GatewayListEventsResponse,
     GatewayStreamUpdate, ListConfigWritesParams, ListEventsParams, ListSessionsParams,
-    ListSessionsResponse, S3UploadRequest, S3UploadResponse, StreamEventsParams,
+    ListSessionsResponse, S3UploadRequest, S3UploadResponse, SessionStatusDetail,
+    StreamEventsParams,
 };
 use tensorzero_types::ResolveUuidResponse;
 
@@ -277,6 +278,19 @@ pub async fn s3_initiate_upload(
         .map_err(Error::from)
 }
 
+/// Fetch detailed status information for a session from the Autopilot API.
+///
+/// This is the core function called by both the HTTP handler and embedded client.
+pub async fn get_status_detail(
+    autopilot_client: &AutopilotClient,
+    session_id: Uuid,
+) -> Result<SessionStatusDetail, Error> {
+    autopilot_client
+        .get_status_detail(session_id)
+        .await
+        .map_err(Error::from)
+}
+
 // =============================================================================
 // HTTP Handlers
 // =============================================================================
@@ -407,6 +421,20 @@ pub async fn interrupt_session_handler(
 ) -> Result<(), Error> {
     let client = get_autopilot_client(&app_state)?;
     interrupt_session(&client, session_id).await
+}
+
+/// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/status_detail`
+///
+/// Returns detailed status information for a session (e.g. whether the
+/// underlying durable task is in a terminal state).
+#[instrument(name = "autopilot.status_detail", skip_all, fields(session_id = %session_id))]
+pub async fn status_detail_handler(
+    State(app_state): AppState,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<SessionStatusDetail>, Error> {
+    let client = get_autopilot_client(&app_state)?;
+    let response = get_status_detail(&client, session_id).await?;
+    Ok(Json(response))
 }
 
 /// Handler for `GET /internal/autopilot/v1/sessions/{session_id}/config-writes`
