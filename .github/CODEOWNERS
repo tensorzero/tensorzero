@@ -1,5 +1,5 @@
 /crates/tensorzero-python/tensorzero/generated_types.py @GabrielBianconi
-/crates/tensorzero-python/tensorzero/tensorzero.pyi @GabrielBianconi
+/crates/tensorzero-python/tensorzero/tensorzero.pyi @GabrielBianconi @virajmehta
 /crates/tensorzero-python/tensorzero/types.py @GabrielBianconi
 /crates/evaluations/src/cli.rs @GabrielBianconi
 /crates/gateway/src/cli.rs @GabrielBianconi
