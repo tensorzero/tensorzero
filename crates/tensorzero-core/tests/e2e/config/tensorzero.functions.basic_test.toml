@@ -612,6 +612,7 @@ type = "chat_completion"
 model = "glm-5-together-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 1024
+extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false }]
 
 [functions.basic_test.variants.together-shorthand]
 type = "chat_completion"

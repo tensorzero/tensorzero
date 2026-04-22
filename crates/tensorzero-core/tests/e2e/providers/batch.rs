@@ -1868,6 +1868,12 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     provider: E2ETestProvider,
 ) {
     skip_for_postgres!();
+    // Gemini 2.5 batch polling intermittently returns completed tool-choice payloads with empty
+    // content blocks, so these assertions are not stable until the provider behavior is resolved.
+    // See https://github.com/tensorzero/tensorzero/issues/2329
+    if provider.model_name.contains("gemini-2.5") {
+        return;
+    }
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = get_latest_batch_inference(
@@ -1988,6 +1994,12 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     skip_for_postgres!();
+    // Gemini 2.5 batch polling intermittently returns completed tool-use payloads with empty
+    // content blocks, so these assertions are not stable until the provider behavior is resolved.
+    // See https://github.com/tensorzero/tensorzero/issues/2329
+    if provider.model_name.contains("gemini-2.5") {
+        return;
+    }
     let clickhouse = get_clickhouse().await;
     let function_name = "weather_helper";
     let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
