@@ -794,6 +794,9 @@ struct ResolvedEvaluationConfig {
 }
 
 /// Builds `EvaluationCoreArgs` for running an evaluation in embedded mode.
+///
+/// The caller constructs `ts_executor` separately (it's async) and passes
+/// it in here so this helper stays synchronous.
 #[expect(clippy::too_many_arguments)]
 fn build_embedded_evaluation_args(
     client: &Client,
@@ -804,6 +807,7 @@ fn build_embedded_evaluation_args(
     variant: EvaluationVariant,
     concurrency: usize,
     inference_cache: tensorzero_core::cache::CacheEnabledMode,
+    ts_executor: evaluations::evaluators::typescript_judge::TypescriptJudgeExecutor,
 ) -> EvaluationCoreArgs {
     let inference_executor = Arc::new(ClientInferenceExecutor::new(client.clone()));
 
@@ -821,6 +825,7 @@ fn build_embedded_evaluation_args(
         concurrency,
         inference_cache,
         tags: HashMap::new(),
+        ts_executor,
     }
 }
 
@@ -1671,6 +1676,16 @@ impl TensorZeroGateway {
                 evaluator_names,
             )?;
 
+            let ts_executor = tokio_block_on_without_gil(
+                this.py(),
+                evaluations::evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults(),
+            )
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "Failed to build TypeScript judge executor: {e}"
+                ))
+            })?;
+
             let core_args = build_embedded_evaluation_args(
                 &client,
                 &app_state,
@@ -1680,6 +1695,7 @@ impl TensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache_enum,
+                ts_executor,
             );
 
             let stream_result = tokio_block_on_without_gil(
@@ -2723,6 +2739,15 @@ impl AsyncTensorZeroGateway {
                     evaluator_names,
                 )?;
 
+                let ts_executor =
+                    evaluations::evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults()
+                        .await
+                        .map_err(|e| {
+                            pyo3::exceptions::PyRuntimeError::new_err(format!(
+                                "Failed to build TypeScript judge executor: {e}"
+                            ))
+                        })?;
+
                 let core_args = build_embedded_evaluation_args(
                     &client,
                     &app_state,
@@ -2732,6 +2757,7 @@ impl AsyncTensorZeroGateway {
                     variant,
                     concurrency,
                     inference_cache_enum,
+                    ts_executor,
                 );
 
                 let stream_result =

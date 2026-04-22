@@ -272,6 +272,7 @@ impl EmbeddingModelConfig {
                     provider_name,
                     otlp_config: &clients.otlp_config,
                     model_inference_id: Uuid::now_v7(),
+                    function_name: None,
                 };
                 let provider_type: Arc<str> = Arc::from(provider_config.inner.provider_type());
                 // TODO: think about how to best handle errors here

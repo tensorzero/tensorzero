@@ -21,6 +21,9 @@ use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::delegating_connection::DelegatingDatabaseQueries;
 use tensorzero_core::db::feedback::FeedbackByVariant;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::db::variant_statistics::{
+    GetVariantStatisticsParams, GetVariantStatisticsResponse, VariantStatisticsQueries,
+};
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsRequest, DeleteDatapointsRequest,
     GetDatapointsRequest, UpdateDatapointsRequest,
@@ -564,6 +567,41 @@ impl TensorZeroClient for EmbeddedClient {
             .map_err(|e| {
                 TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
             })
+    }
+
+    async fn get_variant_statistics(
+        &self,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError> {
+        let parse_rfc3339 = |s: String, field: &str| {
+            chrono::DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map_err(|e| {
+                    TensorZeroClientError::TensorZero(TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidRequest {
+                            message: format!("Invalid RFC 3339 datetime for `{field}`: {e}"),
+                        })
+                        .into(),
+                    })
+                })
+        };
+        let after = after.map(|s| parse_rfc3339(s, "after")).transpose()?;
+        let before = before.map(|s| parse_rfc3339(s, "before")).transpose()?;
+        let db = self.app_state.get_delegating_database();
+        let params = GetVariantStatisticsParams {
+            function_name,
+            variant_names,
+            after,
+            before,
+        };
+        let quantiles = db.get_variant_statistics_quantiles().map(|q| q.to_vec());
+        let data = db.get_variant_statistics(&params).await.map_err(|e| {
+            TensorZeroClientError::TensorZero(TensorZeroError::Other { source: e.into() })
+        })?;
+        Ok(GetVariantStatisticsResponse { quantiles, data })
     }
 
     async fn run_evaluation(

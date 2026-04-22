@@ -19,7 +19,11 @@ name = "tensorzero"
 crate-type = ["cdylib"]
 
 [dependencies]
-evaluations = { path = "../evaluations" }
+# We disable the `ts-executor-pool` default feature because the v8 / deno
+# stack does not link on the manylinux2014 / musllinux platforms we publish
+# Python wheels for. Attempting to run a TypeScript judge evaluator from the
+# Python client will return a runtime error.
+evaluations = { path = "../evaluations", default-features = false }
 tensorzero-core = { path = "../tensorzero-core" }
 futures = { workspace = true }
 pyo3 = { workspace = true }

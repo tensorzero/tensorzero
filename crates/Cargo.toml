@@ -45,7 +45,7 @@ license = "Apache-2.0"
 edition = "2024"
 
 [workspace.dependencies]
-deno_core = "0.397.0"
+deno_core = "0.398.0"
 reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"] }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
@@ -66,7 +66,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.102"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
-clap = { version = "4.6.0", features = ["derive", "env"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
 http-body-util = "0.1.3"
 futures = "0.3.32"
 thiserror = "2.0.18"
@@ -82,11 +82,11 @@ minijinja = { version = "2.19.0", features = [
     "unstable_machinery",
 ] }
 url = { version = "2.5.8", features = ["serde"] }
-google-cloud-auth = "1.7.0"
+google-cloud-auth = "1.9.0"
 object_store = { version = "0.13.2", features = ["serde", "aws", "gcp"] }
 arrow = { version = "58.1.0", default-features = false, features = ["json"] }
 parquet = { version = "58.1.0", default-features = false, features = ["arrow", "async", "snap", "zstd"] }
-rand = "0.10.0"
+rand = "0.10.1"
 ts-rs = { version = "12.0.1", features = [
     "serde-compat",
     "serde-json-impl",

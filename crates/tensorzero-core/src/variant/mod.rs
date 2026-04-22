@@ -897,7 +897,12 @@ async fn infer_model_request(
         .retry_config
         .retry_collecting_errors(|| async {
             args.model_config
-                .infer(&args.request, &clients, &args.model_name)
+                .infer(
+                    &args.request,
+                    &clients,
+                    &args.model_name,
+                    Some(&args.inference_config.function_name),
+                )
                 .await
         })
         .await;
@@ -950,6 +955,7 @@ async fn infer_model_request(
 // Note: this is due to a bug in Clippy 1.86 which runs on CI
 // when we upgrate it we should be able to remove this attribute
 #[allow(clippy::needless_lifetimes, clippy::allow_attributes)]
+#[expect(clippy::too_many_arguments)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: Arc<str>,
@@ -958,12 +964,13 @@ async fn infer_model_request_stream<'request>(
     clients: InferenceClients,
     inference_params: InferenceParams,
     retry_config: RetryConfig,
+    function_name: Option<&'request str>,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     let include_raw_response = clients.include_raw_response;
     let (result, retry_errors) = retry_config
         .retry_collecting_errors(|| async {
             model_config
-                .infer_stream(&request, &clients, &model_name)
+                .infer_stream(&request, &clients, &model_name, function_name)
                 .await
         })
         .await;
@@ -1994,6 +2001,7 @@ mod tests {
             clients.clone(),
             inference_params.clone(),
             retry_config,
+            None,
         )
         .await;
 
@@ -2181,6 +2189,7 @@ mod tests {
             clients.clone(),
             inference_params.clone(),
             retry_config,
+            None,
         )
         .await;
 

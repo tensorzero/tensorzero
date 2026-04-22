@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::check_table_exists;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
@@ -44,12 +46,12 @@ impl Migration for Migration0050<'_> {
         // Check if the migration manager has already recorded this migration as successful.
         // If so, skip it. Otherwise, run it once so the manager writes the row.
         let query = format!(
-            "SELECT 1 FROM {}.TensorZeroMigration WHERE migration_id = {MIGRATION_ID} LIMIT 1",
-            self.clickhouse.database()
+            "SELECT 1 FROM {{db_name:Identifier}}.TensorZeroMigration WHERE migration_id = {MIGRATION_ID} LIMIT 1"
         );
+        let params = HashMap::from([("db_name", self.clickhouse.database())]);
         let response = self
             .clickhouse
-            .run_query_synchronous_no_params_delayed_err(query)
+            .run_query_synchronous_delayed_err(query, &params)
             .await?;
         Ok(response.response.trim() != "1")
     }

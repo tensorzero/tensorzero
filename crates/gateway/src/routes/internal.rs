@@ -74,6 +74,10 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
             get(endpoints::internal::inference_count::get_function_throughput_by_variant_handler),
         )
         .route(
+            "/internal/functions/{function_name}/variant_usage",
+            get(endpoints::internal::models::get_variant_usage_handler),
+        )
+        .route(
             "/internal/model_inferences/{inference_id}",
             get(endpoints::internal::model_inferences::get_model_inferences_handler),
         )
@@ -280,6 +284,11 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
         .route(
             "/internal/autopilot/v1/sessions/{session_id}/aws/s3_initiate_upload",
             post(endpoints::internal::autopilot::s3_initiate_upload_handler),
+        )
+        // Variant statistics endpoint
+        .route(
+            "/internal/variant_statistics",
+            get(endpoints::internal::variant_statistics::get_variant_statistics_handler),
         )
         // Resolve UUID endpoint
         .route(

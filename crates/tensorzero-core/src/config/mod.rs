@@ -269,6 +269,13 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPathDirectory>,
 }
 
+impl TemplateFilesystemAccess {
+    /// Returns `true` if filesystem access is explicitly enabled or a base path is configured.
+    pub fn is_active(&self) -> bool {
+        self.enabled == Some(true) || self.base_path.is_some()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
@@ -613,6 +620,23 @@ impl OtlpConfig {
         }
     }
 
+    /// Whether GenAI content-capture attributes (`gen_ai.input.messages`,
+    /// `gen_ai.output.messages`, `gen_ai.system_instructions`,
+    /// `gen_ai.tool.definitions`) should be emitted: OTLP traces enabled,
+    /// `include_content = true`, and `format = OpenTelemetry` (the default).
+    pub fn genai_content_capture_enabled(&self) -> bool {
+        let Some(traces) = &self.traces else {
+            return false;
+        };
+        if !traces.enabled.unwrap_or(false) {
+            return false;
+        }
+        if !traces.include_content.unwrap_or(false) {
+            return false;
+        }
+        matches!(traces.format, None | Some(OtlpTracesFormat::OpenTelemetry))
+    }
+
     /// Marks a span as being an OpenInference 'CHAIN' span.
     /// We use this for function/variant/model spans (but not model provider spans).
     /// At the moment, there doesn't seem to be a similar concept in the OpenTelemetry GenAI semantic conventions.
@@ -641,6 +665,11 @@ pub struct OtlpTracesConfig {
     pub format: Option<OtlpTracesFormat>,
     /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
     pub extra_headers: Option<HashMap<String, String>>,
+    /// When `format = "opentelemetry"`, emit the content-carrying GenAI semantic-convention attributes
+    /// (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.system_instructions`,
+    /// `gen_ai.tool.definitions`) on the `model_provider_inference` span. These contain full
+    /// prompt/response content and are opt-in even when traces are enabled. Defaults to `false`.
+    pub include_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -2941,10 +2970,6 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub(crate) fn files_for_db(&self) -> [&ResolvedTomlPathData; 1] {
-        [&self.parameters]
-    }
-
     pub(crate) fn convert_for_db(
         &self,
         file_version_ids: &HashMap<String, Uuid>,

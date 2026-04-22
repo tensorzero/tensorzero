@@ -39,6 +39,13 @@ const CODE_EXECUTION_AMBIENT_GLOBALS: &str = r"
 declare var console: {
   log(...args: unknown[]): void;
 };
+
+/**
+ * Report a final value back to the Rust caller via
+ * `ExecuteBlockResult::result`. Terminates execution; code after the call
+ * does not run. Pair with a runtime check on the returned `Option<String>`.
+ */
+declare function FINAL(value: string): never;
 ";
 
 /// Result of a successful typecheck: the transpiled JavaScript with types stripped.
@@ -787,7 +794,7 @@ mod tests {
     fn test_code_execution_ambient_excludes_rlm_only_globals() {
         let ambient = build_code_execution_ambient_declarations(&fake_exposed_tools());
         assert!(!ambient.contains("declare var context: string"));
-        assert!(!ambient.contains("declare function FINAL"));
+        assert!(ambient.contains("declare function FINAL"));
         assert!(!ambient.contains("declare function llm_query"));
         assert!(!ambient.contains("declare function llm_query_batched"));
         assert!(ambient.contains("declare var console"));

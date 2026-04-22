@@ -48,9 +48,7 @@ use tensorzero_core::tool::ToolCallWrapper;
 use thiserror::Error;
 use uuid::Uuid;
 
-use durable_tools::{
-    InferenceResponse, InputMessage, InputMessageContent, NonControlToolError, ToolError,
-};
+use tensorzero_core::client::{InferenceResponse, InputMessage, InputMessageContent};
 
 use self::bip39::BIP39_WORDS;
 
@@ -64,14 +62,6 @@ pub enum UuidSubstitutionError {
     },
     #[error("regex capture group {group} missing for match")]
     MissingCaptureGroup { group: usize },
-}
-
-impl From<UuidSubstitutionError> for ToolError {
-    fn from(err: UuidSubstitutionError) -> Self {
-        ToolError::NonControl(NonControlToolError::Internal {
-            message: err.to_string(),
-        })
-    }
 }
 
 // UUID regex: 8-4-4-4-12 hex pattern

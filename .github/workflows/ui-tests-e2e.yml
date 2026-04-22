@@ -532,12 +532,12 @@ jobs:
           case "${{ matrix.auth_mode }}" in
             no_gateway_auth)
               # Skip all auth-specific tests - gateway has no authentication
-              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-ui-server-key|@gateway-auth-with-browser-key" -j 4
+              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-ui-server-key|@gateway-auth-with-browser-key|@config-editing" -j 4
               ;;
             gateway_auth_with_ui_server_key)
-              # Run all tests except mock and browser-key - UI server has the API key,
+              # Run all tests except mock, browser-key, and config-editing - UI server has the API key,
               # so @gateway-auth-with-ui-server-key tests (409 rejection) are included
-              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-browser-key" -j 4
+              pnpm ui:test:e2e --grep-invert "@mock|@gateway-auth-with-browser-key|@config-editing" -j 4
               ;;
             gateway_auth_with_browser_key)
               # Run ONLY browser key tests - gateway has auth but UI server has no API key,
@@ -578,6 +578,144 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: playwright-report-e2e-main-${{ matrix.auth_mode }}
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+  # Runs @config-editing playwright tests against a gateway booted from the
+  # config-in-database path. These tests mutate gateway-wide config state via
+  # /internal/config_toml/apply, so they need TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE
+  # and a pre-loaded config — they cannot run in the main e2e job.
+  ui-tests-e2e-config-editing:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group) }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.13.0"
+
+      - name: Setup `pnpm`
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@10.15.0; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Install `pnpm` dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm dependencies after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Setup Playwright
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Playwright after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull container images
+        run: |
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/ui-dev:sha-${{ github.sha }} \
+            tensorzero/mock-provider-api:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+
+      - name: Set common fixture environment variables
+        working-directory: ui
+        run: |
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          # Dummy values — config editing tests do not make real inference calls
+          echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=not_used" >> fixtures/.env-gateway
+
+      - name: Start docker containers and apply fixtures
+        working-directory: ui
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          export TENSORZERO_SKIP_LARGE_FIXTURES=1
+          docker compose \
+            -f fixtures/docker-compose.e2e.yml \
+            -f fixtures/docker-compose.ui.yml \
+            -f fixtures/docker-compose.config-in-db.yml \
+            up --no-build -d
+          docker compose \
+            -f fixtures/docker-compose.e2e.yml \
+            -f fixtures/docker-compose.ui.yml \
+            -f fixtures/docker-compose.config-in-db.yml \
+            wait fixtures
+
+      - name: Run config-editing E2E tests
+        id: e2e_tests_config_editing
+        env:
+          TENSORZERO_CI: 1
+          # Playwright runs on the host; gateway port 3000 is mapped to localhost.
+          # Using http://gateway:3000 here would fail with EAI_AGAIN because the
+          # `gateway` hostname is only resolvable within the Docker network.
+          TENSORZERO_GATEWAY_URL: "http://localhost:3000"
+        run: pnpm ui:test:e2e --grep "@config-editing" --workers=1
+
+      - name: Print docker compose logs
+        if: always()
+        working-directory: ui
+        run: |
+          docker compose \
+            -f fixtures/docker-compose.e2e.yml \
+            -f fixtures/docker-compose.ui.yml \
+            -f fixtures/docker-compose.config-in-db.yml \
+            logs -t
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: playwright-report-e2e-config-editing
           path: |
             ui/playwright-report/
             ui/test-results/

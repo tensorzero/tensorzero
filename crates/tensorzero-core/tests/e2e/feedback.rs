@@ -293,6 +293,7 @@ async fn test_comment_feedback_validation_disabled() {
         None,
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     )
     .await
     .unwrap();
@@ -1671,6 +1672,7 @@ async fn test_float_feedback_validation_disabled() {
         None,
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     )
     .await
     .unwrap();
@@ -2016,6 +2018,7 @@ async fn test_boolean_feedback_validation_disabled() {
         None,
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     )
     .await
     .unwrap();

@@ -33,7 +33,7 @@ use url::Url;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use input_handling::resolved_input_to_client_input;
 mod tool_context;
-pub use tool_context::ToolContextHelper;
+pub use tool_context::{ToolContextHelper, checkpointed_inference};
 
 pub use crate::cache::CacheParamsOptions;
 pub use crate::endpoints::feedback::FeedbackResponse;
@@ -661,6 +661,7 @@ impl ClientBuilder {
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
                                 HashSet::new(), // tool_whitelist not needed for embedded client
+                                false,
                             )
                             .await
                             .map_err(|e| {
@@ -712,6 +713,7 @@ impl ClientBuilder {
                                 self.drop_wrapper,
                                 HashSet::new(), // available_tools not needed for embedded client
                                 HashSet::new(), // tool_whitelist not needed for embedded client
+                                false,
                             )
                             .await
                             .map_err(|e| {

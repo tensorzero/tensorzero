@@ -19,6 +19,7 @@ use deno_core::v8::IsolateHandle;
 use deno_core::{JsRuntime, OpState, PollEventLoopOptions, RuntimeOptions};
 use deno_error::JsErrorBox;
 use durable::{ControlFlow, async_trait};
+use tensorzero_types::InputMessage;
 use tensorzero_types::tool_error::ToolResult;
 use tokio::runtime::Handle;
 use tracing::Span;
@@ -64,6 +65,21 @@ pub struct RlmLoopParams<'a> {
     pub exposed_tools: Option<&'a ExposedTools>,
     /// The TensorZero function name to use for code generation inference calls.
     pub function_name: &'a str,
+    /// Optional message history from a previous RLM session to prepend.
+    /// When provided, these messages are placed before the initial prompt
+    /// so the LLM has context from prior interactions.
+    pub initial_messages: Vec<InputMessage>,
+}
+
+/// Result of an RLM loop execution, containing both the final answer
+/// and the full message history for potential reuse.
+#[derive(Debug)]
+pub struct RlmResult {
+    /// The final answer produced by `FINAL()`.
+    pub answer: String,
+    /// The complete message history from this RLM session,
+    /// including any initial messages that were prepended.
+    pub messages: Vec<InputMessage>,
 }
 
 /// Trait abstracting the RLM loop execution within `llm_query`.
@@ -72,7 +88,10 @@ pub struct RlmLoopParams<'a> {
 /// implementation delegates to `run_rlm_loop`.
 #[async_trait]
 pub trait RlmQuery: Send + Sync {
-    async fn run(&self, params: RlmLoopParams<'_>) -> Result<Result<String, ControlFlow>, TsError>;
+    async fn run(
+        &self,
+        params: RlmLoopParams<'_>,
+    ) -> Result<Result<RlmResult, ControlFlow>, TsError>;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +110,10 @@ pub struct RuntimeParams {
     pub ts_checker: Arc<TsCheckerPool>,
     pub exposed_tools: Option<ExposedTools>,
     pub oom_snapshot_config: Option<OomSnapshotConfig>,
+    /// V8 heap limit in bytes for this isolate. When `None`, the pool-level
+    /// default (see [`RlmPool::heap_limit_bytes`]) is used. Exceeding this
+    /// limit triggers the near-heap-limit callback and terminates the isolate.
+    pub heap_limit_bytes: Option<usize>,
 }
 
 /// State stored in `OpState` for the RLM runtime.
@@ -306,7 +329,10 @@ pub enum RuntimeMode {
         /// Recursion and execution metadata needed by `llm_query`.
         rlm_state: RlmRuntimeState,
     },
-    /// Direct code execution mode: `console`, `join_tool`, and `toolClient`.
+    /// Direct code execution mode: `console`, `FINAL`, `join_tool`, and
+    /// `toolClient`. `FINAL` is exposed so callers can propagate a single
+    /// final value back via [`ExecuteBlockResult::result`], mirroring the
+    /// RLM escape mechanism.
     CodeExecution,
 }
 
@@ -334,6 +360,7 @@ impl RuntimeMode {
                 RuntimeEndowment::ToolClient,
             ],
             Self::CodeExecution => &[
+                RuntimeEndowment::Final,
                 RuntimeEndowment::Console,
                 RuntimeEndowment::JoinTool,
                 RuntimeEndowment::ToolClient,
@@ -616,11 +643,20 @@ impl Drop for JsRuntimeHandle {
 pub struct RlmPool {
     semaphore: Arc<tokio::sync::Semaphore>,
     oom_snapshot_config: Option<OomSnapshotConfig>,
+    /// Default V8 heap limit (bytes) applied to isolates spawned through
+    /// this pool. Individual `RuntimeParams` may override with
+    /// [`RuntimeParams::heap_limit_bytes`].
+    heap_limit_bytes: usize,
 }
 
 impl RlmPool {
     pub fn oom_snapshot_config(&self) -> Option<&OomSnapshotConfig> {
         self.oom_snapshot_config.as_ref()
+    }
+
+    /// Default V8 heap limit (bytes) for isolates spawned from this pool.
+    pub fn heap_limit_bytes(&self) -> usize {
+        self.heap_limit_bytes
     }
 }
 
@@ -677,6 +713,10 @@ impl ExposedToolMode {
 impl RlmPool {
     /// Create a new pool with the given concurrency limit.
     ///
+    /// Uses the environment-driven default heap limit (see
+    /// `RLM_JS_HEAP_LIMIT_MIB`, 100 MiB fallback). To override per pool, use
+    /// [`RlmPool::with_heap_limit_mib`].
+    ///
     /// # Errors
     ///
     /// Returns `TsError::InvalidConfig` if `max_concurrency` is 0.
@@ -689,6 +729,7 @@ impl RlmPool {
         Ok(Self {
             semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrency)),
             oom_snapshot_config: None,
+            heap_limit_bytes: *DEFAULT_JS_HEAP_LIMIT,
         })
     }
 
@@ -697,6 +738,25 @@ impl RlmPool {
     pub fn with_oom_snapshot_config(mut self, config: OomSnapshotConfig) -> Self {
         self.oom_snapshot_config = Some(config);
         self
+    }
+
+    /// Override the default V8 heap limit (in MiB) for isolates spawned from
+    /// this pool. Must be at least 1 MiB.
+    ///
+    /// Individual `RuntimeParams` may still override per-runtime via
+    /// [`RuntimeParams::heap_limit_bytes`].
+    ///
+    /// # Errors
+    ///
+    /// Returns `TsError::InvalidConfig` if `heap_limit_mib` is 0.
+    pub fn with_heap_limit_mib(mut self, heap_limit_mib: usize) -> Result<Self, TsError> {
+        if heap_limit_mib == 0 {
+            return Err(TsError::InvalidConfig {
+                message: "RlmPool heap_limit_mib must be at least 1".to_string(),
+            });
+        }
+        self.heap_limit_bytes = heap_limit_mib * 1024 * 1024;
+        Ok(self)
     }
 
     /// Spawn a direct code-execution runtime without entering the RLM loop.
@@ -717,6 +777,7 @@ impl RlmPool {
             ts_checker,
             exposed_tools,
             oom_snapshot_config: self.oom_snapshot_config.clone(),
+            heap_limit_bytes: Some(self.heap_limit_bytes),
         })
         .await
     }
@@ -761,7 +822,9 @@ async fn spawn_runtime_handle(
         ts_checker,
         exposed_tools,
         oom_snapshot_config,
+        heap_limit_bytes,
     } = params;
+    let heap_limit_bytes = heap_limit_bytes.unwrap_or(*DEFAULT_JS_HEAP_LIMIT);
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<RuntimeCommand>();
     let (init_tx, init_rx) =
         tokio::sync::oneshot::channel::<Result<deno_core::v8::IsolateHandle, TsError>>();
@@ -800,6 +863,7 @@ async fn spawn_runtime_handle(
             exposed_tools,
             main_runtime_handle,
             oom_snapshot_config,
+            heap_limit_bytes,
         ) {
             Ok(rt) => rt,
             Err(e) => {
@@ -870,11 +934,12 @@ pub async fn spawn_child_runtime(
 // Runtime creation
 // ---------------------------------------------------------------------------
 
-/// V8 heap limit for RLM isolates. Configurable via `RLM_JS_HEAP_LIMIT_MIB`.
-/// Defaults to 100 MiB. We pass the limit to V8. If we get close to it
-/// (as determined by our 'add_near_heap_limit_callback'), then we terminate
-/// the isolate, which produces a nice Rust error on the other side.
-static JS_HEAP_LIMIT: LazyLock<usize> = LazyLock::new(|| {
+/// Default V8 heap limit for RLM isolates when the pool / runtime params do
+/// not specify one. Configurable via `RLM_JS_HEAP_LIMIT_MIB` (defaults to 100
+/// MiB). We pass the limit to V8; if we get close to it (as determined by our
+/// `add_near_heap_limit_callback`) the isolate is terminated and surfaces a
+/// clean Rust error.
+static DEFAULT_JS_HEAP_LIMIT: LazyLock<usize> = LazyLock::new(|| {
     std::env::var("RLM_JS_HEAP_LIMIT_MIB")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -901,10 +966,11 @@ fn create_rlm_runtime(
     exposed_tools: Option<ExposedTools>,
     main_runtime_handle: MainRuntimeHandle,
     oom_snapshot_config: Option<OomSnapshotConfig>,
+    heap_limit_bytes: usize,
 ) -> Result<JsRuntime, TsError> {
     let mut runtime = JsRuntime::new(RuntimeOptions {
         extensions: vec![rlm_ext::init()],
-        create_params: Some(v8::CreateParams::default().heap_limits(0, *JS_HEAP_LIMIT)),
+        create_params: Some(v8::CreateParams::default().heap_limits(0, heap_limit_bytes)),
         ..Default::default()
     });
 
@@ -1187,11 +1253,11 @@ async fn upload_oom_snapshot(
 mod tests {
     use super::*;
     use crate::llm_query::extract_text_from_response;
-    use crate::tensorzero_client::MockTensorZeroClient;
-    use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
-    use tensorzero_core::inference::types::ContentBlockChatOutput;
-    use tensorzero_core::inference::types::Usage;
-    use tensorzero_types::InputMessageContent;
+    use crate::tensorzero_client::{MockTensorZeroClient, PoolInferenceParams};
+    use tensorzero_types::{
+        ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, InputMessageContent,
+        Usage,
+    };
 
     const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -1229,7 +1295,7 @@ mod tests {
         }
     }
 
-    fn first_inference_text(params: &tensorzero_core::client::ClientInferenceParams) -> String {
+    fn first_inference_text(params: &PoolInferenceParams) -> String {
         params
             .input
             .messages
@@ -1282,6 +1348,7 @@ mod tests {
             None,
             MainRuntimeHandle(Handle::current()),
             None,
+            *DEFAULT_JS_HEAP_LIMIT,
         )
         .unwrap_or_else(|e| std::panic::panic_any(format!("Failed to create runtime: {e}")))
     }
@@ -1296,6 +1363,7 @@ mod tests {
             None,
             MainRuntimeHandle(Handle::current()),
             None,
+            *DEFAULT_JS_HEAP_LIMIT,
         )
         .unwrap_or_else(|e| std::panic::panic_any(format!("Failed to create runtime: {e}")))
     }
@@ -1326,6 +1394,7 @@ mod tests {
             None,
             MainRuntimeHandle(Handle::current()),
             None,
+            *DEFAULT_JS_HEAP_LIMIT,
         )
         .unwrap_or_else(|e| std::panic::panic_any(format!("Failed to create runtime: {e}")))
     }
@@ -1417,7 +1486,7 @@ mod tests {
         );
         assert_eq!(
             eval_to_string(&mut runtime, "typeof FINAL").await,
-            "undefined"
+            "function"
         );
         assert_eq!(
             eval_to_string(&mut runtime, "typeof llm_query").await,
@@ -1463,7 +1532,7 @@ mod tests {
             .expect("execute_js_block should succeed");
         assert_eq!(
             result.console_logs,
-            vec!["undefined undefined undefined object function object"]
+            vec!["undefined function undefined object function object"]
         );
         handle.shutdown().await.expect("shutdown should succeed");
     }
@@ -1962,7 +2031,7 @@ mod tests {
     }
 
     fn mock_chat_response(texts: &[&str]) -> InferenceResponse {
-        use tensorzero_core::inference::types::Text as T0Text;
+        use tensorzero_types::Text as T0Text;
         InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::nil(),
             episode_id: Uuid::nil(),
@@ -2095,6 +2164,7 @@ mod tests {
                 ts_checker: test_ts_checker().await,
                 exposed_tools: None,
                 oom_snapshot_config: None,
+                heap_limit_bytes: None,
             },
             parent_permit.child_permit(),
         )
@@ -2150,8 +2220,7 @@ mod tests {
 
     #[test]
     fn test_extract_text_json_response() {
-        use tensorzero_core::endpoints::inference::JsonInferenceResponse;
-        use tensorzero_core::inference::types::JsonInferenceOutput;
+        use tensorzero_types::{JsonInferenceOutput, JsonInferenceResponse};
         let response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::nil(),
             episode_id: Uuid::nil(),

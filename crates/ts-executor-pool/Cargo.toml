@@ -14,6 +14,7 @@ regex.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tensorzero-core.workspace = true
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-ts-types = { path = "../tensorzero-ts-types" }
 tensorzero-types = { path = "../tensorzero-types" }
 deno_error = "0.7"
@@ -28,7 +29,18 @@ v8 = "147.0.0"
 icu_calendar = ">=2.1, <2.2"
 bb8 = "0.9.1"
 deno_core.workspace = true
-aws-sdk-s3 = "1.129.0"
+# `default-features = false` avoids the legacy `hyper 0.14` + `rustls 0.21`
+# stack pulled in by the crate's default `rustls` feature (which enables
+# `aws-smithy-runtime/tls-rustls`). See
+# https://github.com/smithy-lang/smithy-rs/issues/4576#issuecomment-4113177811
+# The feature list mirrors `aws-sdk-s3`'s defaults (`sigv4a`, `http-1x`,
+# `default-https-client`, `rt-tokio`) with `rustls` removed.
+aws-sdk-s3 = { version = "1.130.0", default-features = false, features = [
+    "sigv4a",
+    "http-1x",
+    "default-https-client",
+    "rt-tokio",
+] }
 
 [build-dependencies]
 blake3.workspace = true

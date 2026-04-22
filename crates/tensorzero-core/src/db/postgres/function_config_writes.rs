@@ -14,8 +14,8 @@ use tensorzero_stored_config::{
     StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
     StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
     StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig, StoredTimeoutsConfig,
-    StoredToolChoice, StoredToolUseConfig, StoredVariantConfig, StoredVariantRef,
-    StoredVariantVersionConfig,
+    StoredToolChoice, StoredToolUseConfig, StoredTypescriptJudgeConfig, StoredVariantConfig,
+    StoredVariantRef, StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -323,6 +323,8 @@ async fn write_file_versions(
 
     // Merge extra templates. All prompts (directly or transitively included) must be stored
     // in the database for the config to be self-contained.
+    // Note: extra_templates keys are already relative paths (discovered via MiniJinja
+    // include traversal from template_filesystem_access), so no prefix stripping is needed.
     for (key, body) in extra_templates {
         if !templates.contains_key(key) {
             templates.insert(
@@ -978,6 +980,13 @@ pub(crate) fn convert_evaluators(
                     StoredEvaluatorConfig::Regex(StoredRegexConfig {
                         must_match: config.must_match.clone(),
                         must_not_match: config.must_not_match.clone(),
+                    })
+                }
+                UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                    StoredEvaluatorConfig::Typescript(StoredTypescriptJudgeConfig {
+                        typescript_code: config.typescript_file.data().to_string(),
+                        output_type: config.output_type.into(),
+                        optimize: config.optimize.into(),
                     })
                 }
             },

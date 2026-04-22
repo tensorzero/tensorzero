@@ -11,7 +11,7 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::tool::{InferenceResponseToolCall, ToolCall, ToolCallWrapper, ToolResult};
 use uuid::Uuid;
 
-use durable_tools::Role;
+use tensorzero_core::client::Role;
 
 fn make_uuid(value: u128) -> Uuid {
     Uuid::from_u128(value)

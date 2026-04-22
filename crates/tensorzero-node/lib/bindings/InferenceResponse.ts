@@ -3,6 +3,6 @@ import type { ChatInferenceResponse } from "./ChatInferenceResponse";
 import type { JsonInferenceResponse } from "./JsonInferenceResponse";
 
 /**
- * InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
+ * InferenceResponse determines what gets serialized and sent to the client
  */
 export type InferenceResponse = ChatInferenceResponse | JsonInferenceResponse;

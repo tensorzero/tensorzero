@@ -1007,11 +1007,11 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
             }
         }
         // For the judge model we want to check that the `raw_request` is correct
-        if mi.model_name == "claude-haiku-4-5-anthropic" {
+        if mi.model_name == "claude-sonnet-4-6" {
             let raw_request: Value =
                 serde_json::from_str(mi.raw_request.as_deref().unwrap()).unwrap();
             let expected_request = json!({
-                "model": "claude-haiku-4-5",
+                "model": "claude-sonnet-4-6",
                 "messages": [
                     {
                         "role": "user",
@@ -1068,7 +1068,7 @@ async fn test_best_of_n_json_real_judge_implicit_tool() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "json_goodbye", "claude-haiku-4-5-anthropic"]
+        ["test", "json", "json_goodbye", "claude-sonnet-4-6"]
             .iter()
             .map(std::string::ToString::to_string)
             .collect();

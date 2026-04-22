@@ -151,6 +151,14 @@ export async function getConfig(): Promise<UiConfig> {
 }
 
 /**
+ * Clears all cached config state so the next read fetches from the gateway.
+ */
+export function invalidateConfigCache(): void {
+  configCache = undefined;
+  snapshotConfigCache.clear();
+}
+
+/**
  * Helper function to get a specific function configuration by name (server-side only)
  * @param functionName - The name of the function to retrieve
  * @param config - The config object (optional, will fetch if not provided)

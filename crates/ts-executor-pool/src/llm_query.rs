@@ -11,13 +11,20 @@ use crate::runtime::{
     RuntimeMode, RuntimeParams, spawn_child_runtime,
 };
 use crate::state::OomSnapshotConfig;
-use crate::tensorzero_client::TensorZeroClient;
+use crate::tensorzero_client::{PoolInferenceParams, TensorZeroClient};
 use crate::ts_checker::TsCheckerPool;
 use durable::ControlFlow;
-use tensorzero_core::client::ClientInferenceParams;
-use tensorzero_core::endpoints::inference::{ChatInferenceResponse, InferenceResponse};
-use tensorzero_core::inference::types::ContentBlockChatOutput;
-use tensorzero_types::{Input, InputMessage, InputMessageContent, Role};
+use tensorzero_types::{
+    ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent, Role, Text,
+};
+
+/// Maximum prompt length (in chars) accepted by `llm_query_with_timeout`.
+///
+/// Roughly matches the context compaction token budget (~300k tokens ≈ 1.2M chars).
+/// Prompts exceeding this are rejected early with a JS-visible error instead of
+/// being sent to the inference provider (which would fail with a payload-too-large error).
+const MAX_LLM_QUERY_INPUT_CHARS: usize = 1_200_000;
 
 /// Shared implementation for `op_llm_query` and `op_llm_query_batched`.
 ///
@@ -35,6 +42,16 @@ pub async fn llm_query_with_timeout(
     exposed_tools: Option<ExposedTools>,
     oom_snapshot_config: Option<OomSnapshotConfig>,
 ) -> Result<Result<String, ControlFlow>, TsError> {
+    let prompt_char_count = prompt.chars().count();
+    if prompt_char_count > MAX_LLM_QUERY_INPUT_CHARS {
+        return Err(TsError::Execution {
+            message: format!(
+                "`llm_query` input too large ({prompt_char_count} chars, limit {MAX_LLM_QUERY_INPUT_CHARS}). \
+                 Try again with less data (e.g. use smaller limits or more specific filters).",
+            ),
+        });
+    }
+
     let timeout = std::time::Duration::from_secs(rlm_state.execution_timeout_secs);
     Box::pin(tokio::time::timeout(
         timeout,
@@ -100,6 +117,10 @@ async fn llm_query_inner(
                 ts_checker: ts_checker.clone(),
                 exposed_tools: exposed_tools.clone(),
                 oom_snapshot_config,
+                // Child RLM runtimes inherit the process-wide default heap
+                // limit (`RLM_JS_HEAP_LIMIT_MIB`). Pool-level overrides only
+                // apply to top-level runtimes spawned via `RlmPool`.
+                heap_limit_bytes: None,
             },
             child_permit,
         )
@@ -116,10 +137,12 @@ async fn llm_query_inner(
                 ts_checker: &ts_checker,
                 exposed_tools: exposed_tools.as_ref(),
                 function_name: "rlm_recursive_query",
+                initial_messages: vec![],
             })),
         )
         .await
         .and_then(|r| r)
+        .map(|r| r.map(|rlm_result| rlm_result.answer))
     } else {
         // Leaf: single-shot inference via rlm_text_analysis.
         let user_text = format!(
@@ -129,7 +152,7 @@ async fn llm_query_inner(
         let messages = vec![make_user_message(vec![user_text])];
         let response = rlm_permit
             .run_with_cancellation(run_inference(
-                ClientInferenceParams {
+                PoolInferenceParams {
                     function_name: Some("rlm_text_analysis".to_string()),
                     episode_id: Some(rlm_state.episode_id),
                     input: Input {
@@ -182,7 +205,7 @@ pub fn make_user_message(text: impl IntoIterator<Item = String>) -> InputMessage
         role: Role::User,
         content: text
             .into_iter()
-            .map(|t| InputMessageContent::Text(tensorzero_core::inference::types::Text { text: t }))
+            .map(|t| InputMessageContent::Text(Text { text: t }))
             .collect(),
     }
 }
@@ -191,8 +214,6 @@ pub fn make_user_message(text: impl IntoIterator<Item = String>) -> InputMessage
 pub fn make_assistant_message(text: impl Into<String>) -> InputMessage {
     InputMessage {
         role: Role::Assistant,
-        content: vec![InputMessageContent::Text(
-            tensorzero_core::inference::types::Text { text: text.into() },
-        )],
+        content: vec![InputMessageContent::Text(Text { text: text.into() })],
     }
 }

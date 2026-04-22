@@ -31,12 +31,26 @@ slow-timeout = { period = "20s", terminate-after = 5 }
 # - optimization mock tests run separately in mock-optimization-tests with the mock gateway config
 # - binding generation
 # - evaluation tests run separately with a database matrix in the evaluation-tests CI job
+# - config editing tests run separately in the live-tests-config-in-database CI job because
+#   they mutate gateway-wide config state
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
 default-filter = '''
-not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive) | package(evaluations))
+not (test(batch) | test(test_dummy_only) | test(clickhouse::) | (test(db::) & !test(postgres) & !test(valkey)) | test(export_bindings_) | test(export_schema_) | binary(optimization-mock) | package(tensorzero-derive) | package(evaluations) | test(config_editing::))
 '''
+junit.path = "junit.xml"
+
+# Run only the config editing e2e tests. These mutate gateway-wide config state
+# via `/internal/config_toml/apply`, so they must not race with the main e2e
+# suite and run after it finishes in the live-tests-config-in-database workflow.
+[profile.config-editing]
+default-filter = 'binary(e2e) and test(config_editing::)'
+# These tests all mutate gateway-wide config state, so they must run one at a
+# time even within the profile.
+test-threads = 1
+retries = { backoff = "exponential", count = 2, delay = "5s", jitter = true, max-delay = "30s" }
+slow-timeout = { period = "30s", terminate-after = 2 }
 junit.path = "junit.xml"
 
 [profile.live-batch]

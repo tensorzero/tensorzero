@@ -275,7 +275,7 @@ jobs:
           retention-days: 7
 
       - name: Check tensorzero-node bindings are properly exported
-        run: pnpm --filter=tensorzero-node run check-exports
+        run: pnpm --filter=@tensorzero/tensorzero-node run check-exports
 
   check-python-schemas:
     needs: [detect-changes]
@@ -570,13 +570,13 @@ jobs:
         run: pnpm -r build
 
       - name: Format tensorzero-node package
-        run: pnpm --filter=tensorzero-node run format:check
+        run: pnpm --filter=@tensorzero/tensorzero-node run format:check
 
       - name: Lint tensorzero-node package
-        run: pnpm --filter=tensorzero-node run lint:check
+        run: pnpm --filter=@tensorzero/tensorzero-node run lint:check
 
       - name: Typecheck tensorzero-node package
-        run: pnpm --filter=tensorzero-node run typecheck
+        run: pnpm --filter=@tensorzero/tensorzero-node run typecheck
 
       - name: Run oxlint + ESLint
         run: pnpm --filter=tensorzero-ui run lint:check
@@ -619,7 +619,10 @@ jobs:
 
       - name: Build (Rust)
         working-directory: crates
-        run: cargo build --workspace --verbose
+        # A workspace-level build does not work, as this will to perform a Python
+        # build with the 'ts-executor-pool' feature enabled on 'evaluations'
+        # (due to feaure unification)
+        run: cargo build -p gateway
 
       - name: Validate config
         working-directory: crates
@@ -1407,6 +1410,23 @@ jobs:
     uses: ./.github/workflows/live-tests.yml
     secrets: inherit
 
+  live-tests-config-in-database:
+    if: ${{ needs.detect-changes.outputs.live-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    needs:
+      [
+        detect-changes,
+        build-gateway-container,
+        build-gateway-e2e-container,
+        build-fixtures-container,
+        build-provider-proxy-container,
+        build-live-tests-container,
+      ]
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/live-tests-config-in-database.yml
+    secrets: inherit
+
   inference-cache-tests:
     if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     needs:
@@ -1547,6 +1567,7 @@ jobs:
         inference-cache-tests,
         lint-rust,
         live-tests,
+        live-tests-config-in-database,
         k3d,
         mock-optimization-tests,
         mocked-batch-tests,
