@@ -1,5 +1,6 @@
 [gateway]
 observability.enabled = true
+observability.async_writes = false
 
 [gateway.observability.batch_writes]
 enabled = true

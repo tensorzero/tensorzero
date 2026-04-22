@@ -221,18 +221,28 @@ See [Export Prometheus metrics](/operations/export-prometheus-metrics) for more 
 ### `observability.async_writes`
 
 - **Type:** boolean
-- **Required:** no (default: `false`)
+- **Required:** no (default: `true`)
 
-Enabling this setting will improve the latency of the gateway by offloading the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
+By default, the gateway offloads the responsibility of writing inferences, feedback, and other data to your database to a background task, instead of waiting for the database to complete the writes.
 Each database insert is handled immediately in separate background tasks.
+
+To disable async writes and use synchronous writes instead, set `gateway.observability.async_writes = false`.
 
 See the ["Optimize latency and throughput" guide](/deployment/optimize-latency-and-throughput) for best practices.
 
-You can't enable `async_writes` and `batch_writes` at the same time.
+You can't enable `async_writes` and `batch_writes` at the same time. Since `async_writes` is enabled by default, you must explicitly disable it to use `batch_writes`:
+
+```toml title="tensorzero.toml"
+[gateway]
+# ...
+observability.async_writes = false
+observability.batch_writes = { enabled = true }
+# ...
+```
 
 <Warning>
 
-If you enable this setting, make sure that the gateway lives long enough to complete the writes.
+Since async writes are enabled by default, make sure that the gateway lives long enough to complete the writes.
 This can be problematic in serverless environments that terminate the gateway instance after the response is returned but before the writes are completed.
 
 </Warning>
@@ -256,6 +266,7 @@ The `batch_writes` object supports the following fields:
 ```toml tensorzero.toml
 [gateway]
 # ...
+observability.async_writes = false
 observability.batch_writes = { enabled = true, flush_interval_ms = 200, max_rows = 500 }
 # ...
 ```

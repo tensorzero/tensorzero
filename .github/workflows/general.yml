@@ -32,9 +32,9 @@ jobs:
       docs: ${{ steps.filter.outputs.docs || 'true' }}
       live-tests: ${{ steps.filter.outputs.live-tests || 'true' }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: github.event_name != 'pull_request'
-      - uses: dorny/paths-filter@668c092af3649c4b664c54e4b704aa46782f6f7c
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
@@ -75,7 +75,7 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -95,13 +95,13 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Set up Python
         if: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
 
@@ -126,10 +126,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -175,17 +175,17 @@ jobs:
     steps:
       - name: Set DNS
         run: echo "127.0.0.1 howdy.tensorzero.com" | sudo tee -a /etc/hosts
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
       - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@f378676225212387f1283f4da878712af2c4cd60
+        uses: namespacelabs/nscloud-setup@f378676225212387f1283f4da878712af2c4cd60 # v0.0.11
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e # v0.0.20
         with:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
@@ -223,10 +223,10 @@ jobs:
       actions: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: "24.13.0"
 
@@ -268,7 +268,7 @@ jobs:
 
       - name: Upload bindings artifact on diff failure
         if: failure()
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68 # v1.0.0
         with:
           name: node-bindings
           path: crates/tensorzero-node/lib/bindings
@@ -284,10 +284,10 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: "24.13.0"
 
@@ -306,7 +306,7 @@ jobs:
         shell: bash
 
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -336,7 +336,7 @@ jobs:
       actions: read
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
         run: |
@@ -351,13 +351,13 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
           workspaces: "crates -> target"
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -397,7 +397,7 @@ jobs:
         include:
           - total_partitions: 4
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
       # This avoids the need to deal with linter bugs in older rust versions.
       - name: Install Rust toolchain
@@ -408,7 +408,7 @@ jobs:
             fi
           done
         shell: bash
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "lint-rust-cache"
@@ -416,7 +416,7 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-hack
 
@@ -432,7 +432,7 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
@@ -454,7 +454,7 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -513,7 +513,7 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
@@ -535,7 +535,7 @@ jobs:
         run: rustc --version
 
       - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: "24.13.0"
 
@@ -594,7 +594,7 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
@@ -613,7 +613,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -637,7 +637,7 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
@@ -656,7 +656,7 @@ jobs:
         shell: bash
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
@@ -678,7 +678,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # rust-toolchain.toml pins our MSRV to ensure everything compiles with that version
       - name: Install Rust (from rust-toolchain.toml)
@@ -700,7 +700,7 @@ jobs:
         run: rustc --version
 
       - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: "24.13.0"
 
@@ -719,7 +719,7 @@ jobs:
         shell: bash
 
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -799,7 +799,7 @@ jobs:
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
 
       - name: Install cargo-nextest and cargo-hack
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest,cargo-hack
 
@@ -876,10 +876,10 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-deny
 
@@ -928,7 +928,7 @@ jobs:
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -948,7 +948,7 @@ jobs:
           done
         shell: bash
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
@@ -956,12 +956,12 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -1016,7 +1016,7 @@ jobs:
       matrix:
         database: [clickhouse, postgres]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
@@ -1036,7 +1036,7 @@ jobs:
           done
         shell: bash
 
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
@@ -1044,12 +1044,12 @@ jobs:
           workspaces: "crates -> target"
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -1138,7 +1138,7 @@ jobs:
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
         run: |
@@ -1153,14 +1153,14 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
           workspaces: "crates -> target"
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
@@ -1168,7 +1168,7 @@ jobs:
         run: bash ci/free-disk-space.sh
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -1353,10 +1353,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -1476,16 +1476,6 @@ jobs:
     needs: [build-gateway-container, build-mock-provider-api-container]
     secrets: inherit
 
-  autopilot-e2e:
-    permissions:
-      contents: read
-    if: needs.detect-changes.outputs.code == 'true' && github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
-    needs: [detect-changes, build-gateway-e2e-container, build-ui-container]
-    uses: ./.github/workflows/dispatch-autopilot-e2e.yml
-    secrets:
-      AUTOPILOT_DISPATCH_APP_ID: ${{ secrets.AUTOPILOT_DISPATCH_APP_ID }}
-      AUTOPILOT_DISPATCH_PRIVATE_KEY: ${{ secrets.AUTOPILOT_DISPATCH_PRIVATE_KEY }}
-
   check-docs-broken-links:
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.docs == 'true'
@@ -1493,10 +1483,10 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: "24.13.0"
 
@@ -1531,6 +1521,23 @@ jobs:
         working-directory: docs
         run: pnpm exec mint broken-links --check-anchors
 
+  pinact:
+    # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
+    # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: suzuki-shunsuke/pinact-action@cf51507d80d4d6522a07348e3d58790290eaf0b6 # v2.0.0
+        with:
+          app_id: ${{ secrets.PINACT_APP_ID }}
+          app_private_key: ${{ secrets.PINACT_APP_PRIVATE_KEY }}
+
   # See 'ci/README.md' at the repository root for more details.
   # This job queries the GitHub API for all jobs in this workflow run and asserts
   # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
@@ -1545,7 +1552,6 @@ jobs:
     needs:
       [
         detect-changes,
-        autopilot-e2e,
         build-gateway-container,
         build-gateway-e2e-container,
         build-live-tests-container,
@@ -1571,6 +1577,7 @@ jobs:
         k3d,
         mock-optimization-tests,
         mocked-batch-tests,
+        pinact,
         postgres-tests,
         rust-build,
         rust-test,
@@ -1582,7 +1589,7 @@ jobs:
       ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout: ci/check-all-general-jobs-passed.sh
           sparse-checkout-cone-mode: false
