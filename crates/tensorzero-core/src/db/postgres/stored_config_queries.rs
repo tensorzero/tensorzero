@@ -966,16 +966,14 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
     Ok(config)
 }
 
-/// Loads the latest non-tombstoned version of every file in `stored_files`,
-/// keyed by `file_path`.
+/// Loads every non-tombstoned file in `stored_files`, keyed by `file_path`.
 ///
 /// Used by the config editor to build the full `path_contents` map — both
 /// files referenced in the TOML and "free" files the user added but has not
-/// yet referenced. The `DISTINCT ON … ORDER BY created_at DESC, id DESC`
-/// pattern relies on `idx_stored_files_editor_latest`. The secondary `id
-/// DESC` sort ensures deterministic row selection when rows share a
-/// `created_at` timestamp (which can happen within a single transaction,
-/// since `NOW()` is transaction-stable).
+/// yet referenced. The write path maintains the invariant that at most one
+/// active row exists per `file_path`, so we treat a duplicate as a data
+/// integrity violation and surface an error rather than silently picking a
+/// row.
 pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, String>, Error> {
     #[derive(FromRow)]
     struct EditorFileRow {
@@ -984,10 +982,9 @@ pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, 
     }
     let rows = sqlx::query_as::<_, EditorFileRow>(
         r"
-        SELECT DISTINCT ON (file_path) file_path, source_body
+        SELECT file_path, source_body
         FROM tensorzero.stored_files
         WHERE deleted_at IS NULL
-        ORDER BY file_path, created_at DESC, id DESC
         ",
     )
     .fetch_all(pool)
@@ -997,8 +994,19 @@ pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, 
             message: format!("Failed to load editor path contents: {e}"),
         })
     })?;
-    Ok(rows
-        .into_iter()
-        .map(|r| (r.file_path, r.source_body))
-        .collect())
+    let mut path_contents: HashMap<String, String> = HashMap::with_capacity(rows.len());
+    for row in rows {
+        if path_contents
+            .insert(row.file_path.clone(), row.source_body)
+            .is_some()
+        {
+            return Err(Error::new(ErrorDetails::PostgresQuery {
+                message: format!(
+                    "stored_files has multiple active rows for file_path {:?}; the write path should maintain at most one active row per path.",
+                    row.file_path
+                ),
+            }));
+        }
+    }
+    Ok(path_contents)
 }

@@ -5,12 +5,13 @@
 -- live config — it only affects the editor view.
 ALTER TABLE tensorzero.stored_files ADD COLUMN deleted_at TIMESTAMPTZ;
 
--- Partial index supporting the editor's "latest non-deleted version per
--- file path" query:
---   SELECT DISTINCT ON (file_path) file_path, source_body
+-- Partial index supporting the editor's "all non-deleted rows" query and
+-- the free-file write path's per-path lookups:
+--   SELECT file_path, source_body
 --   FROM tensorzero.stored_files
 --   WHERE deleted_at IS NULL
---   ORDER BY file_path, created_at DESC
+-- The write path maintains the invariant of at most one active row per
+-- file_path; the read path returns an error if that invariant is violated.
 CREATE INDEX idx_stored_files_editor_latest
-    ON tensorzero.stored_files (file_path, created_at DESC)
+    ON tensorzero.stored_files (file_path)
     WHERE deleted_at IS NULL;
