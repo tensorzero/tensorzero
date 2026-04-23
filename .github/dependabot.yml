@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
@@ -11,6 +13,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
     labels: []
     open-pull-requests-limit: 0 # only send security updates
 
@@ -18,19 +22,20 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 3
     labels: []
     open-pull-requests-limit: 0 # only send security updates
     # These paths contain educational content that is not directly meant for production use.
     # Automatic upgrades are likely to break them over time as they're not actively tested.
-    exclude-paths:
-      - "examples/**"
-      - "recipes/**"
 
   - package-ecosystem: "cargo"
     directory: "/crates"
     schedule:
       # This schedule does not affect security updates: https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/customizing-dependabot-security-prs#about-customizing-pull-requests-for-security-updates
       interval: "weekly"
+    cooldown:
+      default-days: 3
     labels: []
     groups:
       opentelemetry-dependencies:
