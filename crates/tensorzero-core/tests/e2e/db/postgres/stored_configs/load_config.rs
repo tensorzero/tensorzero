@@ -214,7 +214,7 @@ async fn load_config_from_db_returns_defaults_on_empty_database(pool: PgPool) {
     let loaded = load_config_from_db(&pool)
         .await
         .expect("loading an empty database should succeed");
-    expect_that!(
+    assert_that!(
         loaded,
         matches_pattern!(UninitializedConfig {
             gateway: some(anything()),
