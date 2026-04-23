@@ -7,3 +7,4 @@ dependencies = ["grandalf>=0.8", "langgraph>=0.3.29", "tensorzero"]
 
 [tool.uv]
 exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }
