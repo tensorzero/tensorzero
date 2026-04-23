@@ -16,6 +16,8 @@ jobs:
   build-wheels:
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/python-client-build.yml
+    with:
+      use_cache: false
     permissions:
       contents: read
       id-token: write
