@@ -81,14 +81,24 @@ async fn load_startup_config(
         return Ok((unwritten_config, None, false));
     }
 
-    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+    // Fall back to loading configuration from Postgres when the operator has
+    // either explicitly opted in via the feature flag, or implicitly opted in
+    // by setting `TENSORZERO_POSTGRES_URL` without providing a config file.
+    // An empty database is a valid starting point: the gateway will serve a
+    // functional runtime with no functions/variants, and operators populate
+    // config through the REST API (or the UI).
+    let has_postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").is_ok();
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() || has_postgres_url {
         let unwritten_config = load_startup_config_from_database()
             .await
             .log_err_pretty("Failed to load configuration from database")?;
         return Ok((unwritten_config, None, true));
     }
 
-    tracing::error!("You must specify either `--config-file` or `--default-config`.");
+    tracing::error!(
+        "No configuration source found. Specify `--config-file`, `--default-config`, \
+         or set `TENSORZERO_POSTGRES_URL` to load configuration from a database."
+    );
     Err(ExitCode::FAILURE)
 }
 
