@@ -1002,7 +1002,7 @@ pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, 
         {
             return Err(Error::new(ErrorDetails::PostgresQuery {
                 message: format!(
-                    "stored_files has multiple active rows for file_path {:?}; the write path should maintain at most one active row per path.",
+                    "`stored_files` has multiple active rows for `file_path` `{}`; the write path should maintain at most one active row per path.",
                     row.file_path
                 ),
             }));
