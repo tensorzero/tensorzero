@@ -108,6 +108,7 @@ jobs:
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          MATRIX_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version }}
         run: |
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
@@ -121,7 +122,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-provider-api -d
+          TENSORZERO_CLICKHOUSE_VERSION=${MATRIX_CLICKHOUSE_VERSION} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-provider-api -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
       - name: Run `pnpm test`

@@ -98,6 +98,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           # Use debug builds for dev images
+          no-cache: ${{ github.event_name == 'release' }}
           build-args: |
             PROFILE=${{ inputs.is_dev && 'dev' || 'performance' }}
             DEBUG_BUILD=${{ inputs.is_dev && '1' || '0' }}
@@ -162,7 +163,7 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}@sha256:%s ' *)
+            $(printf "${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}@sha256:%s " *)
         env:
           MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
 
