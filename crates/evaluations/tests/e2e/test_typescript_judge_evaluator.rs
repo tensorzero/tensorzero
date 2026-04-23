@@ -229,10 +229,15 @@ async fn test_typescript_judge_success() {
         .expect("ts_reference_output_length result missing")
         .as_ref()
         .expect("ts_reference_output_length should produce a value");
+    // `output_type = "float"` makes the evaluator return a Number tagged as
+    // `Float` internally, so `as_u64` returns `None` even for integer-valued
+    // results. Read as `f64` and compare to the integer-derived expected
+    // value — both sides originate from the exact integer 10, so direct
+    // equality is safe (no tolerance).
     let ref_len = ref_len_value
-        .as_u64()
-        .expect("ts_reference_output_length should be a non-negative integer");
-    let expected_ref_len = REFERENCE_OUTPUT_TEXT.len() as u64;
+        .as_f64()
+        .expect("ts_reference_output_length should be numeric");
+    let expected_ref_len = REFERENCE_OUTPUT_TEXT.len() as f64;
     assert_eq!(
         ref_len, expected_ref_len,
         "ts_reference_output_length should equal {expected_ref_len} (len of {REFERENCE_OUTPUT_TEXT:?})"
@@ -266,7 +271,7 @@ async fn test_typescript_judge_success() {
         .await
         .expect("float feedback for ts_reference_output_length should be recorded");
     assert_eq!(
-        ref_len_feedback.value as u64, expected_ref_len,
+        ref_len_feedback.value, expected_ref_len,
         "float feedback {} should match expected reference output length {expected_ref_len}",
         ref_len_feedback.value
     );
