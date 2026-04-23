@@ -162,11 +162,13 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}@sha256:%s ' *)
+            $(printf '${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}@sha256:%s ' *)
+        env:
+          MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
 
       - name: Wait for image to be available on Docker Hub
         run: |
-          IMAGE="${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}"
+          IMAGE="${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 30); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
@@ -178,3 +180,6 @@ jobs:
           done
           echo "Timed out waiting for ${IMAGE} to appear on Docker Hub"
           exit 1
+        env:
+          MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
+          STEPS_META_OUTPUTS_VERSION: ${{ steps.meta.outputs.version }}
