@@ -16,6 +16,7 @@ repos:
         exclude: |
           (?x)^(
               examples/production-deployment-k8s-helm/templates/.*\.yaml
+              |crates/tensorzero-core/tests/e2e/docker-compose\.db-only-boot\.yml
           )$
       - id: detect-private-key
         exclude: |

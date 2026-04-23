@@ -1428,8 +1428,14 @@ jobs:
     secrets: inherit
 
   db-only-boot-e2e:
-    if: ${{ needs.detect-changes.outputs.code == 'true' }}
-    needs: [detect-changes, build-gateway-container]
+    if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    needs:
+      [
+        detect-changes,
+        build-gateway-container,
+        build-fixtures-container,
+        build-live-tests-container,
+      ]
     permissions:
       contents: read
       actions: read
