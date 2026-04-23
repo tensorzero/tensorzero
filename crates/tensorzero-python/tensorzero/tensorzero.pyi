@@ -15,7 +15,7 @@ from typing import (
 from uuid import UUID
 
 import uuid_utils
-from typing_extensions import deprecated
+from typing_extensions import deprecated, disjoint_base
 
 # PyO3
 from tensorzero import (
@@ -472,7 +472,7 @@ class ChainOfThoughtConfig:
 class VariantsConfig:
     def __len__(self) -> int: ...
     def __getitem__(
-        self, key: str
+        self, key: str, /
     ) -> Union[
         ChatCompletionConfig,
         BestOfNSamplingConfig,
@@ -512,13 +512,14 @@ class FunctionConfigJson:
 @final
 class FunctionsConfig:
     def __len__(self) -> int: ...
-    def __getitem__(self, key: str) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
+    def __getitem__(self, key: str, /) -> Union[FunctionConfigChat, FunctionConfigJson]: ...
 
 @final
 class Config:
     @property
     def functions(self) -> FunctionsConfig: ...
 
+@disjoint_base
 class BaseTensorZeroGateway:
     def experimental_get_config(self) -> Config: ...
 
