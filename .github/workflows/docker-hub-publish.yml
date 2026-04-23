@@ -1,35 +1,84 @@
-# This workflow builds and pushes the gateway, ui, and evaluations docker images to Docker Hub
-# when we tag a release.
+# This workflow publishes production Docker images only via manual dispatch.
+# It is intended to be paired with a protected GitHub environment named
+# `docker-prod-publish` that holds the production Docker Hub token.
+#
+# SECURITY NOTE: Public release images should not reuse remote build caches.
+name: Publish production Docker images
 
-# SECURITY NOTE: We should disable all caches when building a public release to mitigate cache poisoning attacks.
-
-name: Publish docker images
+run-name: Publish production Docker images for ${{ inputs.release_tag }}
 
 on:
   workflow_dispatch:
-  workflow_call:
     inputs:
-      is_dev:
-        description: "Whether to use -dev suffix for container names"
+      release_tag:
+        description: "Release tag to publish (for example `2026.4.0`)"
+        type: string
+        required: true
+      publish_latest:
+        description: "Also publish the `latest` tag"
         type: boolean
         required: false
-        default: true
-    secrets:
-      DOCKERHUB_USERNAME:
-        required: true
-      DOCKERHUB_TOKEN:
-        required: true
-  release:
-    types: [released]
+        default: false
+
+concurrency:
+  group: docker-prod-publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
 
 env:
   DOCKERHUB_USER: tensorzero
 
 jobs:
+  validate-release-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.validate.outputs.release_tag }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag format and existence
+        id: validate
+        run: |
+          release_tag='${{ inputs.release_tag }}'
+          default_branch='${{ github.event.repository.default_branch }}'
+
+          if [ "${GITHUB_REF_TYPE}" != "branch" ] || [ "${GITHUB_REF_NAME}" != "${default_branch}" ]; then
+            echo "This workflow must be dispatched from the ${default_branch} branch"
+            exit 1
+          fi
+
+          if ! [[ "${release_tag}" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must match YYYY.M.PATCH, for example 2026.4.0"
+            exit 1
+          fi
+
+          git fetch --force origin "${default_branch}"
+          git fetch --force --tags origin
+          if ! git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null; then
+            echo "Tag ${release_tag} does not exist in the repository"
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "refs/tags/${release_tag}" "origin/${default_branch}"; then
+            echo "Tag ${release_tag} is not reachable from ${default_branch}"
+            exit 1
+          fi
+
+          echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build and push Docker image to Docker Hub
+    needs: [validate-release-tag]
     runs-on: ${{ matrix.platform.runner }}
     if: github.repository == 'tensorzero/tensorzero'
+    environment: docker-prod-publish
     strategy:
       matrix:
         platform:
@@ -38,18 +87,14 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          # Set the container name to a '-dev' name when this workflow is invoked by workflow_call with is_dev=true
-          # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
-          # Unfortunately, we can't use 'env' in 'strategy.matrix'
-          - name: ${{ inputs.is_dev && 'ui-dev' || 'ui' }}
+          - name: ui
             path: ui
-          - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
+          - name: gateway
             path: crates/gateway
-          - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
+          - name: evaluations
             path: crates/evaluations
 
     permissions:
-      packages: write
       contents: read
       attestations: write
       id-token: write
@@ -57,6 +102,8 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: refs/tags/${{ needs.validate-release-tag.outputs.release_tag }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Prepare
@@ -67,7 +114,7 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
@@ -85,7 +132,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ matrix.container.name }}
+          images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
 
       - name: Build and push Docker image
         id: push
@@ -93,7 +140,7 @@ jobs:
         with:
           platforms: ${{ matrix.platform.target }}
           file: ./${{ matrix.container.path }}/Dockerfile
-          # This is required to make '.git' available in the build context:
+          # This is required to make `.git` available in the build context:
           # https://github.com/docker/build-push-action/issues/513#issuecomment-987951050
           context: .
           push: true
@@ -102,11 +149,10 @@ jobs:
           tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
-          no-cache: ${{ github.event_name == 'release' }}
-          # Use debug builds for dev images
+          no-cache: true
           build-args: |
-            PROFILE=${{ inputs.is_dev && 'dev' || 'performance' }}
-            DEBUG_BUILD=${{ inputs.is_dev && '1' || '0' }}
+            PROFILE=performance
+            DEBUG_BUILD=0
 
       - name: Export digest
         run: |
@@ -125,16 +171,19 @@ jobs:
   merge:
     permissions:
       actions: read
+      contents: read
     if: github.repository == 'tensorzero/tensorzero'
+    needs:
+      - validate-release-tag
+      - build
+    environment: docker-prod-publish
     strategy:
       matrix:
         container:
-          - name: ${{ inputs.is_dev && 'ui-dev' || 'ui' }}
-          - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
-          - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
+          - name: ui
+          - name: gateway
+          - name: evaluations
     runs-on: ubuntu-latest
-    needs:
-      - build
     steps:
       - name: Download digests
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
@@ -146,7 +195,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
@@ -160,9 +209,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=ref,event=tag,
-            type=sha,format=long,enable=${{ inputs.is_dev && 'true' || 'false' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
+            type=raw,value=${{ needs.validate-release-tag.outputs.release_tag }}
+            type=raw,value=latest,enable=${{ inputs.publish_latest }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -174,7 +222,7 @@ jobs:
 
       - name: Wait for image to be available on Docker Hub
         run: |
-          IMAGE="${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
+          IMAGE="${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}:${RELEASE_TAG}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 30); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
@@ -188,4 +236,4 @@ jobs:
           exit 1
         env:
           MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
-          STEPS_META_OUTPUTS_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate-release-tag.outputs.release_tag }}

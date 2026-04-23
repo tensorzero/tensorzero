@@ -1,3 +1,5 @@
+/.github/ @virajmehta @Aaron1011
+
 /crates/tensorzero-python/tensorzero/generated_types.py @GabrielBianconi
 /crates/tensorzero-python/tensorzero/tensorzero.pyi @GabrielBianconi
 /crates/tensorzero-python/tensorzero/types.py @GabrielBianconi
