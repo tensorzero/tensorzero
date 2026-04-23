@@ -16,18 +16,22 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the list_episodes tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct ListEpisodesToolParams {
     /// Maximum number of episodes to return (max 100).
     pub limit: u32,
     /// Return episodes before this episode_id (for pagination).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
     /// Return episodes after this episode_id (for pagination).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<Uuid>,
     /// Filter to episodes containing inferences for this function.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_name: Option<String>,
     /// Filter to episodes containing inferences matching these criteria.
     /// Supports boolean_metric, float_metric, tag, time, and logical combinators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filters: Option<InferenceFilter>,
 }
 

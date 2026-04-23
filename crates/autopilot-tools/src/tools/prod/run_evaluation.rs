@@ -20,27 +20,27 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the run_evaluation tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evaluation_name: Option<String>,
     /// Name of the function to evaluate when using `evaluator_names`.
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_name: Option<String>,
     /// Function-scoped evaluator names to run.
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evaluator_names: Option<Vec<String>>,
     /// Name of the dataset to evaluate on.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dataset_name: Option<String>,
     /// Specific datapoint IDs to evaluate.
     /// Either dataset_name or datapoint_ids must be provided, but not both.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub datapoint_ids: Option<Vec<Uuid>>,
     /// Name of the variant to evaluate.
     pub variant_name: String,
@@ -48,7 +48,7 @@ pub struct RunEvaluationToolParams {
     #[serde(default = "default_concurrency")]
     pub concurrency: usize,
     /// Maximum number of datapoints to evaluate from the dataset.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_datapoints: Option<u32>,
     /// Precision targets for adaptive stopping.
     /// Maps evaluator names to target confidence interval half-widths.

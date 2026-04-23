@@ -11,5 +11,5 @@ export type GetFeedbackByTargetIdToolParams = {
   /**
    * Maximum number of feedback entries to return.
    */
-  limit: number | null;
+  limit?: number;
 };

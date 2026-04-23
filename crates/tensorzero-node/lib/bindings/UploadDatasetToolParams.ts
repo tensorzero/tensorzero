@@ -11,5 +11,5 @@ export type UploadDatasetToolParams = {
   /**
    * Optional maximum number of rows to upload.
    */
-  row_limit: number | null;
+  row_limit?: number;
 };

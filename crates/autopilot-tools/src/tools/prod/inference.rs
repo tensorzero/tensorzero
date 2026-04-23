@@ -20,13 +20,13 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the inference tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct InferenceToolParams {
     /// The function name to call. Exactly one of function_name or model_name required.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_name: Option<String>,
     /// Model name shorthand (e.g., "openai::gpt-4"). Alternative to function_name.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_name: Option<String>,
     /// The input for inference.
     pub input: Input,
@@ -34,13 +34,13 @@ pub struct InferenceToolParams {
     #[serde(default)]
     pub params: InferenceParams,
     /// Pin a specific variant (optional, normally let API select).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant_name: Option<String>,
     /// Dynamic tool parameters (allowed_tools, additional_tools, tool_choice, parallel_tool_calls).
     #[serde(flatten, default)]
     pub dynamic_tool_params: DynamicToolParams,
     /// Output schema override (for JSON functions).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<Value>,
 }
 
