@@ -36,9 +36,14 @@ async fn db_only_boot_serves_status_with_defaulted_config() {
         .json()
         .await
         .expect("status response should deserialize");
-    expect_that!(status.status, eq("ok"));
-    expect_that!(status.version, eq(TENSORZERO_VERSION));
-    expect_that!(&status.config_hash, not(eq("")));
+    expect_that!(
+        status,
+        matches_pattern!(StatusResponse {
+            status: eq("ok"),
+            version: eq(TENSORZERO_VERSION),
+            config_hash: not(eq("")),
+        })
+    );
 }
 
 #[gtest]
@@ -75,7 +80,6 @@ async fn db_only_boot_returns_default_config_via_config_toml_endpoint() {
     // singleton renders its defaulted section header — and it must parse
     // back as a valid TOML table.
     expect_that!(&config.toml, not(eq("")));
-    let parsed: toml::Value = toml::from_str(&config.toml)
-        .unwrap_or_else(|e| panic!("editable TOML should parse: {e}\nbody:\n{}", config.toml));
-    expect_that!(parsed.is_table(), eq(true));
+    let parsed = toml::from_str::<toml::Value>(&config.toml);
+    expect_that!(parsed, ok(predicate(toml::Value::is_table)));
 }

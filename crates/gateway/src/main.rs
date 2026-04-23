@@ -21,7 +21,7 @@ use tracing::Level;
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, unwritten::UnwrittenConfig};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 use tensorzero_core::db::postgres::postgres_setup::{
@@ -55,7 +55,7 @@ const STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS: u32 = 20;
 const TENSORZERO_POSTGRES_URL_ENV: &str = "TENSORZERO_POSTGRES_URL";
 
 struct StartupConfig {
-    unwritten: tensorzero_core::config::unwritten::UnwrittenConfig,
+    unwritten: UnwrittenConfig,
     glob: Option<ConfigFileGlob>,
     from_database: bool,
 }
@@ -117,7 +117,7 @@ async fn load_startup_config(args: &GatewayArgs) -> Result<StartupConfig, ExitCo
         );
     }
     if explicit_opt_in || postgres_url.is_some() {
-        let unwritten = load_startup_config_from_database(postgres_url)
+        let unwritten = load_startup_config_from_database(postgres_url.as_deref())
             .await
             .log_err_pretty("Failed to load configuration from database")?;
         return Ok(StartupConfig {
@@ -158,8 +158,8 @@ fn merge_db_config_load_errors(errors: Vec<Error>) -> Error {
 }
 
 async fn load_startup_config_from_database(
-    postgres_url: Option<String>,
-) -> Result<tensorzero_core::config::unwritten::UnwrittenConfig, Error> {
+    postgres_url: Option<&str>,
+) -> Result<UnwrittenConfig, Error> {
     let postgres_url = postgres_url.ok_or_else(|| {
         Error::new(ErrorDetails::PostgresConnectionInitialization {
             message: format!(
@@ -173,7 +173,7 @@ async fn load_startup_config_from_database(
     // hitting the default 30s acquire timeout during gateway startup.
     let pool = PgPoolOptions::new()
         .max_connections(STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS)
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await
         .map_err(|error| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
