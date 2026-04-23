@@ -1,9 +1,12 @@
+# UNUSED: autopilot integration is disabled. The `/autopilot-e2e` slash
+# command has been unregistered in `slash-command-dispatch.yml`, the
+# `repository_dispatch` trigger has been removed here, and the job is
+# guarded with `if: false` so even a manual `workflow_dispatch` is a no-op.
+# Kept on disk for historical reference.
 name: Trigger Autopilot E2E from slash command
 
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [autopilot-e2e-command]
 
 permissions:
   pull-requests: write
@@ -12,7 +15,7 @@ permissions:
 jobs:
   trigger-autopilot-e2e:
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: false # autopilot integration disabled; see header comment
     steps:
       - name: Add initial reaction
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0

@@ -1,3 +1,7 @@
+# UNUSED: autopilot integration is disabled. No workflow calls this file.
+# Kept on disk for historical reference. Do not re-add a caller without
+# also reverting the `checkAutopilotAvailable()` short-circuit in
+# `ui/app/utils/config/index.server.ts`.
 name: Dispatch Autopilot E2E Tests
 
 on:

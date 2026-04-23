@@ -152,7 +152,8 @@ test.describe("Chat input validation", () => {
   });
 });
 
-test.describe("Autopilot New Session Button", () => {
+// Skipped: autopilot sidebar hard-disabled upstream in #7347
+test.describe.skip("Autopilot New Session Button", () => {
   test("should navigate to new session from existing session page", async ({
     page,
   }) => {

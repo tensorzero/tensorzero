@@ -59,6 +59,7 @@ import type {
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetVariantSamplingProbabilitiesResponse,
+  GetVariantUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
@@ -801,6 +802,33 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetFunctionThroughputByVariantResponse;
+  }
+
+  /**
+   * Gets variant usage timeseries data for a function.
+   * @param functionName - The function to get variant usage for
+   * @param timeWindow - The time window granularity
+   * @param maxPeriods - Maximum number of periods to return
+   * @returns A promise that resolves with variant usage data
+   * @throws Error if the request fails
+   */
+  async getVariantUsageTimeseries(
+    functionName: string,
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetVariantUsageResponse> {
+    const searchParams = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_usage?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetVariantUsageResponse;
   }
 
   /**

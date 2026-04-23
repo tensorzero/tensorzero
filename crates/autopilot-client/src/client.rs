@@ -26,7 +26,7 @@ use crate::types::{
     GatewayListConfigWritesResponse, GatewayListEventsResponse, GatewayStreamUpdate,
     ListConfigWritesParams, ListConfigWritesResponse, ListEventsParams, ListEventsResponse,
     ListSessionsParams, ListSessionsResponse, S3UploadRequest, S3UploadResponse,
-    StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
+    SessionStatusDetail, StreamEventsParams, ToolCallAuthorizationStatus, ToolCallDecisionSource,
 };
 
 /// Default base URL for the Autopilot API.
@@ -510,6 +510,26 @@ impl AutopilotClient {
             .interrupt_tasks_by_session_id(session_id)
             .await
             .map_err(AutopilotError::from)
+    }
+
+    /// Returns detailed status information for a session, including whether
+    /// the session's durable task is in a terminal state.
+    pub async fn get_status_detail(
+        &self,
+        session_id: Uuid,
+    ) -> Result<SessionStatusDetail, AutopilotError> {
+        let url = self
+            .base_url
+            .join(&format!("/v1/sessions/{session_id}/status_detail"))?;
+        let response = self
+            .http_client
+            .get(url)
+            .headers(self.auth_headers())
+            .send()
+            .await?;
+        let response = self.check_response(response).await?;
+        let body = response.json().await?;
+        Ok(body)
     }
 
     // -------------------------------------------------------------------------
