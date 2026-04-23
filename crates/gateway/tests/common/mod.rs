@@ -171,24 +171,34 @@ async fn start_gateway_impl(
 }
 
 /// Start the gateway with no `--config-file`, relying on `TENSORZERO_POSTGRES_URL`
-/// alone to trigger the implicit DB-boot path (no `--default-config`, no
-/// `ENABLE_CONFIG_IN_DATABASE` feature flag). The DB at `db_url` is expected
-/// to be migrated but otherwise empty — the gateway should populate singleton
-/// configs with their defaults and serve traffic.
+/// alone (plus any extra env vars the caller passes) to drive config loading.
+/// The DB at `db_url` is expected to be migrated; config rows may be empty,
+/// in which case the gateway should populate singleton configs with their
+/// defaults and serve traffic.
+///
+/// Callers that want the full config-in-database scenario pass
+/// `("TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE", "true")` in
+/// `extra_env`; callers testing the implicit-opt-in path (env var only,
+/// no feature flag) pass an empty slice.
 #[allow(dead_code)]
-pub async fn start_gateway_from_db_url_on_random_port(db_url: &str) -> ChildData {
+pub async fn start_gateway_from_db_url_on_random_port(
+    db_url: &str,
+    extra_env: &[(&str, &str)],
+) -> ChildData {
     let mut builder = Command::new(gateway_path());
     builder
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .args(["--bind-address", "0.0.0.0:0", "--log-format", "json"])
         .env("TENSORZERO_POSTGRES_URL", db_url)
-        // Ensure we're exercising the implicit-opt-in path (env var only, no
-        // feature flag) and not inheriting the outer test env's log settings.
+        // Strip inherited env the caller might not want bleeding through.
         .env_remove("RUST_LOG")
         .env_remove("TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE")
         .env_remove("TENSORZERO_GATEWAY_BIND_ADDRESS")
         .kill_on_drop(true);
+    for (key, value) in extra_env {
+        builder.env(key, value);
+    }
 
     let child = builder.spawn().unwrap();
     await_gateway_listening(child).await

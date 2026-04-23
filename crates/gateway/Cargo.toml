@@ -61,3 +61,4 @@ tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 flate2 = "1.1.8"
 zstd = "0.13.3"
 brotli = "8.0.2"
+toml = { workspace = true }
