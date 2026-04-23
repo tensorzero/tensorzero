@@ -13,7 +13,9 @@ use serde_json::json;
 use sqlx::Postgres;
 use tracing::instrument;
 
-use crate::config::editable::{config_to_toml, config_to_toml_with_errors, toml_to_config};
+#[cfg(test)]
+use crate::config::editable::config_to_toml;
+use crate::config::editable::{config_to_toml_with_errors, toml_to_config};
 use crate::config::{Config, ConfigLoadingError, UninitializedConfig};
 use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
 use crate::db::postgres::stored_config_writes::{
@@ -229,8 +231,6 @@ pub async fn apply_config_toml_handler(
 ) -> Result<Json<ApplyConfigTomlResponse>, Error> {
     let app_state = swap_state.load_latest();
     let edited_config = toml_to_config(&request.toml, &request.path_contents)?;
-    let (canonical_toml, canonical_path_contents) = config_to_toml(&edited_config)?;
-    let canonical_signature = editable_config_signature(&canonical_toml, &canonical_path_contents)?;
 
     let pool = app_state
         .postgres_connection_info
@@ -300,11 +300,26 @@ pub async fn apply_config_toml_handler(
     // Infallible: all fallible work was done in `prepare_config_swap` above.
     swap_state.swap_config(prepared);
 
+    // Re-load from DB after commit so the response reflects what the next
+    // GET (and the next CAS check) will see. This matters when broken rows
+    // survive the apply — e.g. a malformed singleton row that the user did
+    // not overwrite stays "latest" in its append-only table, so the next
+    // load still surfaces it as a `loading_error` and the annotated TOML
+    // still has its `# BROKEN` block. Computing the response via plain
+    // `config_to_toml` here would diverge from the next GET's signature
+    // and cause a false CAS conflict on the very next save.
+    let post_loaded = load_config_from_db(pool)
+        .await
+        .map_err(merge_load_config_errors)?;
+    let (response_toml, response_path_contents) =
+        config_to_toml_with_errors(&post_loaded.config, &post_loaded.loading_errors)?;
+    let response_signature = editable_config_signature(&response_toml, &response_path_contents)?;
+
     Ok(Json(ApplyConfigTomlResponse {
-        toml: canonical_toml,
-        path_contents: canonical_path_contents,
+        toml: response_toml,
+        path_contents: response_path_contents,
         hash: written_hash,
-        base_signature: canonical_signature,
+        base_signature: response_signature,
     }))
 }
 

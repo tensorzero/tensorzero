@@ -7,7 +7,7 @@ use googletest::prelude::*;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use tensorzero_core::config::editable::config_to_toml_with_errors;
+use tensorzero_core::config::editable::{config_to_toml, config_to_toml_with_errors};
 use tensorzero_core::config::path::ResolvedTomlPathData;
 use tensorzero_core::config::{
     Namespace, NonStreamingTimeouts, StreamingTimeouts, TimeoutsConfig, UninitializedConfig,
@@ -510,4 +510,40 @@ async fn config_to_toml_with_errors_is_stable_across_loads_for_cas(pool: PgPool)
         &first_toml,
         contains_substring(r#"# BROKEN (model "broken-model")"#)
     );
+}
+
+/// Locks in the rationale for `apply_config_toml_handler` re-loading from the
+/// DB after commit and using `config_to_toml_with_errors` (rather than plain
+/// `config_to_toml`) for the response. When the DB still has broken rows that
+/// survived the apply (e.g. a malformed singleton the user did not overwrite),
+/// the two functions produce different output, so the apply response signature
+/// must be computed via the same function GET uses — otherwise consumers
+/// reusing the apply response's `base_signature` for their next save would hit
+/// a false CAS conflict on the very next call.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn plain_and_annotated_toml_diverge_when_loading_errors_present(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO tensorzero.gateway_configs (id, schema_revision, config) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(999_i32)
+    .bind(serde_json::json!({}))
+    .execute(&pool)
+    .await
+    .expect("bad gateway row insert should succeed");
+
+    let loaded = load_config_from_db(&pool)
+        .await
+        .expect("load should succeed even with broken row");
+    assert_that!(loaded.loading_errors.len(), eq(1));
+
+    let (plain_toml, _) =
+        config_to_toml(&loaded.config).expect("plain serialization should succeed");
+    let (annotated_toml, _) = config_to_toml_with_errors(&loaded.config, &loaded.loading_errors)
+        .expect("annotated serialization should succeed");
+
+    assert_that!(&plain_toml, not(eq(&annotated_toml)));
+    assert_that!(&plain_toml, not(contains_substring("# BROKEN (")));
+    assert_that!(&annotated_toml, contains_substring("# BROKEN ("));
 }
