@@ -7,3 +7,4 @@ dependencies = ["tensorzero>=2025.5.7"]
 
 [tool.uv]
 exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }
