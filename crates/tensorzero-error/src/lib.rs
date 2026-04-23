@@ -1035,6 +1035,7 @@ impl ErrorDetails {
                 .values()
                 .last()
                 .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::RateLimitExceeded { .. } => Some(StatusCode::TOO_MANY_REQUESTS),
             _ => None,
         }
     }
@@ -1046,8 +1047,12 @@ impl ErrorDetails {
                 .last()
                 .map(|e| e.status_code())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-            ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
-            ErrorDetails::AllCandidatesFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::AllVariantsFailed { .. } => self
+                .underlying_status_code()
+                .unwrap_or(StatusCode::BAD_GATEWAY),
+            ErrorDetails::AllCandidatesFailed { .. } => self
+                .underlying_status_code()
+                .unwrap_or(StatusCode::BAD_GATEWAY),
             ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1140,7 +1145,9 @@ impl ErrorDetails {
             ErrorDetails::MissingFunctionInVariants { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
-            ErrorDetails::AllModelProvidersFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllModelProvidersFailed { .. } => self
+                .underlying_status_code()
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
             ErrorDetails::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
@@ -2375,6 +2382,62 @@ mod tests {
             body.get("raw_response").is_none(),
             "should not have `raw_response` field when entries is None"
         );
+    }
+
+    #[test]
+    fn test_status_code_rate_limit_exceeded_through_wrappers() {
+        // A bare RateLimitExceeded should map to 429.
+        let inner = Error::new(ErrorDetails::RateLimitExceeded {
+            failed_rate_limits: vec![],
+        });
+        assert_eq!(inner.status_code(), StatusCode::TOO_MANY_REQUESTS);
+
+        // When wrapped in AllModelProvidersFailed, the status code should still be 429
+        // (not INTERNAL_SERVER_ERROR, which is the wrapper's default).
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "openai_gpt_4o_mini".to_string(),
+            Error::new(ErrorDetails::RateLimitExceeded {
+                failed_rate_limits: vec![],
+            }),
+        );
+        let providers_failed =
+            Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
+        assert_eq!(
+            providers_failed.status_code(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "AllModelProvidersFailed wrapping RateLimitExceeded should surface 429, not 500",
+        );
+
+        // And wrapped one level deeper in AllVariantsFailed, still 429
+        // (not BAD_GATEWAY, which is the wrapper's default).
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert("gpt-4o-mini".to_string(), providers_failed);
+        let variants_failed = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        assert_eq!(
+            variants_failed.status_code(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "AllVariantsFailed wrapping AllModelProvidersFailed(RateLimitExceeded) should surface 429, not 502",
+        );
+    }
+
+    #[test]
+    fn test_status_code_all_variants_failed_defaults_to_bad_gateway() {
+        // When the underlying error doesn't expose a status code via the walker
+        // (e.g. Config), we fall back to the wrapper's default 502.
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert(
+            "variant_a".to_string(),
+            Error::new(ErrorDetails::Config {
+                message: "bad config".to_string(),
+            }),
+        );
+        let error = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        assert_eq!(error.status_code(), StatusCode::BAD_GATEWAY);
     }
 
     #[test]
