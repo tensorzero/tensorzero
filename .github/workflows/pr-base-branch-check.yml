@@ -5,10 +5,11 @@ permissions:
   statuses: write # Required for creating commit statuses
 
 on:
-  # Using pull_request_target instead of pull_request so that we have write access
-  # to labels and commit statuses for PRs from forks.
-  # This is safe because we only read PR metadata - we don't checkout or execute PR code.
-  pull_request_target:
+  # We use pull_request rather than pull_request_target to avoid any security
+  # risks caused by having a writeable github token available for external PRs.
+  # This workflow is only useful for handling stacked PRs by tensorzero developers - 
+  # any external contributors should be making PRs against 'main'
+  pull_request:
     types: [opened, edited, synchronize, reopened, unlabeled]
 
 jobs:
