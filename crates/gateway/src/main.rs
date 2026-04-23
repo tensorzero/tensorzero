@@ -51,34 +51,52 @@ static GLOBAL: MiMalloc = MiMalloc;
 /// so this number must stay above 2 (and we use a number >15 for performance).
 const STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS: u32 = 20;
 
-async fn load_startup_config(
-    args: &GatewayArgs,
-) -> Result<
-    (
-        tensorzero_core::config::unwritten::UnwrittenConfig,
-        Option<ConfigFileGlob>,
-        bool, // config_in_database
-    ),
-    ExitCode,
-> {
+/// Name of the environment variable holding the Postgres connection string.
+const TENSORZERO_POSTGRES_URL_ENV: &str = "TENSORZERO_POSTGRES_URL";
+
+struct StartupConfig {
+    unwritten: tensorzero_core::config::unwritten::UnwrittenConfig,
+    glob: Option<ConfigFileGlob>,
+    from_database: bool,
+}
+
+/// Reads `TENSORZERO_POSTGRES_URL` and treats an unset or empty value as absent.
+/// A present-but-empty env var is almost always a shell/compose misconfiguration;
+/// propagating it forward produces an opaque sqlx dial error, so we normalize it
+/// to `None` here and let callers handle the "missing" case uniformly.
+fn read_postgres_url_env() -> Option<String> {
+    std::env::var(TENSORZERO_POSTGRES_URL_ENV)
+        .ok()
+        .filter(|url| !url.is_empty())
+}
+
+async fn load_startup_config(args: &GatewayArgs) -> Result<StartupConfig, ExitCode> {
     if args.default_config && args.config_file.is_some() {
         tracing::error!("You must not specify both `--config-file` and `--default-config`.");
         return Err(ExitCode::FAILURE);
     }
 
     if let Some(path) = args.config_file.as_ref() {
-        let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
-        return Ok((unwritten_config, Some(glob), false));
+        let (unwritten, glob) = load_config_from_path_glob(path).await?;
+        return Ok(StartupConfig {
+            unwritten,
+            glob: Some(glob),
+            from_database: false,
+        });
     }
 
     if args.default_config {
         tracing::warn!(
             "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
         );
-        let unwritten_config = Config::new_empty()
+        let unwritten = Config::new_empty()
             .await
             .log_err_pretty("Failed to load default config")?;
-        return Ok((unwritten_config, None, false));
+        return Ok(StartupConfig {
+            unwritten,
+            glob: None,
+            from_database: false,
+        });
     }
 
     // Fall back to loading configuration from Postgres when the operator has
@@ -87,17 +105,31 @@ async fn load_startup_config(
     // An empty database is a valid starting point: the gateway will serve a
     // functional runtime with no functions/variants, and operators populate
     // config through the REST API (or the UI).
-    let has_postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").is_ok();
-    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() || has_postgres_url {
-        let unwritten_config = load_startup_config_from_database()
+    let postgres_url = read_postgres_url_env();
+    let explicit_opt_in = feature_flags::ENABLE_CONFIG_IN_DATABASE.get();
+    if postgres_url.is_some() && !explicit_opt_in {
+        // Many deployments set `TENSORZERO_POSTGRES_URL` for observability or
+        // rate-limiting without intending to boot from DB config. Log loudly
+        // so the operator sees the fallback in startup logs instead of being
+        // surprised by an empty function/variant set at runtime.
+        tracing::warn!(
+            "No `--config-file` or `--default-config` was supplied; booting with configuration from Postgres because `{TENSORZERO_POSTGRES_URL_ENV}` is set. Pass `--config-file` or `--default-config` explicitly if this is not what you intended."
+        );
+    }
+    if explicit_opt_in || postgres_url.is_some() {
+        let unwritten = load_startup_config_from_database(postgres_url)
             .await
             .log_err_pretty("Failed to load configuration from database")?;
-        return Ok((unwritten_config, None, true));
+        return Ok(StartupConfig {
+            unwritten,
+            glob: None,
+            from_database: true,
+        });
     }
 
     tracing::error!(
         "No configuration source found. Specify `--config-file`, `--default-config`, \
-         or set `TENSORZERO_POSTGRES_URL` to load configuration from a database."
+         or set `{TENSORZERO_POSTGRES_URL_ENV}` to load configuration from a database."
     );
     Err(ExitCode::FAILURE)
 }
@@ -125,13 +157,14 @@ fn merge_db_config_load_errors(errors: Vec<Error>) -> Error {
     })
 }
 
-async fn load_startup_config_from_database()
--> Result<tensorzero_core::config::unwritten::UnwrittenConfig, Error> {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+async fn load_startup_config_from_database(
+    postgres_url: Option<String>,
+) -> Result<tensorzero_core::config::unwritten::UnwrittenConfig, Error> {
+    let postgres_url = postgres_url.ok_or_else(|| {
         Error::new(ErrorDetails::PostgresConnectionInitialization {
-            message:
-                "Missing environment variable `TENSORZERO_POSTGRES_URL` required to load configuration from database."
-                    .to_string(),
+            message: format!(
+                "Missing environment variable `{TENSORZERO_POSTGRES_URL_ENV}` required to load configuration from database."
+            ),
         })
     })?;
     // `load_config_from_db` fans out into 14 parallel snapshot readers plus a
@@ -453,7 +486,11 @@ async fn run() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
-    let (unwritten_config, glob, config_in_database) = load_startup_config(&args).await?;
+    let StartupConfig {
+        unwritten: unwritten_config,
+        glob,
+        from_database: config_in_database,
+    } = load_startup_config(&args).await?;
 
     let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
         .log_err_pretty("Failed to set up metrics")?;

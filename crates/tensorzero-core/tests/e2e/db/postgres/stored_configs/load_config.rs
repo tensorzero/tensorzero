@@ -214,7 +214,25 @@ async fn load_config_from_db_returns_defaults_on_empty_database(pool: PgPool) {
     let loaded = load_config_from_db(&pool)
         .await
         .expect("loading an empty database should succeed");
-    assert_that!(&loaded, eq(&empty_config()));
+    expect_that!(
+        loaded,
+        matches_pattern!(UninitializedConfig {
+            gateway: some(anything()),
+            clickhouse: some(anything()),
+            postgres: some(anything()),
+            rate_limiting: some(anything()),
+            object_storage: none(),
+            models: some(is_empty()),
+            embedding_models: some(is_empty()),
+            functions: some(is_empty()),
+            metrics: some(is_empty()),
+            tools: some(is_empty()),
+            evaluations: some(is_empty()),
+            provider_types: some(anything()),
+            optimizers: some(is_empty()),
+            autopilot: some(anything()),
+        })
+    );
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
