@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [tool.uv]
+exclude-newer = "3 days"
 override-dependencies = [
     "pillow>=12.1.1",
 ]

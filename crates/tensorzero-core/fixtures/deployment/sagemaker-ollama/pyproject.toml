@@ -8,3 +8,6 @@ dependencies = ["flask", "requests"]
 
 [dependency-groups]
 dev = ["boto3>=1.37.26", "sagemaker>=3.4.0"]
+
+[tool.uv]
+exclude-newer = "3 days"

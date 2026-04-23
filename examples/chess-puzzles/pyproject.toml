@@ -12,3 +12,6 @@ dependencies = [
     "tensorzero",
     "tqdm",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"

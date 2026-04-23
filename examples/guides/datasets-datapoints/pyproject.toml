@@ -4,3 +4,6 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["tensorzero>=2025.5.7"]
+
+[tool.uv]
+exclude-newer = "3 days"

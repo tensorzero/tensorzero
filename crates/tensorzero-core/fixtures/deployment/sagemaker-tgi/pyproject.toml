@@ -5,3 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["flask", "requests"]
+
+[tool.uv]
+exclude-newer = "3 days"

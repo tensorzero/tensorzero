@@ -7,3 +7,6 @@ dependencies = [
     "openai>=2.3.0",
     "tensorzero>=2025.10.1",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"

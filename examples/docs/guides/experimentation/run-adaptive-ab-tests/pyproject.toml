@@ -14,3 +14,6 @@ dependencies = [
 dev = [
     "pyright>=1.1.0",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"

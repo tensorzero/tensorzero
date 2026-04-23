@@ -10,3 +10,6 @@ dependencies = [
     "tensorzero",
     "wikipedia",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"
