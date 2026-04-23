@@ -205,10 +205,11 @@ mod tests {
     };
     use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
     use crate::jsonschema_util::JSONSchema;
-    use crate::tool::{DynamicToolParams, InferenceResponseToolCall};
+    use crate::tool::InferenceResponseToolCall;
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::Path;
+    use tensorzero_inference_types::tool::DynamicToolParams;
     use uuid::Uuid;
 
     async fn get_e2e_config() -> Config {

@@ -1983,9 +1983,10 @@ mod tool_call_storage_tests {
     use super::*;
     use serde_json::json;
     use tensorzero_core::tool::{
-        AllowedTools, AllowedToolsChoice, FunctionTool, ProviderTool, ProviderToolScope,
-        ProviderToolScopeModelProvider, Tool, ToolCallConfigDatabaseInsert, ToolChoice,
+        AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope,
+        ProviderToolScopeModelProvider, ToolCallConfigDatabaseInsert, ToolChoice,
     };
+    use tensorzero_inference_types::tool::{FunctionTool, Tool};
 
     async fn test_tool_call_storage_static_tools_only(
         conn: impl DatasetQueries + TestDatabaseHelpers,

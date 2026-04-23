@@ -15,7 +15,7 @@ use tensorzero_core::endpoints::datasets::v1::types::{
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Role, System, Text,
 };
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 fn chat_datapoint(
     function_name: &str,

@@ -47,7 +47,6 @@ pub use crate::inference::types::{Base64File, File, ObjectStoragePointer, UrlFil
 pub use crate::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
 };
-pub use crate::tool::{DynamicToolParams, Tool};
 
 pub mod client_inference_params;
 pub mod input_handling;

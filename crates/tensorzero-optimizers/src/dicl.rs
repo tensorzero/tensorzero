@@ -541,7 +541,7 @@ mod tests {
     use super::*;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
-    use tensorzero_core::tool::Tool;
+    use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
     use uuid::Uuid;
 
     use tensorzero_core::{
@@ -564,8 +564,7 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            DynamicToolParams, FunctionTool, ToolCall, ToolCallConfig, ToolChoice, ToolResult,
-            create_json_mode_tool_call_config,
+            ToolCall, ToolCallConfig, ToolChoice, ToolResult, create_json_mode_tool_call_config,
         },
     };
 

@@ -14,7 +14,7 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::tool::Tool;
+use tensorzero_inference_types::tool::Tool;
 
 use axum::body::Body;
 use axum::extract::{Query, State};

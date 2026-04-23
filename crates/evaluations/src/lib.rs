@@ -28,9 +28,8 @@ pub use types::*;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
-    ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams, InferenceOutput,
-    InferenceParams, InferenceResponse, PostgresConfig,
-    input_handling::resolved_input_to_client_input,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput, InferenceParams,
+    InferenceResponse, PostgresConfig, input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
@@ -49,6 +48,7 @@ use tensorzero_core::{
     config::Config, db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::datasets::Datapoint,
 };
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tokio::{
     sync::{Semaphore, mpsc},
     task::JoinSet,
