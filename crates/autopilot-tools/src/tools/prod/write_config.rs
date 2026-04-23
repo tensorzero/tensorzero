@@ -24,7 +24,7 @@ pub use config_applier::{
 /// Parameters for the write_config tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,
@@ -33,7 +33,7 @@ pub struct WriteConfigToolParams {
     pub extra_templates: HashMap<String, String>,
     /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
     /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit: Option<Vec<EditPayload>>,
 }
 

@@ -15,5 +15,5 @@ export type GetFeedbackByVariantToolParams = {
   /**
    * Optional filter for specific variants. If not provided, all variants are included.
    */
-  variant_names: Array<string> | null;
+  variant_names?: Array<string>;
 };

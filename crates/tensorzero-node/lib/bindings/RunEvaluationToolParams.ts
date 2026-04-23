@@ -9,27 +9,27 @@ export type RunEvaluationToolParams = {
    * Name of the evaluation to run (must be defined in config).
    * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
    */
-  evaluation_name: string | null;
+  evaluation_name?: string;
   /**
    * Name of the function to evaluate when using `evaluator_names`.
    * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
    */
-  function_name: string | null;
+  function_name?: string;
   /**
    * Function-scoped evaluator names to run.
    * Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
    */
-  evaluator_names: Array<string> | null;
+  evaluator_names?: Array<string>;
   /**
    * Name of the dataset to evaluate on.
    * Either dataset_name or datapoint_ids must be provided, but not both.
    */
-  dataset_name: string | null;
+  dataset_name?: string;
   /**
    * Specific datapoint IDs to evaluate.
    * Either dataset_name or datapoint_ids must be provided, but not both.
    */
-  datapoint_ids: Array<string> | null;
+  datapoint_ids?: Array<string>;
   /**
    * Name of the variant to evaluate.
    */
@@ -41,7 +41,7 @@ export type RunEvaluationToolParams = {
   /**
    * Maximum number of datapoints to evaluate from the dataset.
    */
-  max_datapoints: number | null;
+  max_datapoints?: number;
   /**
    * Precision targets for adaptive stopping.
    * Maps evaluator names to target confidence interval half-widths.

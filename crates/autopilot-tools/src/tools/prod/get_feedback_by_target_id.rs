@@ -16,12 +16,12 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the get_feedback_by_target_id tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetFeedbackByTargetIdToolParams {
     /// The target ID (inference or episode) to get feedback for.
     pub target_id: Uuid,
     /// Maximum number of feedback entries to return.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
 }
 
