@@ -32,6 +32,7 @@ use tensorzero_core::db::delegating_connection::DelegatingDatabaseConnection;
 use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, StoredDatapoint};
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use tensorzero_core::evaluations::EvaluationConfig;
+use tensorzero_core::inference::types::{ContentBlockChatOutput, Text};
 use tokio::time::sleep;
 use uuid::Uuid;
 
@@ -40,10 +41,17 @@ use crate::common::{
     query_float_feedback,
 };
 
+/// A known reference output string used by [`make_datapoint`]. Kept as a
+/// module-level constant so tests that assert on its length (e.g. the
+/// `ts_reference_output_length` evaluator) stay in sync with the datapoint.
+const REFERENCE_OUTPUT_TEXT: &str = "ref-answer";
+
 /// Build a minimal chat datapoint for the `ts_judge_eval` function.
 ///
 /// Input is a single "hello" user message. No schema/template — the function
-/// definition in `tensorzero.functions.ts_judge_eval.toml` omits both.
+/// definition in `tensorzero.functions.ts_judge_eval.toml` omits both. The
+/// datapoint carries [`REFERENCE_OUTPUT_TEXT`] as its reference output so
+/// evaluators that read `reference_output` have something to observe.
 fn make_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
     let input: tensorzero_core::inference::types::stored_input::StoredInput =
         serde_json::from_value(serde_json::json!({
@@ -61,7 +69,9 @@ fn make_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input,
-        output: None,
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: REFERENCE_OUTPUT_TEXT.to_string(),
+        })]),
         tool_params: None,
         tags: None,
         is_custom: true,
@@ -209,7 +219,26 @@ async fn test_typescript_judge_success() {
         "dummy model output should be non-empty, got {len}"
     );
 
-    // Wait for async feedback writes, then confirm both metrics landed.
+    // `ts_reference_output_length` → length of the datapoint's reference
+    // output. The fixture returns -1 when `reference_output` is absent, so a
+    // match here proves the datapoint's expected output was plumbed through
+    // to the evaluator as `reference_output`.
+    let ref_len_value = info
+        .evaluations
+        .get("ts_reference_output_length")
+        .expect("ts_reference_output_length result missing")
+        .as_ref()
+        .expect("ts_reference_output_length should produce a value");
+    let ref_len = ref_len_value
+        .as_u64()
+        .expect("ts_reference_output_length should be a non-negative integer");
+    let expected_ref_len = REFERENCE_OUTPUT_TEXT.len() as u64;
+    assert_eq!(
+        ref_len, expected_ref_len,
+        "ts_reference_output_length should equal {expected_ref_len} (len of {REFERENCE_OUTPUT_TEXT:?})"
+    );
+
+    // Wait for async feedback writes, then confirm all metrics landed.
     db.flush_pending_writes().await;
     sleep(Duration::from_secs(5)).await;
     let inference_id = info.response.inference_id();
@@ -230,6 +259,16 @@ async fn test_typescript_judge_success() {
         (float_feedback.value - len).abs() < 1e-6,
         "float feedback {} should match evaluator return {len}",
         float_feedback.value
+    );
+
+    let ref_len_metric = "tensorzero::evaluation_name::typescript_judge_success::evaluator_name::ts_reference_output_length";
+    let ref_len_feedback = query_float_feedback(&db, inference_id, Some(ref_len_metric))
+        .await
+        .expect("float feedback for ts_reference_output_length should be recorded");
+    assert_eq!(
+        ref_len_feedback.value as u64, expected_ref_len,
+        "float feedback {} should match expected reference output length {expected_ref_len}",
+        ref_len_feedback.value
     );
 }
 

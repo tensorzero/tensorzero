@@ -20,6 +20,7 @@ mod imp {
     use anyhow::Result;
     use serde_json::Value;
     use tensorzero_core::client::{InferenceResponse, Input};
+    use tensorzero_core::endpoints::datasets::Datapoint;
     use tensorzero_core::endpoints::inference::InferenceResponse as CoreInferenceResponse;
     use tensorzero_core::evaluations::{TypescriptJudgeConfig, TypescriptJudgeOutputType};
     use ts_executor_pool::ExtraInferenceTags;
@@ -112,7 +113,9 @@ mod imp {
     /// 2. `Input` (and its transitive deps) from `tensorzero-ts-types`
     /// 3. `ContentBlockChatOutput` (and its transitive deps) from `tensorzero-ts-types`
     /// 4. `EvaluatorParams`, the single-argument wrapper passed to
-    ///    `tensorzero_evaluator`.
+    ///    `tensorzero_evaluator`. `reference_output` is the datapoint's
+    ///    expected output (if any) in the same shape as `output`, so user
+    ///    evaluators can compare the two directly.
     ///
     /// The `tensorzero-ts-types` bundles are generated at build time from the
     /// `ts-rs`-emitted `.ts` files under `crates/tensorzero-node/lib/bindings/`,
@@ -125,8 +128,9 @@ mod imp {
              {input}\n\n\
              {content}\n\n\
              interface EvaluatorParams {{\n\
-             \x20   input: Input;\n\
-             \x20   output: ContentBlockChatOutput[];\n\
+                input: Input;\n\
+                output: ContentBlockChatOutput[];\n\
+                reference_output?: ContentBlockChatOutput[];\n\
              }}\n",
             input = tensorzero_ts_types::INPUT.as_str(),
             content = tensorzero_ts_types::CONTENT_BLOCK_CHAT_OUTPUT.as_str(),
@@ -136,6 +140,7 @@ mod imp {
     pub async fn run_typescript_judge_evaluator(
         inference_response: &InferenceResponse,
         input: &Input,
+        datapoint: &Datapoint,
         config: &TypescriptJudgeConfig,
         executor: &TypescriptJudgeExecutor,
     ) -> Result<Option<Value>> {
@@ -154,18 +159,49 @@ mod imp {
             }
         };
 
-        // 2. Build wrapper code that calls the user's evaluator function.
+        // 2. Serialize the datapoint's reference output (if any), matching the
+        //    wire format of `output` so user evaluators can compare them
+        //    directly.
+        let reference_output_json = match datapoint {
+            Datapoint::Chat(chat_dp) => chat_dp
+                .output
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
+            Datapoint::Json(json_dp) => json_dp
+                .output
+                .as_ref()
+                .map(|output| {
+                    let raw = output.raw.as_deref().unwrap_or("");
+                    let text_block = serde_json::json!([{
+                        "type": "text",
+                        "text": raw
+                    }]);
+                    serde_json::to_string(&text_block)
+                })
+                .transpose()?,
+        };
+
+        // 3. Build wrapper code that calls the user's evaluator function.
+        //    `reference_output` is only emitted when the datapoint carries
+        //    one, so the field stays `undefined` on the JS side otherwise.
+        let reference_output_field = match &reference_output_json {
+            Some(json) => format!("  reference_output: {json},\n"),
+            None => String::new(),
+        };
         let wrapper_code = format!(
             "{user_code}\n\n\
              const __t0_params: EvaluatorParams = {{\n\
-             \x20   input: {input_json},\n\
-             \x20   output: {output_json},\n\
+                input: {input_json},\n\
+                output: {output_json},\n\
+             {reference_output_field}\
              }};\n\
              const __t0_result = await tensorzero_evaluator(__t0_params);\n\
              FINAL(JSON.stringify(__t0_result));\n",
             user_code = config.typescript_code,
             input_json = input_json,
             output_json = output_json,
+            reference_output_field = reference_output_field,
         );
 
         // 3. Spawn a fresh code-execution runtime and typecheck+run the wrapped TS.
@@ -368,6 +404,7 @@ mod imp {
     use anyhow::Result;
     use serde_json::Value;
     use tensorzero_core::client::{InferenceResponse, Input};
+    use tensorzero_core::endpoints::datasets::Datapoint;
     use tensorzero_core::evaluations::TypescriptJudgeConfig;
 
     /// Stub executor: holds no state and exists purely so that types in
@@ -394,6 +431,7 @@ mod imp {
     pub async fn run_typescript_judge_evaluator(
         _inference_response: &InferenceResponse,
         _input: &Input,
+        _datapoint: &Datapoint,
         _config: &TypescriptJudgeConfig,
         _executor: &TypescriptJudgeExecutor,
     ) -> Result<Option<Value>> {
