@@ -166,7 +166,37 @@ async fn start_gateway_impl(
         builder.env("RUST_LOG", rust_log);
     }
 
-    let mut child = builder.spawn().unwrap();
+    let child = builder.spawn().unwrap();
+    await_gateway_listening(child).await
+}
+
+/// Start the gateway with no `--config-file`, relying on `TENSORZERO_POSTGRES_URL`
+/// alone to trigger the implicit DB-boot path (no `--default-config`, no
+/// `ENABLE_CONFIG_IN_DATABASE` feature flag). The DB at `db_url` is expected
+/// to be migrated but otherwise empty — the gateway should populate singleton
+/// configs with their defaults and serve traffic.
+#[allow(dead_code)]
+pub async fn start_gateway_from_db_url_on_random_port(db_url: &str) -> ChildData {
+    let mut builder = Command::new(gateway_path());
+    builder
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .args(["--bind-address", "0.0.0.0:0", "--log-format", "json"])
+        .env("TENSORZERO_POSTGRES_URL", db_url)
+        // Ensure we're exercising the implicit-opt-in path (env var only, no
+        // feature flag) and not inheriting the outer test env's log settings.
+        .env_remove("RUST_LOG")
+        .env_remove("TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE")
+        .env_remove("TENSORZERO_GATEWAY_BIND_ADDRESS")
+        .kill_on_drop(true);
+
+    let child = builder.spawn().unwrap();
+    await_gateway_listening(child).await
+}
+
+/// Read gateway stdout until the startup "listening on" line appears, parse
+/// the bound address, and return a `ChildData` handle usable by the test.
+async fn await_gateway_listening(mut child: Child) -> ChildData {
     let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
 
     let (line_tx, mut line_rx) = tokio::sync::mpsc::unbounded_channel();
