@@ -60,9 +60,12 @@ pub(super) fn add_file(
     }
 }
 
-/// Persist a collected set of stored files, reusing any existing rows
-/// that already match `(file_path, content_hash)` and batch-inserting
-/// only the genuinely new ones. Returns `file_path -> version_id`.
+/// Persist a collected set of stored files, reusing any existing *active*
+/// row that already matches `(file_path, content_hash)` and batch-inserting
+/// only the genuinely new ones. After writing, any other active rows for
+/// the same `file_path` are tombstoned so that the invariant "at most one
+/// active row per `file_path`" (relied on by `load_editor_path_contents`)
+/// is preserved. Returns `file_path -> version_id`.
 pub(super) async fn write_collected_files(
     tx: &mut Transaction<'_, Postgres>,
     templates: &BTreeMap<String, CollectedFile>,
@@ -84,15 +87,20 @@ pub(super) async fn write_collected_files(
         })
         .collect();
 
-    // Batch lookup: find existing template versions with matching
-    // `(file_path, content_hash)`.
+    // Batch lookup: find existing active template versions with matching
+    // `(file_path, content_hash)`. We intentionally filter on
+    // `deleted_at IS NULL` so we never reuse a tombstoned row's UUID — doing
+    // so would leave zero active rows for the path after the tombstone step
+    // below, breaking the editor view.
     let file_paths: Vec<&str> = templates.keys().map(String::as_str).collect();
     let content_hashes: Vec<&[u8]> = file_paths.iter().map(|k| hashes[*k].as_slice()).collect();
     let existing_rows: Vec<ExistingTemplateRow> = sqlx::query_as(
         "SELECT input.file_path, t.id \
          FROM UNNEST($1::text[], $2::bytea[]) AS input(file_path, content_hash) \
          JOIN tensorzero.stored_files t \
-           ON t.file_path = input.file_path AND t.content_hash = input.content_hash",
+           ON t.file_path = input.file_path \
+          AND t.content_hash = input.content_hash \
+          AND t.deleted_at IS NULL",
     )
     .bind(&file_paths)
     .bind(&content_hashes)
@@ -139,6 +147,26 @@ pub(super) async fn write_collected_files(
             .await
             .map_err(|e| postgres_query_error("Failed to insert stored file versions", e))?;
     }
+
+    // Tombstone any OTHER active rows for the file paths we just wrote so
+    // that at most one active row remains per `file_path`. Config reads go
+    // by UUID and do not filter on `deleted_at`, so previously-referenced
+    // function/tool/evaluation versions still resolve correctly — the
+    // tombstone only hides the old row from the editor's latest-per-path
+    // view.
+    let kept_ids: Vec<Uuid> = template_version_ids.values().copied().collect();
+    sqlx::query(
+        "UPDATE tensorzero.stored_files \
+         SET deleted_at = NOW() \
+         WHERE deleted_at IS NULL \
+           AND file_path = ANY($1::text[]) \
+           AND id <> ALL($2::uuid[])",
+    )
+    .bind(&file_paths)
+    .bind(&kept_ids)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| postgres_query_error("Failed to tombstone superseded stored file versions", e))?;
 
     Ok(template_version_ids)
 }

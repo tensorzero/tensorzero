@@ -966,3 +966,48 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<UninitializedConfig, V
 
     Ok(config)
 }
+
+/// Loads every non-tombstoned file in `stored_files`, keyed by `file_path`.
+///
+/// Used by the config editor to build the full `path_contents` map — both
+/// files referenced in the TOML and "free" files the user added but has not
+/// yet referenced. The write path maintains the invariant that at most one
+/// active row exists per `file_path`, so we treat a duplicate as a data
+/// integrity violation and surface an error rather than silently picking a
+/// row.
+pub async fn load_editor_path_contents(pool: &PgPool) -> Result<HashMap<String, String>, Error> {
+    #[derive(FromRow)]
+    struct EditorFileRow {
+        file_path: String,
+        source_body: String,
+    }
+    let rows = sqlx::query_as::<_, EditorFileRow>(
+        r"
+        SELECT file_path, source_body
+        FROM tensorzero.stored_files
+        WHERE deleted_at IS NULL
+        ",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to load editor path contents: {e}"),
+        })
+    })?;
+    let mut path_contents: HashMap<String, String> = HashMap::with_capacity(rows.len());
+    for row in rows {
+        if path_contents
+            .insert(row.file_path.clone(), row.source_body)
+            .is_some()
+        {
+            return Err(Error::new(ErrorDetails::PostgresQuery {
+                message: format!(
+                    "`stored_files` has multiple active rows for `file_path` `{}`; the write path should maintain at most one active row per path.",
+                    row.file_path
+                ),
+            }));
+        }
+    }
+    Ok(path_contents)
+}

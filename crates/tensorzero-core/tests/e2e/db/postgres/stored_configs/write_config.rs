@@ -523,6 +523,74 @@ async fn write_stored_config_persists_tool_with_file(pool: PgPool) {
     assert_that!(source_body, contains_substring("\"city\""));
 }
 
+/// Editing the body of a file referenced by a tool and re-writing the config
+/// must maintain the "at most one active (non-tombstoned) row per `file_path`"
+/// invariant that `load_editor_path_contents` relies on. Before
+/// `write_collected_files` was taught to tombstone superseded versions, this
+/// left two active rows for the same `file_path` and broke the editor.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn write_stored_config_tombstones_superseded_referenced_file(pool: PgPool) {
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+
+    let path = "tools.get_weather.parameters";
+
+    let build_config = |body: &str| {
+        let tool = UninitializedToolConfig {
+            description: "Look up weather".to_string(),
+            parameters: fake_template(path, body),
+            name: Some("get_weather".to_string()),
+            strict: true,
+        };
+        UninitializedConfig {
+            tools: Some(HashMap::from([("get_weather".to_string(), tool)])),
+            ..Default::default()
+        }
+    };
+
+    // v1.
+    let config_v1 =
+        build_config("{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}");
+    postgres
+        .write_stored_config(default_write_params(&config_v1))
+        .await
+        .expect("first write should succeed");
+
+    // v2 — same `file_path`, different content.
+    let config_v2 =
+        build_config("{\"type\":\"object\",\"properties\":{\"zip\":{\"type\":\"string\"}}}");
+    postgres
+        .write_stored_config(default_write_params(&config_v2))
+        .await
+        .expect("second write should succeed");
+
+    // Two rows exist overall (old + new), but only one is active.
+    assert_that!(count_rows(&pool, "stored_files").await, eq(2));
+    let active_for_path: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM tensorzero.stored_files \
+         WHERE file_path = $1 AND deleted_at IS NULL",
+    )
+    .bind(path)
+    .fetch_one(&pool)
+    .await
+    .expect("active-count query should succeed");
+    assert_that!(
+        active_for_path,
+        eq(1),
+        "exactly one active stored_files row should remain for `{path}` after a content-change re-write"
+    );
+
+    // The active row must carry the v2 body, not the tombstoned v1 body.
+    let active_body: String = sqlx::query_scalar(
+        "SELECT source_body FROM tensorzero.stored_files \
+         WHERE file_path = $1 AND deleted_at IS NULL",
+    )
+    .bind(path)
+    .fetch_one(&pool)
+    .await
+    .expect("active row should exist");
+    assert_that!(active_body, contains_substring("\"zip\""));
+}
+
 // ── Tests: evaluations with stored files ──────────────────────────────────────
 
 /// Writing an evaluation with an LLM-judge variant should persist the
