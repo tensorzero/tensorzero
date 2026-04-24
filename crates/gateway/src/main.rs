@@ -99,24 +99,17 @@ async fn load_startup_config(args: &GatewayArgs) -> Result<StartupConfig, ExitCo
         });
     }
 
-    // Fall back to loading configuration from Postgres when the operator has
-    // either explicitly opted in via the feature flag, or implicitly opted in
-    // by setting `TENSORZERO_POSTGRES_URL` without providing a config file.
-    // An empty database is a valid starting point: the gateway will serve a
-    // functional runtime with no functions/variants, and operators populate
-    // config through the REST API (or the UI).
-    let postgres_url = read_postgres_url_env();
-    let explicit_opt_in = feature_flags::ENABLE_CONFIG_IN_DATABASE.get();
-    if postgres_url.is_some() && !explicit_opt_in {
-        // Many deployments set `TENSORZERO_POSTGRES_URL` for observability or
-        // rate-limiting without intending to boot from DB config. Log loudly
-        // so the operator sees the fallback in startup logs instead of being
-        // surprised by an empty function/variant set at runtime.
-        tracing::warn!(
-            "No `--config-file` or `--default-config` was supplied; booting with configuration from Postgres because `{TENSORZERO_POSTGRES_URL_ENV}` is set. Pass `--config-file` or `--default-config` explicitly if this is not what you intended."
-        );
-    }
-    if explicit_opt_in || postgres_url.is_some() {
+    // Load configuration from Postgres only when the operator has explicitly
+    // opted in via the `ENABLE_CONFIG_IN_DATABASE` feature flag. An empty
+    // database is a valid starting point: the gateway will serve a functional
+    // runtime with no functions/variants, and operators populate config
+    // through the REST API (or the UI). `TENSORZERO_POSTGRES_URL` by itself
+    // is NOT sufficient to take this path — many deployments set that env
+    // var for observability or rate-limiting without intending to boot from
+    // DB config, and config-in-database is still behind the flag while we
+    // harden it.
+    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+        let postgres_url = read_postgres_url_env();
         let unwritten = load_startup_config_from_database(postgres_url.as_deref())
             .await
             .log_err_pretty("Failed to load configuration from database")?;
@@ -127,10 +120,7 @@ async fn load_startup_config(args: &GatewayArgs) -> Result<StartupConfig, ExitCo
         });
     }
 
-    tracing::error!(
-        "No configuration source found. Specify `--config-file`, `--default-config`, \
-         or set `{TENSORZERO_POSTGRES_URL_ENV}` to load configuration from a database."
-    );
+    tracing::error!("You must specify either `--config-file` or `--default-config`.");
     Err(ExitCode::FAILURE)
 }
 
