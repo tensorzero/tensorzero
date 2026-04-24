@@ -26,12 +26,20 @@ env:
 jobs:
   db-only-boot-e2e:
     if: github.repository == 'tensorzero/tensorzero'
-    name: "db-only-boot-e2e"
+    # Run the zero-config scenario in both observability modes: with
+    # ClickHouse as the data backend (default) and with Postgres as
+    # the data backend (single-datastore deploy). Config always lives
+    # in Postgres; this matrix only varies where observability data goes.
+    name: "db-only-boot-e2e (database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
     timeout-minutes: 20
+    strategy:
+      matrix:
+        database: [clickhouse, postgres]
+      fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -57,6 +65,11 @@ jobs:
       - name: Pull images referenced by the compose files
         run: docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy pull --ignore-pull-failures
 
+      - name: Set Postgres as primary datastore
+        if: matrix.database == 'postgres'
+        run: |
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
+
       - name: Run db-only-boot e2e tests
         # The `db-only-boot` nextest profile filters down to the tests in
         # `tensorzero-core/tests/e2e/db_only_boot/`, which hit the running
@@ -65,6 +78,7 @@ jobs:
         run: |
           DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
             sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile db-only-boot"
 
