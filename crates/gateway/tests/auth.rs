@@ -1022,7 +1022,7 @@ async fn test_rate_limit_auth_single_key() {
     let status = first_key_failure.status();
     let text = first_key_failure.text().await.unwrap();
     assert!(text.contains("TensorZero rate limit"));
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 
     // The request with 'second_key' should succeed, since it's a different key
     reqwest::Client::new()
@@ -1294,7 +1294,7 @@ async fn test_rate_limit_auth_each_key() {
         !text.contains(&parsed_second_key.public_id),
         "Public ID of second key should not be in response: {text}"
     );
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 
     // The request with 'second_key' should succeed, since it's a different key
     reqwest::Client::new()
@@ -1355,5 +1355,5 @@ async fn test_rate_limit_auth_each_key() {
         !text.contains(&parsed_first_key.public_id),
         "Public ID of first key should not be in response: {text}"
     );
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 }
