@@ -7,15 +7,19 @@ use googletest::prelude::*;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use tensorzero_core::config::editable::toml_to_config;
 use tensorzero_core::config::path::ResolvedTomlPathData;
+use tensorzero_core::config::snapshot::StoredConfig;
 use tensorzero_core::config::{
-    Namespace, NonStreamingTimeouts, StreamingTimeouts, TimeoutsConfig, UninitializedConfig,
-    UninitializedFunctionConfig, UninitializedFunctionConfigJson, UninitializedSchemas,
-    UninitializedToolConfig, UninitializedVariantConfig, UninitializedVariantInfo,
+    Config, Namespace, NonStreamingTimeouts, StreamingTimeouts, TimeoutsConfig,
+    UninitializedConfig, UninitializedFunctionConfig, UninitializedFunctionConfigJson,
+    UninitializedSchemas, UninitializedToolConfig, UninitializedVariantConfig,
+    UninitializedVariantInfo,
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::function_config_writes::WriteFunctionConfigParams;
 use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
+use tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams;
 use tensorzero_core::evaluations::{
     ExactMatchConfig, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
     UninitializedInferenceEvaluationConfig,
@@ -438,5 +442,73 @@ async fn load_config_from_db_fails_on_invalid_singleton_rows(pool: PgPool) {
     assert_that!(
         errors[0].to_string(),
         contains_substring("unsupported schema revision 999 for `gateway_config`")
+    );
+}
+
+/// Regression guard: a config written via the apply path and then reloaded via
+/// `load_config_from_db` must produce the same `Config::hash` as the one
+/// `Config::load_from_uninitialized` returned for the original input. This is
+/// the invariant `POST /internal/config_toml/apply` + `GET /internal/config_toml`
+/// rely on — if it breaks, the UI sees one hash immediately after save and a
+/// different hash on next page load.
+///
+/// This test uses `toml_to_config` (the same parser the apply handler uses)
+/// because the bug it guards against is specifically triggered by that parse
+/// path: `TryFrom<TomlUninitializedConfig>` wraps every section in `Some(..)`,
+/// so even a TOML with no `[rate_limiting]` section produces
+/// `rate_limiting: Some(default)` — which the write path persists as a row,
+/// exercising the asymmetric `StoredRateLimitingConfig -> Uninitialized`
+/// conversion that collapsed `rules: None` to `rules: Some(vec![])`.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn write_then_load_preserves_config_hash_for_metric_only_config(pool: PgPool) {
+    const METRIC_TOML: &str = r#"
+[metrics.test_metric]
+type = "boolean"
+optimize = "max"
+level = "episode"
+"#;
+    let original =
+        toml_to_config(METRIC_TOML, &HashMap::new()).expect("metric-only TOML should parse");
+
+    let pre_write = Config::load_from_uninitialized(original.clone(), false)
+        .await
+        .expect("validating the original config should succeed");
+    let pre_write_hash = pre_write.hash.to_string();
+
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+    postgres
+        .write_stored_config(WriteStoredConfigParams {
+            config: &original,
+            creation_source: "test",
+            source_autopilot_session_id: None,
+            extra_templates: &HashMap::new(),
+        })
+        .await
+        .expect("writing the original config should succeed");
+
+    let reloaded = load_config_from_db(&pool)
+        .await
+        .expect("loading back from DB should succeed");
+    let post_load = Config::load_from_uninitialized(reloaded.clone(), false)
+        .await
+        .expect("validating the reloaded config should succeed");
+    let post_load_hash = post_load.hash.to_string();
+
+    // Compare the canonical `StoredConfig` TOML as well: the hash is derived
+    // from that TOML, so a diff here localizes the field responsible for any
+    // future drift.
+    let before_toml = toml::to_string_pretty(&StoredConfig::from(original.clone()))
+        .expect("original config should serialize to TOML");
+    let after_toml = toml::to_string_pretty(&StoredConfig::from(reloaded.clone()))
+        .expect("reloaded config should serialize to TOML");
+    assert_that!(
+        &after_toml,
+        eq(&before_toml),
+        "canonical StoredConfig TOML must round-trip unchanged"
+    );
+    assert_that!(
+        &post_load_hash,
+        eq(&pre_write_hash),
+        "Config::hash must round-trip unchanged through write + load"
     );
 }

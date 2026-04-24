@@ -244,39 +244,48 @@ impl TryFrom<StoredRateLimitingConfig> for UninitializedRateLimitingConfig {
     type Error = Error;
 
     fn try_from(stored: StoredRateLimitingConfig) -> Result<Self, Error> {
+        // Preserve `None` vs `Some(vec![])` — the stored type encodes "field
+        // absent from this row" as `None` and "explicitly empty rule list"
+        // as `Some(vec![])`. Collapsing both to `Some(vec![])` here makes
+        // the forward conversion `UninitializedRateLimitingConfig -> Stored`
+        // asymmetric with its reverse, which shifts the canonical TOML used
+        // to compute `Config::hash` between the apply and re-read paths.
         let rules = stored
             .rules
-            .unwrap_or_default()
-            .into_iter()
-            .map(|rule| {
-                let limits = rule
-                    .limits
+            .map(|rules| {
+                rules
                     .into_iter()
-                    .map(|limit| {
-                        Arc::new(RateLimit {
-                            resource: limit.resource.into(),
-                            interval: limit.interval.into(),
-                            capacity: limit.capacity,
-                            refill_rate: limit.refill_rate,
+                    .map(|rule| {
+                        let limits = rule
+                            .limits
+                            .into_iter()
+                            .map(|limit| {
+                                Arc::new(RateLimit {
+                                    resource: limit.resource.into(),
+                                    interval: limit.interval.into(),
+                                    capacity: limit.capacity,
+                                    refill_rate: limit.refill_rate,
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        let scope = rule.scope.try_into().map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!("Failed to build rate limiting scopes: {e}"),
+                            })
+                        })?;
+                        let priority = rule.priority.into();
+                        Ok(RateLimitingConfigRule {
+                            limits,
+                            scope,
+                            priority,
                         })
                     })
-                    .collect::<Vec<_>>();
-                let scope = rule.scope.try_into().map_err(|e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to build rate limiting scopes: {e}"),
-                    })
-                })?;
-                let priority = rule.priority.into();
-                Ok(RateLimitingConfigRule {
-                    limits,
-                    scope,
-                    priority,
-                })
+                    .collect::<Result<Vec<_>, Error>>()
             })
-            .collect::<Result<Vec<_>, Error>>()?;
+            .transpose()?;
         let backend = stored.backend.map(Into::into);
         Ok(UninitializedRateLimitingConfig {
-            rules: Some(rules),
+            rules,
             enabled: stored.enabled,
             backend,
             default_nano_cost: stored.default_nano_cost,
