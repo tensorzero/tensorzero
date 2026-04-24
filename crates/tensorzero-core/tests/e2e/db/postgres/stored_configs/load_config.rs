@@ -205,6 +205,39 @@ async fn insert_file(pool: &PgPool, file_path: &str, source_body: &str) -> Uuid 
     id
 }
 
+/// Smoke test for the zero-config gateway boot path: a freshly-migrated
+/// database with no rows should load into an `UninitializedConfig` whose
+/// singletons are populated with their defaults and whose collections are
+/// empty. This is the shape the gateway sees when it starts with only a
+/// Postgres connection and an otherwise empty database.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn load_config_from_db_returns_defaults_on_empty_database(pool: PgPool) {
+    let loaded = load_config_from_db(&pool)
+        .await
+        .expect("loading an empty database should succeed");
+    // No rows to load means no per-row loading errors.
+    assert_that!(loaded.loading_errors.is_empty(), eq(true));
+    assert_that!(
+        loaded.config,
+        matches_pattern!(UninitializedConfig {
+            gateway: some(anything()),
+            clickhouse: some(anything()),
+            postgres: some(anything()),
+            rate_limiting: some(anything()),
+            object_storage: none(),
+            models: some(is_empty()),
+            embedding_models: some(is_empty()),
+            functions: some(is_empty()),
+            metrics: some(is_empty()),
+            tools: some(is_empty()),
+            evaluations: some(is_empty()),
+            provider_types: some(anything()),
+            optimizers: some(is_empty()),
+            autopilot: some(anything()),
+        })
+    );
+}
+
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
 async fn load_config_from_db_round_trips_written_function_configs(pool: PgPool) {
     let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());

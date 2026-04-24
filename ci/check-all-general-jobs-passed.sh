@@ -40,6 +40,7 @@ ALLOWED_SKIP=(
   "check-version-consistency"
   "clickhouse-tests"
   "client-tests"
+  "db-only-boot-e2e"
   "inference-cache-tests"
   "Endpoint tests"
   "k3d"
