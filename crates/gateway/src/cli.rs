@@ -65,6 +65,12 @@ pub struct EarlyExitCommands {
     /// Load config files matching the specified glob pattern, store the config in the database, then exit.
     #[arg(long, value_name = "CONFIG_GLOB", conflicts_with_all = ["config_file", "default_config"])]
     pub migrate_config: Option<PathBuf>,
+
+    /// Load config files matching the specified glob pattern, verify every stored-config table
+    /// is empty, store the config in the database, then exit. Use --force to write even when
+    /// stored-config tables already have rows.
+    #[arg(long, value_name = "CONFIG_GLOB", conflicts_with_all = ["config_file", "default_config"])]
+    pub bootstrap_config: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -73,6 +79,11 @@ pub struct EarlyExitCommandArguments {
     /// be set.
     #[arg(long, requires = "create_api_key", value_name = "DATETIME")]
     pub expiration: Option<DateTime<Utc>>,
+
+    /// Override the empty-DB precondition on --bootstrap-config. Writes the config on top of
+    /// existing stored-config rows.
+    #[arg(long, requires = "bootstrap_config")]
+    pub force: bool,
 }
 
 #[cfg(test)]
@@ -116,5 +127,73 @@ mod tests {
         .expect_err("`--migrate-config` should conflict with `--default-config`");
 
         expect_that!(error.kind(), eq(clap::error::ErrorKind::ArgumentConflict));
+    }
+
+    #[gtest]
+    fn test_bootstrap_config_accepts_a_glob_argument() {
+        let args = GatewayArgs::try_parse_from(["gateway", "--bootstrap-config", "config/*.toml"])
+            .expect("`--bootstrap-config` should parse with a path argument");
+
+        expect_that!(
+            args.early_exit_commands.bootstrap_config,
+            some(eq(&PathBuf::from("config/*.toml")))
+        );
+        expect_that!(args.early_exit_command_arguments.force, eq(false));
+    }
+
+    #[gtest]
+    fn test_bootstrap_config_conflicts_with_config_file() {
+        let error = GatewayArgs::try_parse_from([
+            "gateway",
+            "--bootstrap-config",
+            "config/*.toml",
+            "--config-file",
+            "other.toml",
+        ])
+        .expect_err("`--bootstrap-config` should conflict with `--config-file`");
+
+        expect_that!(error.kind(), eq(clap::error::ErrorKind::ArgumentConflict));
+    }
+
+    #[gtest]
+    fn test_bootstrap_config_conflicts_with_migrate_config() {
+        // `EarlyExitCommands` is declared as `#[group(multiple = false)]`, so
+        // specifying two early-exit commands at once is rejected by clap.
+        let error = GatewayArgs::try_parse_from([
+            "gateway",
+            "--bootstrap-config",
+            "config/*.toml",
+            "--migrate-config",
+            "other.toml",
+        ])
+        .expect_err("`--bootstrap-config` should conflict with `--migrate-config`");
+
+        expect_that!(error.kind(), eq(clap::error::ErrorKind::ArgumentConflict));
+    }
+
+    #[gtest]
+    fn test_bootstrap_config_accepts_force_flag() {
+        let args = GatewayArgs::try_parse_from([
+            "gateway",
+            "--bootstrap-config",
+            "config/*.toml",
+            "--force",
+        ])
+        .expect("`--bootstrap-config --force` should parse");
+
+        expect_that!(args.early_exit_command_arguments.force, eq(true));
+    }
+
+    #[gtest]
+    fn test_force_requires_bootstrap_config() {
+        // `--force` on its own is meaningless — it must be paired with
+        // `--bootstrap-config` because that is the only command it gates.
+        let error = GatewayArgs::try_parse_from(["gateway", "--force"])
+            .expect_err("`--force` should require `--bootstrap-config`");
+
+        expect_that!(
+            error.kind(),
+            eq(clap::error::ErrorKind::MissingRequiredArgument)
+        );
     }
 }

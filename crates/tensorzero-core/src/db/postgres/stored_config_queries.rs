@@ -1159,6 +1159,64 @@ pub async fn load_config_from_db(pool: &PgPool) -> Result<LoadedConfig, Vec<Erro
     })
 }
 
+/// Every Postgres table that holds stored-config rows, in declaration order.
+/// `find_nonempty_stored_config_table` checks these in sequence; callers that
+/// want to enumerate stored config state (for diagnostics, health checks, or
+/// pre-bootstrap validation) should share this list rather than maintain
+/// their own.
+const STORED_CONFIG_TABLES: &[&str] = &[
+    "tensorzero.function_configs",
+    "tensorzero.variant_configs",
+    "tensorzero.stored_files",
+    "tensorzero.tools_configs",
+    "tensorzero.evaluations_configs",
+    "tensorzero.gateway_configs",
+    "tensorzero.clickhouse_configs",
+    "tensorzero.postgres_configs",
+    "tensorzero.object_storage_configs",
+    "tensorzero.models_configs",
+    "tensorzero.embedding_models_configs",
+    "tensorzero.metrics_configs",
+    "tensorzero.rate_limiting_configs",
+    "tensorzero.autopilot_configs",
+    "tensorzero.provider_types_configs",
+    "tensorzero.optimizers_configs",
+];
+
+/// Returns the name of the first stored-config table that contains at least
+/// one row, or `None` if every stored-config table is empty. Short-circuits
+/// on the first hit. Used by `gateway --bootstrap-config` to refuse to write
+/// on top of existing state.
+///
+/// Soft-deleted rows still count as "present" — we want bootstrap to require
+/// a fully-fresh schema, not a formerly-populated one that was later cleared.
+pub async fn find_nonempty_stored_config_table(
+    pool: &PgPool,
+) -> Result<Option<&'static str>, Error> {
+    for table in STORED_CONFIG_TABLES {
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT EXISTS (SELECT 1 FROM ");
+        // Table names are static identifiers from `STORED_CONFIG_TABLES`, not
+        // user input — `.push()` splices them as trusted SQL. `sqlx::query!`
+        // can't bind identifiers, so a builder is the canonical pattern per
+        // the crates AGENTS.md.
+        qb.push(*table);
+        qb.push(")");
+        let has_any: bool = qb
+            .build_query_scalar()
+            .fetch_one(pool)
+            .await
+            .map_err(|error| {
+                Error::new(ErrorDetails::PostgresQuery {
+                    message: format!("Failed to check if `{table}` is empty: {error}"),
+                })
+            })?;
+        if has_any {
+            return Ok(Some(table));
+        }
+    }
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
