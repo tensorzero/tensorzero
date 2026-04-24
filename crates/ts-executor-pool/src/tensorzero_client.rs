@@ -3,10 +3,10 @@
 //! This provides the subset of the full `durable_tools::TensorZeroClient` that
 //! `ts-executor-pool` actually requires: just the `inference` method.
 //!
-//! [`PoolInferenceParams`] is a lightweight version of
-//! `tensorzero_core::client::ClientInferenceParams` containing only the fields
-//! that this crate reads or writes. Implementations convert to the full
-//! `ClientInferenceParams` at the call-site boundary.
+//! [`PoolInferenceParams`] is a lightweight version of the full inference
+//! parameters containing only the fields that this crate reads or writes.
+//! Implementations convert to the full parameter type at the call-site
+//! boundary.
 
 use std::collections::HashMap;
 

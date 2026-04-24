@@ -15,7 +15,7 @@ use tensorzero_core::endpoints::inference::InferenceCredentials;
 pub use tensorzero_types::ToolHandle;
 use uuid::Uuid;
 
-use crate::error::{NonControlToolError, ToolResult};
+use crate::error::{NonControlToolError, ToolError, ToolResult};
 use crate::registry::ToolRegistry;
 use crate::task_tool::TaskToolParams;
 use crate::tensorzero_client::{TensorZeroClient, TensorZeroClientError};
@@ -536,6 +536,23 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
         .await
     }
 
+    /// Run a checkpointed inference call using this context's episode id.
+    ///
+    /// Validates that `episode_id` is `None` (it will be set from the context),
+    /// then delegates to [`ToolContext::inference`].
+    pub async fn checkpointed_inference(
+        &mut self,
+        mut params: ClientInferenceParams,
+    ) -> ToolResult<InferenceResponse> {
+        if params.episode_id.is_some() {
+            return Err(ToolError::NonControl(NonControlToolError::Internal {
+                message: "episode_id must be None when using checkpointed_inference".to_string(),
+            }));
+        }
+        params.episode_id = Some(self.episode_id());
+        self.inference(params).await
+    }
+
     /// Compute embeddings with the configured embedding model.
     ///
     /// This is a checkpointed operation - results are cached on restart.
@@ -562,7 +579,7 @@ impl<S: Clone + Send + Sync + 'static> ToolContext<S> {
 }
 
 #[async_trait::async_trait]
-impl<S: Clone + Send + Sync> tensorzero_core::client::ToolContextHelper for ToolContext<S> {
+impl<S: Clone + Send + Sync> tensorzero_types::tool_context::ToolContextHelper for ToolContext<S> {
     fn episode_id(&self) -> Uuid {
         ToolContext::episode_id(self)
     }
@@ -586,9 +603,6 @@ impl<S: Clone + Send + Sync> tensorzero_core::client::ToolContextHelper for Tool
         options: durable::SpawnOptions,
     ) -> ToolResult<tensorzero_types::ToolHandle> {
         ToolContext::spawn_tool(self, tool_name, llm_params, side_info, options).await
-    }
-    async fn inference(&mut self, params: ClientInferenceParams) -> ToolResult<InferenceResponse> {
-        ToolContext::inference(self, params).await
     }
 }
 
