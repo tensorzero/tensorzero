@@ -1,15 +1,13 @@
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { cn } from "~/utils/common";
 import type {
   EventPayloadUserQuestions,
   UserQuestionAnswer,
 } from "~/types/tensorzero";
 import { MultipleChoiceStep } from "./MultipleChoiceStep";
 import { FreeResponseStep } from "./FreeResponseStep";
-import { StepTab } from "./StepTab";
 import { useQuestionCardState } from "./useQuestionCardState";
-import { useAnimatedHeight } from "~/hooks/useAnimatedHeight";
+import { QuestionCard } from "./QuestionCard";
 
 type PendingQuestionCardProps = {
   eventId: string;
@@ -30,9 +28,6 @@ export function PendingQuestionCard({
   className,
 }: PendingQuestionCardProps) {
   const state = useQuestionCardState(payload, eventId, onSubmit);
-  const { ref: contentRef, height: contentHeight } = useAnimatedHeight(
-    state.activeStep,
-  );
 
   const handleDismiss = () => {
     const responses: Record<string, UserQuestionAnswer> = {};
@@ -80,61 +75,28 @@ export function PendingQuestionCard({
   };
 
   return (
-    <div
-      className={cn(
-        "flex flex-col rounded-md border border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30",
-        className,
-      )}
-    >
-      {/* Header row */}
-      <div className="flex items-center justify-between gap-4 px-4 py-3">
-        <span className="text-sm font-medium">
-          {state.isSingleQuestion ? "Question" : "Questions"}
-        </span>
-        <button
-          type="button"
-          onClick={handleDismiss}
-          disabled={isLoading}
-          className="-mr-1 cursor-pointer rounded-sm p-0.5 text-purple-400 transition-colors hover:text-purple-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-purple-500 dark:hover:text-purple-300"
-          aria-label="Dismiss questions"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Step tabs (only for multi-question) */}
-      {!state.isSingleQuestion && (
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3">
-          {payload.questions.map((q, idx) => (
-            <StepTab
-              key={q.id}
-              index={idx}
-              label={q.header}
-              state={getStepTabState(idx)}
-              disabled={isLoading}
-              onClick={() => state.setActiveStep(idx)}
-            />
-          ))}
-        </nav>
-      )}
-
-      {/* Content area */}
-      <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 px-4 pb-3">
-        <div
-          ref={contentRef}
-          className="max-h-[48vh] overflow-y-auto transition-[height] duration-300 ease-in-out"
-          style={{ height: contentHeight }}
-        >
-          <div
-            key={state.activeStep}
-            className="animate-in fade-in duration-300"
-          >
-            {renderActiveStep()}
-          </div>
-        </div>
-
-        {/* Footer: Back / Skip / Next / Submit */}
-        <div className="flex items-center justify-between">
+    <QuestionCard
+      title={state.isSingleQuestion ? "Question" : "Questions"}
+      onDismiss={handleDismiss}
+      isLoading={isLoading}
+      className={className}
+      contentClassName="max-h-[48vh] overflow-y-auto"
+      dismissAriaLabel="Dismiss questions"
+      activeStep={state.activeStep}
+      steps={
+        !state.isSingleQuestion
+          ? {
+              items: payload.questions.map((q, idx) => ({
+                id: q.id,
+                label: q.header,
+                state: getStepTabState(idx),
+              })),
+              onStepClick: (idx) => state.setActiveStep(idx),
+            }
+          : undefined
+      }
+      footer={
+        <div className="flex items-center justify-between px-4 pt-3 pb-3">
           <div>
             {!state.isSingleQuestion && !state.isFirstStep && (
               <Button
@@ -142,20 +104,20 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={isLoading}
                 onClick={() => state.setActiveStep((s) => s - 1)}
-                className="gap-0.5 pl-1 text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
+                className="gap-0.5 pl-1 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 Back
               </Button>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="xs"
               disabled={isLoading}
               onClick={state.handleSkipStep}
-              className="text-purple-700 hover:text-purple-800 dark:text-purple-300 dark:hover:text-purple-200"
+              className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
             >
               Skip
             </Button>
@@ -164,7 +126,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={state.handleSubmit}
-                className="gap-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+                className="gap-1"
               >
                 {isLoading ? "Submitting..." : "Submit"}
                 <Check className="h-3.5 w-3.5" />
@@ -174,7 +136,7 @@ export function PendingQuestionCard({
                 size="xs"
                 disabled={!state.isStepComplete(state.activeStep) || isLoading}
                 onClick={() => state.setActiveStep((s) => s + 1)}
-                className="gap-0.5 bg-purple-600 pr-1 text-white hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500"
+                className="gap-0.5 pr-1 bg-purple-600 text-white hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
               >
                 Next
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -182,7 +144,9 @@ export function PendingQuestionCard({
             )}
           </div>
         </div>
-      </div>
-    </div>
+      }
+    >
+      {renderActiveStep()}
+    </QuestionCard>
   );
 }

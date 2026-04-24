@@ -85,6 +85,10 @@ export default [
       "routes/api/autopilot/sessions/$session_id/events/answer-questions.route.ts",
     ),
     route(
+      "autopilot/sessions/:session_id/events/answer-auto-eval-example-labeling",
+      "routes/api/autopilot/sessions/$session_id/events/answer-auto-eval-example-labeling.route.ts",
+    ),
+    route(
       "autopilot/sessions/:session_id/events/message",
       "routes/api/autopilot/sessions/$session_id/events/message.route.ts",
     ),

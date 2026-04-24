@@ -2,13 +2,16 @@ import { EmptyMessage } from "./ContentBlockElement";
 import type { System, Input, InputMessage } from "~/types/tensorzero";
 import { SystemElement } from "./SystemElement";
 import { MessagesElement } from "./MessagesElement";
+import { ScrollFadeContainer } from "./ScrollFadeContainer";
+import { cn } from "~/utils/common";
+import type { ContentOverflow } from "./content_overflow";
 
 interface InputElementProps {
   input: Input;
   isEditing?: boolean;
   onSystemChange?: (system?: System) => void;
   onMessagesChange?: (messages: InputMessage[]) => void;
-  maxHeight?: number | "Content";
+  overflow?: ContentOverflow;
 }
 
 export function InputElement({
@@ -16,30 +19,53 @@ export function InputElement({
   isEditing,
   onSystemChange,
   onMessagesChange,
-  maxHeight,
+  overflow,
 }: InputElementProps) {
   const { messages, system } = input;
 
-  return (
-    <div className="bg-bg-primary border-border flex w-full flex-col gap-1 rounded-lg border p-4">
-      {/* Empty input */}
+  // In scroll mode, disable per-section ExpandableElements so the whole card scrolls
+  const childMaxHeight =
+    overflow?.type === "scroll" ? ("Content" as const) : overflow?.maxHeight;
+
+  const content = (
+    <>
       {system == null && messages.length === 0 && !isEditing && (
         <EmptyMessage message="Empty input" />
       )}
-      {/* System */}
       <SystemElement
         system={system}
         isEditing={isEditing}
         onSystemChange={onSystemChange}
-        maxHeight={maxHeight}
+        maxHeight={childMaxHeight}
       />
-      {/* Messages */}
       <MessagesElement
         messages={messages}
         isEditing={isEditing}
         onMessagesChange={onMessagesChange}
-        maxHeight={maxHeight}
+        maxHeight={childMaxHeight}
       />
+    </>
+  );
+
+  const isScroll = overflow?.type === "scroll";
+
+  return (
+    <div
+      className={cn(
+        "bg-bg-primary border-border flex w-full flex-col rounded-lg border",
+        isScroll ? "flex-1 gap-0" : "gap-1 p-4",
+      )}
+    >
+      {isScroll ? (
+        <ScrollFadeContainer
+          maxHeight={overflow.maxHeight}
+          contentClassName="gap-1 px-4"
+        >
+          {content}
+        </ScrollFadeContainer>
+      ) : (
+        content
+      )}
     </div>
   );
 }
