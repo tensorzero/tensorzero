@@ -10,7 +10,7 @@ use crate::error::AutopilotToolError;
 use schemars::{JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero::{WriteConfigRequest, WriteConfigResponse};
+use tensorzero::WriteConfigRequest;
 use tensorzero_core::config::UninitializedConfig;
 
 use autopilot_client::AutopilotSideInfo;
@@ -20,6 +20,46 @@ pub use config_applier::{
     EditPayload, UpsertEvaluationPayload, UpsertEvaluatorPayload, UpsertExperimentationPayload,
     UpsertVariantPayload,
 };
+
+/// Output of the `write_config` tool (visible to LLM).
+///
+/// Tagged with `status` so the LLM sees an explicit success/error discriminant
+/// rather than needing to distinguish a bare hash from a thrown exception.
+/// Only LLM-actionable failures (e.g. malformed `config` that fails local
+/// deserialization) land here as `Error`. Infrastructure failures from the
+/// underlying client call (gateway 5xx, network, DB) propagate as `ToolError`
+/// so the worker's failure-oriented handling and observability still fire.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum WriteConfigToolOutput {
+    /// The config snapshot was written successfully.
+    Ok {
+        /// Hash identifying the newly-written config snapshot.
+        hash: String,
+    },
+    /// The write failed in a way the LLM can reason about and recover from.
+    Error {
+        /// Stable machine-readable error category.
+        code: WriteConfigErrorCode,
+        /// Human-readable error message.
+        message: String,
+    },
+}
+
+/// Stable error category for `WriteConfigToolOutput::Error`.
+///
+/// Only covers cases the LLM can act on. Transport/server failures are
+/// surfaced as `ToolError` instead and never reach this enum.
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum WriteConfigErrorCode {
+    /// Input parameters were invalid (e.g. malformed config JSON).
+    Validation,
+}
 
 /// Parameters for the write_config tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
@@ -43,7 +83,7 @@ pub struct WriteConfigTool;
 
 impl ToolMetadata for WriteConfigTool {
     type SideInfo = AutopilotSideInfo;
-    type Output = WriteConfigResponse;
+    type Output = WriteConfigToolOutput;
     type LlmParams = WriteConfigToolParams;
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_TOOL_PARAMS
@@ -52,10 +92,10 @@ impl ToolMetadata for WriteConfigTool {
         "WriteConfigToolParams".to_string()
     }
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
-        tensorzero_ts_types::WRITE_CONFIG_RESPONSE
+        tensorzero_ts_types::WRITE_CONFIG_TOOL_OUTPUT
     }
     fn output_ts_bundle_type_name() -> String {
-        "WriteConfigResponse".to_string()
+        "WriteConfigToolOutput".to_string()
     }
 
     fn name(&self) -> Cow<'static, str> {
@@ -64,8 +104,9 @@ impl ToolMetadata for WriteConfigTool {
 
     fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
-            "Write a config snapshot to storage and return its hash. \
-             Autopilot tags are automatically merged into the provided tags.",
+            "Write a config snapshot to storage. Returns `{status: \"ok\", hash}` on success \
+             or `{status: \"error\", code, message}` when the input is invalid and should be retried \
+             with fixes. Autopilot tags are automatically merged into the provided tags.",
         )
     }
 
@@ -165,8 +206,15 @@ impl SimpleTool for WriteConfigTool {
         ctx: SimpleToolContext<'_>,
         _idempotency_key: &str,
     ) -> ToolResult<<Self as ToolMetadata>::Output> {
-        let config: UninitializedConfig = serde_json::from_value(llm_params.config)
-            .map_err(|e| AutopilotToolError::validation(format!("Invalid `config`: {e}")))?;
+        let config: UninitializedConfig = match serde_json::from_value(llm_params.config) {
+            Ok(config) => config,
+            Err(e) => {
+                return Ok(WriteConfigToolOutput::Error {
+                    code: WriteConfigErrorCode::Validation,
+                    message: format!("Invalid `config`: {e}"),
+                });
+            }
+        };
 
         let request = WriteConfigRequest {
             config,
@@ -174,9 +222,14 @@ impl SimpleTool for WriteConfigTool {
             tags: side_info.to_tags(),
         };
 
-        ctx.client()
+        let response = ctx
+            .client()
             .write_config(request)
             .await
-            .map_err(|e| AutopilotToolError::client_error("write_config", e).into())
+            .map_err(|e| AutopilotToolError::client_error("write_config", e))?;
+
+        Ok(WriteConfigToolOutput::Ok {
+            hash: response.hash,
+        })
     }
 }
