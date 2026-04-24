@@ -20,7 +20,6 @@ use crate::db::postgres::stored_config_writes::{
     WriteStoredConfigParams, write_stored_config_in_tx,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::feature_flags;
 #[expect(
     clippy::disallowed_types,
     reason = "apply_config_toml_handler needs SwappableAppStateData to hot-swap the config after applying"
@@ -142,23 +141,29 @@ async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) ->
 
 /// Handler for `GET /internal/config_toml`
 ///
-/// Returns the latest config in editable TOML form. Only available
-/// when the `enable_config_in_database` feature flag is set — the editable-TOML
-/// pipeline assumes the stored-config tables are the source of truth, so
-/// serving it from a file-backed config would be misleading.
+/// Returns the latest config in editable TOML form. Only available when the
+/// gateway booted in DB-authoritative mode — the editable-TOML pipeline
+/// assumes the stored-config tables are the source of truth, so serving it
+/// from a file-backed config would be misleading.
 #[instrument(name = "config.get_latest_toml", skip_all)]
 pub async fn get_latest_config_toml_handler(
     State(app_state): AppState,
 ) -> Result<Json<GetConfigTomlResponse>, Error> {
-    if !feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
+    require_config_in_database(app_state.config_in_database, "GET /internal/config_toml")?;
+    Ok(Json(load_db_authoritative_config_toml(&app_state).await?))
+}
+
+fn require_config_in_database(config_in_database: bool, endpoint: &str) -> Result<(), Error> {
+    if !config_in_database {
         return Err(Error::new(ErrorDetails::NotImplemented {
-            message:
-                "GET /internal/config_toml requires the `enable_config_in_database` feature flag"
-                    .to_string(),
+            message: format!(
+                "{endpoint} is only available when the gateway is running in DB-authoritative \
+                 config mode. Start the gateway without `--config-file` and with \
+                 `TENSORZERO_POSTGRES_URL` set to enable this endpoint."
+            ),
         }));
     }
-
-    Ok(Json(load_db_authoritative_config_toml(&app_state).await?))
+    Ok(())
 }
 
 /// Request body for validating editable config TOML.
@@ -185,6 +190,12 @@ pub struct ValidateConfigTomlResponse {
 ///
 /// Validates editable TOML by parsing it back into `UninitializedConfig` and
 /// running the shared config-loading pipeline without persisting anything.
+///
+/// Unlike `GET /internal/config_toml` and `POST /internal/config_toml/apply`,
+/// this endpoint is intentionally available regardless of the gateway's
+/// config mode: validation is stateless (parse + load-pipeline, no DB reads
+/// or writes), and the UI needs to be able to lint editable TOML even when
+/// pointed at a file-backed gateway.
 #[instrument(name = "config.validate_toml", skip_all)]
 pub async fn validate_config_toml_handler(
     StructuredJson(request): StructuredJson<ValidateConfigTomlRequest>,
@@ -213,6 +224,10 @@ pub async fn apply_config_toml_handler(
     StructuredJson(request): StructuredJson<ApplyConfigTomlRequest>,
 ) -> Result<Json<ApplyConfigTomlResponse>, Error> {
     let app_state = swap_state.load_latest();
+    require_config_in_database(
+        app_state.config_in_database,
+        "POST /internal/config_toml/apply",
+    )?;
     let edited_config = toml_to_config(&request.toml, &request.path_contents)?;
     let (canonical_toml, canonical_path_contents) = config_to_toml(&edited_config)?;
     let canonical_signature = editable_config_signature(&canonical_toml, &canonical_path_contents)?;

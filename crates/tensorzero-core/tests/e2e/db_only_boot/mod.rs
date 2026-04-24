@@ -80,6 +80,28 @@ async fn db_only_boot_returns_default_config_via_config_toml_endpoint() {
     // singleton renders its defaulted section header — and it must parse
     // back as a valid TOML table.
     expect_that!(&config.toml, not(eq("")));
-    let parsed = toml::from_str::<toml::Value>(&config.toml);
-    expect_that!(parsed, ok(predicate(toml::Value::is_table)));
+    let parsed: toml::Table = toml::from_str(&config.toml)
+        .expect("GET /internal/config_toml body should parse as a TOML table");
+
+    // The collection tables (functions, models, tools, metrics) must be
+    // absent or empty on a zero-config gateway. Parse structurally rather
+    // than grepping substrings so the assertion doesn't encode a specific
+    // header layout.
+    for key in ["functions", "models", "tools", "metrics"] {
+        let Some(value) = parsed.get(key) else {
+            continue;
+        };
+        let table = value
+            .as_table()
+            .unwrap_or_else(|| panic!("expected `{key}` to be a table, got {value:?}"));
+        assert!(
+            table.is_empty(),
+            "expected `{key}` table to be empty on a zero-config gateway, got {table:?}",
+        );
+    }
+
+    // `base_signature` is the CAS token callers echo back to
+    // `/internal/config_toml/apply`. It must be populated even when the
+    // database is empty, otherwise the first apply would fail validation.
+    expect_that!(&config.base_signature, not(eq("")));
 }
