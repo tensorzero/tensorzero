@@ -18,6 +18,32 @@
 #   3. Turns on `ENABLE_CONFIG_IN_DATABASE` and clears `--config-file`.
 
 services:
+  # Drop the fixture-loading deps: the zero-config scenario starts with an
+  # empty DB by definition, so loading fixtures against it is either a
+  # no-op or a semantic mismatch. Keeping only the infra + gateway deps.
+  live-tests:
+    depends_on: !override
+      gateway:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
+      provider-proxy:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      tempo:
+        condition: service_started
+
   gateway:
     # Use the plain gateway image rather than the e2e-test build: this
     # scenario exercises the production boot path, not e2e-only hooks.
