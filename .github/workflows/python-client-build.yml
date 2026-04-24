@@ -1,14 +1,8 @@
-# NOTE: This workflow is run on every push to `main` in order to populate the cache
+# NOTE - this workflow is run on every push to 'main' in order to populate the cache
 # If you ever switch this to a non-free runner (e.g. a Namespace runner), be aware that
 # this might end up costing us much more than expected.
-
 on:
   workflow_call:
-    inputs:
-      use_cache:
-        description: "Use build caches (disable for clean release builds)"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -23,18 +17,12 @@ jobs:
     strategy:
       matrix:
         platform:
-          # NOTE: This workflow is run on every push to `main` in order to populate the cache
-          # If you ever switch this to a non-free runner (e.g. a Namespace runner), be aware that
-          # this might end up costing us much more than expected.
           - runner: ubuntu-24.04
             target: x86_64
           - runner: ubuntu-24.04-arm
             target: aarch64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
@@ -60,26 +48,22 @@ jobs:
         shell: bash
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        if: ${{ inputs.use_cache }}
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: "crates -> target"
-
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
-          # sccache: ${{ inputs.use_cache }}
+          #sccache: "true"
           manylinux: auto
-
       - name: Upload wheels
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: ./crates/tensorzero-python/dist
-
       - name: Check built wheel
         run: |
           ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
@@ -96,9 +80,6 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
         run: |
@@ -113,37 +94,30 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        if: ${{ inputs.use_cache }}
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: "crates -> target"
-
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
-
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
-
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
-          # sccache: ${{ inputs.use_cache }}
+          #sccache: "true"
           manylinux: musllinux_1_2
-
       - name: Upload wheels
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: ./crates/tensorzero-python/dist
-
       - name: Check built musl wheel
         run: |
           ./ci/check-musl-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
@@ -158,9 +132,6 @@ jobs:
             target: x64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
         run: |
@@ -175,37 +146,30 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        if: ${{ inputs.use_cache }}
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: "crates -> target"
-
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
           architecture: ${{ matrix.platform.target }}
-
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
-
       - name: Build wheels
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
-          # sccache: ${{ inputs.use_cache }}
-
+          #sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: ./crates/tensorzero-python/dist
-
       - name: Check built wheel
         run: |
           ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
@@ -225,9 +189,6 @@ jobs:
           #  target: aarch64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
         run: |
@@ -242,13 +203,10 @@ jobs:
             sleep $((10 * attempt))
           done
         shell: bash
-
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-        if: ${{ inputs.use_cache }}
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: "crates -> target"
-
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.10"
@@ -264,14 +222,13 @@ jobs:
           working-directory: ./crates/tensorzero-python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
-          # sccache: ${{ inputs.use_cache }}
+          #sccache: "true"
 
       - name: Upload wheels
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: ./crates/tensorzero-python/dist
-
       - name: Check built wheel
         run: |
           ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
@@ -281,27 +238,21 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - name: Build sdist
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           working-directory: ./crates/tensorzero-python
           command: sdist
           args: --out dist
-
       - name: Upload sdist
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: wheels-sdist
           path: ./crates/tensorzero-python/dist
-
       - name: Install uv
         uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
-
       - name: Check local sdist
         run: |
           for attempt in 1 2 3; do
@@ -314,7 +265,6 @@ jobs:
             fi
             sleep $((10 * attempt))
           done
-
       - name: Run twine on sdist
         run: |
           uv pip install twine==6.2.0
@@ -326,19 +276,14 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           pattern: wheels-*
-
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*
           # Count the number of files named 'tensorzero-*.whl', and verify that it equals 5
           # If we add new platforms / python versions, update this number
           ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6
-
       - name: Check PyPI size limit
         run: python3 ci/check_pypi_size.py './wheels-*/*'

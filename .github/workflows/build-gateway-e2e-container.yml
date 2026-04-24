@@ -19,8 +19,6 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
 
       # We use 'DOCKERHUB_LIMITED_TOKEN' to ensure that we can only push to our private '-dev' repos,
       # not to any of the public production repos.
