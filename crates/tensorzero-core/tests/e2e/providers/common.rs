@@ -1934,7 +1934,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     // Get 32 random bytes, and write then to the image. This should force a cache miss
     let mut rng = rand::rng();
     let random_bytes: Vec<u8> = (0..32)
-        .map(|_| rng.sample(rand::distr::StandardUniform))
+        .map(|_| rng.sample::<u8, _>(rand::distr::StandardUniform))
         .collect();
     image_png
         .as_mut_rgba8()

@@ -143,6 +143,7 @@ tempfile = "3.27.0"
 toml_edit = "0.25"
 googletest = "0.14.2"
 derive_builder = "0.20.0"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
