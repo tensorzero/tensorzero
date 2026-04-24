@@ -310,6 +310,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
             let result = typescript_judge::run_typescript_judge_evaluator(
                 inference_response,
                 input,
+                datapoint,
                 ts_config,
                 &clients.ts_executor,
             )

@@ -33,6 +33,12 @@ typescript_file = "../../../fixtures/config/evaluations/typescript_judge/output_
 output_type = "float"
 optimize = "max"
 
+[evaluations.typescript_judge_success.evaluators.ts_reference_output_length]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/reference_output_length.ts"
+output_type = "float"
+optimize = "max"
+
 # ─── Exception path ──────────────────────────────────────────────────────────
 [evaluations.typescript_judge_exception]
 type = "inference"
