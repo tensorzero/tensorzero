@@ -120,6 +120,13 @@ SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 
 cargo run-e2e > e2e_logs.txt 2>&1 &
+
+# Start test compilation in background immediately - it doesn't need the gateway,
+# so we overlap it with the gateway health check wait (~2 min on ClickHouse Cloud)
+echo "Starting background test compilation..."
+SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
+TEST_BUILD_PID=$!
+
     count=0
     max_attempts=180
     while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
@@ -133,11 +140,6 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
         fi
     done
     export GATEWAY_PID=$!
-
-# Start test compilation in background while we load fixtures
-echo "Starting background test compilation..."
-SQLX_OFFLINE=1 cargo test-clickhouse --no-run &
-TEST_BUILD_PID=$!
 
 export CLICKHOUSE_USER=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_USERNAME)
 export CLICKHOUSE_PASSWORD=$(buildkite-agent secret get CLICKHOUSE_CLOUD_INSERT_PASSWORD)
