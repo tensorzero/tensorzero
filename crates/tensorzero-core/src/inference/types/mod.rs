@@ -865,9 +865,8 @@ impl RateLimitedInputContent for ContentBlock {
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum StoredContentBlock {
@@ -882,9 +881,8 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
@@ -1057,10 +1055,9 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,

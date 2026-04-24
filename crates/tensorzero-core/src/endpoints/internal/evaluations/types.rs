@@ -9,9 +9,8 @@ use uuid::Uuid;
 // =============================================================================
 
 /// Response containing the count of evaluation runs.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct EvaluationRunStatsResponse {
     /// The total count of evaluation runs.
     pub count: u64,
@@ -35,17 +34,15 @@ fn default_limit() -> u32 {
 }
 
 /// Response containing a list of evaluation runs.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct ListEvaluationRunsResponse {
     pub runs: Vec<EvaluationRunInfo>,
 }
 
 /// Information about a single evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationRunInfo {
     pub evaluation_run_id: Uuid,
     pub evaluation_name: String,
@@ -70,9 +67,8 @@ pub struct CountDatapointsParams {
 }
 
 /// Response containing the count of unique datapoints.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct DatapointStatsResponse {
     pub count: u64,
 }
@@ -96,17 +92,15 @@ pub struct SearchEvaluationRunsParams {
 }
 
 /// Response containing search results for evaluation runs.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct SearchEvaluationRunsResponse {
     pub results: Vec<SearchEvaluationRunResult>,
 }
 
 /// A single search result for an evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct SearchEvaluationRunResult {
     pub evaluation_run_id: Uuid,
     pub evaluation_name: String,
@@ -131,17 +125,15 @@ pub struct GetEvaluationStatisticsParams {
 }
 
 /// Response containing evaluation statistics.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetEvaluationStatisticsResponse {
     pub statistics: Vec<EvaluationStatistics>,
 }
 
 /// Statistics for a single evaluation run and metric.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationStatistics {
     pub evaluation_run_id: Uuid,
     pub metric_name: String,
@@ -166,17 +158,15 @@ pub struct GetEvaluationUsageStatisticsParams {
 }
 
 /// Response containing evaluation usage statistics.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetEvaluationUsageStatisticsResponse {
     pub usage_statistics: Vec<EvaluationUsageStatistics>,
 }
 
 /// Aggregated usage statistics for a single evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationUsageStatistics {
     pub evaluation_run_id: Uuid,
     pub inference_count: u32,

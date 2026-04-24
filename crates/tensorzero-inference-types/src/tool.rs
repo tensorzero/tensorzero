@@ -30,10 +30,9 @@ use crate::{OpenAICustomTool, ProviderTool};
 /// Notably, provider tools (like OpenAI websearch) are not part of this enum
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
@@ -184,9 +183,8 @@ impl Tool {
 /// and return the result on the next turn (a ToolCallResult).
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct FunctionTool {
@@ -302,10 +300,9 @@ impl FunctionTool {
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
+#[ts(optional_fields, export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 pub struct DynamicToolParams {

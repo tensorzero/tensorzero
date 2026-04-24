@@ -20,9 +20,8 @@ use schemars::JsonSchema;
 use tensorzero_core::endpoints::internal::autopilot::CreateEventGatewayRequest;
 
 /// Parameters for the auto-reject tool (not visible to LLM - internal use only).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct AutoRejectToolCallParams {}
 
 /// Built-in tool to send `NotAvailable` authorization for unknown tool calls.

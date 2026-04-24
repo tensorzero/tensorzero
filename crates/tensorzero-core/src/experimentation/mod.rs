@@ -83,9 +83,8 @@ fn check_duplicates_across(
 /// Runtime experimentation config — only two variants (plus test-only AlwaysFails).
 /// Legacy types (`Uniform`, `StaticWeights`, `TrackAndStop`) are converted to these
 /// during `load()`.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
     /// No experimentation configured — sample uniformly from all active variants.
@@ -93,15 +92,14 @@ pub enum ExperimentationConfig {
     Default,
     Static(StaticExperimentationConfig),
     Adaptive(AdaptiveExperimentationConfig),
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     #[cfg(test)]
     AlwaysFails(AlwaysFailsConfig),
 }
 
 /// Holds the base experimentation config plus namespace-specific configs (loaded version).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 #[derive(Default)]
 pub struct ExperimentationConfigWithNamespaces {
     /// The base experimentation config used when no namespace is provided
@@ -143,8 +141,8 @@ impl ExperimentationConfigWithNamespaces {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum UninitializedExperimentationConfig {
     // New types
     Static(StaticExperimentationConfig),
@@ -157,9 +155,8 @@ pub enum UninitializedExperimentationConfig {
 
 /// Wrapper struct that holds the base experimentation config plus namespace-specific configs.
 /// This is the type used in the TOML config to allow both a default config and per-namespace overrides.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UninitializedExperimentationConfigWithNamespaces {
     /// The base experimentation config (type, candidate_variants, etc.)
     #[serde(flatten)]

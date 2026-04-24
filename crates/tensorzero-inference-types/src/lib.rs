@@ -177,9 +177,8 @@ impl LazyFileExt for LazyFile {
 // =============================================================================
 
 /// Types of content blocks that can be returned by a model provider
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
@@ -698,21 +697,19 @@ pub struct ProviderBatchInferenceResponse {
 // Tool types (no core deps)
 // =============================================================================
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+#[ts(optional_fields)]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,
     #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
     pub provider_name: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+#[ts(optional_fields)]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
@@ -736,9 +733,8 @@ impl ProviderToolScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
@@ -754,9 +750,8 @@ impl std::fmt::Display for ProviderTool {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAICustomTool {
@@ -812,9 +807,8 @@ impl OpenAICustomTool {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
     #[schemars(title = "OpenAICustomToolFormatText")]
@@ -823,17 +817,15 @@ pub enum OpenAICustomToolFormat {
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 pub struct OpenAIGrammarDefinition {
     pub syntax: OpenAIGrammarSyntax,
     pub definition: String,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrammarSyntax {
     Lark,
@@ -842,18 +834,16 @@ pub enum OpenAIGrammarSyntax {
 
 /// Records / lists the tools that were allowed in the request.
 /// Also lists how they were set (default, dynamically set).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     /// If `allowed_tools` is not explicitly passed, we set the function tools

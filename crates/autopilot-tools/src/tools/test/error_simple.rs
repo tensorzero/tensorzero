@@ -37,15 +37,19 @@ impl ToolMetadata for ErrorSimpleTool {
             "Always returns an error with the specified message. A SimpleTool for testing error propagation.",
         )
     }
+
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
+
     fn llm_params_ts_bundle_type_name() -> String {
         "void".to_string()
     }
+
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
+
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }

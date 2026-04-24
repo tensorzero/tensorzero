@@ -13,9 +13,8 @@ use tensorzero::{GetInferencesResponse, ListInferencesRequest};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_inferences tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct ListInferencesToolParams {
     /// Request parameters for listing inferences (filtering, pagination, ordering).
     #[serde(flatten)]

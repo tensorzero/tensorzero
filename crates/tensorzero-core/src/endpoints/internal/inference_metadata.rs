@@ -31,9 +31,8 @@ pub struct InferenceMetadataQueryParams {
 }
 
 /// Response containing a list of inference metadata
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct ListInferenceMetadataResponse {
     pub inference_metadata: Vec<InferenceMetadata>,
 }

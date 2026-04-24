@@ -24,9 +24,8 @@ use autopilot_client::AutopilotSideInfo;
 use durable_tools::tensorzero_client::{S3UploadRequest, S3UploadResponse};
 
 /// Parameters for the upload_dataset tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct UploadDatasetToolParams {
     /// The name of the dataset to upload.
     pub dataset_name: String,
@@ -35,10 +34,9 @@ pub struct UploadDatasetToolParams {
     pub row_limit: Option<u32>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum UploadDatasetFormat {
     /// An initial naive format, which just stores the serialized JSON in a single column
     /// This is still an improvement over JSONL, as we get automatic multipart upload and compression
@@ -57,9 +55,8 @@ impl UploadDatasetFormat {
 }
 
 /// Output of the upload_dataset tool.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct UploadDatasetToolOutput {
     /// The S3 URI where the dataset was uploaded (e.g., `s3://bucket/path/to/dataset.parquet`).
     pub s3_uri: String,

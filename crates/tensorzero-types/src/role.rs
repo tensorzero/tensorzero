@@ -14,9 +14,8 @@ pub const USER_TEXT_TEMPLATE_VAR: &str = "user_text";
 /// Template variable name for assistant text in legacy templates.
 pub const ASSISTANT_TEXT_TEMPLATE_VAR: &str = "assistant_text";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[export_schema]

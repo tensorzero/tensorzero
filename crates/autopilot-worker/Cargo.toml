@@ -7,11 +7,10 @@ rust-version.workspace = true
 
 [features]
 e2e_tests = ["autopilot-tools/e2e_tests"]
-ts-bindings = ["durable-tools/ts-bindings", "autopilot-tools/ts-bindings"]
 
 [dependencies]
 # Internal crates
-durable-tools = { path = "../durable-tools", features = ["ts-bindings"] }
+durable-tools = { path = "../durable-tools" }
 tensorzero-core = { path = "../tensorzero-core" }
 autopilot-client = { path = "../autopilot-client" }
 autopilot-tools = { path = "../autopilot-tools" }

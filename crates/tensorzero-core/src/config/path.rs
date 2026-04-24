@@ -21,9 +21,8 @@ use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 /// When we add support for config globbing, we'll require deserializing
 /// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, JsonSchema, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Eq, Hash, Deserialize, JsonSchema, Serialize)]
+#[ts(export)]
 pub struct ResolvedTomlPathData {
     __tensorzero_remapped_path: PathBuf,
     /// This should contain the data that was stored at the path above
@@ -35,9 +34,8 @@ pub struct ResolvedTomlPathData {
 /// Unlike `ResolvedTomlPathData`, this doesn't eagerly load file contents since directories don't have contents.
 /// This path is always stored as an absolute filesystem path because runtime
 /// code needs to read from that directory after config loading.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[ts(export)]
 pub struct ResolvedTomlPathDirectory {
     __tensorzero_remapped_path: PathBuf,
 }

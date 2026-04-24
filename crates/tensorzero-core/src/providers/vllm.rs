@@ -40,9 +40,8 @@ use uuid::Uuid;
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct VLLMProvider {
     model_name: String,
     api_base: Url,

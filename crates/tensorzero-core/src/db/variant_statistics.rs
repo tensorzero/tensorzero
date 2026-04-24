@@ -12,9 +12,8 @@ use crate::error::Error;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 /// Query parameters for variant statistics.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize)]
+#[ts(export)]
 pub struct GetVariantStatisticsParams {
     /// The function name to query statistics for.
     pub function_name: String,
@@ -30,9 +29,8 @@ pub struct GetVariantStatisticsParams {
 }
 
 /// A single row of aggregated variant statistics.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
+#[ts(export, optional_fields)]
 pub struct VariantStatisticsRow {
     pub function_name: String,
     pub variant_name: String,
@@ -46,7 +44,7 @@ pub struct VariantStatisticsRow {
     pub total_output_tokens: Option<u64>,
     #[serde(default, with = "rust_decimal::serde::float_option")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[ts(type = "number | null")]
     pub total_cost: Option<Decimal>,
     #[serde(default, deserialize_with = "deserialize_option_u64")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -66,9 +64,8 @@ pub struct VariantStatisticsRow {
 }
 
 /// Response type for the variant statistics endpoint.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct GetVariantStatisticsResponse {
     /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
     /// is the backend, None on Postgres.

@@ -8,9 +8,8 @@ use crate::db::{
 };
 
 /// Response containing the count of distinct models used.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct CountModelsResponse {
     /// The count of distinct models used.
     pub model_count: u32,
@@ -26,9 +25,8 @@ pub struct GetModelUsageQueryParams {
 }
 
 /// Response containing model usage timeseries data.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetModelUsageResponse {
     /// The model usage data points.
     pub data: Vec<ModelUsageTimePoint>,
@@ -55,9 +53,8 @@ pub struct GetCacheStatisticsQueryParams {
 }
 
 /// Response containing cache statistics timeseries data.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetCacheStatisticsResponse {
     /// The cache statistics data points.
     pub data: Vec<CacheStatisticsTimePoint>,
@@ -73,9 +70,8 @@ pub struct GetVariantUsageQueryParams {
 }
 
 /// Response containing variant usage timeseries data.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct GetVariantUsageResponse {
     /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) — populated when ClickHouse
     /// is the backend, None on Postgres.
@@ -86,9 +82,8 @@ pub struct GetVariantUsageResponse {
 }
 
 /// Response containing model latency quantile data.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetModelLatencyResponse {
     /// The quantile inputs (e.g. [0.001, 0.005, ..., 0.999]) used to compute the distributions.
     pub quantiles: Vec<f64>,

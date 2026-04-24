@@ -14,9 +14,8 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct GetDatapointsToolParams {
     /// The name of the dataset (optional, but recommended for performance).
     #[serde(default, skip_serializing_if = "Option::is_none")]

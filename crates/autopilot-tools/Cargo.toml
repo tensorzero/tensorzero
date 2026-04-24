@@ -8,16 +8,9 @@ rust-version.workspace = true
 [features]
 default = []
 e2e_tests = []
-ts-bindings = [
-    "dep:ts-rs",
-    "tensorzero-core/ts-bindings",
-    "tensorzero/ts-bindings",
-    "config-applier/ts-bindings",
-    "durable-tools/ts-bindings",
-]
 
 [dependencies]
-durable-tools = { path = "../durable-tools", features = ["ts-bindings"] }
+durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../tensorzero-client" }
 autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../tensorzero-core" }
@@ -42,7 +35,7 @@ tensorzero-ts-types = { path = "../tensorzero-ts-types" }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-ts-rs = { workspace = true, optional = true }
+ts-rs.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

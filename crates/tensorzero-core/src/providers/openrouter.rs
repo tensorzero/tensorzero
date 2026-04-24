@@ -90,9 +90,8 @@ type PreparedOpenRouterToolsResult<'a> = (
     Option<bool>,
 );
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct OpenRouterProvider {
     model_name: String,
     #[serde(skip)]

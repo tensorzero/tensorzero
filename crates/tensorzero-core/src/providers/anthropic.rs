@@ -125,9 +125,8 @@ fn get_messages_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
