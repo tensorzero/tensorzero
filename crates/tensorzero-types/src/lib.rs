@@ -17,6 +17,7 @@ pub mod serde_utils;
 pub mod snapshot;
 pub mod storage;
 pub mod tool;
+pub mod tool_context;
 pub mod tool_error;
 pub mod tool_failure;
 pub mod tool_handle;

@@ -7,6 +7,7 @@ use googletest::prelude::*;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use tensorzero_core::config::editable::{config_to_toml, config_to_toml_with_errors};
 use tensorzero_core::config::path::ResolvedTomlPathData;
 use tensorzero_core::config::{
     Namespace, NonStreamingTimeouts, StreamingTimeouts, TimeoutsConfig, UninitializedConfig,
@@ -260,7 +261,8 @@ async fn load_config_from_db_round_trips_written_function_configs(pool: PgPool) 
         .functions
         .get_or_insert_with(HashMap::new)
         .insert("test".to_string(), sample_function());
-    assert_that!(&loaded, eq(&expected));
+    assert_that!(&loaded.config, eq(&expected));
+    assert_that!(loaded.loading_errors.is_empty(), eq(true));
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
@@ -324,11 +326,12 @@ async fn load_config_from_db_loads_top_level_tools_and_evaluations(pool: PgPool)
         .expect("DB load should succeed");
 
     assert_that!(
-        loaded.tools.as_ref().and_then(|t| t.get("search")),
+        loaded.config.tools.as_ref().and_then(|t| t.get("search")),
         some(eq(&sample_tool()))
     );
     assert_that!(
         loaded
+            .config
             .evaluations
             .as_ref()
             .and_then(|e| e.get("exact_eval")),
@@ -403,22 +406,43 @@ async fn load_config_from_db_skips_invalid_collection_rows_and_broken_functions(
         .await
         .expect("DB load should succeed");
 
+    // The broken model is skipped — models map is empty.
     assert_that!(
-        loaded.models.as_ref().is_none_or(|m| m.is_empty()),
+        loaded.config.models.as_ref().is_none_or(|m| m.is_empty()),
         eq(true)
     );
+    // The "good" function loads normally.
     assert_that!(
-        loaded.functions.as_ref().and_then(|f| f.get("good")),
+        loaded.config.functions.as_ref().and_then(|f| f.get("good")),
         some(eq(&sample_function()))
     );
+    // The "broken" function loads but with an empty variants map (the missing
+    // variant reference is collected as a per-variant error, not a fatal failure).
+    let broken = loaded
+        .config
+        .functions
+        .as_ref()
+        .and_then(|f| f.get("broken"));
+    assert_that!(broken.is_some(), eq(true));
+
+    // Both the broken model and the missing variant should be in loading_errors.
+    assert_that!(loaded.loading_errors.len(), ge(2usize));
     assert_that!(
-        loaded.functions.as_ref().and_then(|f| f.get("broken")),
-        none()
+        loaded
+            .loading_errors
+            .iter()
+            .any(|e| e.kind == "model" && e.name == "broken-model"),
+        eq(true)
+    );
+    // The missing variant should appear as a variant-kind error.
+    assert_that!(
+        loaded.loading_errors.iter().any(|e| e.kind == "variant"),
+        eq(true)
     );
 }
 
 #[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
-async fn load_config_from_db_fails_on_invalid_singleton_rows(pool: PgPool) {
+async fn load_config_from_db_collects_invalid_singleton_rows_as_loading_errors(pool: PgPool) {
     sqlx::query(
         "INSERT INTO tensorzero.gateway_configs (id, schema_revision, config) \
          VALUES ($1, $2, $3)",
@@ -430,13 +454,127 @@ async fn load_config_from_db_fails_on_invalid_singleton_rows(pool: PgPool) {
     .await
     .expect("bad gateway row insert should succeed");
 
-    let errors = load_config_from_db(&pool)
+    // Invalid singleton rows no longer abort the load — they produce loading errors and
+    // fall back to Default::default() so the gateway can still start up.
+    let loaded = load_config_from_db(&pool)
         .await
-        .expect_err("invalid singleton rows should fail");
+        .expect("load should succeed despite broken singleton row");
 
-    assert_that!(errors.len(), eq(1));
+    assert_that!(loaded.loading_errors.len(), eq(1));
+    assert_that!(loaded.loading_errors[0].kind, eq("gateway_config"));
     assert_that!(
-        errors[0].to_string(),
+        loaded.loading_errors[0].error,
         contains_substring("unsupported schema revision 999 for `gateway_config`")
     );
+}
+
+/// Regression test for the 7d fix: the apply handler's CAS check must compute
+/// the same base_signature that GET returned, even when the DB has broken
+/// rows. Both paths must serialize via `config_to_toml_with_errors(config,
+/// loading_errors)` — if either side drifts back to plain `config_to_toml`,
+/// the signatures will diverge any time `loading_errors` is non-empty and
+/// every save will fail with a false CAS conflict.
+///
+/// This test locks in the contract that two independent loads of the same
+/// database state produce byte-identical annotated TOML.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn config_to_toml_with_errors_is_stable_across_loads_for_cas(pool: PgPool) {
+    // Broken singleton: invalid schema revision on gateway row.
+    sqlx::query(
+        "INSERT INTO tensorzero.gateway_configs (id, schema_revision, config) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(999_i32)
+    .bind(serde_json::json!({}))
+    .execute(&pool)
+    .await
+    .expect("bad gateway row insert should succeed");
+
+    // Broken collection row: model with unsupported schema revision.
+    sqlx::query(
+        "INSERT INTO tensorzero.models_configs (id, name, schema_revision, config) \
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(Uuid::now_v7())
+    .bind("broken-model")
+    .bind(999_i32)
+    .bind(serde_json::json!({}))
+    .execute(&pool)
+    .await
+    .expect("bad model row insert should succeed");
+
+    // Load twice in a row. The DB state is identical, so both annotated TOML
+    // strings and their path_contents maps must be byte-identical. If the
+    // apply handler ever recomputes via plain `config_to_toml`, the second
+    // string will drop the `# BROKEN:` fragments and the CAS signature will
+    // mismatch on every save.
+    let first = load_config_from_db(&pool)
+        .await
+        .expect("first load should succeed");
+    let second = load_config_from_db(&pool)
+        .await
+        .expect("second load should succeed");
+
+    assert_that!(first.loading_errors.len(), eq(2));
+    assert_that!(second.loading_errors.len(), eq(2));
+
+    let (first_toml, first_paths) =
+        config_to_toml_with_errors(&first.config, &first.loading_errors)
+            .expect("first annotated serialization should succeed");
+    let (second_toml, second_paths) =
+        config_to_toml_with_errors(&second.config, &second.loading_errors)
+            .expect("second annotated serialization should succeed");
+
+    assert_that!(&first_toml, eq(&second_toml));
+    assert_that!(&first_paths, eq(&second_paths));
+
+    // The annotated TOML must actually contain the broken-item markers,
+    // otherwise this test would pass vacuously if both sides regressed to
+    // plain `config_to_toml`.
+    assert_that!(&first_toml, contains_substring("# BROKEN ("));
+    assert_that!(
+        &first_toml,
+        contains_substring(r#"# BROKEN (gateway_config "gateway_config")"#)
+    );
+    assert_that!(
+        &first_toml,
+        contains_substring(r#"# BROKEN (model "broken-model")"#)
+    );
+}
+
+/// Locks in the rationale for `apply_config_toml_handler` re-loading from the
+/// DB after commit and using `config_to_toml_with_errors` (rather than plain
+/// `config_to_toml`) for the response. When the DB still has broken rows that
+/// survived the apply (e.g. a malformed singleton the user did not overwrite),
+/// the two functions produce different output, so the apply response signature
+/// must be computed via the same function GET uses — otherwise consumers
+/// reusing the apply response's `base_signature` for their next save would hit
+/// a false CAS conflict on the very next call.
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn plain_and_annotated_toml_diverge_when_loading_errors_present(pool: PgPool) {
+    sqlx::query(
+        "INSERT INTO tensorzero.gateway_configs (id, schema_revision, config) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(999_i32)
+    .bind(serde_json::json!({}))
+    .execute(&pool)
+    .await
+    .expect("bad gateway row insert should succeed");
+
+    let loaded = load_config_from_db(&pool)
+        .await
+        .expect("load should succeed even with broken row");
+    assert_that!(loaded.loading_errors.len(), eq(1));
+
+    let (plain_toml, _) =
+        config_to_toml(&loaded.config).expect("plain serialization should succeed");
+    let (annotated_toml, _) = config_to_toml_with_errors(&loaded.config, &loaded.loading_errors)
+        .expect("annotated serialization should succeed");
+
+    assert_that!(&plain_toml, not(eq(&annotated_toml)));
+    assert_that!(&plain_toml, not(contains_substring("# BROKEN (")));
+    assert_that!(&annotated_toml, contains_substring("# BROKEN ("));
 }

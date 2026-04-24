@@ -30,8 +30,9 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput};
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::config::AllowedTools;
-use crate::tool::types::{ProviderTool, Tool};
 use crate::tool::wire::ToolChoice;
+use tensorzero_inference_types::ProviderTool;
+use tensorzero_inference_types::tool::Tool;
 
 use super::PostgresConnectionInfo;
 

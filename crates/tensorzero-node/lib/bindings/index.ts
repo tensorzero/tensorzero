@@ -51,6 +51,7 @@ export * from "./ClientInferenceParams";
 export * from "./CloneDatapointsResponse";
 export * from "./CommentFeedbackRow";
 export * from "./CommentTargetType";
+export * from "./ConfigLoadingError";
 export * from "./ContentBlockChatOutput";
 export * from "./ContentBlockOutput";
 export * from "./ContentBlockType";

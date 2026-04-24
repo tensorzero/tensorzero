@@ -26,12 +26,12 @@ use durable_tools::tensorzero_client::{S3UploadRequest, S3UploadResponse};
 /// Parameters for the upload_dataset tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct UploadDatasetToolParams {
     /// The name of the dataset to upload.
     pub dataset_name: String,
     /// Optional maximum number of rows to upload.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_limit: Option<u32>,
 }
 

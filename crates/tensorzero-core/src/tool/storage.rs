@@ -18,12 +18,13 @@ use crate::endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 
+use tensorzero_inference_types::ProviderTool;
+use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
+
 use super::config::{
     AllowedTools, AllowedToolsChoice, FunctionToolConfig, StaticToolConfig, ToolCallConfig,
     ToolCallConfigConstructorArgs,
 };
-use super::params::DynamicToolParams;
-use super::types::{FunctionTool, ProviderTool, Tool};
 use super::wire::ToolChoice;
 
 /// Storage representation of tool call configuration for database persistence.

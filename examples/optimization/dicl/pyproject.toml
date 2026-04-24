@@ -10,3 +10,7 @@ dependencies = [
     "tensorzero>=2025.9.1",
     "tqdm>=4.67.1",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }

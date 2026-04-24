@@ -2,9 +2,8 @@
 //! and UUID substitution.
 //!
 //! [`run_inference`] is a direct (non-checkpointed) call for use outside durable
-//! execution. For checkpointed inference via a
-//! [`ToolContextHelper`](tensorzero_core::client::ToolContextHelper), see
-//! [`tensorzero_core::client::checkpointed_inference`].
+//! execution. For checkpointed inference via a `ToolContext`, see
+//! `durable_tools::ToolContext::checkpointed_inference`.
 
 use crate::ExtraInferenceTags;
 use crate::tensorzero_client::{PoolInferenceParams, TensorZeroClient};

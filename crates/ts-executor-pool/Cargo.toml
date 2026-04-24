@@ -13,7 +13,6 @@ blake3.workspace = true
 regex.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-tensorzero-core.workspace = true
 tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-ts-types = { path = "../tensorzero-ts-types" }
 tensorzero-types = { path = "../tensorzero-types" }

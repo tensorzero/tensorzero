@@ -11,13 +11,13 @@ export type GetVariantStatisticsToolParams = {
   /**
    * Optional filter for specific variants. If not provided, all variants are included.
    */
-  variant_names: Array<string> | null;
+  variant_names?: Array<string>;
   /**
    * Optional lower bound on the time window (inclusive, RFC 3339 format).
    */
-  after: string | null;
+  after?: string;
   /**
    * Optional upper bound on the time window (exclusive, RFC 3339 format).
    */
-  before: string | null;
+  before?: string;
 };

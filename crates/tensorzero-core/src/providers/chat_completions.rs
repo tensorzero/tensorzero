@@ -12,7 +12,8 @@ use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::error::Error;
 use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{FunctionTool, ToolChoice};
+use crate::tool::ToolChoice;
+use tensorzero_inference_types::tool::FunctionTool;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]

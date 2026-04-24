@@ -41,9 +41,10 @@ use crate::{
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseArgs,
         Text, resolved_input::LazyFile,
     },
-    tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef},
+    tool::{ToolCall, ToolCallWrapper, ToolConfigRef},
     variant::JsonMode,
 };
+use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 use uuid::Uuid;
 
 #[derive(Clone, Debug)]

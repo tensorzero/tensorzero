@@ -10,3 +10,7 @@ dependencies = [
     "tensorzero",
     "wikipedia",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }

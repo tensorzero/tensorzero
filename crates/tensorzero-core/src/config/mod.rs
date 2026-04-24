@@ -121,6 +121,27 @@ impl From<&AutopilotConfig> for tensorzero_stored_config::StoredAutopilotConfig 
     }
 }
 
+/// A per-item error encountered during config loading from the database.
+/// Items with loading errors are skipped from the live config; this struct
+/// preserves enough context for the UI to display the error and for operators
+/// to copy/paste the raw config fragment for debugging.
+#[serde_with::skip_serializing_none]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+pub struct ConfigLoadingError {
+    /// The type of config item (e.g. `"function"`, `"variant"`, `"model"`).
+    pub kind: &'static str,
+    /// The name of the broken item.
+    pub name: String,
+    /// For variants: the parent function name.
+    pub parent: Option<String>,
+    /// Human-readable description of what went wrong.
+    pub error: String,
+    /// Best-effort TOML fragment of the raw stored config, for copy/paste debugging.
+    pub raw_toml: Option<String>,
+}
+
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
@@ -144,6 +165,9 @@ pub struct Config {
     pub http_client: TensorzeroHttpClient,
     pub autopilot: AutopilotConfig,
     pub hash: SnapshotHash,
+    /// Errors encountered while loading config items from the database.
+    /// Non-empty only in config-in-database mode; always empty for file configs.
+    pub loading_errors: Vec<ConfigLoadingError>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -1117,6 +1141,10 @@ struct ProcessedConfigInput {
 
     /// Runtime overlay captured from the UninitializedConfig before defaults are resolved.
     runtime_overlay: RuntimeOverlay,
+
+    /// Errors collected during DB loading, to be stored on the final `Config`.
+    /// Always empty for fresh TOML and snapshot inputs.
+    loading_errors: Vec<ConfigLoadingError>,
 }
 
 pub(crate) fn validate_user_config_names(config: &UninitializedConfig) -> Result<(), Error> {
@@ -1265,9 +1293,17 @@ async fn process_config_input(
                 gateway_config,
                 object_store_info: overlay_object_store_info,
                 runtime_overlay: captured_runtime_overlay,
+                loading_errors: vec![],
             })
         }
-        ConfigInput::Database(config) => process_uninitialized_config(*config, templates).await,
+        ConfigInput::Database {
+            config,
+            loading_errors,
+        } => {
+            let mut processed = process_uninitialized_config(*config, templates).await?;
+            processed.loading_errors = loading_errors;
+            Ok(processed)
+        }
     }
 }
 
@@ -1371,6 +1407,7 @@ async fn process_uninitialized_config(
         object_store_info,
         uninitialized_config,
         runtime_overlay,
+        loading_errors: vec![],
     })
 }
 
@@ -1480,16 +1517,17 @@ impl Config {
         pool: &PgPool,
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Vec<Error>> {
-        let config = crate::db::postgres::stored_config_queries::load_config_from_db(pool).await?;
-        let config = Box::new(config);
+        let loaded = crate::db::postgres::stored_config_queries::load_config_from_db(pool).await?;
+        let input = ConfigInput::Database {
+            config: Box::new(loaded.config),
+            loading_errors: loaded.loading_errors,
+        };
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
-                ConfigInput::Database(config),
-            )))
-            .await
-            .map_err(|error| vec![error])?
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(input)))
+                .await
+                .map_err(|error| vec![error])?
         } else {
-            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config)))
+            Box::pin(Self::load_unwritten_config(input))
                 .await
                 .map_err(|error| vec![error])?
         };
@@ -1505,14 +1543,14 @@ impl Config {
         config: UninitializedConfig,
         validate_credentials: bool,
     ) -> Result<UnwrittenConfig, Error> {
-        let config = Box::new(config);
+        let input = ConfigInput::Database {
+            config: Box::new(config),
+            loading_errors: vec![],
+        };
         let unwritten_config = if e2e_skip_credential_validation() || !validate_credentials {
-            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(
-                ConfigInput::Database(config),
-            )))
-            .await?
+            with_skip_credential_validation(Box::pin(Self::load_unwritten_config(input))).await?
         } else {
-            Box::pin(Self::load_unwritten_config(ConfigInput::Database(config))).await?
+            Box::pin(Self::load_unwritten_config(input)).await?
         };
 
         if validate_credentials && let Some(object_store) = &unwritten_config.object_store_info {
@@ -1579,7 +1617,7 @@ impl Config {
     async fn load_unwritten_config(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
         let is_config_snapshot = match &input {
             ConfigInput::Snapshot { .. } => true,
-            ConfigInput::Fresh(_) | ConfigInput::Database(_) => false,
+            ConfigInput::Fresh(_) | ConfigInput::Database { .. } => false,
         };
         let mut templates = TemplateConfig::new();
         let ProcessedConfigInput {
@@ -1600,6 +1638,7 @@ impl Config {
             gateway_config,
             object_store_info,
             runtime_overlay,
+            loading_errors,
         } = process_config_input(input, &mut templates).await?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
@@ -1713,6 +1752,7 @@ impl Config {
             http_client,
             autopilot,
             hash: snapshot.hash.clone(),
+            loading_errors,
         };
 
         // Validate the config (before adding tensorzero:: prefixed evaluator artifacts)
@@ -2064,7 +2104,10 @@ impl Config {
 
 pub enum ConfigInput {
     Fresh(toml::Table),
-    Database(Box<UninitializedConfig>),
+    Database {
+        config: Box<UninitializedConfig>,
+        loading_errors: Vec<ConfigLoadingError>,
+    },
     Snapshot {
         snapshot: Box<ConfigSnapshot>,
         runtime_overlay: Box<RuntimeOverlay>,

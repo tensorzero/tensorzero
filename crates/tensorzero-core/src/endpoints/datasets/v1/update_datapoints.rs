@@ -780,9 +780,9 @@ mod tests {
 
     mod prepare_update_tests {
         use crate::{
-            endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
-            tool::{FunctionTool, Tool, ToolChoice},
+            endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest, tool::ToolChoice,
         };
+        use tensorzero_inference_types::tool::{FunctionTool, Tool};
 
         use super::*;
 

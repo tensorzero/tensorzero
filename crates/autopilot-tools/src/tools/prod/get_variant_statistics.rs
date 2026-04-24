@@ -15,18 +15,18 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the get_variant_statistics tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetVariantStatisticsToolParams {
     /// The name of the function to query statistics for.
     pub function_name: String,
     /// Optional filter for specific variants. If not provided, all variants are included.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant_names: Option<Vec<String>>,
     /// Optional lower bound on the time window (inclusive, RFC 3339 format).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<String>,
     /// Optional upper bound on the time window (exclusive, RFC 3339 format).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<String>,
 }
 

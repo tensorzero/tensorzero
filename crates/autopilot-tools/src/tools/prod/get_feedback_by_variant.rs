@@ -20,14 +20,14 @@ use autopilot_client::AutopilotSideInfo;
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,
     /// The name of the function to query.
     pub function_name: String,
     /// Optional filter for specific variants. If not provided, all variants are included.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant_names: Option<Vec<String>>,
 }
 

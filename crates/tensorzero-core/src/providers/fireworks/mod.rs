@@ -9,7 +9,6 @@ use crate::inference::types::{ContentBlock, Role};
 use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::REASONING_FIELD_CHUNK_ID,
-    tool::FunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -18,6 +17,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero_inference_types::tool::FunctionTool;
 use tensorzero_types_providers::fireworks::*;
 use tokio::time::Instant;
 use url::Url;

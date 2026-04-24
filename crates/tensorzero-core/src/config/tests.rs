@@ -3485,9 +3485,10 @@ async fn test_database_config_input_loads_via_shared_pipeline() {
         .map(HashMap::len)
         .unwrap_or(0);
 
-    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Database(
-        Box::new(uninitialized),
-    )))
+    let config = Box::pin(Config::load_unwritten_config(ConfigInput::Database {
+        config: Box::new(uninitialized),
+        loading_errors: vec![],
+    }))
     .await
     .expect("database config input should load successfully");
 

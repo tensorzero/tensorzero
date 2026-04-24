@@ -30,8 +30,11 @@ pub async fn build_mcp_router(
 
     let mut config =
         StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token());
-    // During e2e tests, we use the magic docker-compose service hostnames
-    if cfg!(feature = "e2e_tests") {
+    // During e2e tests, we use the magic docker-compose service hostnames.
+    // The env var lets users (e.g. those running behind custom proxies) opt out of the check.
+    if cfg!(feature = "e2e_tests")
+        || std::env::var("TENSORZERO_DISABLE_MCP_HOST_CHECK").unwrap_or_default() == "1"
+    {
         config = config.disable_allowed_hosts();
     }
 

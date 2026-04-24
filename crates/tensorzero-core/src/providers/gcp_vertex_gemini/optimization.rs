@@ -18,8 +18,8 @@ use crate::{
         GCPVertexGeminiRole, PROVIDER_TYPE,
     },
     stored_inference::LazyRenderedSample,
-    tool::Tool,
 };
+use tensorzero_inference_types::tool::Tool;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -268,9 +268,9 @@ mod tests {
             StoredInputMessageContent, System, Text,
         },
         stored_inference::{RenderedSample, StoredOutput},
-        tool::DynamicToolParams,
     };
     use serde_json::json;
+    use tensorzero_inference_types::tool::DynamicToolParams;
 
     use super::*;
 

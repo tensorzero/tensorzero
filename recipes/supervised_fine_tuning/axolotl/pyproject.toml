@@ -22,6 +22,8 @@ dependencies = [
 ]
 
 [tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }
 required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 override-dependencies = ["pillow>=12.1.1"]
 

@@ -7,7 +7,7 @@ export type GetDatapointsToolParams = {
   /**
    * The name of the dataset (optional, but recommended for performance).
    */
-  dataset_name: string | null;
+  dataset_name?: string;
   /**
    * The IDs of the datapoints to retrieve.
    */

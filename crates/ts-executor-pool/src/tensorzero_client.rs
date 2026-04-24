@@ -3,14 +3,17 @@
 //! This provides the subset of the full `durable_tools::TensorZeroClient` that
 //! `ts-executor-pool` actually requires: just the `inference` method.
 //!
-//! [`PoolInferenceParams`] is a lightweight version of
-//! `tensorzero_core::client::ClientInferenceParams` containing only the fields
-//! that this crate reads or writes. Implementations convert to the full
-//! `ClientInferenceParams` at the call-site boundary.
+//! [`PoolInferenceParams`] is a lightweight version of the full inference
+//! parameters containing only the fields that this crate reads or writes.
+//! Implementations convert to the full parameter type at the call-site
+//! boundary.
 
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use serde_json::Value;
+use tensorzero_inference_types::tool::DynamicToolParams;
+use tensorzero_types::inference_params::InferenceParams;
 use tensorzero_types::{InferenceResponse, Input};
 use uuid::Uuid;
 
@@ -28,6 +31,9 @@ pub struct PoolInferenceParams {
     pub episode_id: Option<Uuid>,
     pub input: Input,
     pub tags: HashMap<String, String>,
+    pub params: InferenceParams,
+    pub dynamic_tool_params: DynamicToolParams,
+    pub output_schema: Option<Value>,
 }
 
 /// Minimal client trait for running TensorZero inference.

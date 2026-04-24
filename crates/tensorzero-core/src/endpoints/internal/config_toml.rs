@@ -13,8 +13,10 @@ use serde_json::json;
 use sqlx::Postgres;
 use tracing::instrument;
 
-use crate::config::editable::{config_to_toml, toml_to_config};
-use crate::config::{Config, UninitializedConfig};
+#[cfg(test)]
+use crate::config::editable::config_to_toml;
+use crate::config::editable::{config_to_toml_with_errors, toml_to_config};
+use crate::config::{Config, ConfigLoadingError, UninitializedConfig};
 use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
 use crate::db::postgres::stored_config_writes::{
     WriteStoredConfigParams, write_stored_config_in_tx,
@@ -46,6 +48,14 @@ pub struct GetConfigTomlResponse {
     pub base_signature: String,
     /// User-defined tags for categorizing or labeling this config.
     pub tags: HashMap<String, String>,
+    /// Non-fatal errors encountered while loading the config from the database.
+    /// Present when some config items failed to load but the gateway started anyway.
+    /// Serialized as an optional field — absent when the Vec is empty — so the
+    /// TS binding declares it optional.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<ConfigLoadingError>>"))]
+    #[serde(skip_serializing_if = "Vec::is_empty", default, skip_deserializing)]
+    pub loading_errors: Vec<ConfigLoadingError>,
 }
 
 impl GetConfigTomlResponse {
@@ -53,8 +63,9 @@ impl GetConfigTomlResponse {
         config: UninitializedConfig,
         hash: String,
         tags: HashMap<String, String>,
+        loading_errors: Vec<ConfigLoadingError>,
     ) -> Result<Self, Error> {
-        let (toml, path_contents) = config_to_toml(&config)?;
+        let (toml, path_contents) = config_to_toml_with_errors(&config, &loading_errors)?;
         let base_signature = editable_config_signature(&toml, &path_contents)?;
         Ok(Self {
             toml,
@@ -62,6 +73,7 @@ impl GetConfigTomlResponse {
             hash,
             base_signature,
             tags,
+            loading_errors,
         })
     }
 }
@@ -108,23 +120,28 @@ fn editable_config_signature(
 
 async fn load_db_authoritative_uninitialized_config(
     app_state: &ResolvedAppStateData,
-) -> Result<(UninitializedConfig, String), Error> {
+) -> Result<(UninitializedConfig, String, Vec<ConfigLoadingError>), Error> {
     let pool = app_state
         .postgres_connection_info
         .get_pool_result()
         .map_err(|e| e.log())?;
-    let uninitialized = load_config_from_db(pool)
+    let loaded = load_config_from_db(pool)
         .await
         .map_err(merge_load_config_errors)?;
-    let validated = Config::load_from_uninitialized(uninitialized.clone(), false).await?;
-    Ok((uninitialized, validated.hash.to_string()))
+    let validated = Config::load_from_uninitialized(loaded.config.clone(), false).await?;
+    Ok((
+        loaded.config,
+        validated.hash.to_string(),
+        loaded.loading_errors,
+    ))
 }
 
 async fn load_db_authoritative_config_toml(
     app_state: &ResolvedAppStateData,
 ) -> Result<GetConfigTomlResponse, Error> {
-    let (uninitialized, hash) = load_db_authoritative_uninitialized_config(app_state).await?;
-    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new())
+    let (uninitialized, hash, loading_errors) =
+        load_db_authoritative_uninitialized_config(app_state).await?;
+    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new(), loading_errors)
 }
 
 async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) -> Result<(), Error> {
@@ -214,8 +231,6 @@ pub async fn apply_config_toml_handler(
 ) -> Result<Json<ApplyConfigTomlResponse>, Error> {
     let app_state = swap_state.load_latest();
     let edited_config = toml_to_config(&request.toml, &request.path_contents)?;
-    let (canonical_toml, canonical_path_contents) = config_to_toml(&edited_config)?;
-    let canonical_signature = editable_config_signature(&canonical_toml, &canonical_path_contents)?;
 
     let pool = app_state
         .postgres_connection_info
@@ -234,10 +249,12 @@ pub async fn apply_config_toml_handler(
     // observe uncommitted state on `tx` — but that is fine here: at this
     // point `tx` has only acquired the lock, not written anything, so the
     // committed baseline is exactly what we want to CAS against.
-    let current_uninitialized = load_config_from_db(pool)
+    let current_loaded = load_config_from_db(pool)
         .await
         .map_err(merge_load_config_errors)?;
-    let (current_toml, current_path_contents) = config_to_toml(&current_uninitialized)?;
+    // Use config_to_toml_with_errors so the CAS signature matches what GET returns.
+    let (current_toml, current_path_contents) =
+        config_to_toml_with_errors(&current_loaded.config, &current_loaded.loading_errors)?;
     let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
 
     if current_signature != request.base_signature {
@@ -283,11 +300,26 @@ pub async fn apply_config_toml_handler(
     // Infallible: all fallible work was done in `prepare_config_swap` above.
     swap_state.swap_config(prepared);
 
+    // Re-load from DB after commit so the response reflects what the next
+    // GET (and the next CAS check) will see. This matters when broken rows
+    // survive the apply — e.g. a malformed singleton row that the user did
+    // not overwrite stays "latest" in its append-only table, so the next
+    // load still surfaces it as a `loading_error` and the annotated TOML
+    // still has its `# BROKEN` block. Computing the response via plain
+    // `config_to_toml` here would diverge from the next GET's signature
+    // and cause a false CAS conflict on the very next save.
+    let post_loaded = load_config_from_db(pool)
+        .await
+        .map_err(merge_load_config_errors)?;
+    let (response_toml, response_path_contents) =
+        config_to_toml_with_errors(&post_loaded.config, &post_loaded.loading_errors)?;
+    let response_signature = editable_config_signature(&response_toml, &response_path_contents)?;
+
     Ok(Json(ApplyConfigTomlResponse {
-        toml: canonical_toml,
-        path_contents: canonical_path_contents,
+        toml: response_toml,
+        path_contents: response_path_contents,
         hash: written_hash,
-        base_signature: canonical_signature,
+        base_signature: response_signature,
     }))
 }
 
@@ -341,6 +373,7 @@ mod tests {
             config,
             "test-hash".to_string(),
             HashMap::new(),
+            vec![],
         )
         .expect("TOML response generation should succeed");
 

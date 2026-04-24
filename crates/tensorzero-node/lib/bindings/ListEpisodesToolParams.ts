@@ -12,18 +12,18 @@ export type ListEpisodesToolParams = {
   /**
    * Return episodes before this episode_id (for pagination).
    */
-  before: string | null;
+  before?: string;
   /**
    * Return episodes after this episode_id (for pagination).
    */
-  after: string | null;
+  after?: string;
   /**
    * Filter to episodes containing inferences for this function.
    */
-  function_name: string | null;
+  function_name?: string;
   /**
    * Filter to episodes containing inferences matching these criteria.
    * Supports boolean_metric, float_metric, tag, time, and logical combinators.
    */
-  filters: InferenceFilter | null;
+  filters?: InferenceFilter;
 };

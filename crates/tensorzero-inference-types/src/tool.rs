@@ -1,25 +1,20 @@
-//! Core tool type definitions.
+//! Tool types for inference API requests.
 //!
-//! This module contains the fundamental types that represent tools in TensorZero:
-//! - `Tool` - The main enum representing all tool types
-//! - `FunctionTool` - Client-side function tools with JSON schema parameters
-//! - `OpenAICustomTool` - OpenAI's custom tool format (text/grammar)
-//! - `ProviderTool` - Provider-specific tool configurations
-
-use std::fmt;
+//! These were originally in `tensorzero-core::tool`, but live here so that
+//! leaf crates (e.g. `ts-executor-pool`) can consume them without pulling in
+//! all of `tensorzero-core`.
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use std::fmt;
 use strum::AsRefStr;
+use tensorzero_derive::export_schema;
+use tensorzero_types::ToolChoice;
 
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::serialize_to_dict;
-use crate::jsonschema_util::JSONSchema;
-
-use super::config::DynamicToolConfig;
+use crate::{OpenAICustomTool, ProviderTool};
 
 /// `Tool` is the generic form for all tools that TensorZero itself manages.
 /// This includes function tools (the original kind) and OpenAI's custom tools
@@ -96,7 +91,7 @@ impl<'de> Deserialize<'de> for Tool {
 }
 
 impl Tool {
-    pub(crate) fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
             Tool::Function(tool) => &tool.name,
             Tool::OpenAICustom(tool) => &tool.name,
@@ -131,9 +126,7 @@ impl Tool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Tool::Function(tool) => {
-                serialize_to_dict(py, tool.parameters.clone()).map(|x| x.into_bound(py))
-            }
+            Tool::Function(tool) => value_to_py_dict(py, &tool.parameters),
             Tool::OpenAICustom(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
                 "Custom tools do not have parameters. Check type field first.",
             )),
@@ -172,7 +165,7 @@ impl Tool {
     pub fn get_format<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
             Tool::OpenAICustom(tool) => match &tool.format {
-                Some(format) => serialize_to_dict(py, format.clone()).map(|x| x.into_bound(py)),
+                Some(format) => serialize_to_py(py, format),
                 None => Ok(py.None().into_bound(py)),
             },
             Tool::Function(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
@@ -221,7 +214,7 @@ impl fmt::Display for FunctionTool {
 impl FunctionTool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+        value_to_py_dict(py, &self.parameters)
     }
 
     #[getter]
@@ -244,18 +237,151 @@ impl FunctionTool {
     }
 }
 
-impl FunctionTool {
-    pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
-        DynamicToolConfig {
-            description: self.description,
-            parameters: JSONSchema::compile_background(self.parameters),
-            name: self.name,
-            strict: self.strict,
-        }
+/// Wire/API representation of dynamic tool parameters for inference requests.
+///
+/// This type is the **wire format** for tool configurations used in API requests and responses.
+/// It distinguishes between static tools (configured in the function) and dynamic tools
+/// (provided at runtime), allowing clients to reference pre-configured tools by name or
+/// provide new tools on-the-fly.
+///
+/// # Purpose
+/// - Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)
+/// - Expose tool configurations in API responses for stored inferences
+/// - Support Python and TypeScript client bindings
+/// - Allow runtime customization of tool behavior
+///
+/// # Fields
+/// - `allowed_tools`: Names of static tools from function config to use (subset selection)
+/// - `additional_tools`: New tools defined at runtime (not in static config)
+/// - `tool_choice`: Override the function's default tool choice strategy
+/// - `parallel_tool_calls`: Override whether parallel tool calls are enabled
+/// - `provider_tools`: Provider-specific tool configurations (not persisted to database)
+///
+/// # Key Differences from ToolCallConfigDatabaseInsert
+/// - **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools
+/// - **By reference**: Static tools referenced by name, not duplicated
+/// - **Has provider_tools**: Can specify provider-specific tool configurations
+/// - **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`
+///
+/// # Conversion to Storage Format
+/// Converting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:
+/// 1. Static tools (from `allowed_tools` names) are resolved from function config
+/// 2. Dynamic tools (from `additional_tools`) are included as-is
+/// 3. Both lists are merged into a single `tools_available` list
+/// 4. The distinction between static and dynamic tools is lost
+/// 5. `provider_tools` are dropped (not stored)
+///
+/// Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
+///
+/// # Conversion from Storage Format
+/// Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
+/// 1. `dynamic_tools` -> `additional_tools`
+/// 2. `allowed_tools` -> `allowed_tools` (based on choice enum)
+/// 3. Other fields copied directly
+///
+/// Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
+///
+/// # Example
+/// ```rust,ignore
+/// // API request with dynamic tool params
+/// let params = DynamicToolParams {
+///     allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
+///     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
+///     tool_choice: Some(ToolChoice::Required),
+///     parallel_tool_calls: Some(true),
+///     provider_tools: vec![],
+/// };
+///
+/// // Convert to storage format
+/// let db_insert = function_config
+///     .dynamic_tool_params_to_database_insert(params, &static_tools)?
+///     .unwrap_or_default();
+///
+/// // db_insert.tools_available now contains both the calculator tool (from config)
+/// // and the runtime tool (from additional_tools), merged together
+/// ```
+///
+/// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", ts(optional_fields, export))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
+pub struct DynamicToolParams {
+    /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    /// If not provided, all static tools are allowed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_tools: Option<Vec<String>>,
+
+    /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    /// tools, that are also allowed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_tools: Option<Vec<Tool>>,
+    /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    /// Optional.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
+
+    /// Whether to use parallel tool calls in the inference. Optional.
+    /// If provided during inference, it will override the function-configured parallel tool calls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
+
+    /// Provider-specific tool configurations
+    #[serde(default)]
+    pub provider_tools: Vec<ProviderTool>,
+}
+
+impl std::fmt::Display for DynamicToolParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 
-pub use tensorzero_inference_types::{
-    OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarDefinition, OpenAIGrammarSyntax,
-    ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider,
-};
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl DynamicToolParams {
+    #[getter]
+    pub fn allowed_tools(&self) -> Option<Vec<String>> {
+        self.allowed_tools.clone()
+    }
+
+    #[getter]
+    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
+        self.additional_tools.clone()
+    }
+
+    // TODO: Add tool_choice getter when we decide how to handle it.
+    // Mixed enums (with unit and tuple variants) aren't well supported in PyO3,
+    // and we need to decide on the proper Python representation.
+
+    #[getter]
+    pub fn parallel_tool_calls(&self) -> Option<bool> {
+        self.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_py(py, &self.provider_tools)
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+fn serialize_to_py<'py, T: Serialize>(py: Python<'py>, val: &T) -> PyResult<Bound<'py, PyAny>> {
+    let json_str = serde_json::to_string(val).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Failed to serialize to JSON: {e:?}"))
+    })?;
+    let json_module = py.import("json")?;
+    Ok(json_module.call_method1("loads", (json_str,))?.into_any())
+}
+
+#[cfg(feature = "pyo3")]
+fn value_to_py_dict<'py>(py: Python<'py>, value: &Value) -> PyResult<Bound<'py, PyAny>> {
+    serialize_to_py(py, value)
+}

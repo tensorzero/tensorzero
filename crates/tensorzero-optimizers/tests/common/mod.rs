@@ -36,9 +36,10 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolChoice, ToolResult},
+    tool::{ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;

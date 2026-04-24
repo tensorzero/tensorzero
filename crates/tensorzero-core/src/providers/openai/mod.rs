@@ -66,9 +66,8 @@ use crate::providers::openai::responses::{
 };
 use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
-use crate::tool::{
-    FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfigRef,
-};
+use crate::tool::{OpenAICustomTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfigRef};
+use tensorzero_inference_types::tool::FunctionTool;
 
 use super::helpers::{JsonlBatchFileInfo, parse_jsonl_batch_file};
 use crate::inference::TensorZeroEventError;
