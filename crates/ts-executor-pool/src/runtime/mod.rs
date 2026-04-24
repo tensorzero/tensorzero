@@ -660,7 +660,7 @@ impl RlmPool {
     }
 }
 
-pub use tensorzero_core::client::ToolContextHelper;
+pub use tensorzero_types::tool_context::ToolContextHelper;
 
 /// Constructs side info suitable for calling tools in our `ToolContext`,
 /// using the provided value as the tool call id.

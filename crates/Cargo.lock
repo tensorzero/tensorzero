@@ -8346,6 +8346,7 @@ name = "tensorzero-types"
 version = "2026.4.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "aws-smithy-types",
  "blake3",
  "chrono",
@@ -8974,7 +8975,6 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "tensorzero-core",
  "tensorzero-inference-types",
  "tensorzero-ts-types",
  "tensorzero-types",
