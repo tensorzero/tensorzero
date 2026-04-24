@@ -12,7 +12,7 @@ import {
 import { ChartContainer, ChartTooltip } from "~/components/ui/chart";
 import { Markdown } from "~/components/ui/markdown";
 import type { TopKEvaluationVisualization } from "~/types/tensorzero";
-import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
+import { getChartColor, formatChartNumber } from "~/utils/chart";
 
 type TopKEvaluationVizProps = {
   data: TopKEvaluationVisualization;
@@ -97,7 +97,7 @@ function DotWithErrorBar(props: {
     return null;
 
   const cx = x + width / 2;
-  const color = payload.color ?? CHART_COLORS[0];
+  const color = payload.color ?? getChartColor(0);
   const opacity = payload.failed ? FAILED_OPACITY : 1;
 
   // Calculate error bar positions based on the chart scale
@@ -388,10 +388,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
 
     // Create color map based on alphabetical order (for all variants)
     const colorMap = new Map(
-      sortedAlphabetically.map(([name], index) => [
-        name,
-        CHART_COLORS[index % CHART_COLORS.length],
-      ]),
+      sortedAlphabetically.map(([name], index) => [name, getChartColor(index)]),
     );
 
     // Sort non-failed by mean estimate (descending - best first)
@@ -427,7 +424,7 @@ export default function TopKEvaluationViz({ data }: TopKEvaluationVizProps) {
         // Error bar values are relative to the mean: [lower error, upper error]
         error: [mean - lower, upper - mean],
         count,
-        color: colorMap.get(name) ?? CHART_COLORS[0],
+        color: colorMap.get(name) ?? getChartColor(0),
         failed,
       };
     });

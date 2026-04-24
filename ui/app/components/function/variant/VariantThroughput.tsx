@@ -1,7 +1,7 @@
 import type { VariantThroughput } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  CHART_COLORS,
+  getChartColor,
   formatChartNumber,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
@@ -33,7 +33,7 @@ export function VariantThroughput({
         ...config,
         [variantName]: {
           label: variantName,
-          color: CHART_COLORS[index % CHART_COLORS.length],
+          color: getChartColor(index),
         },
       }),
       {},
@@ -143,7 +143,7 @@ export function VariantThroughput({
               ))}
             </AreaChart>
           </ChartContainer>
-          <ChartLegend items={variantNames} colors={CHART_COLORS} />
+          <ChartLegend items={variantNames} colorFn={getChartColor} />
         </CardContent>
       </Card>
     </div>

@@ -196,7 +196,7 @@ function getRetryDelay(retryCount: number): number {
  * ## Cleanup
  *
  * Requests are cancelled and state is reset when:
- * - YOLO mode is disabled (enabled=false)
+ * - Auto-approve is disabled (enabled=false)
  * - Session changes
  * - Component unmounts
  */

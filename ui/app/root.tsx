@@ -50,6 +50,7 @@ import {
   isSecureRequest,
   runWithRequest,
 } from "./utils/api-key-override.server";
+import type { Theme } from "./context/theme";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -60,7 +61,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap",
   },
   {
     rel: "icon",
@@ -87,6 +88,13 @@ interface LoaderData {
   autopilotAvailable: boolean;
   featureFlags: FeatureFlags;
   infraError: ClassifiedError | null;
+  theme: Theme;
+}
+
+function getThemeFromCookies(request: Request): Theme {
+  const cookies = request.headers.get("Cookie") ?? "";
+  const match = cookies.match(/(?:^|;\s*)theme=(light|dark|system)/);
+  return (match?.[1] as Theme) ?? "system";
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -94,6 +102,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   startPeriodicCleanup();
   const isReadOnly = isReadOnlyMode();
   const featureFlags = loadFeatureFlags();
+  const theme = getThemeFromCookies(request);
   try {
     // Fetch config and autopilot availability in parallel
     const [config, autopilotAvailable] = await Promise.all([
@@ -106,6 +115,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       autopilotAvailable,
       featureFlags,
       infraError: null,
+      theme,
     };
   } catch (e) {
     // Graceful degradation for infrastructure errors:
@@ -118,6 +128,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         autopilotAvailable: false,
         featureFlags,
         infraError: { type: InfraErrorType.GatewayUnavailable },
+        theme,
       };
     }
     if (isAuthenticationError(e)) {
@@ -127,6 +138,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         autopilotAvailable: false,
         featureFlags,
         infraError: { type: InfraErrorType.GatewayAuthFailed },
+        theme,
       };
       // Clear stale cookie so the auth dialog starts fresh
       if (await getApiKeyFromRequest(request)) {
@@ -152,6 +164,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           type: InfraErrorType.ClickHouseUnavailable,
           message,
         },
+        theme,
       };
     }
     throw e;
@@ -160,8 +173,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 // Global Layout
 export function Layout({ children }: { children: React.ReactNode }) {
+  // Read the theme cookie for SSR to avoid flash of wrong theme.
+  // The ThemeProvider will take over on the client.
+  const loaderData = useRouteLoaderData<typeof loader>("root");
+  const theme = loaderData?.theme ?? "system";
+  const htmlClass = theme === "dark" ? "dark" : "";
+
   return (
-    <html lang="en">
+    <html lang="en" className={htmlClass}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

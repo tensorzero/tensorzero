@@ -32,10 +32,12 @@ const Chip: React.FC<ChipProps> = ({
   onClick,
 }) => {
   const baseClasses =
-    "inline-flex text-sm text-fg-primary px-0 md:px-2 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
+    "inline-flex items-center text-sm text-fg-primary bg-bg-secondary border border-border px-2 py-0.5 gap-1.5 rounded-md whitespace-nowrap overflow-hidden";
   const hoverClasses =
-    link || onClick ? "md:hover:bg-bg-hover cursor-pointer" : "";
-  const fontClasses = font === "mono" ? "font-mono" : "font-sans";
+    link || onClick
+      ? "hover:bg-bg-hover hover:border-border-accent cursor-pointer"
+      : "";
+  const fontClasses = font === "mono" ? "font-mono text-xs" : "font-sans";
   const combinedClasses = cn(baseClasses, hoverClasses, fontClasses, className);
 
   const content = (

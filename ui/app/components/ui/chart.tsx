@@ -317,9 +317,11 @@ function getPayloadConfigFromPayload(
 function ChartLegend({
   items,
   colors,
+  colorFn,
 }: {
   items: string[];
-  colors: readonly string[];
+  colors?: readonly string[];
+  colorFn?: (index: number) => string;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-4 pt-6">
@@ -328,7 +330,11 @@ function ChartLegend({
           <div
             className="h-2 w-2 shrink-0 rounded-[2px]"
             style={{
-              backgroundColor: colors[index % colors.length],
+              backgroundColor: colorFn
+                ? colorFn(index)
+                : colors
+                  ? colors[index % colors.length]
+                  : undefined,
             }}
           />
           <span className="font-mono text-xs">{name}</span>

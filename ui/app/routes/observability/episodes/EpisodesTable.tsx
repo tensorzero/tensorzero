@@ -8,29 +8,22 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
-import { toEpisodeUrl } from "~/utils/urls";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
+import { toEpisodeUrl, toInferenceUrl } from "~/utils/urls";
 import { Suspense } from "react";
 import { useLocation, Await } from "react-router";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Badge } from "~/components/ui/badge";
 import type { EpisodesData } from "./route";
 
-const formatTimeRange = (startTime: Date, endTime: Date, count: number) => {
-  const formatOptions: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  };
-  const start = startTime.toLocaleString("en-US", formatOptions);
-  if (count === 1) {
-    return start;
-  }
-  const end = endTime.toLocaleString("en-US", formatOptions);
-  return `${start} — ${end}`;
-};
+function formatDuration(startTime: Date, endTime: Date): string {
+  const diffMs = endTime.getTime() - startTime.getTime();
+  if (diffMs < 1000) return `${diffMs}ms`;
+  if (diffMs < 60_000) return `${(diffMs / 1000).toFixed(1)}s`;
+  if (diffMs < 3_600_000)
+    return `${Math.floor(diffMs / 60_000)}m ${Math.floor((diffMs % 60_000) / 1000)}s`;
+  return `${Math.floor(diffMs / 3_600_000)}h ${Math.floor((diffMs % 3_600_000) / 60_000)}m`;
+}
 
 function SkeletonRows() {
   return (
@@ -41,10 +34,16 @@ function SkeletonRows() {
             <Skeleton className="h-4 w-24" />
           </TableCell>
           <TableCell>
+            <Skeleton className="h-4 w-12" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-24" />
+          </TableCell>
+          <TableCell>
             <Skeleton className="h-4 w-16" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-32" />
           </TableCell>
         </TableRow>
       ))}
@@ -61,26 +60,44 @@ function TableRows({ data }: { data: EpisodesData }) {
 
   return (
     <>
-      {episodes.map((episode) => (
-        <TableRow key={episode.episode_id} id={episode.episode_id}>
-          <TableCell className="max-w-[200px] lg:max-w-none">
-            <TableItemShortUuid
-              id={episode.episode_id}
-              link={toEpisodeUrl(episode.episode_id)}
-            />
-          </TableCell>
-          <TableCell>{episode.count}</TableCell>
-          <TableCell className="max-w-[200px] lg:max-w-none">
-            <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
-              {formatTimeRange(
-                new Date(episode.start_time),
-                new Date(episode.end_time),
-                Number(episode.count),
-              )}
-            </span>
-          </TableCell>
-        </TableRow>
-      ))}
+      {episodes.map((episode) => {
+        const startTime = new Date(episode.start_time);
+        const endTime = new Date(episode.end_time);
+        const count = Number(episode.count);
+
+        return (
+          <TableRow key={episode.episode_id} id={episode.episode_id}>
+            <TableCell className="max-w-[200px] lg:max-w-none">
+              <TableItemShortUuid
+                id={episode.episode_id}
+                link={toEpisodeUrl(episode.episode_id)}
+              />
+            </TableCell>
+            <TableCell>
+              <Badge
+                variant="secondary"
+                className="font-mono text-xs font-normal"
+              >
+                {count}
+              </Badge>
+            </TableCell>
+            <TableCell className="max-w-[120px] lg:max-w-none">
+              <TableItemShortUuid
+                id={episode.last_inference_id}
+                link={toInferenceUrl(episode.last_inference_id)}
+              />
+            </TableCell>
+            <TableCell>
+              <span className="text-fg-secondary whitespace-nowrap text-xs">
+                {count > 1 ? formatDuration(startTime, endTime) : "—"}
+              </span>
+            </TableCell>
+            <TableCell>
+              <TableItemTime timestamp={episode.start_time} />
+            </TableCell>
+          </TableRow>
+        );
+      })}
     </>
   );
 }
@@ -98,8 +115,10 @@ export default function EpisodesTable({
         <TableHeader>
           <TableRow>
             <TableHead>Episode ID</TableHead>
-            <TableHead>Inference Count</TableHead>
-            <TableHead>Time</TableHead>
+            <TableHead>Inferences</TableHead>
+            <TableHead>Last Inference</TableHead>
+            <TableHead>Duration</TableHead>
+            <TableHead>Started</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -108,7 +127,7 @@ export default function EpisodesTable({
               resolve={data}
               errorElement={
                 <TableAsyncErrorState
-                  colSpan={3}
+                  colSpan={5}
                   defaultMessage="Failed to load episodes"
                 />
               }

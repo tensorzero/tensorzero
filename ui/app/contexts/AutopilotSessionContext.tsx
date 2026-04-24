@@ -2,7 +2,11 @@ import { createContext, useContext, type ReactNode } from "react";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 
 interface AutopilotSessionContextValue {
+  autoApprove: boolean;
+  setAutoApprove: (value: boolean) => void;
+  /** @deprecated Use `autoApprove` instead */
   yoloMode: boolean;
+  /** @deprecated Use `setAutoApprove` instead */
   setYoloMode: (value: boolean) => void;
 }
 
@@ -14,13 +18,20 @@ export function AutopilotSessionProvider({
 }: {
   children: ReactNode;
 }) {
-  const [yoloMode, setYoloMode] = useLocalStorage<boolean>(
-    "tensorzero-yolo-mode",
+  const [autoApprove, setAutoApprove] = useLocalStorage<boolean>(
+    "tensorzero-auto-approve",
     false,
   );
 
   return (
-    <AutopilotSessionContext.Provider value={{ yoloMode, setYoloMode }}>
+    <AutopilotSessionContext.Provider
+      value={{
+        autoApprove,
+        setAutoApprove,
+        yoloMode: autoApprove,
+        setYoloMode: setAutoApprove,
+      }}
+    >
       {children}
     </AutopilotSessionContext.Provider>
   );

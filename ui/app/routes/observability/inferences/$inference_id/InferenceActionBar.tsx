@@ -154,7 +154,10 @@ function TryWithVariantActionStreaming({
             ...config.model_names,
           ]);
           const models = [...modelsSet].sort();
-          const options = isDefault ? models : variants;
+          const allOptions = isDefault ? models : variants;
+          const options = allOptions.filter(
+            (o) => o !== inference.variant_name,
+          );
 
           return (
             <TryWithVariantAction

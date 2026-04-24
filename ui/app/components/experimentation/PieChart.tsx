@@ -59,12 +59,14 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
     0,
   );
 
-  // Transform data for the pie chart
-  const data = variantWeights.map((variant) => ({
-    variant_name: variant.variant_name,
-    weight: variant.weight,
-    percentage: `${((variant.weight / totalWeight) * 100).toFixed(1)}%`,
-  }));
+  // Transform data for the pie chart, filtering out 0-weight variants
+  const data = variantWeights
+    .filter((variant) => variant.weight > 0)
+    .map((variant) => ({
+      variant_name: variant.variant_name,
+      weight: variant.weight,
+      percentage: `${((variant.weight / totalWeight) * 100).toFixed(1)}%`,
+    }));
 
   return (
     <Card>
@@ -84,8 +86,34 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               nameKey="variant_name"
               cx="50%"
               cy="50%"
-              outerRadius={100}
-              label={({ percentage }) => percentage}
+              outerRadius={80}
+              label={({
+                cx,
+                cy,
+                midAngle,
+                outerRadius: or,
+                percentage,
+                fill,
+              }) => {
+                const RADIAN = Math.PI / 180;
+                const radius = or + 18;
+                const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                return (
+                  <text
+                    x={x}
+                    y={y}
+                    fill={fill}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={12}
+                    fontWeight={600}
+                  >
+                    {percentage}
+                  </text>
+                );
+              }}
+              labelLine={false}
               isAnimationActive={false}
             >
               {data.map((entry) => (

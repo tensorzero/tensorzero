@@ -13,7 +13,7 @@ import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackM
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { CHART_COLORS } from "~/utils/chart";
+import { getChartColor } from "~/utils/chart";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
@@ -92,7 +92,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
         ...config,
         [variantName]: {
           label: variantName,
-          color: CHART_COLORS[index % CHART_COLORS.length],
+          color: getChartColor(index),
         },
       }),
       {},

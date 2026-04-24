@@ -1,4 +1,4 @@
-import { Code } from "~/components/ui/code";
+import { Badge } from "~/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -45,7 +45,7 @@ export default function FunctionVariantTable({
             variantName={info.getValue()}
             functionName={function_name}
           >
-            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+            <code className="text-fg-primary block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-orange-600">
               {info.getValue()}
             </code>
           </VariantLink>
@@ -53,7 +53,11 @@ export default function FunctionVariantTable({
       }),
       columnHelper.accessor("type", {
         header: "Type",
-        cell: (info) => <Code>{info.getValue()}</Code>,
+        cell: (info) => (
+          <Badge variant="secondary" className="font-mono text-xs font-normal">
+            {info.getValue()}
+          </Badge>
+        ),
       }),
       columnHelper.accessor("inference_count", {
         header: "Count",

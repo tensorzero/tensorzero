@@ -12,6 +12,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   type FeatureFlags,
 } from "~/context/feature-flags";
+import { ThemeProvider, type Theme } from "~/context/theme";
 import type { UiConfig } from "~/types/tensorzero";
 
 export interface AppProvidersLoaderData {
@@ -19,6 +20,7 @@ export interface AppProvidersLoaderData {
   autopilotAvailable?: boolean;
   config?: UiConfig;
   featureFlags?: FeatureFlags;
+  theme?: Theme;
 }
 
 interface AppProvidersProps {
@@ -32,27 +34,29 @@ interface AppProvidersProps {
  */
 export function AppProviders({ children, loaderData }: AppProvidersProps) {
   return (
-    <ReactQueryProvider>
-      <GlobalToastProvider>
-        <ReadOnlyProvider value={loaderData?.isReadOnly ?? false}>
-          <AutopilotAvailableProvider
-            value={loaderData?.autopilotAvailable ?? false}
-          >
-            <FeatureFlagsProvider
-              value={loaderData?.featureFlags ?? DEFAULT_FEATURE_FLAGS}
+    <ThemeProvider defaultTheme={loaderData?.theme ?? "system"}>
+      <ReactQueryProvider>
+        <GlobalToastProvider>
+          <ReadOnlyProvider value={loaderData?.isReadOnly ?? false}>
+            <AutopilotAvailableProvider
+              value={loaderData?.autopilotAvailable ?? false}
             >
-              <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
-                <SidebarProvider>
-                  <TooltipProvider delayDuration={250}>
-                    <EntitySheetProvider>{children}</EntitySheetProvider>
-                  </TooltipProvider>
-                </SidebarProvider>
-              </ConfigProvider>
-            </FeatureFlagsProvider>
-          </AutopilotAvailableProvider>
-        </ReadOnlyProvider>
-        <Toaster />
-      </GlobalToastProvider>
-    </ReactQueryProvider>
+              <FeatureFlagsProvider
+                value={loaderData?.featureFlags ?? DEFAULT_FEATURE_FLAGS}
+              >
+                <ConfigProvider value={loaderData?.config ?? EMPTY_CONFIG}>
+                  <SidebarProvider>
+                    <TooltipProvider delayDuration={250}>
+                      <EntitySheetProvider>{children}</EntitySheetProvider>
+                    </TooltipProvider>
+                  </SidebarProvider>
+                </ConfigProvider>
+              </FeatureFlagsProvider>
+            </AutopilotAvailableProvider>
+          </ReadOnlyProvider>
+          <Toaster />
+        </GlobalToastProvider>
+      </ReactQueryProvider>
+    </ThemeProvider>
   );
 }
