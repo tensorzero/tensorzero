@@ -500,37 +500,62 @@ fn rehydrate_evaluator(
 /// Rehydrates a stored function config into an `UninitializedFunctionConfig`.
 ///
 /// `variant_rows` maps variant_version_id -> (variant_name, stored_config).
+/// Rehydrates a stored function config. Returns the config alongside any
+/// per-variant errors — the function succeeds even if some variants fail.
+/// The outer `Err` is reserved for function-level failures (e.g. broken schema
+/// file references) that make the entire function unloadable.
 pub fn rehydrate_function(
     stored: StoredFunctionConfig,
     variant_rows: &HashMap<Uuid, (String, StoredVariantVersionConfig)>,
     files: &FileMap,
-) -> Result<UninitializedFunctionConfig, Error> {
+) -> Result<(UninitializedFunctionConfig, Vec<(String, Error)>), Error> {
     match stored {
         StoredFunctionConfig::Chat(chat) => rehydrate_chat_function(chat, variant_rows, files)
-            .map(UninitializedFunctionConfig::Chat),
+            .map(|(config, errs)| (UninitializedFunctionConfig::Chat(config), errs)),
         StoredFunctionConfig::Json(json) => rehydrate_json_function(json, variant_rows, files)
-            .map(UninitializedFunctionConfig::Json),
+            .map(|(config, errs)| (UninitializedFunctionConfig::Json(config), errs)),
     }
 }
 
+/// Resolves variant refs to fully rehydrated variant infos.
+///
+/// Per-variant failures (missing version, broken file references) are collected
+/// and returned alongside the successfully loaded variants rather than failing
+/// the entire function. The outer `Result` is reserved for function-level
+/// failures that make the function itself unloadable.
 fn resolve_variants(
     stored_variants: Option<BTreeMap<String, tensorzero_stored_config::StoredVariantRef>>,
     variant_rows: &HashMap<Uuid, (String, StoredVariantVersionConfig)>,
     files: &FileMap,
-) -> Result<HashMap<String, UninitializedVariantInfo>, Error> {
+) -> (
+    HashMap<String, UninitializedVariantInfo>,
+    Vec<(String, Error)>,
+) {
     let mut result = HashMap::new();
+    let mut errors = Vec::new();
     for (name, vref) in stored_variants.unwrap_or_default() {
-        let (_, stored_variant) = variant_rows.get(&vref.variant_version_id).ok_or_else(|| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Missing variant version `{}` for variant `{name}`",
-                    vref.variant_version_id
-                ),
-            })
-        })?;
-        result.insert(name, rehydrate_variant(stored_variant.clone(), files)?);
+        let Some((_, stored_variant)) = variant_rows.get(&vref.variant_version_id) else {
+            errors.push((
+                name.clone(),
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Missing or broken variant version `{}` for variant `{name}`",
+                        vref.variant_version_id
+                    ),
+                }),
+            ));
+            continue;
+        };
+        match rehydrate_variant(stored_variant.clone(), files) {
+            Ok(info) => {
+                result.insert(name, info);
+            }
+            Err(error) => {
+                errors.push((name, error));
+            }
+        }
     }
-    Ok(result)
+    (result, errors)
 }
 
 struct ResolvedSchemas {
@@ -586,7 +611,7 @@ fn rehydrate_chat_function(
     stored: tensorzero_stored_config::StoredChatFunctionConfig,
     variant_rows: &HashMap<Uuid, (String, StoredVariantVersionConfig)>,
     files: &FileMap,
-) -> Result<UninitializedFunctionConfigChat, Error> {
+) -> Result<(UninitializedFunctionConfigChat, Vec<(String, Error)>), Error> {
     let tensorzero_stored_config::StoredChatFunctionConfig {
         variants,
         system_schema,
@@ -601,7 +626,7 @@ fn rehydrate_chat_function(
         evaluators,
     } = stored;
 
-    let resolved_variants = resolve_variants(variants, variant_rows, files)?;
+    let (resolved_variants, variant_errors) = resolve_variants(variants, variant_rows, files);
     let resolved = resolve_schemas(
         system_schema.as_ref(),
         user_schema.as_ref(),
@@ -610,26 +635,29 @@ fn rehydrate_chat_function(
         files,
     )?;
 
-    Ok(UninitializedFunctionConfigChat {
-        variants: resolved_variants,
-        system_schema: resolved.system,
-        user_schema: resolved.user,
-        assistant_schema: resolved.assistant,
-        schemas: resolved.schemas,
-        tools: tools.unwrap_or_default(),
-        tool_choice: tool_choice.map(ToolChoice::from).unwrap_or_default(),
-        parallel_tool_calls,
-        description,
-        experimentation: experimentation.map(Into::into),
-        evaluators: resolve_evaluators(evaluators, files)?,
-    })
+    Ok((
+        UninitializedFunctionConfigChat {
+            variants: resolved_variants,
+            system_schema: resolved.system,
+            user_schema: resolved.user,
+            assistant_schema: resolved.assistant,
+            schemas: resolved.schemas,
+            tools: tools.unwrap_or_default(),
+            tool_choice: tool_choice.map(ToolChoice::from).unwrap_or_default(),
+            parallel_tool_calls,
+            description,
+            experimentation: experimentation.map(Into::into),
+            evaluators: resolve_evaluators(evaluators, files)?,
+        },
+        variant_errors,
+    ))
 }
 
 fn rehydrate_json_function(
     stored: tensorzero_stored_config::StoredJsonFunctionConfig,
     variant_rows: &HashMap<Uuid, (String, StoredVariantVersionConfig)>,
     files: &FileMap,
-) -> Result<UninitializedFunctionConfigJson, Error> {
+) -> Result<(UninitializedFunctionConfigJson, Vec<(String, Error)>), Error> {
     let tensorzero_stored_config::StoredJsonFunctionConfig {
         variants,
         system_schema,
@@ -642,7 +670,7 @@ fn rehydrate_json_function(
         evaluators,
     } = stored;
 
-    let resolved_variants = resolve_variants(variants, variant_rows, files)?;
+    let (resolved_variants, variant_errors) = resolve_variants(variants, variant_rows, files);
     let resolved = resolve_schemas(
         system_schema.as_ref(),
         user_schema.as_ref(),
@@ -651,17 +679,20 @@ fn rehydrate_json_function(
         files,
     )?;
 
-    Ok(UninitializedFunctionConfigJson {
-        variants: resolved_variants,
-        system_schema: resolved.system,
-        user_schema: resolved.user,
-        assistant_schema: resolved.assistant,
-        schemas: resolved.schemas,
-        output_schema: resolve_optional_file_ref(output_schema.as_ref(), files)?,
-        description,
-        experimentation: experimentation.map(Into::into),
-        evaluators: resolve_evaluators(evaluators, files)?,
-    })
+    Ok((
+        UninitializedFunctionConfigJson {
+            variants: resolved_variants,
+            system_schema: resolved.system,
+            user_schema: resolved.user,
+            assistant_schema: resolved.assistant,
+            schemas: resolved.schemas,
+            output_schema: resolve_optional_file_ref(output_schema.as_ref(), files)?,
+            description,
+            experimentation: experimentation.map(Into::into),
+            evaluators: resolve_evaluators(evaluators, files)?,
+        },
+        variant_errors,
+    ))
 }
 
 // ─── Tool conversions ──────────────────────────────────────────────────────
@@ -851,7 +882,7 @@ mod tests {
     }
 
     #[gtest]
-    fn rehydrate_function_errors_on_missing_variant_reference() {
+    fn rehydrate_function_collects_missing_variant_as_per_variant_error() {
         let stored = StoredFunctionConfig::Chat(StoredChatFunctionConfig {
             variants: Some(BTreeMap::from([(
                 "primary".to_string(),
@@ -871,11 +902,22 @@ mod tests {
             evaluators: None,
         });
 
-        let result = rehydrate_function(stored, &HashMap::new(), &FileMap::new());
+        let (config, variant_errors) = rehydrate_function(stored, &HashMap::new(), &FileMap::new())
+            .expect("function-level rehydration should succeed even with broken variants");
 
+        // The function itself loaded with an empty variants map
+        let UninitializedFunctionConfig::Chat(chat) = config else {
+            panic!("expected Chat variant");
+        };
+        expect_that!(chat.variants.is_empty(), eq(true));
+
+        // The missing variant was collected as a per-variant error
+        assert_that!(variant_errors.len(), eq(1));
+        let (variant_name, error) = &variant_errors[0];
+        expect_that!(variant_name, eq("primary"));
         expect_that!(
-            result,
-            err(displays_as(contains_substring("Missing variant version")))
+            error.to_string(),
+            contains_substring("Missing or broken variant version")
         );
     }
 
@@ -1172,7 +1214,8 @@ mod tests {
             evaluators: None,
         });
 
-        let rehydrated = rehydrate_function(stored, &variant_rows, &files)?;
+        let (rehydrated, variant_errors) = rehydrate_function(stored, &variant_rows, &files)?;
+        assert_that!(variant_errors.is_empty(), eq(true));
         let UninitializedFunctionConfig::Json(json) = rehydrated else {
             panic!("expected json function");
         };

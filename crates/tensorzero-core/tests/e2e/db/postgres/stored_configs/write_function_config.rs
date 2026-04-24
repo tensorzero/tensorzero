@@ -545,7 +545,7 @@ async fn write_function_config_round_trips_via_load_config_from_db(pool: PgPool)
         .expect("DB load should succeed");
 
     assert_that!(
-        loaded.functions.as_ref().and_then(|f| f.get("test")),
+        loaded.config.functions.as_ref().and_then(|f| f.get("test")),
         some(eq(&sample_json_function()))
     );
 }

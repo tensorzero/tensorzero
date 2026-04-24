@@ -714,6 +714,7 @@ async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
 
     assert_that!(
         loaded
+            .config
             .clickhouse
             .as_ref()
             .and_then(|c| c.disable_automatic_migrations),
@@ -721,17 +722,19 @@ async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
     );
     assert_that!(
         loaded
+            .config
             .postgres
             .as_ref()
             .and_then(|p| p.connection_pool_size),
         some(eq(17))
     );
     assert_that!(
-        loaded.object_storage.as_ref(),
+        loaded.config.object_storage.as_ref(),
         some(eq(&StorageKind::Disabled))
     );
     assert_that!(
         loaded
+            .config
             .autopilot
             .as_ref()
             .and_then(|a| a.tool_whitelist.as_deref()),
@@ -739,6 +742,7 @@ async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
     );
     assert_that!(
         loaded
+            .config
             .models
             .as_ref()
             .and_then(|m| m.get(&std::sync::Arc::<str>::from("model_a"))),
@@ -746,17 +750,26 @@ async fn write_stored_config_round_trips_via_load_config_from_db(pool: PgPool) {
     );
     assert_that!(
         loaded
+            .config
             .embedding_models
             .as_ref()
             .and_then(|m| m.get(&std::sync::Arc::<str>::from("embed_a"))),
         some(eq(&embedding_model))
     );
     assert_that!(
-        loaded.metrics.as_ref().and_then(|m| m.get("quality")),
+        loaded
+            .config
+            .metrics
+            .as_ref()
+            .and_then(|m| m.get("quality")),
         some(eq(&metric))
     );
     assert_that!(
-        loaded.tools.as_ref().and_then(|t| t.get("get_weather")),
+        loaded
+            .config
+            .tools
+            .as_ref()
+            .and_then(|t| t.get("get_weather")),
         some(eq(&tool))
     );
 }
