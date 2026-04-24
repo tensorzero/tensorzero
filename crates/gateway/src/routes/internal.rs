@@ -8,7 +8,6 @@ use axum::{
     routing::{get, post},
 };
 use tensorzero_core::endpoints;
-use tensorzero_core::feature_flags;
 #[expect(
     clippy::disallowed_types,
     reason = "router builders are parameterized on SwappableAppStateData by axum's type system"
@@ -305,24 +304,20 @@ pub fn build_internal_non_otel_enabled_routes() -> Router<SwappableAppStateData>
             get(endpoints::internal::autopilot::autopilot_status_handler),
         );
 
-    if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
-        router
-            .route(
-                "/internal/config_toml",
-                get(endpoints::internal::config_toml::get_latest_config_toml_handler),
-            )
-            // `apply` and `validate` accept the full editable config document in the request
-            // body, which can be large — we use `POST` instead of `GET` so callers don't have
-            // to URL-encode the entire TOML + referenced file contents into the query string.
-            .route(
-                "/internal/config_toml/apply",
-                post(endpoints::internal::config_toml::apply_config_toml_handler),
-            )
-            .route(
-                "/internal/config_toml/validate",
-                post(endpoints::internal::config_toml::validate_config_toml_handler),
-            )
-    } else {
-        router
-    }
+    router
+        .route(
+            "/internal/config_toml",
+            get(endpoints::internal::config_toml::get_latest_config_toml_handler),
+        )
+        // `apply` and `validate` accept the full editable config document in the request
+        // body, which can be large — we use `POST` instead of `GET` so callers don't have
+        // to URL-encode the entire TOML + referenced file contents into the query string.
+        .route(
+            "/internal/config_toml/apply",
+            post(endpoints::internal::config_toml::apply_config_toml_handler),
+        )
+        .route(
+            "/internal/config_toml/validate",
+            post(endpoints::internal::config_toml::validate_config_toml_handler),
+        )
 }
