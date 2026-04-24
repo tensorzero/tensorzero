@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::config::MetricConfigOptimize;
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::{Error, ErrorDetails};
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting evaluation run metadata.
 #[derive(Debug, Deserialize)]
@@ -55,7 +55,6 @@ pub struct GetEvaluationRunMetadataResponse {
 ///
 /// Returns metadata for one or more evaluation runs, including the evaluation name,
 /// function name, function type, and metric definitions.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_run_metadata", skip_all)]
 pub async fn get_run_metadata_handler(
     State(app_state): AppState,

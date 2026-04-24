@@ -1,7 +1,7 @@
 //! Count inferences endpoint for getting the count of inferences matching query parameters.
 
+use axum::Json;
 use axum::extract::State;
-use axum::{Json, debug_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::db::clickhouse::query_builder::{DemonstrationFeedbackFilter, InferenceFilter};
 use crate::db::inferences::{CountInferencesParams, InferenceOutputSource, InferenceQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Request to count inferences matching the given parameters.
 #[derive(ts_rs::TS, Debug, Deserialize, Serialize, JsonSchema)]
@@ -83,7 +83,6 @@ pub async fn count_inferences(
 }
 
 /// HTTP handler for the count inferences endpoint.
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "count_inferences_handler",
     skip_all,

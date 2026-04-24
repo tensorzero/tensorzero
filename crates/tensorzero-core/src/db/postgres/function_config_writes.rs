@@ -14,8 +14,8 @@ use tensorzero_stored_config::{
     StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
     StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
     StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig, StoredTimeoutsConfig,
-    StoredToolChoice, StoredToolUseConfig, StoredVariantConfig, StoredVariantRef,
-    StoredVariantVersionConfig,
+    StoredToolChoice, StoredToolUseConfig, StoredTypescriptJudgeConfig, StoredVariantConfig,
+    StoredVariantRef, StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -36,21 +36,32 @@ use crate::experimentation::{
     UninitializedExperimentationConfig, UninitializedExperimentationConfigWithNamespaces,
     track_and_stop::UninitializedTrackAndStopExperimentationConfig,
 };
-use crate::inference::types::extra_body::extra_body_config_to_stored;
-use crate::inference::types::extra_headers::extra_headers_config_to_stored;
 use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::{
     UninitializedChatCompletionConfig, UninitializedInputWrappers,
 };
 use crate::variant::dicl::UninitializedDiclConfig;
+use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use super::PostgresConnectionInfo;
 use super::file_writes::{CollectedFile, add_file, write_collected_files};
 
+/// Parameters for the public, single-function write API
+/// (`PostgresConnectionInfo::write_function_config`).
+///
+/// This API always performs a per-function compare-and-swap check against the
+/// caller-supplied `expected_current_version_id`. The only way to bypass that
+/// check is via `write_function_config_in_tx_skipping_cas`, which is
+/// crate-private and only usable by the full-config bulk write path.
 #[derive(Debug)]
 pub struct WriteFunctionConfigParams<'a> {
     pub function_name: &'a str,
     pub config: &'a UninitializedFunctionConfig,
+    /// Expected current latest version ID for this function. The write fails
+    /// with a CAS error if the actual latest row doesn't match.
+    ///
+    /// `None` means the caller expects no existing row for this function
+    /// (first write).
     pub expected_current_version_id: Option<Uuid>,
     pub creation_source: &'a str,
     pub source_autopilot_session_id: Option<Uuid>,
@@ -59,6 +70,20 @@ pub struct WriteFunctionConfigParams<'a> {
     /// MiniJinja `{% include %}` — must be stored in the database for the config to be
     /// self-contained.
     pub extra_templates: &'a HashMap<String, String>,
+}
+
+/// Compare-and-swap mode for the internal `write_function_config_in_tx_impl`.
+#[derive(Debug, Clone, Copy)]
+enum FunctionVersionCas {
+    /// Check that the current latest version ID matches this expected value.
+    /// `None` means "expect no existing row" (first write for this function).
+    Expected(Option<Uuid>),
+    /// Skip the per-function CAS check entirely.
+    ///
+    /// **Invariant:** this variant must only be used by the full-config bulk
+    /// write path (`write_stored_config_in_tx`). See
+    /// `write_function_config_in_tx_skipping_cas` for the full rationale.
+    SkipForFullConfigWrite,
 }
 
 #[derive(Debug)]
@@ -102,50 +127,126 @@ pub(super) async fn write_function_config_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     params: WriteFunctionConfigParams<'_>,
 ) -> Result<WriteFunctionConfigResult, Error> {
+    write_function_config_in_tx_impl(
+        tx,
+        params.function_name,
+        params.config,
+        FunctionVersionCas::Expected(params.expected_current_version_id),
+        params.creation_source,
+        params.source_autopilot_session_id,
+        params.extra_templates,
+    )
+    .await
+}
+
+/// Writes a function config version **without** the per-function CAS check.
+///
+/// # Invariant: full-config bulk write path only
+///
+/// This entry point must only ever be called from
+/// `write_stored_config_in_tx`, the bulk "apply a full editable TOML" path.
+/// That path provides equivalent protection at a higher level:
+///
+/// 1. It holds the global `config_editor` transaction-level advisory lock
+///    (`acquire_config_editor_lock` in `endpoints/internal/config.rs`), which
+///    serializes all config-editor writes — no other bulk or single-function
+///    UI-driven write can interleave.
+/// 2. It verifies the full editable-TOML signature against the `base_signature`
+///    the UI was editing from (see `apply_config_toml_handler`). If anything
+///    in the config has changed between the read and the write, the apply
+///    is rejected before we get here.
+///
+/// Together, those guarantees make the per-function CAS redundant: every
+/// function row we append is guaranteed to sit on top of the same state the
+/// caller snapshotted. Dropping the per-function CAS is also *necessary* in
+/// the bulk path because the bulk writer never reads the current function
+/// version IDs — it only has the `UninitializedConfig` — and there is no
+/// safe value to pass for `expected_current_version_id` on an existing row.
+///
+/// # Do not call from anywhere else
+///
+/// Any single-function edit path (UI function editor, API) must go through
+/// `write_function_config` / `write_function_config_in_tx`, which enforces
+/// the CAS against a caller-supplied `expected_current_version_id`. Calling
+/// this skipping-CAS variant from such a path would allow concurrent writers
+/// to silently clobber each other's edits.
+pub(crate) async fn write_function_config_in_tx_skipping_cas(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
+    write_function_config_in_tx_impl(
+        tx,
+        function_name,
+        config,
+        FunctionVersionCas::SkipForFullConfigWrite,
+        creation_source,
+        source_autopilot_session_id,
+        extra_templates,
+    )
+    .await
+}
+
+async fn write_function_config_in_tx_impl(
+    tx: &mut Transaction<'_, Postgres>,
+    function_name: &str,
+    config: &UninitializedFunctionConfig,
+    cas: FunctionVersionCas,
+    creation_source: &str,
+    source_autopilot_session_id: Option<Uuid>,
+    extra_templates: &HashMap<String, String>,
+) -> Result<WriteFunctionConfigResult, Error> {
     // Acquire an advisory lock on the function name to serialize concurrent writes,
     // including first writes where there is no existing row to lock via FOR UPDATE.
-    acquire_function_advisory_lock(tx, params.function_name).await?;
+    acquire_function_advisory_lock(tx, function_name).await?;
 
-    // With the advisory lock held, read the latest version for the CAS check.
-    let actual_latest_id = fetch_latest_function_version(tx, params.function_name).await?;
-
-    // Compare-and-swap: verify the caller's expected version matches the current row.
-    if actual_latest_id != params.expected_current_version_id {
-        return Err(Error::new(ErrorDetails::Config {
-            message: format!(
-                "Function `{}` was updated during your edit; please refresh before retrying.",
-                params.function_name
-            ),
-        }));
+    match cas {
+        FunctionVersionCas::Expected(expected) => {
+            // With the advisory lock held, read the latest version for the CAS check.
+            let actual_latest_id = fetch_latest_function_version(tx, function_name).await?;
+            if actual_latest_id != expected {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Function `{function_name}` was updated during your edit; please refresh before retrying.",
+                    ),
+                }));
+            }
+        }
+        FunctionVersionCas::SkipForFullConfigWrite => {
+            // Intentionally no CAS — see `write_function_config_in_tx_skipping_cas`.
+        }
     }
 
     let file_version_ids = write_file_versions(
         tx,
-        params.config,
-        params.extra_templates,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        config,
+        extra_templates,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let variant_version_ids = write_variant_versions(
         tx,
-        params.function_name,
-        params.config,
+        function_name,
+        config,
         &file_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
     let function_version_id = write_function_version(
         tx,
-        params.function_name,
-        params.config,
+        function_name,
+        config,
         &file_version_ids,
         &variant_version_ids,
-        params.creation_source,
-        params.source_autopilot_session_id,
+        creation_source,
+        source_autopilot_session_id,
     )
     .await?;
 
@@ -222,6 +323,8 @@ async fn write_file_versions(
 
     // Merge extra templates. All prompts (directly or transitively included) must be stored
     // in the database for the config to be self-contained.
+    // Note: extra_templates keys are already relative paths (discovered via MiniJinja
+    // include traversal from template_filesystem_access), so no prefix stripping is needed.
     for (key, body) in extra_templates {
         if !templates.contains_key(key) {
             templates.insert(
@@ -786,11 +889,11 @@ fn convert_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -844,11 +947,11 @@ fn convert_dicl_variant(
         verbosity: config.verbosity.clone(),
         max_distance: config.max_distance,
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -877,6 +980,13 @@ pub(crate) fn convert_evaluators(
                     StoredEvaluatorConfig::Regex(StoredRegexConfig {
                         must_match: config.must_match.clone(),
                         must_not_match: config.must_not_match.clone(),
+                    })
+                }
+                UninitializedEvaluatorConfig::TypescriptJudge(config) => {
+                    StoredEvaluatorConfig::Typescript(StoredTypescriptJudgeConfig {
+                        typescript_code: config.typescript_file.data().to_string(),
+                        output_type: config.output_type.into(),
+                        optimize: config.optimize.into(),
                     })
                 }
             },
@@ -978,11 +1088,11 @@ fn convert_llm_judge_chat_completion_variant(
         thinking_budget_tokens: config.thinking_budget_tokens,
         verbosity: config.verbosity.clone(),
         retries: Some(StoredRetryConfig::from(config.retries)),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 
@@ -1034,12 +1144,12 @@ fn convert_llm_judge_dicl_variant(
         seed: config.seed,
         json_mode: config.json_mode,
         stop_sequences: config.stop_sequences.clone(),
-        extra_body: config.extra_body.as_ref().map(extra_body_config_to_stored),
+        extra_body: config.extra_body.as_ref().map(StoredExtraBodyConfig::from),
         retries: Some(StoredRetryConfig::from(config.retries)),
         extra_headers: config
             .extra_headers
             .as_ref()
-            .map(extra_headers_config_to_stored),
+            .map(StoredExtraHeadersConfig::from),
     })
 }
 

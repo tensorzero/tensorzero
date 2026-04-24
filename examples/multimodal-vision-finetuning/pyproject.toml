@@ -9,7 +9,7 @@ dependencies = [
     "ipywidgets>=8.1.6",
     "pandas>=2.2.3",
     "pymupdf>=1.25.5",
-    "requests>=2.32.3",
+    "requests>=2.33.1",
     "tensorzero",
     "tqdm>=4.67.1",
 ]
@@ -18,4 +18,6 @@ dependencies = [
 dev = ["pyright>=1.1.400"]
 
 [tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }
 constraint-dependencies = ["urllib3>=2.6.0"]

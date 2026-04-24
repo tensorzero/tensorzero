@@ -670,15 +670,25 @@ pub async fn test_batch_token_arrays_semantic_similarity_with_provider(
         return;
     }
 
-    // Token arrays (using cl100k_base encoding):
-    // "The dog barked." -> [791, 5679, 293, 43161, 13]
-    // "The cat meowed." -> [791, 8415, 757, 13111, 13]
-    // "Megumin cast an explosion spell." -> [80863, 10318, 6445, 459, 25176, 13141, 13]
-    let token_arrays = vec![
-        vec![791, 5679, 293, 43161, 13],
-        vec![791, 8415, 757, 13111, 13],
-        vec![80863, 10318, 6445, 459, 25176, 13141, 13],
-    ];
+    // Token arrays:
+    // "The dog barked."
+    // "The cat meowed."
+    // "Megumin cast an explosion spell."
+    let token_arrays = if provider.model_name == "multilingual-e5-together" {
+        vec![
+            vec![0, 581, 10269, 1909, 12225, 5, 2],
+            vec![0, 581, 7515, 163, 2600, 71, 5, 2],
+            vec![0, 10692, 316, 73, 37702, 142, 24649, 6889, 160093, 5, 2],
+        ]
+    } else {
+        // cl100k_base encoding
+        vec![
+            vec![791, 5679, 293, 43161, 13],
+            vec![791, 8415, 757, 13111, 13],
+            vec![80863, 10318, 6445, 459, 25176, 13141, 13],
+        ]
+    };
+
     let payload = json!({
         "input": token_arrays,
         "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),

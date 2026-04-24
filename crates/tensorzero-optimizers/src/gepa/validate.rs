@@ -822,7 +822,7 @@ mod tests {
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
-        tool::{DynamicToolParams, ToolChoice},
+        tool::ToolChoice,
         utils::retries::RetryConfig,
         variant::{
             VariantConfig, VariantInfo,
@@ -831,6 +831,7 @@ mod tests {
             },
         },
     };
+    use tensorzero_inference_types::tool::DynamicToolParams;
     use uuid::Uuid;
 
     fn create_minimal_config() -> Config {

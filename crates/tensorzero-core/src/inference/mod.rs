@@ -1,6 +1,5 @@
 pub mod types;
 
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::http::TensorzeroHttpClient;
@@ -12,7 +11,7 @@ use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
-use crate::model::ModelProvider;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use async_trait::async_trait;
 use futures::Future;
 use futures::Stream;
@@ -46,18 +45,18 @@ impl std::error::Error for TensorZeroEventError {}
 pub trait InferenceProvider {
     fn infer<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> impl Future<Output = Result<ProviderInferenceResponse, Error>> + Send + 'a;
 
     fn infer_stream<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> impl Future<Output = Result<(PeekableProviderInferenceResponseStream, String), Error>> + Send + 'a;
 
     fn start_batch_inference<'a>(
@@ -87,7 +86,7 @@ pub trait WrappedProvider: Debug {
 
     async fn make_body<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
     ) -> Result<serde_json::Value, Error>;
 
     #[expect(clippy::too_many_arguments)]

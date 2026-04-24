@@ -11,7 +11,6 @@ mod call;
 pub mod config;
 pub mod params;
 pub mod storage;
-pub mod types;
 pub mod wire;
 
 // Re-export core types for convenience
@@ -21,7 +20,7 @@ pub use config::{
     DynamicImplicitToolConfig, DynamicToolConfig, FunctionToolConfig, ImplicitToolConfig,
     StaticToolConfig, ToolCallConfig, ToolCallConfigConstructorArgs, ToolConfig,
 };
-pub use params::{BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams};
+pub use params::{BatchDynamicToolParams, BatchDynamicToolParamsWithSize};
 pub use storage::{
     LegacyToolCallConfigDatabaseInsert, ToolCallConfigDatabaseInsert,
     apply_dynamic_tool_params_update_to_tool_call_config, deserialize_optional_tool_info,
@@ -32,7 +31,6 @@ pub use tensorzero_inference_types::{
     ProviderToolScope, ProviderToolScopeModelProvider, ToolConfigRef,
 };
 pub use tensorzero_types::InferenceResponseToolCall;
-pub use types::{FunctionTool, Tool};
 // Re-export tool wire types from tensorzero-types
 pub use tensorzero_types::{ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
 
@@ -135,6 +133,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;
+    use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 
     lazy_static! {
         static ref TOOLS: HashMap<String, Arc<StaticToolConfig>> = {

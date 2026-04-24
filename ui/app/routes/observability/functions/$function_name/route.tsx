@@ -27,6 +27,8 @@ import { fetchExperimentationSectionData } from "./experimentation-data.server";
 import { ExperimentationSection } from "./ExperimentationSection";
 import { fetchThroughputSectionData } from "./throughput-data.server";
 import { ThroughputSection } from "./ThroughputSection";
+import { fetchVariantUsageSectionData } from "./variant-usage-data.server";
+import { VariantUsageSection } from "./VariantUsageSection";
 import { fetchMetricsSectionData } from "./metrics-data.server";
 import { MetricsSection } from "./MetricsSection";
 import {
@@ -81,6 +83,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const throughput_time_granularity = (url.searchParams.get(
     "throughput_time_granularity",
   ) || "week") as TimeWindow;
+  const variant_usage_time_granularity = (url.searchParams.get(
+    "variantUsageTimeGranularity",
+  ) || "week") as TimeWindow;
   const feedback_time_granularity = (url.searchParams.get(
     "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
@@ -111,6 +116,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       function_name,
       time_granularity: throughput_time_granularity,
     }),
+    variantUsageData: fetchVariantUsageSectionData({
+      function_name,
+      time_granularity: variant_usage_time_granularity,
+    }),
     metricsData: fetchMetricsSectionData({
       function_name,
       metric_name,
@@ -136,6 +145,7 @@ export default function FunctionDetailPage({
     variantsData,
     experimentationData,
     throughputData,
+    variantUsageData,
     metricsData,
     inferenceCountPromise,
     inferencesData,
@@ -167,6 +177,11 @@ export default function FunctionDetailPage({
 
         <ThroughputSection
           throughputData={throughputData}
+          locationKey={location.key}
+        />
+
+        <VariantUsageSection
+          variantUsageData={variantUsageData}
           locationKey={location.key}
         />
 

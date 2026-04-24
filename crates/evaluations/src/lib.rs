@@ -28,9 +28,8 @@ pub use types::*;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::Input;
 use tensorzero_core::client::{
-    ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams, InferenceOutput,
-    InferenceParams, InferenceResponse, PostgresConfig,
-    input_handling::resolved_input_to_client_input,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput, InferenceParams,
+    InferenceResponse, PostgresConfig, input_handling::resolved_input_to_client_input,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::endpoints::datasets::v1::{
@@ -49,6 +48,7 @@ use tensorzero_core::{
     config::Config, db::delegating_connection::DelegatingDatabaseQueries,
     endpoints::datasets::Datapoint,
 };
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tokio::{
     sync::{Semaphore, mpsc},
     task::JoinSet,
@@ -91,6 +91,12 @@ pub(crate) fn merge_tags(
 pub struct Clients {
     pub inference_executor: Arc<dyn EvaluationsInferenceExecutor>,
     pub db: Arc<dyn DelegatingDatabaseQueries>,
+    /// Resources required to run TypeScript judge evaluators. Always present —
+    /// construct via [`TypescriptJudgeExecutor::with_defaults`] if the caller
+    /// has no particular configuration in mind.
+    ///
+    /// [`TypescriptJudgeExecutor::with_defaults`]: crate::evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults
+    pub ts_executor: crate::evaluators::typescript_judge::TypescriptJudgeExecutor,
 }
 
 /// Generates a default evaluation name when one is not explicitly provided.
@@ -241,7 +247,7 @@ pub async fn run_evaluation(
         postgres_connection.clone(),
         primary_datastore,
     );
-    let config = Box::pin(unwritten_config.into_config(&database))
+    let (config, _) = Box::pin(unwritten_config.into_config(&database))
         .await
         .map_err(|e| e.log())?;
     let config = Arc::new(config);
@@ -319,6 +325,10 @@ pub async fn run_evaluation(
     // Wrap the client in ClientInferenceExecutor for use with evaluations
     let inference_executor = Arc::new(ClientInferenceExecutor::new(tensorzero_client));
 
+    let ts_executor = evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults()
+        .await
+        .map_err(|e| anyhow!("Failed to build TypeScript judge executor: {e}"))?;
+
     let core_args = EvaluationCoreArgs {
         inference_executor,
         db: Arc::new(database),
@@ -333,6 +343,7 @@ pub async fn run_evaluation(
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
         tags: HashMap::new(), // CLI doesn't have autopilot context
+        ts_executor,
     };
 
     // Convert Vec<(String, f32)> to HashMap<String, f32> for precision_targets
@@ -478,6 +489,10 @@ pub async fn run_evaluation_with_app_state(
     // Generate a new evaluation run ID
     let evaluation_run_id = Uuid::now_v7();
 
+    let ts_executor = evaluators::typescript_judge::TypescriptJudgeExecutor::with_defaults()
+        .await
+        .map_err(|e| anyhow!("Failed to build TypeScript judge executor: {e}"))?;
+
     // Build the core args
     let core_args = EvaluationCoreArgs {
         inference_executor,
@@ -493,6 +508,7 @@ pub async fn run_evaluation_with_app_state(
         inference_cache: params.cache_mode,
         concurrency: params.concurrency,
         tags: params.tags,
+        ts_executor,
     };
 
     // Run the evaluation
@@ -583,6 +599,7 @@ pub async fn run_evaluation_core_streaming(
     let clients = Arc::new(Clients {
         inference_executor: args.inference_executor,
         db: args.db,
+        ts_executor: args.ts_executor,
     });
 
     debug!(evaluation_name = ?args.evaluation_name, "Evaluation config found");

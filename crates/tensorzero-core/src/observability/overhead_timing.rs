@@ -172,7 +172,7 @@ impl OverheadSpanExt for Span {
 /// This span attribute indicates that we should track overhead for the span.
 pub const TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME: &str = "tensorzero.overhead.track";
 /// NOTE - the value of this attribute is ignored - setting to 'false' will still enable it
-pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
+pub use tensorzero_http::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 
 impl<S: Subscriber> Layer<S> for OverheadTimingLayer
 where

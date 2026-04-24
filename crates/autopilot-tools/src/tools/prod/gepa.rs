@@ -88,19 +88,15 @@ impl ToolMetadata for GepaTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GepaToolOutput;
     type LlmParams = GepaToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GepaToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_OUTPUT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GepaToolOutput".to_string()
     }
@@ -146,19 +142,15 @@ impl ToolMetadata for StandaloneGepaTool {
     type SideInfo = ();
     type Output = GepaToolOutput;
     type LlmParams = GepaToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GepaToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GEPA_TOOL_OUTPUT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GepaToolOutput".to_string()
     }

@@ -32,19 +32,15 @@ impl ToolMetadata for DeleteDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = DeleteDatapointsResponse;
     type LlmParams = DeleteDatapointsToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::DELETE_DATAPOINTS_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "DeleteDatapointsToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::DELETE_DATAPOINTS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "DeleteDatapointsResponse".to_string()
     }

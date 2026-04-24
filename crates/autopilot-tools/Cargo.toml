@@ -14,6 +14,7 @@ durable-tools = { path = "../durable-tools" }
 tensorzero = { path = "../tensorzero-client" }
 autopilot-client = { path = "../autopilot-client" }
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 config-applier = { path = "../config-applier" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 object_store = { workspace = true }

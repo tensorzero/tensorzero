@@ -904,6 +904,20 @@ pub struct ListSessionsResponse {
     pub sessions: Vec<Session>,
 }
 
+/// Detailed status information for a session, returned by the internal
+/// `status_detail` endpoint.
+///
+/// `is_terminal` is true when the session's underlying durable task is in a
+/// terminal state (Completed / Failed / Cancelled) or when no task exists.
+/// It is false when the task is still running, even if the most recent event
+/// is an error — allowing clients to distinguish transient errors from
+/// terminal failures when the public `AutopilotStatus` cannot.
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SessionStatusDetail {
+    pub is_terminal: bool,
+}
+
 /// Query parameters for listing config writes.
 #[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
 #[ts(export)]

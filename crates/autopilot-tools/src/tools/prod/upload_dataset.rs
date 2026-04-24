@@ -25,12 +25,12 @@ use durable_tools::tensorzero_client::{S3UploadRequest, S3UploadResponse};
 
 /// Parameters for the upload_dataset tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UploadDatasetToolParams {
     /// The name of the dataset to upload.
     pub dataset_name: String,
     /// Optional maximum number of rows to upload.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_limit: Option<u32>,
 }
 
@@ -175,19 +175,15 @@ impl ToolMetadata for UploadDatasetTool {
     type SideInfo = AutopilotSideInfo;
     type Output = UploadDatasetToolOutput;
     type LlmParams = UploadDatasetToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPLOAD_DATASET_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "UploadDatasetToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPLOAD_DATASET_TOOL_OUTPUT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "UploadDatasetToolOutput".to_string()
     }

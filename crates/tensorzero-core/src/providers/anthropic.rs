@@ -14,7 +14,6 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::Instant;
 use url::Url;
 
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     DelayedError, DisplayOrDebugGateway, Error, ErrorDetails, warn_discarded_unknown_chunk,
@@ -40,7 +39,8 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
     batch::StartBatchProviderInferenceResponse,
 };
-use crate::model::{Credential, ModelProvider};
+use crate::model::Credential;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -265,16 +265,15 @@ impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -349,7 +348,7 @@ impl InferenceProvider for AnthropicProvider {
                 input_messages: request.messages.clone(),
                 raw_response,
                 model_name,
-                provider_name: &model_provider.name,
+                provider_name: &model_provider.provider_name,
                 model_inference_id,
             };
             Ok(response_with_latency.try_into()?)
@@ -376,16 +375,15 @@ impl InferenceProvider for AnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let all_provider_tools =
             collect_all_provider_tools(&self.provider_tools, request, model_name, provider_name);
@@ -473,7 +471,7 @@ impl InferenceProvider for AnthropicProvider {
 fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
-    model_provider: &ModelProvider,
+    model_provider: &ModelProviderRequestInfo,
     model_name: &str,
     provider_name: &str,
     raw_request: &str,

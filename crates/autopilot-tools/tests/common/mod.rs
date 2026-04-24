@@ -30,7 +30,7 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, Text,
 };
 use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tensorzero_optimizers::endpoints::LaunchOptimizationWorkflowParams;
 use uuid::Uuid;
 
@@ -185,6 +185,14 @@ mock! {
             function_name: String,
             variant_names: Option<Vec<String>>,
         ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+        async fn get_variant_statistics(
+            &self,
+            function_name: String,
+            variant_names: Option<Vec<String>>,
+            after: Option<String>,
+            before: Option<String>,
+        ) -> Result<tensorzero_core::db::variant_statistics::GetVariantStatisticsResponse, TensorZeroClientError>;
 
         async fn run_evaluation(
             &self,

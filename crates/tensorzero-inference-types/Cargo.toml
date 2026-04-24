@@ -9,15 +9,21 @@ license.workspace = true
 derive_builder.workspace = true
 futures.workspace = true
 mime.workspace = true
+mime_guess = "2.0.5"
 rust_decimal = { workspace = true }
 schemars.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
+strum = { version = "0.28.0", features = ["derive"] }
 tensorzero-derive = { path = "../tensorzero-derive" }
+tokio.workspace = true
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
+tensorzero-http = { path = "../tensorzero-http" }
+tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 url = { workspace = true, features = ["serde"] }

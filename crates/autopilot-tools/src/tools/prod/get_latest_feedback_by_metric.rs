@@ -31,19 +31,15 @@ impl ToolMetadata for GetLatestFeedbackByMetricTool {
     type SideInfo = AutopilotSideInfo;
     type Output = LatestFeedbackIdByMetricResponse;
     type LlmParams = GetLatestFeedbackByMetricToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_LATEST_FEEDBACK_BY_METRIC_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GetLatestFeedbackByMetricToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LATEST_FEEDBACK_ID_BY_METRIC_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "LatestFeedbackIdByMetricResponse".to_string()
     }

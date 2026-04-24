@@ -5,7 +5,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{Extension, Json, debug_handler};
+use axum::{Extension, Json};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -31,9 +31,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchema;
 use crate::observability::internal_metrics::TENSORZERO_FEEDBACKS_TOTAL;
 use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig};
-use crate::utils::gateway::{
-    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
-};
+use crate::utils::gateway::{AppState, ResolvedAppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tensorzero_auth::middleware::RequestApiKeyExtension;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -112,7 +110,6 @@ pub struct FeedbackResponse {
 }
 
 /// A handler for the feedback endpoint
-#[debug_handler(state = SwappableAppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,

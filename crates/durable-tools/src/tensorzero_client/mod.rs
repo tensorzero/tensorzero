@@ -26,6 +26,7 @@ use tensorzero::{
 pub use tensorzero_core::cache::CacheEnabledMode;
 pub use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::feedback::FeedbackByVariant;
+use tensorzero_core::db::variant_statistics::GetVariantStatisticsResponse;
 pub use tensorzero_core::embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput};
 pub use tensorzero_core::endpoints::embeddings::{EmbeddingResponse, EmbeddingsParams};
 use tensorzero_core::endpoints::feedback::internal::{
@@ -173,6 +174,18 @@ pub trait TensorZeroClient: Send + Sync + 'static {
         function_name: String,
         variant_names: Option<Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
+
+    /// Get aggregated variant statistics (usage, cost, latency) for a function.
+    ///
+    /// Returns statistics grouped by variant name. Optionally filter by specific
+    /// variant names and a lower time bound (RFC 3339 format).
+    async fn get_variant_statistics(
+        &self,
+        function_name: String,
+        variant_names: Option<Vec<String>>,
+        after: Option<String>,
+        before: Option<String>,
+    ) -> Result<GetVariantStatisticsResponse, TensorZeroClientError>;
 
     /// Create an event in an autopilot session.
     ///

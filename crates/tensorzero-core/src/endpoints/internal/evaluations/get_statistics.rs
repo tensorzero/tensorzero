@@ -11,13 +11,12 @@ use super::types::{
 use crate::db::evaluation_queries::EvaluationQueries;
 use crate::error::Error;
 use crate::function::FunctionConfigType;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Handler for `GET /internal/evaluations/statistics`
 ///
 /// Returns aggregated statistics (mean, confidence intervals) for the specified
 /// evaluation runs and metrics.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_statistics", skip_all)]
 pub async fn get_evaluation_statistics_handler(
     State(app_state): AppState,

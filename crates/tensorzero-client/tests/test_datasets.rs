@@ -12,7 +12,7 @@ use tensorzero_core::endpoints::stored_inferences::v1::types::ListInferencesRequ
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Input, InputMessage, InputMessageContent, Text,
 };
-use tensorzero_core::tool::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use uuid::Uuid;
 
 /// Helper function to create a unique dataset name for testing

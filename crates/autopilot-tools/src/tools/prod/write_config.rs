@@ -23,7 +23,7 @@ pub use config_applier::{
 
 /// Parameters for the write_config tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct WriteConfigToolParams {
     /// The config to write as a JSON object.
     pub config: Value,
@@ -32,7 +32,7 @@ pub struct WriteConfigToolParams {
     pub extra_templates: HashMap<String, String>,
     /// We could have consolidated an array of server-side edits into one client-side edit, so this type contains a Vec
     /// Unset means an older API. This should always be set and we should make it mandatory once upstream merges.
-    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit: Option<Vec<EditPayload>>,
 }
 
@@ -44,19 +44,15 @@ impl ToolMetadata for WriteConfigTool {
     type SideInfo = AutopilotSideInfo;
     type Output = WriteConfigResponse;
     type LlmParams = WriteConfigToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "WriteConfigToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::WRITE_CONFIG_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "WriteConfigResponse".to_string()
     }

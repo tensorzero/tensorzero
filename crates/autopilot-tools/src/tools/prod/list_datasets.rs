@@ -33,19 +33,15 @@ impl ToolMetadata for ListDatasetsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = ListDatasetsResponse;
     type LlmParams = ListDatasetsToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_DATASETS_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "ListDatasetsToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_DATASETS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "ListDatasetsResponse".to_string()
     }

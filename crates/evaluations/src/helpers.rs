@@ -37,9 +37,9 @@ pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOption
 mod tests {
     use serde_json::json;
     use tensorzero_core::tool::{
-        AllowedTools, AllowedToolsChoice, DynamicToolParams, FunctionTool, Tool,
-        ToolCallConfigDatabaseInsert, ToolChoice,
+        AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice,
     };
+    use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 
     #[tokio::test]
     async fn test_get_tool_params_args() {

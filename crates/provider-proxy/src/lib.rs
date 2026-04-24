@@ -65,6 +65,7 @@ fn save_cache_body(
     parts: http::response::Parts,
     body: BytesMut,
     serialized_request: Option<String>,
+    request_start_time: std::time::SystemTime,
 ) -> Result<(), anyhow::Error> {
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
@@ -128,6 +129,34 @@ fn save_cache_body(
             format!("Failed to write final newline to file for path {path_str}")
         })?;
     }
+    // Before atomically renaming, check if a concurrent run wrote a newer file.
+    // If the existing file at the final path has a modified time after our request started,
+    // another process/request finished while we were still in flight — skip this write so
+    // we don't clobber the newer result.
+    match std::fs::metadata(&path) {
+        Ok(metadata) => match metadata.modified() {
+            Ok(mtime) if mtime > request_start_time => {
+                tracing::warn!(
+                    path = path_str,
+                    mtime = ?mtime,
+                    request_start_time = ?request_start_time,
+                    "Skipping cache write: existing file was modified after this request started (likely a concurrent run wrote a newer file)"
+                );
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("Failed to read mtime for existing file {path_str}"));
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("Failed to read metadata for existing file {path_str}"));
+        }
+    }
+
     tmpfile
         .persist(&path)
         .with_context(|| format!("Failed to rename tempfile to {path_str}"))?;
@@ -149,6 +178,7 @@ async fn check_cache<
     mut request: hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
+    let request_start_time = std::time::SystemTime::now();
     request.extensions_mut().clear();
     let mut sanitized_header = false;
     if args.sanitize_bearer_auth
@@ -360,9 +390,13 @@ async fn check_cache<
                                 // This ensures that any retries from the caller (e.g. tensorzero e2e tests)
                                 // will happen after the first response was fully written to disk,
                                 // ensuring that newer retries will overwrite the response from older retries on disk.
-                                if let Err(e) =
-                                    save_cache_body(path, parts, body, serialized_request_for_cache)
-                                {
+                                if let Err(e) = save_cache_body(
+                                    path,
+                                    parts,
+                                    body,
+                                    serialized_request_for_cache,
+                                    request_start_time,
+                                ) {
                                     tracing::error!(
                                         err = e.as_ref() as &dyn std::error::Error,
                                         "Failed to save cache body"

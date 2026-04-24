@@ -355,6 +355,7 @@ impl Variant for DiclConfig {
             clients,
             inference_params,
             *self.retries(),
+            Some(&inference_config.function_name),
         )
         .await?;
 

@@ -9,3 +9,6 @@ dependencies = [
     "markdown>=3.4.0",
     "tqdm>=4.67.1",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"

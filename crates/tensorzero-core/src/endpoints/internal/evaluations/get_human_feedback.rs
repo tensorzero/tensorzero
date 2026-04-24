@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::db::evaluation_queries::{EvaluationQueries, InferenceEvaluationHumanFeedbackRow};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Request body for checking human feedback.
 #[derive(Debug, Deserialize)]
@@ -37,7 +37,6 @@ pub struct GetHumanFeedbackResponse {
 ///
 /// Checks if human feedback exists for a given combination of metric name,
 /// datapoint ID, and output.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_human_feedback", skip_all)]
 pub async fn get_human_feedback_handler(
     State(app_state): AppState,

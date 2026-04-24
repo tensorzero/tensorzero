@@ -18,9 +18,6 @@ import { logger } from "../logger";
 // Poll interval in milliseconds (5 seconds)
 const CONFIG_HASH_POLL_INTERVAL_MS = 5_000;
 
-// TTL for autopilot availability cache in milliseconds (30 seconds)
-const AUTOPILOT_CACHE_TTL_MS = 30_000;
-
 // Track if polling has been started
 let pollingStarted = false;
 
@@ -33,34 +30,14 @@ export async function loadConfig(): Promise<UiConfig> {
 }
 
 let configCache: UiConfig | undefined = undefined;
-let autopilotAvailableCache: { value: boolean; timestamp: number } | undefined =
-  undefined;
 
 /**
- * Checks if autopilot is available by querying the gateway's autopilot status endpoint.
- * This endpoint checks if TENSORZERO_AUTOPILOT_API_KEY is configured on the gateway
- * without making any database queries or pinging the autopilot server.
- * The result is cached with a TTL.
+ * Autopilot UI is hard-disabled. Revert this function (see git history) to
+ * restore the gateway status check + TTL cache.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function checkAutopilotAvailable(): Promise<boolean> {
-  // Check if cache is valid (exists and not expired)
-  if (
-    autopilotAvailableCache !== undefined &&
-    Date.now() - autopilotAvailableCache.timestamp < AUTOPILOT_CACHE_TTL_MS
-  ) {
-    return autopilotAvailableCache.value;
-  }
-
-  try {
-    const client = getTensorZeroClient();
-    const status = await client.getAutopilotStatus();
-    autopilotAvailableCache = { value: status.enabled, timestamp: Date.now() };
-    return status.enabled;
-  } catch (error) {
-    // For network errors, assume unavailable but don't cache
-    logger.warn("Failed to check autopilot status:", error);
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -148,6 +125,14 @@ export async function getConfig(): Promise<UiConfig> {
 
   configCache = freshConfig;
   return configCache;
+}
+
+/**
+ * Clears all cached config state so the next read fetches from the gateway.
+ */
+export function invalidateConfigCache(): void {
+  configCache = undefined;
+  snapshotConfigCache.clear();
 }
 
 /**
@@ -261,7 +246,6 @@ export async function getConfigForSnapshot(
  */
 export function _resetForTesting(): void {
   configCache = undefined;
-  autopilotAvailableCache = undefined;
   pollingStarted = false;
   snapshotConfigCache.clear();
 }

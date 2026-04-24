@@ -4,8 +4,8 @@ use anyhow::{Result, bail};
 use serde_json::{Value, json};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
-    ClientInferenceParams, DynamicToolParams, File, InferenceOutput, InferenceParams,
-    InferenceResponse, Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, File, InferenceOutput, InferenceParams, InferenceResponse, Input,
+    InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
@@ -16,6 +16,7 @@ use tensorzero_core::evaluations::{
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, Template, Text,
 };
+use tensorzero_inference_types::tool::DynamicToolParams;
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 

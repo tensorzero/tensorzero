@@ -9,6 +9,7 @@ pub mod error;
 pub mod file;
 pub mod inference_filters;
 pub mod inference_params;
+pub mod inference_response;
 pub mod message;
 pub mod rate_limiting_types;
 pub mod role;
@@ -16,7 +17,9 @@ pub mod serde_utils;
 pub mod snapshot;
 pub mod storage;
 pub mod tool;
+pub mod tool_error;
 pub mod tool_failure;
+pub mod tool_handle;
 pub mod usage;
 
 pub(crate) fn deprecation_warning(message: &str) {
@@ -36,6 +39,10 @@ pub use file::{
     Base64File, Base64FileMetadata, Detail, File, ObjectStorageError, ObjectStorageFile,
     ObjectStoragePointer, UrlFile,
 };
+pub use inference_response::{
+    ChatInferenceResponse, ContentBlockChatOutput, InferenceResponse, JsonInferenceOutput,
+    JsonInferenceResponse,
+};
 pub use message::{Input, InputMessage, InputMessageContent, TextKind};
 pub use role::{
     ASSISTANT_TEXT_TEMPLATE_VAR, Role, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR,
@@ -45,8 +52,13 @@ pub use snapshot::SnapshotHash;
 pub use storage::{StorageKind, StoragePath};
 use tensorzero_derive::TensorZeroDeserialize;
 pub use tool::{InferenceResponseToolCall, ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
+pub use tool_error::ToolError;
 pub use tool_failure::{NonControlToolError, ToolFailure};
-pub use usage::{ApiType, RawResponseEntry};
+pub use tool_handle::ToolHandle;
+pub use usage::{
+    ApiType, FinishReason, OpenAIPromptTokensDetails, OpenAIUsage, RawResponseEntry, RawUsageEntry,
+    Usage, raw_usage_entries_from_value,
+};
 use uuid::Uuid;
 
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, sqlx::Type)]

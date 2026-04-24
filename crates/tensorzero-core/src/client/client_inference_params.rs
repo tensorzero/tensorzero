@@ -9,11 +9,11 @@ use crate::{
         Input, extra_body::UnfilteredInferenceExtraBody,
         extra_headers::UnfilteredInferenceExtraHeaders,
     },
-    tool::DynamicToolParams,
 };
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use uuid::Uuid;
 
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.

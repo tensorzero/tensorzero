@@ -78,6 +78,7 @@ pub struct StoredOtlpTracesConfig {
     pub enabled: Option<bool>,
     pub format: Option<StoredOtlpTracesFormat>,
     pub extra_headers: Option<BTreeMap<String, String>>,
+    pub include_content: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -21,12 +21,13 @@ use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 use crate::jsonschema_util::JSONSchema;
 
+use tensorzero_inference_types::tool::{FunctionTool, Tool};
+
 use super::IMPLICIT_TOOL_DESCRIPTION;
-use super::types::{FunctionTool, Tool};
 use super::wire::ToolChoice;
 
 #[cfg(test)]
-use super::params::DynamicToolParams;
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 #[derive(ts_rs::TS)]
 #[ts(export)]
@@ -276,8 +277,16 @@ impl ToolCallConfig {
         if let Some(dynamic_additional_tools) = dynamic_additional_tools {
             for tool in dynamic_additional_tools {
                 match tool {
-                    Tool::Function(func) => dynamic_tools_available
-                        .push(FunctionToolConfig::Dynamic(func.into_dynamic_tool_config())),
+                    Tool::Function(func) => {
+                        dynamic_tools_available.push(FunctionToolConfig::Dynamic(
+                            DynamicToolConfig {
+                                description: func.description,
+                                parameters: JSONSchema::compile_background(func.parameters),
+                                name: func.name,
+                                strict: func.strict,
+                            },
+                        ));
+                    }
                     Tool::OpenAICustom(custom_tool) => {
                         openai_custom_tools.push(custom_tool);
                     }

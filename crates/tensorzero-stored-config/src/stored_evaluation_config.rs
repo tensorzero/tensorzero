@@ -36,6 +36,7 @@ pub enum StoredEvaluatorConfig {
     LLMJudge(StoredLLMJudgeConfig),
     ToolUse(StoredToolUseConfig),
     Regex(StoredRegexConfig),
+    Typescript(StoredTypescriptJudgeConfig),
 }
 
 // --- Simple evaluator stored types ---
@@ -194,6 +195,30 @@ pub struct StoredLLMJudgeDiclVariantConfig {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredLLMJudgeChainOfThoughtVariantConfig {
     pub inner: StoredLLMJudgeChatCompletionVariantConfig,
+}
+
+// --- TypeScript judge config ---
+
+#[serde_with::skip_serializing_none]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StoredTypescriptJudgeConfig {
+    pub typescript_code: String,
+    pub output_type: StoredTypescriptJudgeOutputType,
+    pub optimize: StoredTypescriptJudgeOptimize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoredTypescriptJudgeOutputType {
+    Float,
+    Boolean,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoredTypescriptJudgeOptimize {
+    Min,
+    Max,
 }
 
 // --- Shared stored types ---

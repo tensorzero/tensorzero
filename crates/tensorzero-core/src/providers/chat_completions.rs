@@ -12,7 +12,8 @@ use tensorzero_inference_types::{FunctionToolDef, ProviderToolCallConfig};
 
 use crate::error::Error;
 use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{FunctionTool, FunctionToolConfig, ToolChoice};
+use crate::tool::ToolChoice;
+use tensorzero_inference_types::tool::FunctionTool;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -93,20 +94,6 @@ type PreparedChatCompletionToolsResult<'a> = (
     Option<ChatCompletionToolChoice<'a>>,
     Option<bool>,
 );
-
-impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        ChatCompletionTool {
-            r#type: ChatCompletionToolType::Function,
-            function: ChatCompletionFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
-            },
-            strict: tool.strict(),
-        }
-    }
-}
 
 impl<'a> From<&'a FunctionToolDef> for ChatCompletionTool<'a> {
     fn from(tool: &'a FunctionToolDef) -> Self {
@@ -272,23 +259,6 @@ mod tests {
         }
     }
 
-    fn create_dynamic_tool_config() -> FunctionToolConfig {
-        use crate::jsonschema_util::JSONSchema;
-        use crate::tool::DynamicToolConfig;
-
-        FunctionToolConfig::Dynamic(DynamicToolConfig {
-            name: "dynamic_tool".to_string(),
-            description: "A dynamic tool".to_string(),
-            parameters: JSONSchema::compile_background(json!({
-                "type": "object",
-                "properties": {
-                    "param1": {"type": "string"}
-                }
-            })),
-            strict: true,
-        })
-    }
-
     // Test serialization of ChatCompletionToolType
     #[test]
     fn test_chat_completion_tool_type_serialization() {
@@ -416,37 +386,24 @@ mod tests {
 
     // Test From implementations
     #[test]
-    fn test_from_function_tool_config_static() {
-        use crate::jsonschema_util::JSONSchema;
-        use crate::tool::StaticToolConfig;
-        use std::sync::Arc;
-        let tool_config = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
+    fn test_from_function_tool_def() {
+        use tensorzero_inference_types::FunctionToolDef;
+        let tool_def = FunctionToolDef {
             name: "test_tool".to_string(),
-            key: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: JSONSchema::from_value(json!({
+            parameters: json!({
                 "type": "object",
                 "properties": {
                     "param1": {"type": "string"}
                 }
-            }))
-            .unwrap(),
+            }),
             strict: true,
-        }));
-        let chat_tool: ChatCompletionTool = (&tool_config).into();
+        };
+        let chat_tool: ChatCompletionTool = (&tool_def).into();
 
         assert_eq!(chat_tool.function.name, "test_tool");
         assert_eq!(chat_tool.function.description, Some("A test tool"));
         assert!(chat_tool.strict);
-        assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
-    }
-
-    #[tokio::test]
-    async fn test_from_function_tool_config_dynamic() {
-        let tool_config = create_dynamic_tool_config();
-        let chat_tool: ChatCompletionTool = (&tool_config).into();
-
-        assert_eq!(chat_tool.function.name, "dynamic_tool");
         assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
     }
 

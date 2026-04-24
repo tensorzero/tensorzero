@@ -1,14 +1,14 @@
 //! Feedback endpoint for querying feedback bounds by target ID
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::feedback::{FeedbackBounds, FeedbackBoundsByType, FeedbackQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
@@ -31,7 +31,6 @@ impl From<FeedbackBounds> for GetFeedbackBoundsResponse {
 }
 
 /// HTTP handler for getting feedback bounds by target ID
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_feedback_bounds_by_target_id_handler",
     skip_all,

@@ -8,7 +8,7 @@ use tracing::instrument;
 use super::types::{GetWorkflowEvaluationProjectsResponse, WorkflowEvaluationProject};
 use crate::db::workflow_evaluation_queries::WorkflowEvaluationQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting workflow evaluation projects.
 #[derive(Debug, Deserialize)]
@@ -23,7 +23,6 @@ const DEFAULT_GET_WORKFLOW_EVALUATION_PROJECTS_OFFSET: u32 = 0;
 /// Handler for `GET /internal/workflow_evaluations/projects`
 ///
 /// Returns a paginated list of workflow evaluation projects.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "workflow_evaluations.get_projects", skip_all)]
 pub async fn get_workflow_evaluation_projects_handler(
     State(app_state): AppState,

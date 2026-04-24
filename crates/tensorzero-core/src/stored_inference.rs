@@ -23,10 +23,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, FunctionType, JsonInferenceOutput, ModelInput, RequestMessage,
     ResolvedInput, ResolvedRequestMessage, Text,
 };
-use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
-    deserialize_optional_tool_info,
-};
+use crate::tool::{StaticToolConfig, ToolCallConfigDatabaseInsert, deserialize_optional_tool_info};
 use crate::variant::{VariantConfig, chat_completion::prepare_model_input};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
@@ -37,6 +34,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_derive::TensorZeroDeserialize;
+use tensorzero_inference_types::tool::DynamicToolParams;
 use uuid::Uuid;
 
 /// This trait is used to represent a stored sample of data.
@@ -880,8 +878,9 @@ mod tests {
     use crate::inference::types::System;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
     use crate::jsonschema_util::JSONSchema;
-    use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use std::sync::Arc;
+    use tensorzero_inference_types::tool::DynamicToolParams;
 
     /// Helper to create a test config with the functions registered
     fn create_test_config() -> Config {

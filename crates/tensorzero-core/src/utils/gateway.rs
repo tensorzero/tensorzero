@@ -1,3 +1,9 @@
+// This module defines and implements SwappableAppStateData and GatewayHandle.
+#![expect(
+    clippy::disallowed_types,
+    reason = "definition and implementation module for SwappableAppStateData"
+)]
+
 use std::collections::HashSet;
 use std::future::IntoFuture;
 use std::net::SocketAddr;
@@ -26,8 +32,7 @@ use crate::config::gateway::{
 };
 use crate::config::{
     BatchWritesConfig, Config, ConfigFileGlob, DEFAULT_POSTGRES_CONNECTION_POOL_SIZE,
-    RuntimeOverlay, UninitializedConfig, snapshot::ConfigSnapshot, snapshot::SnapshotHash,
-    unwritten::UnwrittenConfig,
+    RuntimeOverlay, snapshot::ConfigSnapshot, snapshot::SnapshotHash, unwritten::UnwrittenConfig,
 };
 use crate::db::ConfigQueries;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -75,7 +80,7 @@ pub type DropWrapper = fn(Box<dyn FnOnce() + Send + '_>);
 /// `GatewayHandle` should *not* be wrapped in an `Arc` (or given a `Clone` impl),
 /// so that it's easy for us to tell where it gets dropped.
 pub struct GatewayHandle {
-    pub app_state: AppStateData<SwappableConfig>,
+    pub app_state: SwappableAppStateData,
     drop_wrapper: Option<DropWrapper>,
     _private: (),
 }
@@ -88,19 +93,6 @@ impl Drop for GatewayHandle {
             let disabled_placeholder = self.app_state.disabled_for_shutdown_placeholder();
             let mut app_state = std::mem::replace(&mut self.app_state, disabled_placeholder);
 
-            // Grab batch writer handles so we can wait on them later.
-            let clickhouse_handle = app_state.clickhouse_connection_info.batcher_join_handle();
-            let pg_handle = app_state.postgres_connection_info.batcher_join_handle();
-
-            // Return unused rate limit tokens while Postgres is still active.
-            if !app_state.rate_limiting_manager.is_empty() {
-                tracing::info!("Returning unused rate limit tokens to database");
-                if let Err(e) = app_state.rate_limiting_manager.shutdown() {
-                    tracing::warn!("Error returning rate limit tokens on shutdown: {e}");
-                }
-                tracing::info!("Rate limit token return complete");
-            }
-
             // Move the deferred task tracker out before dropping app state so we can
             // still close/wait on it below.
             let deferred_tasks =
@@ -111,36 +103,6 @@ impl Drop for GatewayHandle {
             // future fields added to `AppStateData`) without requiring manual `drop(...)`
             // calls for each one.
             drop(app_state);
-            if let Some(clickhouse_handle) = clickhouse_handle {
-                tracing::info!("Waiting for ClickHouse batch writer to finish");
-                // This could block forever if:
-                // * We spawn a long-lived `tokio::task` that holds on to a `ClickhouseConnectionInfo`,
-                //   and isn't using our `CancellationToken` to exit.
-                // * The `GatewayHandle` is dropped from a task that's running other futures
-                //   concurrently (e.g. a `try_join_all` where one of the futures somehow drops a `GatewayHandle`).
-                //   In this case, the `block_in_place` call would prevent those futures from ever making progress,
-                //   causing a `ClickhouseConnectionInfo` (and therefore the `Arc<BatchSender>`) to never be dropped.
-                //   This is very unlikely, as we only create a `GatewayHandle` in a few places (the main gateway
-                //   and embedded client), and drop it when we're exiting.
-                //
-                // We err on the side of hanging the server on shutdown, rather than potentially exiting while
-                // we still have batched writes in-flight (or about to be written via an active `ClickhouseConnectionInfo`).
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(clickhouse_handle) {
-                        tracing::error!("Error in batch writer: {e}");
-                    }
-                });
-                tracing::info!("ClickHouse batch writer finished");
-            }
-            if let Some(pg_handle) = pg_handle {
-                tracing::info!("Waiting for Postgres batch writer to finish");
-                tokio::task::block_in_place(|| {
-                    if let Err(e) = Handle::current().block_on(pg_handle) {
-                        tracing::error!("Error in Postgres batch writer: {e}");
-                    }
-                });
-                tracing::info!("Postgres batch writer finished");
-            }
 
             deferred_tasks.close();
             // The 'wait' future will resolve immediately if the pool is empty.
@@ -168,42 +130,99 @@ impl Drop for GatewayHandle {
     }
 }
 
-/// A wrapper around `Arc<ArcSwap<Config>>` that enables hot-swapping the config at runtime.
+/// All hot-swappable state for a running gateway.
+/// Stored inside `Arc<ArcSwap<LiveState>>` so config swaps are atomic.
+///
+/// Not `Clone` — if cloned, when dropped we will wait on the same database connection's batch writer multiple times,
+/// which works but is logically wrong.
+///
+/// This only spawns tasks that *wait* for shutdown - the shutdown happens automatically
+/// once all outstanding `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles are dropped.
+/// It's therefore safe for us to hand out cloned `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles
+/// from this struct.
+struct LiveState {
+    config: Arc<Config>,
+    runtime_overlay: Arc<RuntimeOverlay>,
+    http_client: TensorzeroHttpClient,
+    valkey_connection_info: ValkeyConnectionInfo,
+    /// Separate Valkey connection for model inference caching.
+    valkey_cache_connection_info: ValkeyConnectionInfo,
+    cache_manager: CacheManager,
+    primary_datastore: PrimaryDatastore,
+    /// Token pool manager for rate limiting pre-borrowing.
+    /// Stored inside `LiveState` so that config hot-swaps are atomic:
+    /// `swap_config` issues a single `ArcSwap::store`, ensuring every
+    /// request sees either the old (config, rate-limiter) pair or the new
+    /// one — never a mix of the two.
+    rate_limiting_manager: Arc<RateLimitingManager>,
+}
+
+#[derive(Clone, Default)]
+struct ConnectionUrls {
+    valkey_url: Option<String>,
+    valkey_cache_url: Option<String>,
+}
+
+/// A thin, cloneable handle that lets callers observe the latest `Config` snapshot
+/// without holding a reference into `SwappableAppStateData`.
+///
+/// Internally shares the same `ArcSwap<LiveState>` as the owning `SwappableAppStateData`,
+/// so every `load()` sees whatever the most recent `swap_config` published.
 #[derive(Clone)]
-pub struct SwappableConfig(Arc<ArcSwap<Config>>);
+pub struct SwappableConfig(Arc<ArcSwap<LiveState>>);
 
 impl SwappableConfig {
-    pub fn new(config: Arc<Config>) -> Self {
-        Self(Arc::new(ArcSwap::from(config)))
+    fn new(live_state: Arc<ArcSwap<LiveState>>) -> Self {
+        Self(live_state)
     }
 
     pub fn load(&self) -> Arc<Config> {
-        self.0.load_full()
-    }
-
-    pub fn store(&self, config: Arc<Config>) {
-        self.0.store(config);
+        self.0.load().config.clone()
     }
 }
 
-/// State for the API, generic over the config type `C`.
-///
-/// When `C = Arc<Config>`, this holds a concrete config snapshot (used in route handlers).
-/// When `C = SwappableConfig`, this holds a hot-swappable config (used as the axum router state).
+/// Holds state that needs to have tasks spawned onto `deferred_tasks`
+/// when dropped.
+/// Currently, we use this to ensure that we wait for the batch writer handles to finish
+/// when the gateway shuts down.
+/// This only spawns tasks that *wait* for shutdown - the shutdown happens automatically
+/// once all outstanding `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles are dropped.
+/// It's therefore safe for us to hand out cloned `ClickHouseConnectionInfo` and `PostgresConnectionInfo` handles
+/// from this struct.
+struct DeferredShutdown {
+    deferred_tasks: TaskTracker,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    postgres_connection_info: PostgresConnectionInfo,
+}
+
+impl Drop for DeferredShutdown {
+    fn drop(&mut self) {
+        if let Some(clickhouse_handle) = self.clickhouse_connection_info.batcher_join_handle() {
+            self.deferred_tasks.spawn(async move {
+                tracing::info!("Waiting for ClickHouse batch writer to finish");
+                if let Err(e) = clickhouse_handle.await {
+                    tracing::error!("Error in batch writer: {e}");
+                }
+                tracing::info!("ClickHouse batch writer finished");
+            });
+        }
+        if let Some(postgres_handle) = self.postgres_connection_info.batcher_join_handle() {
+            self.deferred_tasks.spawn(async move {
+                tracing::info!("Waiting for Postgres batch writer to finish");
+                if let Err(e) = postgres_handle.await {
+                    tracing::error!("Error in batch writer: {e}");
+                }
+                tracing::info!("Postgres batch writer finished");
+            });
+        }
+    }
+}
+
 #[derive(Clone)]
 // `#[non_exhaustive]` only affects downstream crates, so we can't use it here
 #[expect(clippy::manual_non_exhaustive)]
-pub struct AppStateData<C> {
-    pub config: C,
-    /// The original `UninitializedConfig`, preserved for validation during config-in-db writes.
-    /// When a new function is written via the API, we load the current value, patch in the
-    /// new function, and run the full init+validate pipeline to ensure the config remains
-    /// valid. On success, the patched config is swapped in so subsequent writes validate
-    /// against the latest state.
-    ///
-    /// Uses `ArcSwap` so the write path can atomically update the config without blocking
-    /// concurrent readers. Wrapped in `Arc` so `AppStateData` remains `Clone`.
-    pub uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
+pub struct AppStateData {
+    pub config: Arc<Config>,
     /// Runtime overlay captured from the original UninitializedConfig at startup.
     /// Used for snapshot rehydration without the lossy Config → UninitializedConfig round-trip.
     pub runtime_overlay: Arc<RuntimeOverlay>,
@@ -235,52 +254,210 @@ pub struct AppStateData<C> {
     /// Which database backend is the primary datastore for observability data.
     /// Derived from config (`observability.backend`) at startup.
     pub primary_datastore: PrimaryDatastore,
+    /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
+    /// Used by the UI to decide whether to show the config editor.
+    pub config_in_database: bool,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
     _private: (),
 }
 
-/// `AppStateData` with a concrete config snapshot, used by route handlers and business logic.
-pub type ResolvedAppStateData = AppStateData<Arc<Config>>;
+#[derive(Clone)]
+pub struct SwappableAppStateData {
+    live_state: Arc<ArcSwap<LiveState>>,
+    connection_urls: Arc<ConnectionUrls>,
+    /// Holds clickhouse and postgres handles, which are intentionally excluded from the swappable LiveState bundle.
+    /// Hot-swapping them would interfere with the batch-writer drain logic in GatewayHandle::drop and may cause
+    /// issues with connection pool sizes.
+    deferred_shutdown: Arc<DeferredShutdown>,
+    /// Holds any background tasks that we want to wait on during shutdown
+    /// We wait for these tasks to finish when `GatewayHandle` is dropped
+    pub deferred_tasks: TaskTracker,
+    /// Optional cache for TensorZero API key authentication
+    pub auth_cache: Option<Cache<String, AuthResult>>,
+    /// Optional cache for historical config snapshots loaded from ClickHouse
+    pub config_snapshot_cache: Option<Cache<SnapshotHash, Arc<Config>>>,
+    /// Optional Autopilot API client for proxying requests to the Autopilot API
+    pub autopilot_client: Option<Arc<AutopilotClient>>,
+    /// Optional durable task spawning client for GEPA workflows
+    pub spawn_client: Option<Arc<SpawnClient>>,
+    /// The deployment ID from ClickHouse (64-char hex string)
+    pub deployment_id: Option<String>,
+    pub shutdown_token: CancellationToken,
+    /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
+    /// Used by the UI to decide whether to show the config editor.
+    pub config_in_database: bool,
+}
 
-/// The axum router state type, holding a hot-swappable config.
-pub type SwappableAppStateData = AppStateData<SwappableConfig>;
+/// `AppStateData` with a concrete config snapshot, used by route handlers and business logic.
+pub type ResolvedAppStateData = AppStateData;
 
 /// Axum extractor that loads the latest config from the `SwappableConfig`
 /// and produces a `ResolvedAppStateData`.
-pub type LatestAppStateData = axum::extract::State<ResolvedAppStateData>;
+pub type LatestAppStateData = axum::extract::State<AppStateData>;
 pub type AppState = LatestAppStateData;
 
-impl AppStateData<SwappableConfig> {
-    /// Load the latest config snapshot, producing a concrete `AppStateData<Arc<Config>>`.
-    pub fn load_latest(&self) -> AppStateData<Arc<Config>> {
+/// Opaque bundle produced by `SwappableAppStateData::prepare_config_swap`.
+/// Holds everything needed for an infallible `swap_config` call.
+/// Building this succeeds before any database transaction is committed,
+/// so a failure here is still fully recoverable.
+pub struct PreparedConfigSwap {
+    config: Arc<Config>,
+    runtime_overlay: Arc<RuntimeOverlay>,
+    http_client: TensorzeroHttpClient,
+    valkey_connection_info: ValkeyConnectionInfo,
+    valkey_cache_connection_info: ValkeyConnectionInfo,
+    cache_manager: CacheManager,
+    primary_datastore: PrimaryDatastore,
+    rate_limiting_manager: Arc<RateLimitingManager>,
+}
+
+impl PreparedConfigSwap {
+    pub fn config(&self) -> &Arc<Config> {
+        &self.config
+    }
+}
+
+impl SwappableAppStateData {
+    /// A cloneable handle that observes the latest `Config` snapshot. Each call
+    /// returns a fresh handle that shares the underlying `ArcSwap<LiveState>`,
+    /// so any subsequent `swap_config` is visible to existing handles.
+    pub fn config(&self) -> SwappableConfig {
+        SwappableConfig::new(self.live_state.clone())
+    }
+
+    /// Builds new runtime dependencies for the incoming config, and writes a new
+    /// config snapshot to the database. Returns an opaque [`PreparedConfigSwap`].
+    ///
+    /// Callers should invoke this **before** committing any surrounding
+    /// database transaction so that a failure here can still be rolled back.
+    /// Once the transaction commits, pass the result to [`Self::swap_config`],
+    /// which is infallible.
+    pub async fn prepare_config_swap(
+        &self,
+        unwritten: UnwrittenConfig,
+        db: &impl ConfigQueries,
+    ) -> Result<PreparedConfigSwap, DelayedError> {
+        let (config, runtime_overlay) = Box::pin(unwritten.into_config(db)).await?;
+        let config = Arc::new(config);
+        let runtime_overlay = Arc::new(runtime_overlay);
+
+        let valkey_connection_info =
+            setup_valkey(self.connection_urls.valkey_url.as_deref()).await?;
+        let valkey_cache_connection_info = setup_valkey_cache(
+            self.connection_urls.valkey_cache_url.as_deref(),
+            &valkey_connection_info,
+        )
+        .await?;
+        let primary_datastore = PrimaryDatastore::resolve(
+            &config.gateway.observability,
+            &self.deferred_shutdown.clickhouse_connection_info,
+            &self.deferred_shutdown.postgres_connection_info,
+        )?;
+        let cache_manager = CacheManager::new_from_connections(
+            &valkey_cache_connection_info,
+            &self.deferred_shutdown.clickhouse_connection_info,
+            &config.gateway.cache,
+            primary_datastore,
+        )?;
+        let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
+            Arc::new(config.rate_limiting.clone()),
+            &valkey_connection_info,
+            &self.deferred_shutdown.postgres_connection_info,
+        )?);
+        let http_client = config.http_client.clone();
+
+        Ok(PreparedConfigSwap {
+            config,
+            runtime_overlay,
+            http_client,
+            valkey_connection_info,
+            valkey_cache_connection_info,
+            cache_manager,
+            primary_datastore,
+            rate_limiting_manager,
+        })
+    }
+
+    /// Atomically hot-swap the in-memory `Config` snapshot and runtime
+    /// dependencies. Old dependencies (DB pools, batch writers, rate limiter,
+    /// cache manager, HTTP client) remain alive for any in-flight requests
+    /// that have already resolved a snapshot and will be dropped once those
+    /// requests complete.
+    ///
+    /// This is infallible; all fallible work is done up front in
+    /// [`Self::prepare_config_swap`].
+    pub fn swap_config(&self, prepared: PreparedConfigSwap) {
+        self.live_state.store(Arc::new(LiveState {
+            config: prepared.config,
+            runtime_overlay: prepared.runtime_overlay,
+            http_client: prepared.http_client,
+            valkey_connection_info: prepared.valkey_connection_info,
+            valkey_cache_connection_info: prepared.valkey_cache_connection_info,
+            cache_manager: prepared.cache_manager,
+            primary_datastore: prepared.primary_datastore,
+            rate_limiting_manager: prepared.rate_limiting_manager,
+        }));
+    }
+
+    /// Load the latest config snapshot, producing a concrete `AppStateData`.
+    pub fn load_latest(&self) -> AppStateData {
+        let live_state = self.live_state.load_full();
         AppStateData {
-            config: self.config.load(),
-            uninitialized_config: self.uninitialized_config.clone(),
-            runtime_overlay: self.runtime_overlay.clone(),
-            http_client: self.http_client.clone(),
-            clickhouse_connection_info: self.clickhouse_connection_info.clone(),
-            postgres_connection_info: self.postgres_connection_info.clone(),
-            valkey_connection_info: self.valkey_connection_info.clone(),
-            valkey_cache_connection_info: self.valkey_cache_connection_info.clone(),
-            cache_manager: self.cache_manager.clone(),
+            config: live_state.config.clone(),
+            runtime_overlay: live_state.runtime_overlay.clone(),
+            http_client: live_state.http_client.clone(),
+            clickhouse_connection_info: self.deferred_shutdown.clickhouse_connection_info.clone(),
+            postgres_connection_info: self.deferred_shutdown.postgres_connection_info.clone(),
+            valkey_connection_info: live_state.valkey_connection_info.clone(),
+            valkey_cache_connection_info: live_state.valkey_cache_connection_info.clone(),
+            cache_manager: live_state.cache_manager.clone(),
             deferred_tasks: self.deferred_tasks.clone(),
             auth_cache: self.auth_cache.clone(),
             config_snapshot_cache: self.config_snapshot_cache.clone(),
             autopilot_client: self.autopilot_client.clone(),
             spawn_client: self.spawn_client.clone(),
             deployment_id: self.deployment_id.clone(),
-            rate_limiting_manager: self.rate_limiting_manager.clone(),
+            rate_limiting_manager: live_state.rate_limiting_manager.clone(),
             shutdown_token: self.shutdown_token.clone(),
-            primary_datastore: self.primary_datastore,
+            primary_datastore: live_state.primary_datastore,
+            config_in_database: self.config_in_database,
             _private: (),
         }
     }
+
+    pub fn primary_datastore(&self) -> PrimaryDatastore {
+        self.live_state.load().primary_datastore
+    }
+
+    pub fn postgres_connection_info(&self) -> PostgresConnectionInfo {
+        self.deferred_shutdown.postgres_connection_info.clone()
+    }
+
+    pub fn clickhouse_connection_info(&self) -> ClickHouseConnectionInfo {
+        self.deferred_shutdown.clickhouse_connection_info.clone()
+    }
+
+    pub fn valkey_connection_info(&self) -> ValkeyConnectionInfo {
+        self.live_state.load().valkey_connection_info.clone()
+    }
+
+    pub fn valkey_cache_connection_info(&self) -> ValkeyConnectionInfo {
+        self.live_state.load().valkey_cache_connection_info.clone()
+    }
+
+    pub fn http_client(&self) -> TensorzeroHttpClient {
+        self.live_state.load().http_client.clone()
+    }
+
+    pub fn rate_limiting_manager(&self) -> Arc<RateLimitingManager> {
+        self.live_state.load().rate_limiting_manager.clone()
+    }
 }
 
-impl FromRef<AppStateData<SwappableConfig>> for AppStateData<Arc<Config>> {
-    fn from_ref(state: &AppStateData<SwappableConfig>) -> Self {
+impl FromRef<SwappableAppStateData> for AppStateData {
+    fn from_ref(state: &SwappableAppStateData) -> Self {
         state.load_latest()
     }
 }
@@ -323,6 +500,7 @@ impl GatewayHandle {
         config: UnwrittenConfig,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
@@ -336,10 +514,12 @@ impl GatewayHandle {
             valkey_cache_url,
             available_tools,
             tool_whitelist,
+            config_in_database,
         ))
         .await
     }
 
+    #[expect(clippy::too_many_arguments)]
     async fn new_with_databases(
         config: UnwrittenConfig,
         clickhouse_url: Option<String>,
@@ -348,8 +528,9 @@ impl GatewayHandle {
         valkey_cache_url: Option<String>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
-        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
+        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone()).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url.as_deref()).await?;
 
         let primary_datastore = PrimaryDatastore::resolve(
@@ -362,26 +543,29 @@ impl GatewayHandle {
             postgres_connection_info.clone(),
             primary_datastore,
         );
-        let runtime_overlay = Arc::new(config.runtime_overlay().clone());
-        let uninitialized_config =
-            Arc::new(ArcSwap::from_pointee(config.uninitialized_config().clone()));
-        let config = Arc::new(Box::pin(config.into_config(&db)).await?);
+        let (config, runtime_overlay) = Box::pin(config.into_config(&db)).await?;
+        let config = Arc::new(config);
+        let runtime_overlay = Arc::new(runtime_overlay);
         let valkey_connection_info = setup_valkey(valkey_url.as_deref()).await?;
         let valkey_cache_connection_info =
             setup_valkey_cache(valkey_cache_url.as_deref(), &valkey_connection_info).await?;
         let http_client = config.http_client.clone();
-        Self::new_with_database_and_http_client(
+        Self::new_with_database_and_http_client_and_urls(
             config,
-            uninitialized_config,
             runtime_overlay,
             clickhouse_connection_info,
             postgres_connection_info,
             valkey_connection_info,
             valkey_cache_connection_info,
             http_client,
+            ConnectionUrls {
+                valkey_url,
+                valkey_cache_url,
+            },
             None,
             available_tools,
             tool_whitelist,
+            config_in_database,
         )
         .await
     }
@@ -413,31 +597,34 @@ impl GatewayHandle {
             PrimaryDatastore::ClickHouse,
         )
         .expect("Should be able to construct CacheManager");
-        let runtime_overlay = Arc::new(RuntimeOverlay::default());
+        let live_state = Arc::new(ArcSwap::from_pointee(LiveState {
+            config: config.clone(),
+            runtime_overlay: Arc::new(RuntimeOverlay::default()),
+            http_client,
+            valkey_connection_info: ValkeyConnectionInfo::Disabled,
+            valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
+            cache_manager,
+            primary_datastore: PrimaryDatastore::ClickHouse,
+            rate_limiting_manager,
+        }));
+        let deferred_tasks = TaskTracker::new();
         Self {
-            app_state: AppStateData {
-                config: SwappableConfig::new(config),
-                uninitialized_config: Arc::new(ArcSwap::from_pointee(
-                    UninitializedConfig::default(),
-                )),
-                runtime_overlay,
-                http_client,
-                clickhouse_connection_info,
-                postgres_connection_info,
-                valkey_connection_info: ValkeyConnectionInfo::Disabled,
-                valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
-                cache_manager,
-                deferred_tasks: TaskTracker::new(),
+            app_state: SwappableAppStateData {
+                live_state,
+                connection_urls: Arc::new(ConnectionUrls::default()),
+                deferred_shutdown: Arc::new(DeferredShutdown {
+                    deferred_tasks: deferred_tasks.clone(),
+                    clickhouse_connection_info,
+                    postgres_connection_info,
+                }),
+                deferred_tasks,
                 auth_cache,
                 config_snapshot_cache: None,
                 autopilot_client: None,
                 spawn_client: None,
                 deployment_id: None,
-                rate_limiting_manager,
                 shutdown_token: cancel_token,
-                // Unit tests default to ClickHouse
-                primary_datastore: PrimaryDatastore::ClickHouse,
-                _private: (),
+                config_in_database: false,
             },
             drop_wrapper: None,
             _private: (),
@@ -447,7 +634,6 @@ impl GatewayHandle {
     #[expect(clippy::too_many_arguments)]
     pub async fn new_with_database_and_http_client(
         config: Arc<Config>,
-        uninitialized_config: Arc<ArcSwap<UninitializedConfig>>,
         runtime_overlay: Arc<RuntimeOverlay>,
         clickhouse_connection_info: ClickHouseConnectionInfo,
         postgres_connection_info: PostgresConnectionInfo,
@@ -457,18 +643,56 @@ impl GatewayHandle {
         drop_wrapper: Option<DropWrapper>,
         available_tools: HashSet<String>,
         tool_whitelist: HashSet<String>,
+        config_in_database: bool,
     ) -> Result<Self, DelayedError> {
-        let primary_datastore = PrimaryDatastore::resolve(
-            &config.gateway.observability,
-            &clickhouse_connection_info,
-            &postgres_connection_info,
-        )?;
+        Self::new_with_database_and_http_client_and_urls(
+            config,
+            runtime_overlay,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            valkey_connection_info,
+            valkey_cache_connection_info,
+            http_client,
+            ConnectionUrls::default(),
+            drop_wrapper,
+            available_tools,
+            tool_whitelist,
+            config_in_database,
+        )
+        .await
+    }
 
+    #[expect(clippy::too_many_arguments)]
+    async fn new_with_database_and_http_client_and_urls(
+        config: Arc<Config>,
+        runtime_overlay: Arc<RuntimeOverlay>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        valkey_connection_info: ValkeyConnectionInfo,
+        valkey_cache_connection_info: ValkeyConnectionInfo,
+        http_client: TensorzeroHttpClient,
+        connection_urls: ConnectionUrls,
+        drop_wrapper: Option<DropWrapper>,
+        available_tools: HashSet<String>,
+        tool_whitelist: HashSet<String>,
+        config_in_database: bool,
+    ) -> Result<Self, DelayedError> {
         let rate_limiting_manager = Arc::new(RateLimitingManager::new_from_connections(
             Arc::new(config.rate_limiting.clone()),
             &valkey_connection_info,
             &postgres_connection_info,
         )?);
+        let primary_datastore = PrimaryDatastore::resolve(
+            &config.gateway.observability,
+            &clickhouse_connection_info,
+            &postgres_connection_info,
+        )?;
+        let cache_manager = CacheManager::new_from_connections(
+            &valkey_cache_connection_info,
+            &clickhouse_connection_info,
+            &config.gateway.cache,
+            primary_datastore,
+        )?;
 
         let cancel_token = CancellationToken::new();
         setup_howdy(
@@ -479,7 +703,6 @@ impl GatewayHandle {
             cancel_token.clone(),
         );
 
-        // Fetch the deployment ID (skip when observability is disabled since there's no datastore to query)
         let deployment_id = if primary_datastore == PrimaryDatastore::Disabled {
             None
         } else {
@@ -521,7 +744,6 @@ impl GatewayHandle {
         }
         let auth_cache = create_auth_cache_from_config(&config);
 
-        // Create config snapshot cache with TTL of 5 minutes and max 100 entries
         let config_snapshot_cache = Some(
             Cache::builder()
                 .time_to_live(Duration::from_secs(300))
@@ -529,7 +751,6 @@ impl GatewayHandle {
                 .build(),
         );
 
-        // Validate that all whitelisted tool names exist in available_tools
         let unknown_whitelist_tools: Vec<&str> = tool_whitelist
             .iter()
             .filter(|name| !available_tools.contains(name.as_str()))
@@ -572,7 +793,6 @@ impl GatewayHandle {
         )
         .await?;
 
-        // Validate auth config: auth requires Postgres
         if config.gateway.auth.enabled
             && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
@@ -584,33 +804,34 @@ impl GatewayHandle {
             }));
         }
 
-        let cache_manager = CacheManager::new_from_connections(
-            &valkey_cache_connection_info,
-            &clickhouse_connection_info,
-            &config.gateway.cache,
+        let live_state = Arc::new(ArcSwap::from_pointee(LiveState {
+            config: config.clone(),
+            runtime_overlay,
+            http_client,
+            valkey_connection_info,
+            valkey_cache_connection_info,
+            cache_manager,
             primary_datastore,
-        )?;
+            rate_limiting_manager,
+        }));
+        let deferred_tasks = TaskTracker::new();
         Ok(Self {
-            app_state: AppStateData {
-                config: SwappableConfig::new(config),
-                uninitialized_config,
-                runtime_overlay,
-                http_client,
-                clickhouse_connection_info,
-                postgres_connection_info,
-                valkey_connection_info,
-                valkey_cache_connection_info,
-                cache_manager,
-                deferred_tasks: TaskTracker::new(),
+            app_state: SwappableAppStateData {
+                live_state,
+                connection_urls: Arc::new(connection_urls),
+                deferred_shutdown: Arc::new(DeferredShutdown {
+                    deferred_tasks: deferred_tasks.clone(),
+                    clickhouse_connection_info,
+                    postgres_connection_info,
+                }),
+                deferred_tasks,
                 auth_cache,
                 config_snapshot_cache,
                 autopilot_client,
                 spawn_client,
                 deployment_id,
-                rate_limiting_manager,
                 shutdown_token: cancel_token,
-                primary_datastore,
-                _private: (),
+                config_in_database,
             },
             drop_wrapper,
             _private: (),
@@ -618,37 +839,55 @@ impl GatewayHandle {
     }
 }
 
-impl<C: Clone> AppStateData<C> {
+impl SwappableAppStateData {
     /// Returns a new AppStateData with all connections disabled. This is only used in
     /// `GatewayHandle::drop` so we can wait for batch writer handles without worrying
     /// about anything else in AppStateData holding a database connection.
     fn disabled_for_shutdown_placeholder(&self) -> Self {
-        Self {
-            config: self.config.clone(),
-            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
-            runtime_overlay: self.runtime_overlay.clone(),
-            http_client: self.http_client.clone(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-            postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+        let current = self.live_state.load_full();
+        let live_state = Arc::new(ArcSwap::from_pointee(LiveState {
+            config: current.config.clone(),
+            runtime_overlay: current.runtime_overlay.clone(),
+            http_client: current.config.http_client.clone(),
             valkey_connection_info: ValkeyConnectionInfo::Disabled,
             valkey_cache_connection_info: ValkeyConnectionInfo::Disabled,
             cache_manager: CacheManager::disabled(),
+            primary_datastore: current.primary_datastore,
+            rate_limiting_manager: Arc::new(RateLimitingManager::new(
+                Arc::new(RateLimitingConfig::default()),
+                Arc::new(DisabledRateLimitQueries),
+            )),
+        }));
+        Self {
+            live_state,
+            connection_urls: Arc::new(ConnectionUrls::default()),
+            deferred_shutdown: Arc::new(DeferredShutdown {
+                deferred_tasks: TaskTracker::new(),
+                clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                postgres_connection_info: PostgresConnectionInfo::new_disabled(),
+            }),
             deferred_tasks: TaskTracker::new(),
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
             spawn_client: None,
             deployment_id: None,
-            rate_limiting_manager: Arc::new(RateLimitingManager::new(
-                Arc::new(RateLimitingConfig::default()),
-                Arc::new(DisabledRateLimitQueries),
-            )),
             shutdown_token: CancellationToken::new(),
-            primary_datastore: self.primary_datastore,
-            _private: (),
+            config_in_database: self.config_in_database,
         }
     }
 
+    pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
+        let live_state = self.live_state.load_full();
+        DelegatingDatabaseConnection::new(
+            self.deferred_shutdown.clickhouse_connection_info.clone(),
+            self.deferred_shutdown.postgres_connection_info.clone(),
+            live_state.primary_datastore,
+        )
+    }
+}
+
+impl AppStateData {
     pub fn get_delegating_database(&self) -> DelegatingDatabaseConnection {
         DelegatingDatabaseConnection::new(
             self.clickhouse_connection_info.clone(),
@@ -658,7 +897,7 @@ impl<C: Clone> AppStateData<C> {
     }
 }
 
-impl AppStateData<Arc<Config>> {
+impl AppStateData {
     /// Validate a config snapshot and write it to the database.
     ///
     /// This is the single entry point for writing config snapshots. It validates
@@ -712,15 +951,14 @@ impl AppStateData<Arc<Config>> {
         .map_err(|e| e.log())?;
         Ok(Self {
             config,
-            uninitialized_config: Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             runtime_overlay,
             http_client,
-            clickhouse_connection_info,
-            postgres_connection_info,
             valkey_connection_info,
             valkey_cache_connection_info,
             cache_manager,
             deferred_tasks,
+            clickhouse_connection_info,
+            postgres_connection_info,
             auth_cache: None,
             config_snapshot_cache: None,
             autopilot_client: None,
@@ -729,12 +967,13 @@ impl AppStateData<Arc<Config>> {
             rate_limiting_manager,
             shutdown_token,
             primary_datastore,
+            config_in_database: false,
             _private: (),
         })
     }
 }
 
-impl AppStateData<SwappableConfig> {
+impl SwappableAppStateData {
     /// Validate a config snapshot and write it to the database.
     ///
     /// Delegates to the `AppStateData<Arc<Config>>` implementation after loading
@@ -752,13 +991,18 @@ impl AppStateData<SwappableConfig> {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Box::pin(Config::new_empty()).await?, Some(clickhouse_url))
-        .await
-        .map_err(|e| e.log())
+    setup_clickhouse(
+        &Box::pin(Config::new_empty())
+            .await?
+            .dangerous_into_config_without_writing(),
+        Some(clickhouse_url),
+    )
+    .await
+    .map_err(|e| e.log())
 }
 
 pub async fn setup_clickhouse(
-    config: &UnwrittenConfig,
+    config: &Config,
     clickhouse_url: Option<String>,
 ) -> Result<ClickHouseConnectionInfo, DelayedError> {
     // TODO(#5691): we should stop checking an explicit observability.enabled config when setting up
@@ -1172,6 +1416,7 @@ pub async fn start_openai_compatible_gateway(
         None, // Embedded gateways use the same Valkey instance for rate limiting and caching
         HashSet::new(), // available_tools
         HashSet::new(), // tool_whitelist
+        false,
     ))
     .await
     .map_err(|e| e.log())?;
@@ -1218,7 +1463,7 @@ pub struct GatewayHandleTestOptions {
 mod tests {
     use super::*;
     use crate::config::{
-        ObservabilityBackend, ObservabilityConfig, PostgresConfig,
+        ObservabilityBackend, ObservabilityConfig, PostgresConfig, UninitializedConfig,
         gateway::{GatewayConfig, ModelInferenceCacheConfig},
         snapshot::ConfigSnapshot,
         unwritten::UnwrittenConfig,
@@ -1554,7 +1799,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1564,6 +1808,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1592,7 +1837,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1602,6 +1846,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1628,7 +1873,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1638,6 +1882,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when observability is disabled");
@@ -1658,7 +1903,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1668,6 +1912,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when observability is default (not explicitly enabled)");
@@ -1691,7 +1936,6 @@ mod tests {
         // This should succeed because rate limiting has no rules
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config_no_rules,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1701,6 +1945,7 @@ mod tests {
             None,
             HashSet::new(), // available_tools
             HashSet::new(), // tool_whitelist
+            false,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
@@ -1721,7 +1966,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1731,6 +1975,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1757,7 +2002,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1767,6 +2011,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when cache is explicitly disabled");
@@ -1787,7 +2032,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1797,6 +2041,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when cache.enabled is default (null)");
@@ -1884,7 +2129,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let result = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1894,6 +2138,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await;
         let err = result
@@ -1918,7 +2163,6 @@ mod tests {
         let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let _gateway = GatewayHandle::new_with_database_and_http_client(
             config,
-            Arc::new(ArcSwap::from_pointee(UninitializedConfig::default())),
             Arc::new(RuntimeOverlay::default()),
             ClickHouseConnectionInfo::new_disabled(),
             PostgresConnectionInfo::Disabled,
@@ -1928,6 +2172,7 @@ mod tests {
             None,
             HashSet::new(),
             HashSet::new(),
+            false,
         )
         .await
         .expect("Gateway should start when auth is disabled even without Postgres");

@@ -1,14 +1,14 @@
 //! Feedback endpoint for querying cumulative feedback time series
 
+use axum::Json;
 use axum::extract::{Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::db::TimeWindow;
 use crate::db::feedback::{CumulativeFeedbackTimeSeriesPoint, FeedbackQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct GetCumulativeFeedbackTimeseriesParams {
@@ -27,7 +27,6 @@ pub struct GetCumulativeFeedbackTimeseriesResponse {
 }
 
 /// HTTP handler for getting cumulative feedback time series
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_cumulative_feedback_timeseries_handler",
     skip_all,

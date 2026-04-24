@@ -1,14 +1,14 @@
 //! Endpoint for querying demonstration feedback by inference ID
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::feedback::{DemonstrationFeedbackRow, FeedbackQueries};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct GetDemonstrationFeedbackParams {
@@ -24,7 +24,6 @@ pub struct GetDemonstrationFeedbackResponse {
 }
 
 /// HTTP handler for getting demonstration feedback by inference ID
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_demonstration_feedback_handler",
     skip_all,

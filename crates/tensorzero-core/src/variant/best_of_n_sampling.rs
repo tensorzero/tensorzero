@@ -582,7 +582,12 @@ async fn inner_select_best_candidate<'a>(
         .retries()
         .retry(|| async {
             model_config
-                .infer(&inference_request, clients, evaluator.inner.model())
+                .infer(
+                    &inference_request,
+                    clients,
+                    evaluator.inner.model(),
+                    Some(&inference_config.function_name),
+                )
                 .await
         })
         .await?;

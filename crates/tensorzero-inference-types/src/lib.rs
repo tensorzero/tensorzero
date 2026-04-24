@@ -6,9 +6,14 @@
 //! - Isolated serde derive expansion
 //! - Tighter incremental compilation boundaries
 
+pub mod credential_validation;
+pub mod credentials;
+pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod inference_response;
 pub(crate) mod serde_helpers;
+pub mod tool;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -25,19 +30,16 @@ use futures::Stream;
 use futures::future::Shared;
 use futures::stream::Peekable;
 use mime::MediaType;
-use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use tensorzero_derive::{TensorZeroDeserialize, export_schema};
 use tensorzero_error::Error;
 use tensorzero_types::inference_params::JsonMode;
-use tensorzero_types::{ApiType, Text, Thought, ToolCall, Unknown};
-use tensorzero_types_providers::deepseek::DeepSeekUsage;
-use tensorzero_types_providers::fireworks::FireworksFinishReason;
-use tensorzero_types_providers::openai::{OpenAIFinishReason, OpenAIUsage};
-use tensorzero_types_providers::together::TogetherFinishReason;
-use tensorzero_types_providers::xai::XAIUsage;
+use tensorzero_types::{Text, Thought, ToolCall, Unknown};
+
+// Re-export types that were moved to tensorzero-types
+pub use tensorzero_types::{FinishReason, RawUsageEntry, Usage, raw_usage_entries_from_value};
 use url::Url;
 use uuid::Uuid;
 
@@ -59,128 +61,6 @@ pub enum Latency {
 }
 
 // =============================================================================
-// Usage
-// =============================================================================
-
-#[derive(ts_rs::TS, Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[ts(export, optional_fields)]
-pub struct Usage {
-    pub input_tokens: Option<u32>,
-    pub output_tokens: Option<u32>,
-    // Omit from serialized output when None (per AGENTS.md convention for optional fields).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_cache_read_input_tokens: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_cache_write_input_tokens: Option<u32>,
-    #[serde(default, with = "decimal_float_option")]
-    #[ts(type = "number | null")]
-    pub cost: Option<Decimal>,
-}
-
-/// Custom serde module for `Option<Decimal>` as float.
-///
-/// Serializes identically to `rust_decimal::serde::float_option`.
-/// Deserializes via `Option<f64>` instead of `deserialize_option` so that
-/// serde's untagged-enum `ContentDeserializer` (which maps JSON `null` to
-/// `Content::Unit` → `visit_unit`) is handled correctly.  The upstream
-/// `OptionDecimalVisitor` only implements `visit_none`, not `visit_unit`,
-/// which causes failures inside `#[serde(untagged)]` enums.
-mod decimal_float_option {
-    use rust_decimal::Decimal;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    // Signature is required by serde's `with` attribute.
-    #[expect(clippy::ref_option)]
-    pub fn serialize<S>(value: &Option<Decimal>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        rust_decimal::serde::float_option::serialize(value, serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Option::<f64>::deserialize(deserializer)?
-            .map(|f| Decimal::try_from(f).map_err(serde::de::Error::custom))
-            .transpose()
-    }
-}
-
-impl Usage {
-    /// Returns a `Usage` with core fields at zero and cache fields at `None`.
-    ///
-    /// Cache fields start as `None` (meaning "not reported") because not all
-    /// providers support prompt caching. The lenient aggregation helpers
-    /// (`aggregate_usage_across_model_inferences`, `sum_usage_strict`) will
-    /// preserve any `Some` value they encounter rather than contaminating to `None`.
-    pub fn zero() -> Usage {
-        Usage {
-            input_tokens: Some(0),
-            output_tokens: Some(0),
-            provider_cache_read_input_tokens: None,
-            provider_cache_write_input_tokens: None,
-            cost: Some(Decimal::ZERO),
-        }
-    }
-
-    pub fn total_tokens(&self) -> Option<u32> {
-        match (self.input_tokens, self.output_tokens) {
-            (Some(input), Some(output)) => Some(input + output),
-            _ => None,
-        }
-    }
-}
-
-// =============================================================================
-// RawUsageEntry
-// =============================================================================
-
-/// A single entry in the raw usage array, representing usage data from one model inference.
-/// This preserves the original provider-specific usage object for fields that TensorZero
-/// normalizes away (e.g., OpenAI's `reasoning_tokens`, Anthropic's `cache_read_input_tokens`).
-#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[ts(export)]
-pub struct RawUsageEntry {
-    pub model_inference_id: Uuid,
-    pub provider_type: String,
-    pub api_type: ApiType,
-    pub data: Value,
-}
-
-pub fn raw_usage_entries_from_value(
-    model_inference_id: Uuid,
-    provider_type: &str,
-    api_type: ApiType,
-    usage: Value,
-) -> Vec<RawUsageEntry> {
-    vec![RawUsageEntry {
-        model_inference_id,
-        provider_type: provider_type.to_string(),
-        api_type,
-        data: usage,
-    }]
-}
-
-// =============================================================================
-// FinishReason
-// =============================================================================
-
-#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, PartialEq, Serialize, sqlx::Type)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-#[sqlx(type_name = "text", rename_all = "snake_case")]
-pub enum FinishReason {
-    Stop,
-    StopSequence,
-    Length,
-    ToolCall,
-    ContentFilter,
-    Unknown,
-}
-
-// =============================================================================
 // ModelInferenceRequestJsonMode
 // =============================================================================
 
@@ -191,6 +71,105 @@ pub enum ModelInferenceRequestJsonMode {
     Off,
     On,
     Strict,
+}
+
+// =============================================================================
+// EmbeddingEncodingFormat
+// =============================================================================
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+    #[default]
+    Float,
+    Base64,
+}
+
+// =============================================================================
+// MIME type helpers
+// =============================================================================
+
+/// Tries to convert a mime type to a file extension, picking an arbitrary extension if there are multiple
+/// extensions for the mime type.
+/// This is used when writing a file input to object storage, and when determining the file name
+/// to provide to OpenAI (which doesn't accept mime types for file input)
+pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
+    Ok(match mime_type {
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
+        _ if mime_type == "image/webp" => Some("webp"),
+        _ if mime_type == "text/plain" => Some("txt"),
+        _ if mime_type == "audio/midi" => Some("mid"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
+        _ if mime_type == "audio/ogg" => Some("ogg"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
+        _ if mime_type == "audio/amr" => Some("amr"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
+        _ if mime_type == "audio/x-dsf" => Some("dsf"),
+        _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
+        _ => {
+            let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
+                .and_then(|types| types.last());
+            if guess.is_some() {
+                tracing::warn!(
+                    "Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct."
+                );
+            }
+            guess.copied()
+        }
+    })
+}
+
+/// Converts audio MIME types to OpenAI's audio format strings.
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(tensorzero_error::ErrorDetails::InvalidMessage {
+            message: format!("Expected audio MIME type, got: {mime_type}"),
+        }));
+    }
+
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(tensorzero_error::ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/mp4, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
+    })
+}
+
+// =============================================================================
+// LazyFileExt
+// =============================================================================
+
+pub trait LazyFileExt {
+    fn resolve(
+        &self,
+    ) -> impl Future<Output = Result<Cow<'_, tensorzero_types::ObjectStorageFile>, Error>> + Send;
+}
+
+impl LazyFileExt for LazyFile {
+    async fn resolve(&self) -> Result<Cow<'_, tensorzero_types::ObjectStorageFile>, Error> {
+        match self {
+            LazyFile::Url {
+                future,
+                file_url: _,
+            } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::Base64(pending) => Ok(Cow::Borrowed(&pending.0)),
+            LazyFile::ObjectStoragePointer { future, .. } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::ObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
+        }
+    }
 }
 
 // =============================================================================
@@ -508,6 +487,40 @@ pub enum ContentBlock {
     Unknown(Unknown),
 }
 
+impl From<tensorzero_types::ContentBlockChatOutput> for ContentBlock {
+    fn from(output: tensorzero_types::ContentBlockChatOutput) -> Self {
+        match output {
+            tensorzero_types::ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
+            tensorzero_types::ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlock::ToolCall(tool_call.into_tool_call())
+            }
+            tensorzero_types::ContentBlockChatOutput::Thought(thought) => {
+                ContentBlock::Thought(thought)
+            }
+            tensorzero_types::ContentBlockChatOutput::Unknown(unknown) => {
+                ContentBlock::Unknown(unknown)
+            }
+        }
+    }
+}
+
+impl From<tensorzero_types::ContentBlockChatOutput> for ContentBlockOutput {
+    fn from(output: tensorzero_types::ContentBlockChatOutput) -> Self {
+        match output {
+            tensorzero_types::ContentBlockChatOutput::Text(text) => ContentBlockOutput::Text(text),
+            tensorzero_types::ContentBlockChatOutput::ToolCall(tool_call) => {
+                ContentBlockOutput::ToolCall(tool_call.into_tool_call())
+            }
+            tensorzero_types::ContentBlockChatOutput::Thought(thought) => {
+                ContentBlockOutput::Thought(thought)
+            }
+            tensorzero_types::ContentBlockChatOutput::Unknown(unknown) => {
+                ContentBlockOutput::Unknown(unknown)
+            }
+        }
+    }
+}
+
 // =============================================================================
 // LazyFile, FileUrl, PendingObjectStoreFile, FileFuture
 // =============================================================================
@@ -622,104 +635,6 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
             JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
-        }
-    }
-}
-
-impl From<OpenAIUsage> for Usage {
-    fn from(usage: OpenAIUsage) -> Self {
-        Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
-            provider_cache_read_input_tokens: usage
-                .prompt_tokens_details
-                .and_then(|d| d.cached_tokens),
-            provider_cache_write_input_tokens: None,
-            cost: None,
-        }
-    }
-}
-
-impl From<Option<OpenAIUsage>> for Usage {
-    fn from(usage: Option<OpenAIUsage>) -> Self {
-        match usage {
-            Some(u) => u.into(),
-            None => Usage::default(),
-        }
-    }
-}
-
-impl From<OpenAIFinishReason> for FinishReason {
-    fn from(reason: OpenAIFinishReason) -> Self {
-        match reason {
-            OpenAIFinishReason::Stop => FinishReason::Stop,
-            OpenAIFinishReason::Length => FinishReason::Length,
-            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
-            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
-            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenAIFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
-impl From<FireworksFinishReason> for FinishReason {
-    fn from(reason: FireworksFinishReason) -> Self {
-        match reason {
-            FireworksFinishReason::Stop => FinishReason::Stop,
-            FireworksFinishReason::Length => FinishReason::Length,
-            FireworksFinishReason::ToolCalls => FinishReason::ToolCall,
-            FireworksFinishReason::ContentFilter => FinishReason::ContentFilter,
-            FireworksFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
-impl From<TogetherFinishReason> for FinishReason {
-    fn from(reason: TogetherFinishReason) -> Self {
-        match reason {
-            TogetherFinishReason::Stop => FinishReason::Stop,
-            TogetherFinishReason::Eos => FinishReason::Stop,
-            TogetherFinishReason::Length => FinishReason::Length,
-            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
-            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
-            TogetherFinishReason::Unknown => FinishReason::Unknown,
-        }
-    }
-}
-
-impl From<XAIUsage> for Usage {
-    fn from(usage: XAIUsage) -> Self {
-        // Add `reasoning_tokens` to `completion_tokens` for total output tokens
-        let output_tokens = match (usage.completion_tokens, usage.completion_tokens_details) {
-            (Some(completion), Some(details)) => {
-                Some(completion + details.reasoning_tokens.unwrap_or(0))
-            }
-            (Some(completion), None) => Some(completion),
-            (None, Some(details)) => details.reasoning_tokens,
-            (None, None) => None,
-        };
-        Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens,
-            provider_cache_read_input_tokens: usage
-                .prompt_tokens_details
-                .and_then(|d| d.cached_tokens),
-            provider_cache_write_input_tokens: None,
-            cost: None,
-        }
-    }
-}
-
-impl From<DeepSeekUsage> for Usage {
-    fn from(usage: DeepSeekUsage) -> Self {
-        Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
-            provider_cache_read_input_tokens: usage.prompt_cache_hit_tokens,
-            // DeepSeek's `prompt_cache_miss_tokens` = tokens not in cache, which are
-            // written to cache for future requests, so we map miss → write.
-            provider_cache_write_input_tokens: usage.prompt_cache_miss_tokens,
-            cost: None,
         }
     }
 }
@@ -1123,7 +1038,7 @@ mod tests {
     use rust_decimal::Decimal;
     use serde_json::json;
     use std::time::Duration;
-    use tensorzero_types::ToolChoice;
+    use tensorzero_types::{ApiType, ToolChoice};
     use uuid::Uuid;
 
     // =========================================================================
@@ -1235,58 +1150,6 @@ mod tests {
         expect_that!(deserialized.input_tokens, eq(Some(100)));
         expect_that!(deserialized.output_tokens, eq(Some(50)));
         expect_that!(deserialized.cost, eq(Some(Decimal::new(15, 4))));
-    }
-
-    // =========================================================================
-    // FinishReason conversions from provider types
-    // =========================================================================
-
-    #[gtest]
-    fn test_finish_reason_from_openai() {
-        expect_that!(
-            FinishReason::from(OpenAIFinishReason::Stop),
-            eq(FinishReason::Stop)
-        );
-        expect_that!(
-            FinishReason::from(OpenAIFinishReason::Length),
-            eq(FinishReason::Length)
-        );
-        expect_that!(
-            FinishReason::from(OpenAIFinishReason::ToolCalls),
-            eq(FinishReason::ToolCall)
-        );
-        expect_that!(
-            FinishReason::from(OpenAIFinishReason::ContentFilter),
-            eq(FinishReason::ContentFilter)
-        );
-    }
-
-    #[gtest]
-    fn test_finish_reason_from_fireworks() {
-        expect_that!(
-            FinishReason::from(FireworksFinishReason::Stop),
-            eq(FinishReason::Stop)
-        );
-        expect_that!(
-            FinishReason::from(FireworksFinishReason::ToolCalls),
-            eq(FinishReason::ToolCall)
-        );
-    }
-
-    #[gtest]
-    fn test_finish_reason_from_together() {
-        expect_that!(
-            FinishReason::from(TogetherFinishReason::Stop),
-            eq(FinishReason::Stop)
-        );
-        expect_that!(
-            FinishReason::from(TogetherFinishReason::Eos),
-            eq(FinishReason::Stop)
-        );
-        expect_that!(
-            FinishReason::from(TogetherFinishReason::ToolCalls),
-            eq(FinishReason::ToolCall)
-        );
     }
 
     // =========================================================================

@@ -42,10 +42,11 @@ use crate::jsonschema_util::JSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigConstructorArgs,
-    ToolCallConfigDatabaseInsert, ToolChoice,
+    StaticToolConfig, ToolCallConfig, ToolCallConfigConstructorArgs, ToolCallConfigDatabaseInsert,
+    ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 

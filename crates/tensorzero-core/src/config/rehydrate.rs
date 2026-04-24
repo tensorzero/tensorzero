@@ -32,9 +32,10 @@ use crate::evaluations::{
     UninitializedLLMJudgeChatCompletionVariantConfig, UninitializedLLMJudgeConfig,
     UninitializedLLMJudgeDiclVariantConfig, UninitializedLLMJudgeMixtureOfNVariantConfig,
     UninitializedLLMJudgeVariantConfig, UninitializedLLMJudgeVariantInfo,
+    UninitializedTypescriptJudgeConfig,
 };
-use crate::inference::types::extra_body::extra_body_config_from_stored;
-use crate::inference::types::extra_headers::extra_headers_config_from_stored;
+use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::tool::ToolChoice;
 use crate::utils::retries::RetryConfig;
 use crate::variant::best_of_n_sampling::{
@@ -167,8 +168,8 @@ fn rehydrate_chat_completion(
         thinking_budget_tokens,
         verbosity,
         retries: retries.map(RetryConfig::from).unwrap_or_default(),
-        extra_body: extra_body.map(extra_body_config_from_stored),
-        extra_headers: extra_headers.map(extra_headers_config_from_stored),
+        extra_body: extra_body.map(ExtraBodyConfig::from),
+        extra_headers: extra_headers.map(ExtraHeadersConfig::from),
     })
 }
 
@@ -268,8 +269,8 @@ pub fn rehydrate_variant(
                 verbosity,
                 max_distance,
                 retries: retries.map(RetryConfig::from).unwrap_or_default(),
-                extra_body: extra_body.map(extra_body_config_from_stored),
-                extra_headers: extra_headers.map(extra_headers_config_from_stored),
+                extra_body: extra_body.map(ExtraBodyConfig::from),
+                extra_headers: extra_headers.map(ExtraHeadersConfig::from),
             })
         }
         StoredVariantConfig::ChainOfThought(c) => {
@@ -332,8 +333,8 @@ fn rehydrate_llm_judge_chat_completion(
         thinking_budget_tokens,
         verbosity,
         retries: retries.map(RetryConfig::from).unwrap_or_default(),
-        extra_body: extra_body.map(extra_body_config_from_stored),
-        extra_headers: extra_headers.map(extra_headers_config_from_stored),
+        extra_body: extra_body.map(ExtraBodyConfig::from),
+        extra_headers: extra_headers.map(ExtraHeadersConfig::from),
     })
 }
 
@@ -418,9 +419,9 @@ fn rehydrate_llm_judge_variant(
                     seed,
                     json_mode,
                     stop_sequences,
-                    extra_body: extra_body.map(extra_body_config_from_stored),
+                    extra_body: extra_body.map(ExtraBodyConfig::from),
                     retries: retries.map(RetryConfig::from).unwrap_or_default(),
-                    extra_headers: extra_headers.map(extra_headers_config_from_stored),
+                    extra_headers: extra_headers.map(ExtraHeadersConfig::from),
                 },
             ))
         }
@@ -481,6 +482,16 @@ fn rehydrate_evaluator(
             };
             Ok(UninitializedEvaluatorConfig::LLMJudge(config))
         }
+        StoredEvaluatorConfig::Typescript(t) => Ok(UninitializedEvaluatorConfig::TypescriptJudge(
+            UninitializedTypescriptJudgeConfig {
+                typescript_file: ResolvedTomlPathData::new_fake_path(
+                    "stored::typescript_evaluator".to_string(),
+                    t.typescript_code,
+                ),
+                output_type: t.output_type.into(),
+                optimize: t.optimize.into(),
+            },
+        )),
     }
 }
 

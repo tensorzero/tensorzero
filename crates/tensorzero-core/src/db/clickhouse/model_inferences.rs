@@ -9,7 +9,10 @@ use super::ClickHouseConnectionInfo;
 use super::migration_manager::migrations::migration_0037::{QUANTILES, quantiles_sql_args};
 use super::table_name::TableName;
 use crate::db::model_inferences::ModelInferenceQueries;
-use crate::db::{CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow};
+use crate::db::{
+    CacheStatisticsTimePoint, ModelLatencyDatapoint, ModelUsageTimePoint, TimeWindow,
+    VariantUsageTimePoint,
+};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::StoredModelInference;
 
@@ -373,6 +376,89 @@ impl ModelInferenceQueries for ClickHouseConnectionInfo {
         }
 
         Ok(points)
+    }
+
+    async fn get_variant_usage_timeseries(
+        &self,
+        function_name: &str,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<VariantUsageTimePoint>, Error> {
+        let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfMinute(minute)) FROM VariantStatistics WHERE function_name = {{function_name:String}}) - INTERVAL {max_periods} MINUTE"
+                ),
+            ),
+            TimeWindow::Hour => (
+                "toStartOfHour(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfHour(minute)) FROM VariantStatistics WHERE function_name = {{function_name:String}}) - INTERVAL {max_periods} HOUR"
+                ),
+            ),
+            TimeWindow::Day => (
+                "toStartOfDay(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfDay(minute)) FROM VariantStatistics WHERE function_name = {{function_name:String}}) - INTERVAL {max_periods} DAY"
+                ),
+            ),
+            TimeWindow::Week => (
+                "toStartOfWeek(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfWeek(minute)) FROM VariantStatistics WHERE function_name = {{function_name:String}}) - INTERVAL {max_periods} WEEK"
+                ),
+            ),
+            TimeWindow::Month => (
+                "toStartOfMonth(minute)",
+                format!(
+                    "minute >= (SELECT max(toStartOfMonth(minute)) FROM VariantStatistics WHERE function_name = {{function_name:String}}) - INTERVAL {max_periods} MONTH"
+                ),
+            ),
+            TimeWindow::Cumulative => ("toDateTime('1970-01-01 00:00:00')", "1 = 1".to_string()),
+        };
+
+        let qs = quantiles_sql_args();
+        let query = format!(
+            r"
+            SELECT
+                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                variant_name,
+                sumMerge(total_input_tokens) as input_tokens,
+                sumMerge(total_output_tokens) as output_tokens,
+                countMerge(count) as count,
+                sumMerge(total_cost) as cost,
+                countMerge(count_with_cost) as count_with_cost,
+                quantilesTDigestMerge({qs})(processing_time_ms_quantiles) as processing_time_ms_quantiles,
+                quantilesTDigestMerge({qs})(ttft_ms_quantiles) as ttft_ms_quantiles
+            FROM VariantStatistics
+            WHERE function_name = {{function_name:String}}
+                AND {time_filter}
+            GROUP BY period_start, variant_name
+            ORDER BY period_start DESC, variant_name
+            FORMAT JSONEachRow
+            ",
+        );
+
+        let function_name_str = function_name.to_string();
+        let params: HashMap<&str, &str> =
+            HashMap::from([("function_name", function_name_str.as_str())]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        response
+            .response
+            .trim()
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: e.to_string(),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 }
 

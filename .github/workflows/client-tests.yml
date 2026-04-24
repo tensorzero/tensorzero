@@ -62,7 +62,7 @@ jobs:
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
@@ -79,7 +79,7 @@ jobs:
 
       - name: Restore client-tests provider-proxy cache
         if: github.event_name != 'schedule'
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ./ci/provider-proxy-cache/
           key: provider-proxy-cache-client-tests-${{ github.run_id }}
@@ -93,7 +93,7 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/download-provider-proxy-cache.sh
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -134,7 +134,7 @@ jobs:
         run: rustc --version
 
       - name: Install uv
-        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
         with:
           version: "0.9.27"
 
@@ -167,7 +167,7 @@ jobs:
           done
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787
+        uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
         with:
           tool: cargo-nextest
 
@@ -332,7 +332,7 @@ jobs:
           pnpm run test
 
       - name: Install Go
-        uses: actions/setup-go@29694d72cd5e7ef3b09496b39f28a942af47737e
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: "1.24"
 

@@ -15,12 +15,12 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_target_id tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct GetFeedbackByTargetIdToolParams {
     /// The target ID (inference or episode) to get feedback for.
     pub target_id: Uuid,
     /// Maximum number of feedback entries to return.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
 }
 
@@ -35,19 +35,15 @@ impl ToolMetadata for GetFeedbackByTargetIdTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetFeedbackByTargetIdResponse;
     type LlmParams = GetFeedbackByTargetIdToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_TARGET_ID_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GetFeedbackByTargetIdResponse".to_string()
     }

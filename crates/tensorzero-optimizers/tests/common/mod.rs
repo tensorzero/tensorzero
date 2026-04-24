@@ -36,9 +36,10 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolChoice, ToolResult},
+    tool::{ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;
@@ -103,8 +104,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let clickhouse = tensorzero_client
         .get_app_state_data()
         .unwrap()
-        .clickhouse_connection_info
-        .clone();
+        .clickhouse_connection_info();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Arc::new(
@@ -223,7 +223,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 return;
             }
             let response = model_config
-                .infer(&request, &clients, "test")
+                .infer(&request, &clients, "test", None)
                 .await
                 .unwrap();
             println!("Response: {response:?}");

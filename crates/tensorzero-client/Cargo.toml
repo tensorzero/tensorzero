@@ -12,13 +12,14 @@ required-features = ["e2e_tests"]
 
 [dependencies]
 async-trait = { workspace = true }
-evaluations = { path = "../evaluations" }
+evaluations = { path = "../evaluations", default-features = false }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 url = { workspace = true }
 pyo3 = { workspace = true, optional = true }
@@ -44,7 +45,7 @@ toml = { workspace = true }
 [features]
 # Forward this feature to 'tensorzero-core', so that our types will generate
 # the appropriate pyo3 attributes.
-pyo3 = ["dep:pyo3", "tensorzero-core/pyo3"]
+pyo3 = ["dep:pyo3", "tensorzero-core/pyo3", "tensorzero-inference-types/pyo3"]
 # Forward this feature to 'tensorzero-core', so that our embedded
 # client can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests", "dep:paste"]

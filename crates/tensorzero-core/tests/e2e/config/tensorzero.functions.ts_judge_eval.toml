@@ -1,0 +1,62 @@
+# Function + evaluations used by the TypeScript judge e2e tests in
+# `crates/evaluations/tests/e2e/test_typescript_judge_evaluator.rs`.
+#
+# `ts_judge_eval` is intentionally minimal: a single chat function backed by
+# the `dummy::good` provider so every inference produces a deterministic,
+# non-empty text response with no external API dependencies.
+
+[functions.ts_judge_eval]
+type = "chat"
+
+[functions.ts_judge_eval.experimentation]
+type = "static"
+candidate_variants = { "dummy" = 1.0 }
+
+[functions.ts_judge_eval.variants.dummy]
+type = "chat_completion"
+model = "dummy::good"
+
+# ─── Success path ────────────────────────────────────────────────────────────
+[evaluations.typescript_judge_success]
+type = "inference"
+function_name = "ts_judge_eval"
+
+[evaluations.typescript_judge_success.evaluators.ts_always_true]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/always_true.ts"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.typescript_judge_success.evaluators.ts_output_length]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/output_length.ts"
+output_type = "float"
+optimize = "max"
+
+[evaluations.typescript_judge_success.evaluators.ts_reference_output_length]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/reference_output_length.ts"
+output_type = "float"
+optimize = "max"
+
+# ─── Exception path ──────────────────────────────────────────────────────────
+[evaluations.typescript_judge_exception]
+type = "inference"
+function_name = "ts_judge_eval"
+
+[evaluations.typescript_judge_exception.evaluators.ts_throws]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/throws.ts"
+output_type = "boolean"
+optimize = "max"
+
+# ─── OOM path ────────────────────────────────────────────────────────────────
+[evaluations.typescript_judge_oom]
+type = "inference"
+function_name = "ts_judge_eval"
+
+[evaluations.typescript_judge_oom.evaluators.ts_oom]
+type = "typescript"
+typescript_file = "../../../fixtures/config/evaluations/typescript_judge/oom.ts"
+output_type = "boolean"
+optimize = "max"

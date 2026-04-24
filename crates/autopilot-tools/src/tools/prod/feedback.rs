@@ -16,13 +16,13 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the feedback tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct FeedbackToolParams {
     /// The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub episode_id: Option<Uuid>,
     /// The inference ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inference_id: Option<Uuid>,
     /// The name of the metric to provide feedback for.
     /// Use "comment" for free-text comments, "demonstration" for demonstration feedback,
@@ -35,7 +35,7 @@ pub struct FeedbackToolParams {
     /// - boolean metric: boolean
     pub value: Value,
     /// If true, the feedback will not be stored (useful for testing).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dryrun: Option<bool>,
 }
 
@@ -50,19 +50,15 @@ impl ToolMetadata for FeedbackTool {
     type SideInfo = AutopilotSideInfo;
     type Output = FeedbackResponse;
     type LlmParams = FeedbackToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "FeedbackToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "FeedbackResponse".to_string()
     }

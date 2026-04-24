@@ -15,18 +15,22 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_episodes tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct ListEpisodesToolParams {
     /// Maximum number of episodes to return (max 100).
     pub limit: u32,
     /// Return episodes before this episode_id (for pagination).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<Uuid>,
     /// Return episodes after this episode_id (for pagination).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after: Option<Uuid>,
     /// Filter to episodes containing inferences for this function.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_name: Option<String>,
     /// Filter to episodes containing inferences matching these criteria.
     /// Supports boolean_metric, float_metric, tag, time, and logical combinators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filters: Option<InferenceFilter>,
 }
 
@@ -46,19 +50,15 @@ impl ToolMetadata for ListEpisodesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = ListEpisodesResponse;
     type LlmParams = ListEpisodesToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_EPISODES_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "ListEpisodesToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_EPISODES_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "ListEpisodesResponse".to_string()
     }

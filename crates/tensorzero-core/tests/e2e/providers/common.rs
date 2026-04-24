@@ -14,7 +14,7 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::tool::Tool;
+use tensorzero_inference_types::tool::Tool;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -1688,6 +1688,8 @@ pub async fn test_image_inference_with_provider_s3_compatible(
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
+    // Port 0 is fine here: fetch=true means the gateway downloads the image
+    // and sends base64 to the provider, so the port doesn't affect cache keys.
     let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
@@ -2405,7 +2407,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                "messages": [
                 {
                     "role": "user",
-                    "content": format!("If you see this, something has gone wrong - the request should have failed: {}", Uuid::now_v7())
+                    "content": "If you see this, something has gone wrong - the request should have failed: deterministic-cache-test"
                 }
             ]},
         "stream": stream,

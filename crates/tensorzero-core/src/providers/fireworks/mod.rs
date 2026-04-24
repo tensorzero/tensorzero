@@ -9,7 +9,6 @@ use crate::inference::types::{ContentBlock, Role};
 use crate::providers::openai::{OpenAIMessagesConfig, ReasoningFieldName};
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::REASONING_FIELD_CHUNK_ID,
-    tool::FunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -18,6 +17,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
+use tensorzero_inference_types::tool::FunctionTool;
 use tensorzero_types_providers::fireworks::*;
 use tokio::time::Instant;
 use url::Url;
@@ -28,7 +28,6 @@ use super::helpers::{
 use crate::inference::types::Usage;
 use crate::inference::types::usage::raw_usage_entries_from_value;
 use crate::{
-    cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
@@ -44,8 +43,8 @@ use crate::{
             },
         },
     },
-    model::{Credential, ModelProvider},
-    tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
+    model::{Credential, ModelProviderRequestInfo, ProviderInferenceRequest},
+    tool::{ToolCall, ToolCallChunk},
 };
 use tensorzero_inference_types::FunctionToolDef;
 use uuid::Uuid;
@@ -172,16 +171,15 @@ impl FireworksCredentials {
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
             FireworksRequest::new(&self.model_name, request).await?,
@@ -278,16 +276,15 @@ impl InferenceProvider for FireworksProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         api_key: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
             FireworksRequest::new(&self.model_name, request).await?,
@@ -803,19 +800,6 @@ impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
                 name: &tool.name,
                 description: Some(&tool.description),
                 parameters: &tool.parameters,
-            },
-        }
-    }
-}
-
-impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
-    fn from(tool: &'a FunctionToolConfig) -> Self {
-        FireworksTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: tool.name(),
-                description: Some(tool.description()),
-                parameters: tool.parameters(),
             },
         }
     }

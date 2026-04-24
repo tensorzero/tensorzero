@@ -15,10 +15,10 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_datapoints tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct GetDatapointsToolParams {
     /// The name of the dataset (optional, but recommended for performance).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dataset_name: Option<String>,
     /// The IDs of the datapoints to retrieve.
     pub ids: Vec<Uuid>,
@@ -34,19 +34,15 @@ impl ToolMetadata for GetDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = GetDatapointsToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_DATAPOINTS_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GetDatapointsToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_DATAPOINTS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GetDatapointsResponse".to_string()
     }

@@ -13,11 +13,11 @@ export type InferenceToolParams = {
   /**
    * The function name to call. Exactly one of function_name or model_name required.
    */
-  function_name: string | null;
+  function_name?: string;
   /**
    * Model name shorthand (e.g., "openai::gpt-4"). Alternative to function_name.
    */
-  model_name: string | null;
+  model_name?: string;
   /**
    * The input for inference.
    */
@@ -29,11 +29,11 @@ export type InferenceToolParams = {
   /**
    * Pin a specific variant (optional, normally let API select).
    */
-  variant_name: string | null;
+  variant_name?: string;
   /**
    * Output schema override (for JSON functions).
    */
-  output_schema: JsonValue | null;
+  output_schema?: JsonValue;
   /**
    * A subset of static tools configured for the function that the inference is allowed to use. Optional.
    * If not provided, all static tools are allowed.

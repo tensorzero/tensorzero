@@ -116,8 +116,9 @@ pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, FunctionTool, Tool, ToolCallWrapper};
+pub use tensorzero_core::tool::ToolCallWrapper;
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
+pub use tensorzero_inference_types::tool::{DynamicToolParams, FunctionTool, Tool};
 
 // Export quantile array from migration_0037
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
@@ -581,6 +582,10 @@ pub trait ClientExt {
     ) -> Result<ClientEvaluationStreamResult, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "e2e/pyo3 test helper that exposes the embedded gateway's SwappableAppStateData"
+    )]
     fn get_app_state_data(&self)
     -> Option<&tensorzero_core::utils::gateway::SwappableAppStateData>;
 }
@@ -598,7 +603,7 @@ impl ClientExt for Client {
             } => gateway
                 .handle
                 .app_state
-                .clickhouse_connection_info
+                .clickhouse_connection_info()
                 .health()
                 .await
                 .map_err(|e| TensorZeroError::Other {
@@ -613,7 +618,7 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::HTTPGateway(_) => None,
             ClientMode::EmbeddedGateway { gateway, .. } => {
-                Some(gateway.handle.app_state.config.load())
+                Some(gateway.handle.app_state.config().load())
             }
         }
     }
@@ -744,10 +749,11 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
+                    let http_client = gateway.handle.app_state.http_client();
                     tensorzero_core::endpoints::datasets::v1::create_datapoints(
                         &config,
-                        &gateway.handle.app_state.http_client,
+                        &http_client,
                         &gateway.handle.app_state.get_delegating_database(),
                         &dataset_name,
                         request,
@@ -981,7 +987,7 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     tensorzero_core::endpoints::datasets::v1::create_from_inferences(
                         &config,
                         &gateway.handle.app_state.get_delegating_database(),
@@ -1071,7 +1077,7 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
                         &config,
                         &gateway.handle.app_state.get_delegating_database(),
@@ -1102,7 +1108,7 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
                         &config,
                         &gateway.handle.app_state.get_delegating_database(),
@@ -1144,7 +1150,7 @@ impl ClientExt for Client {
                     filters,
                 } = request;
                 with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
                     let episodes = tensorzero_core::endpoints::episodes::internal::list_episodes(
                         &gateway.handle.app_state.get_delegating_database(),
                         &config,
@@ -1245,7 +1251,7 @@ impl ClientExt for Client {
             });
         };
         render_samples(
-            gateway.handle.app_state.config.load(),
+            gateway.handle.app_state.config().load(),
             stored_samples,
             variants,
             concurrency,
@@ -1264,11 +1270,12 @@ impl ClientExt for Client {
                 Ok(Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                         Arc::new(gateway.handle.app_state.get_delegating_database());
+                    let http_client = gateway.handle.app_state.http_client();
                     launch_optimization(
-                        &gateway.handle.app_state.http_client,
+                        &http_client,
                         params,
                         db,
-                        gateway.handle.app_state.config.load(),
+                        gateway.handle.app_state.config().load(),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1296,9 +1303,10 @@ impl ClientExt for Client {
                 Box::pin(with_embedded_timeout(*timeout, async {
                     let db: Arc<dyn DelegatingDatabaseQueries + Send + Sync> =
                         Arc::new(gateway.handle.app_state.get_delegating_database());
+                    let http_client = gateway.handle.app_state.http_client();
                     launch_optimization_workflow(
-                        &gateway.handle.app_state.http_client,
-                        gateway.handle.app_state.config.load(),
+                        &http_client,
+                        gateway.handle.app_state.config().load(),
                         &db,
                         params,
                     )
@@ -1336,9 +1344,10 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
+                    let http_client = gateway.handle.app_state.http_client();
                     poll_optimization(
-                        &gateway.handle.app_state.http_client,
+                        &http_client,
                         job_handle,
                         &config.models.default_credentials,
                         &config.provider_types,
@@ -1372,7 +1381,7 @@ impl ClientExt for Client {
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, .. } => {
-                Ok(gateway.handle.app_state.config.load())
+                Ok(gateway.handle.app_state.config().load())
             }
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::InvalidClientMode {
@@ -1416,7 +1425,7 @@ impl ClientExt for Client {
                                 snapshot_hash: h.to_string(),
                             }))
                         })?,
-                        None => gateway.handle.app_state.config.load().hash.clone(),
+                        None => gateway.handle.app_state.config().load().hash.clone(),
                     };
                     let snapshot = gateway
                         .handle
@@ -1514,10 +1523,11 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let config = gateway.handle.app_state.config.load();
+                    let config = gateway.handle.app_state.config().load();
+                    let postgres_connection_info = gateway.handle.app_state.postgres_connection_info();
                     let response = tensorzero_core::endpoints::variant_probabilities::get_variant_sampling_probabilities(
                         &config,
-                        &gateway.handle.app_state.postgres_connection_info,
+                        &postgres_connection_info,
                         GetVariantSamplingProbabilitiesParams {
                             function_name: function_name.to_string(),
                         },
@@ -1704,6 +1714,10 @@ impl ClientExt for Client {
     }
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "e2e/pyo3 test helper that exposes the embedded gateway's SwappableAppStateData"
+    )]
     fn get_app_state_data(
         &self,
     ) -> Option<&tensorzero_core::utils::gateway::SwappableAppStateData> {

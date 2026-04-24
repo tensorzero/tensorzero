@@ -1,14 +1,12 @@
 use axum::Json;
-use axum::debug_handler;
 use axum::extract::{Path, State};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::resolve_uuid::{ResolveUuidQueries, ResolveUuidResponse};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "resolve_uuid_handler", skip_all, fields(id = %id))]
 pub async fn resolve_uuid_handler(
     State(app_state): AppState,

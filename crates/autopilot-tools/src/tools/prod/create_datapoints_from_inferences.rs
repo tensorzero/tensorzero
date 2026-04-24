@@ -33,19 +33,15 @@ impl ToolMetadata for CreateDatapointsFromInferencesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = CreateDatapointsResponse;
     type LlmParams = CreateDatapointsFromInferencesToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_FROM_INFERENCES_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "CreateDatapointsFromInferencesToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::CREATE_DATAPOINTS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "CreateDatapointsResponse".to_string()
     }

@@ -12,6 +12,8 @@ import {
 } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
+  ApplyConfigTomlRequest,
+  ApplyConfigTomlResponse,
   AutopilotStatusResponse,
   CacheEnabledMode,
   CloneDatapointsResponse,
@@ -37,6 +39,7 @@ import type {
   EvaluationRunStatsResponse,
   FeedbackRow,
   FunctionInferenceCount,
+  GetConfigTomlResponse,
   GetDatapointCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -56,6 +59,7 @@ import type {
   GetModelLatencyResponse,
   GetModelUsageResponse,
   GetVariantSamplingProbabilitiesResponse,
+  GetVariantUsageResponse,
   GetWorkflowEvaluationProjectCountResponse,
   GetWorkflowEvaluationProjectsResponse,
   GetWorkflowEvaluationRunEpisodesWithFeedbackResponse,
@@ -90,6 +94,8 @@ import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
+  ValidateConfigTomlRequest,
+  ValidateConfigTomlResponse,
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
@@ -639,6 +645,45 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     return (await response.json()) as UiConfig;
   }
 
+  async getConfigToml(): Promise<GetConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml", {
+      method: "GET",
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetConfigTomlResponse;
+  }
+
+  async applyConfigToml(
+    request: ApplyConfigTomlRequest,
+  ): Promise<ApplyConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/apply", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ApplyConfigTomlResponse;
+  }
+
+  async validateConfigToml(
+    request: ValidateConfigTomlRequest,
+  ): Promise<ValidateConfigTomlResponse> {
+    const response = await this.fetch("/internal/config_toml/validate", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ValidateConfigTomlResponse;
+  }
+
   /**
    * Fetches inference count for a function, optionally filtered by variant or grouped by variant.
    * @param functionName - The name of the function to get count for
@@ -757,6 +802,33 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetFunctionThroughputByVariantResponse;
+  }
+
+  /**
+   * Gets variant usage timeseries data for a function.
+   * @param functionName - The function to get variant usage for
+   * @param timeWindow - The time window granularity
+   * @param maxPeriods - Maximum number of periods to return
+   * @returns A promise that resolves with variant usage data
+   * @throws Error if the request fails
+   */
+  async getVariantUsageTimeseries(
+    functionName: string,
+    timeWindow: TimeWindow,
+    maxPeriods: number,
+  ): Promise<GetVariantUsageResponse> {
+    const searchParams = new URLSearchParams({
+      time_window: timeWindow,
+      max_periods: maxPeriods.toString(),
+    });
+    const endpoint = `/internal/functions/${encodeURIComponent(functionName)}/variant_usage?${searchParams.toString()}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetVariantUsageResponse;
   }
 
   /**

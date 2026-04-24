@@ -48,19 +48,15 @@ impl ToolMetadata for AutoRejectToolCallTool {
             "Internal tool for rejecting unknown tool calls. Not intended for direct use.",
         )
     }
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::AUTO_REJECT_TOOL_CALL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "AutoRejectToolCallParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }

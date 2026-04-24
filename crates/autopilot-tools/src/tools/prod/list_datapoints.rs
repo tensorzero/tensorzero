@@ -33,19 +33,15 @@ impl ToolMetadata for ListDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetDatapointsResponse;
     type LlmParams = ListDatapointsToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_DATAPOINTS_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "ListDatapointsToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_DATAPOINTS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GetDatapointsResponse".to_string()
     }

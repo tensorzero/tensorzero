@@ -8,7 +8,9 @@ use crate::endpoints::datasets::v1::types::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::inference::types::{FetchContext, InputExt, JsonInferenceOutput};
+use crate::inference::types::{
+    FetchContext, InputExt, JsonInferenceOutput, validate_content_block_chat_output,
+};
 use crate::jsonschema_util::JSONSchema;
 use crate::tool::ToolCallConfigDatabaseInsert;
 
@@ -46,7 +48,7 @@ impl CreateChatDatapointRequest {
         let validated_output = if let Some(output) = self.output {
             let validation_futures = output
                 .into_iter()
-                .map(|output| output.into_validated(tool_config.as_ref()));
+                .map(|output| validate_content_block_chat_output(output, tool_config.as_ref()));
             let validated_output = join_all(validation_futures).await;
             Some(validated_output)
         } else {
@@ -203,10 +205,11 @@ mod tests {
     };
     use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
     use crate::jsonschema_util::JSONSchema;
-    use crate::tool::{DynamicToolParams, InferenceResponseToolCall};
+    use crate::tool::InferenceResponseToolCall;
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::Path;
+    use tensorzero_inference_types::tool::DynamicToolParams;
     use uuid::Uuid;
 
     async fn get_e2e_config() -> Config {

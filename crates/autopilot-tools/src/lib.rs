@@ -87,6 +87,7 @@ pub fn default_whitelisted_tool_names() -> HashSet<String> {
         "launch_optimization_workflow",
         "get_latest_feedback_by_metric",
         "get_feedback_by_variant",
+        "get_variant_statistics",
         "run_evaluation",
         "get_config",
         "write_config",
@@ -209,6 +210,9 @@ pub async fn for_each_tool<V: ToolVisitor>(visitor: &mut V) -> Result<(), V::Err
         .await?;
     visitor
         .visit_simple_tool::<tools::GetFeedbackByVariantTool>()
+        .await?;
+    visitor
+        .visit_simple_tool::<tools::GetVariantStatisticsTool>()
         .await?;
 
     // Evaluation tool

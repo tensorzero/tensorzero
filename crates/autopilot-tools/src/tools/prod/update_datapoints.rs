@@ -33,19 +33,15 @@ impl ToolMetadata for UpdateDatapointsTool {
     type SideInfo = AutopilotSideInfo;
     type Output = UpdateDatapointsResponse;
     type LlmParams = UpdateDatapointsToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPDATE_DATAPOINTS_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "UpdateDatapointsToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UPDATE_DATAPOINTS_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "UpdateDatapointsResponse".to_string()
     }

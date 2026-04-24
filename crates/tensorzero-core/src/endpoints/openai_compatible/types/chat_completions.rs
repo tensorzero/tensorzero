@@ -37,8 +37,9 @@ use crate::inference::types::{
     RawText, Role, System, Template, Text, Thought, Unknown, current_timestamp,
 };
 use crate::serde_util::is_none_or_empty;
-use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
+use crate::tool::{ProviderTool, ToolResult};
 use crate::variant::JsonMode;
+use tensorzero_inference_types::tool::DynamicToolParams;
 
 // ============================================================================
 // Message Types

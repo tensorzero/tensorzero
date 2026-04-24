@@ -6,4 +6,5 @@ requires-python = ">=3.10"
 dependencies = ["pyarrow"]
 
 [tool.uv]
+exclude-newer = "3 days"
 constraint-dependencies = ["urllib3>=2.6.0"]

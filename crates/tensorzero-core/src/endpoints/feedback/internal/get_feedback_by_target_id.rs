@@ -1,14 +1,14 @@
 //! Feedback endpoint for querying feedback by target ID
 
+use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::feedback::{FeedbackQueries, FeedbackRow};
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct GetFeedbackByTargetIdParams {
@@ -24,7 +24,6 @@ pub struct GetFeedbackByTargetIdResponse {
 }
 
 /// HTTP handler for getting feedback by target ID
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_feedback_by_target_id_handler",
     skip_all,

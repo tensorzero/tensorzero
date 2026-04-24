@@ -8,11 +8,11 @@ export type FeedbackToolParams = {
   /**
    * The episode ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
    */
-  episode_id: string | null;
+  episode_id?: string;
   /**
    * The inference ID to provide feedback for. Exactly one of episode_id or inference_id must be set.
    */
-  inference_id: string | null;
+  inference_id?: string;
   /**
    * The name of the metric to provide feedback for.
    * Use "comment" for free-text comments, "demonstration" for demonstration feedback,
@@ -30,5 +30,5 @@ export type FeedbackToolParams = {
   /**
    * If true, the feedback will not be stored (useful for testing).
    */
-  dryrun: boolean | null;
+  dryrun?: boolean;
 };

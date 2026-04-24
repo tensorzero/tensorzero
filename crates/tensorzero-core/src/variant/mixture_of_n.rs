@@ -830,6 +830,7 @@ async fn inner_fuse_candidates_stream<'a>(
         clients,
         params,
         *fuser.inner.retries(),
+        Some(&inference_config.function_name),
     )
     .await
 }

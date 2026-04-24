@@ -2,15 +2,15 @@
 
 use std::collections::HashMap;
 
+use axum::Json;
 use axum::extract::{Path, State};
-use axum::{Json, debug_handler};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::feedback::FeedbackQueries;
 use crate::error::Error;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 #[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
 #[ts(export)]
@@ -19,7 +19,6 @@ pub struct LatestFeedbackIdByMetricResponse {
 }
 
 /// HTTP handler for getting the latest feedback ID for each metric for a target
-#[debug_handler(state = SwappableAppStateData)]
 #[instrument(
     name = "get_latest_feedback_id_by_metric_handler",
     skip_all,

@@ -10,13 +10,12 @@ use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::FetchContext;
-use crate::utils::gateway::{AppState, StructuredJson, SwappableAppStateData};
+use crate::utils::gateway::{AppState, StructuredJson};
 
 use super::types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse};
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/datapoints` endpoint.
 /// Creates manual datapoints in a dataset.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "datasets.v1.create_datapoints", skip(app_state, request))]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,
@@ -124,10 +123,11 @@ mod tests {
         Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::JSONSchema;
-    use crate::tool::{DynamicToolParams, ToolChoice};
+    use crate::tool::ToolChoice;
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
+    use tensorzero_inference_types::tool::DynamicToolParams;
     use uuid::Uuid;
 
     /// Helper to create a test config with functions registered

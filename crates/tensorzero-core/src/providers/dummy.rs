@@ -14,11 +14,11 @@ use uuid::Uuid;
 
 use crate::inference::InferenceProvider;
 
-use crate::cache::ModelProviderRequest;
 use crate::embeddings::{
     Embedding, EmbeddingProvider, EmbeddingProviderRequestInfo, EmbeddingProviderResponse,
     EmbeddingRequest,
 };
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, Error, ErrorDetails};
@@ -35,7 +35,7 @@ use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, current_timestamp,
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
-use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::{
@@ -318,16 +318,15 @@ async fn sleep_excluding_latency(duration: Duration) {
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request,
             provider_name: _,
             model_name,
-            otlp_config: _,
             model_inference_id: _,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "slow" {
             sleep_excluding_latency(Duration::from_secs(5)).await;
@@ -719,16 +718,15 @@ impl InferenceProvider for DummyProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        ModelProviderRequest {
+        ProviderInferenceRequest {
             request: _,
             provider_name: _,
             model_name: _,
-            otlp_config: _,
             model_inference_id,
-        }: ModelProviderRequest<'a>,
+        }: ProviderInferenceRequest<'a>,
         _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
-        _model_provider: &'a ModelProvider,
+        _model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
             sleep_excluding_latency(Duration::from_secs(5)).await;

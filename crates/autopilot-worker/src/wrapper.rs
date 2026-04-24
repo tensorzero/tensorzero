@@ -76,19 +76,15 @@ impl<T: TaskTool> ToolMetadata for ClientTaskToolWrapper<T> {
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         T::llm_params_ts_bundle()
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         T::llm_params_ts_bundle_type_name()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }
@@ -244,19 +240,15 @@ where
     /// The wrapped tool "returns" by writing to the autopilot API
     /// so for our purposes the output of the tool is ()
     type Output = ();
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         T::llm_params_ts_bundle()
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         T::llm_params_ts_bundle_type_name()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }
@@ -536,6 +528,14 @@ mod tests {
                 variant_names: Option<Vec<String>>,
             ) -> Result<Vec<FeedbackByVariant>, TensorZeroClientError>;
 
+            async fn get_variant_statistics(
+                &self,
+                function_name: String,
+                variant_names: Option<Vec<String>>,
+                after: Option<String>,
+                before: Option<String>,
+            ) -> Result<tensorzero_core::db::variant_statistics::GetVariantStatisticsResponse, TensorZeroClientError>;
+
             async fn run_evaluation(
                 &self,
                 params: durable_tools::RunEvaluationParams,
@@ -571,19 +571,15 @@ mod tests {
         type LlmParams = TestTaskToolParams;
         type SideInfo = AutopilotSideInfo;
         type Output = TestTaskToolOutput;
-
         fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
-
         fn llm_params_ts_bundle_type_name() -> String {
             "void".to_string()
         }
-
         fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
-
         fn output_ts_bundle_type_name() -> String {
             "void".to_string()
         }
@@ -631,19 +627,15 @@ mod tests {
         type LlmParams = TestSimpleToolParams;
         type SideInfo = AutopilotSideInfo;
         type Output = TestSimpleToolOutput;
-
         fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
-
         fn llm_params_ts_bundle_type_name() -> String {
             "void".to_string()
         }
-
         fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
             tensorzero_ts_types::UNIT
         }
-
         fn output_ts_bundle_type_name() -> String {
             "void".to_string()
         }

@@ -11,7 +11,7 @@ use crate::db::evaluation_queries::{EvaluationQueries, EvaluationResultRow};
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::EvaluationConfig;
 use crate::function::FunctionConfigType;
-use crate::utils::gateway::{AppState, SwappableAppStateData};
+use crate::utils::gateway::AppState;
 
 /// Query parameters for getting evaluation results.
 #[derive(Debug, Deserialize)]
@@ -38,7 +38,6 @@ pub struct GetEvaluationResultsResponse {
 /// Handler for `GET /internal/evaluations/results`
 ///
 /// Returns paginated evaluation results across one or more evaluation runs.
-#[axum::debug_handler(state = SwappableAppStateData)]
 #[instrument(name = "evaluations.get_results", skip_all)]
 pub async fn get_evaluation_results_handler(
     State(app_state): AppState,

@@ -4,6 +4,10 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use tokio_util::sync::CancellationToken;
 
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP router is initialized from GatewayHandle and needs SwappableAppStateData to load the latest config"
+)]
 use tensorzero_core::utils::gateway::SwappableAppStateData;
 
 mod handler;
@@ -14,11 +18,22 @@ use handler::TensorZeroMcpServer;
 ///
 /// The returned `Router<()>` is intended to be nested on the gateway router
 /// (e.g. via `nest_service("/mcp", ...)`) so MCP is served on the same port.
+#[expect(
+    clippy::disallowed_types,
+    reason = "MCP router is initialized from GatewayHandle and needs SwappableAppStateData to load the latest config"
+)]
 pub async fn build_mcp_router(
     app_state: Arc<SwappableAppStateData>,
     shutdown_token: CancellationToken,
 ) -> Result<axum::Router, String> {
     let tool_router = handler::build_tool_router(&app_state).await?;
+
+    let mut config =
+        StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token());
+    // During e2e tests, we use the magic docker-compose service hostnames
+    if cfg!(feature = "e2e_tests") {
+        config = config.disable_allowed_hosts();
+    }
 
     let service = StreamableHttpService::new(
         move || {
@@ -28,7 +43,7 @@ pub async fn build_mcp_router(
             ))
         },
         LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default().with_cancellation_token(shutdown_token.child_token()),
+        config,
     );
 
     Ok(axum::Router::new().fallback_service(service))

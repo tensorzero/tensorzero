@@ -32,19 +32,15 @@ impl ToolMetadata for ListInferencesTool {
     type SideInfo = AutopilotSideInfo;
     type Output = GetInferencesResponse;
     type LlmParams = ListInferencesToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::LIST_INFERENCES_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "ListInferencesToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_INFERENCES_RESPONSE
     }
-
     fn output_ts_bundle_type_name() -> String {
         "GetInferencesResponse".to_string()
     }

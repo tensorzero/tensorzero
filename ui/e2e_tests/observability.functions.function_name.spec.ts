@@ -156,6 +156,61 @@ test("should show experimentation section with pie chart for write_haiku functio
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
+test("should display variant usage section with chart for write_haiku function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/write_haiku");
+
+  // Variant Usage section heading and card title should be visible
+  await expect(
+    page.getByRole("heading", { name: "Variant Usage" }),
+  ).toBeVisible();
+  await expect(page.getByText("Variant Usage Over Time")).toBeVisible();
+
+  // Default metric is "inferences" — description reflects that
+  await expect(
+    page.getByText("Number of inference requests by variant"),
+  ).toBeVisible();
+
+  // Chart is rendered
+  const charts = page.locator("[data-chart]");
+  await expect(charts.first()).toBeVisible();
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});
+
+test("should switch metrics in variant usage chart for write_haiku function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/write_haiku");
+
+  await expect(
+    page.getByRole("heading", { name: "Variant Usage" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Number of inference requests by variant"),
+  ).toBeVisible();
+
+  // The metric selector is the only combobox on the page whose current value
+  // is "Inferences" by default; identify it by that and by its options list.
+  const metricSelector = page
+    .getByRole("combobox")
+    .filter({ hasText: "Inferences" });
+
+  // Switch to Total Tokens and verify the description updates
+  await metricSelector.click();
+  await page.getByRole("option", { name: "Total Tokens" }).click();
+  await expect(
+    page.getByText("Total token usage (input + output) by variant"),
+  ).toBeVisible();
+
+  // Switch to Cost and verify the description updates (now the selector shows "Total Tokens")
+  await page.getByRole("combobox").filter({ hasText: "Total Tokens" }).click();
+  await page.getByRole("option", { name: "Cost" }).click();
+  await expect(page.getByText("Estimated cost by variant")).toBeVisible();
+});
+
 test("should display feedback timeseries charts for extract_entities function", async ({
   page,
 }) => {

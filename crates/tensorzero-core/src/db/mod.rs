@@ -38,6 +38,7 @@ pub mod resolve_uuid;
 pub mod stored_datapoint;
 pub mod test_helpers;
 pub mod valkey;
+pub mod variant_statistics;
 pub mod workflow_evaluation_queries;
 
 // For backcompat, re-export everything from the rate_limiting module
@@ -126,6 +127,30 @@ pub struct ModelUsageTimePoint {
     pub cost: Option<Decimal>,
     #[serde(default, deserialize_with = "deserialize_option_u64")]
     pub count_with_cost: Option<u64>,
+}
+
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct VariantUsageTimePoint {
+    pub period_start: DateTime<Utc>,
+    pub variant_name: String,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub input_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub output_tokens: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub count: Option<u64>,
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    #[ts(type = "number | null")]
+    pub cost: Option<Decimal>,
+    #[serde(default, deserialize_with = "deserialize_option_u64")]
+    pub count_with_cost: Option<u64>,
+    /// Latency quantiles — only populated from ClickHouse, None on Postgres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms_quantiles: Option<Vec<Option<f32>>>,
+    /// TTFT quantiles — only populated from ClickHouse, None on Postgres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttft_ms_quantiles: Option<Vec<Option<f32>>>,
 }
 
 #[derive(ts_rs::TS, Debug, Serialize, Deserialize, PartialEq)]

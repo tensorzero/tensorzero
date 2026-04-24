@@ -12,6 +12,7 @@ mod cache;
 mod clickhouse;
 mod common;
 mod config;
+mod config_editing;
 mod cost;
 mod db;
 mod dicl;

@@ -19,14 +19,14 @@ use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
 #[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,
     /// The name of the function to query.
     pub function_name: String,
     /// Optional filter for specific variants. If not provided, all variants are included.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant_names: Option<Vec<String>>,
 }
 
@@ -43,19 +43,15 @@ impl ToolMetadata for GetFeedbackByVariantTool {
     type SideInfo = AutopilotSideInfo;
     type Output = Vec<FeedbackByVariant>;
     type LlmParams = GetFeedbackByVariantToolParams;
-
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::GET_FEEDBACK_BY_VARIANT_TOOL_PARAMS
     }
-
     fn llm_params_ts_bundle_type_name() -> String {
         "GetFeedbackByVariantToolParams".to_string()
     }
-
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::FEEDBACK_BY_VARIANT
     }
-
     fn output_ts_bundle_type_name() -> String {
         "FeedbackByVariant[]".to_string()
     }

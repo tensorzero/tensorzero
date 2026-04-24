@@ -26,9 +26,7 @@ use tensorzero_core::config::UninitializedVariantInfo;
 use tensorzero_core::db::BatchWriterHandle;
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluationFunctionConfig, EvaluatorConfig};
-use tensorzero_core::utils::gateway::{
-    AppState, ResolvedAppStateData, StructuredJson, SwappableAppStateData,
-};
+use tensorzero_core::utils::gateway::{AppState, ResolvedAppStateData, StructuredJson};
 
 // =============================================================================
 // Request/Response Types
@@ -365,7 +363,6 @@ fn resolve_evaluators(
 /// Handler for `POST /internal/evaluations/run`
 ///
 /// Runs an evaluation and streams results via SSE.
-#[axum::debug_handler(state = SwappableAppStateData)]
 pub async fn run_evaluation_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<RunEvaluationRequest>,

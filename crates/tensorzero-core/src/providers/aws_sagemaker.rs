@@ -15,7 +15,6 @@ use super::aws_common::{
     warn_if_credential_exfiltration_risk,
 };
 use super::helpers::inject_extra_request_data;
-use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
@@ -25,7 +24,8 @@ use crate::inference::types::{
     ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
-use crate::model::ModelProvider;
+use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+
 use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
 
 #[expect(unused)]
@@ -153,8 +153,8 @@ struct PreparedSagemakerRequest {
 
 /// Prepare the request body: build request using hosted provider, serialize, inject extras
 async fn prepare_sagemaker_request<'a>(
-    request: ModelProviderRequest<'a>,
-    model_provider: &'a ModelProvider,
+    request: ProviderInferenceRequest<'a>,
+    model_provider: &'a ModelProviderRequestInfo,
     hosted_provider: &'a (dyn WrappedProvider + Send + Sync),
 ) -> Result<PreparedSagemakerRequest, Error> {
     // Build request body using WrappedProvider
@@ -192,10 +192,10 @@ async fn prepare_sagemaker_request<'a>(
 impl InferenceProvider for AWSSagemakerProvider {
     async fn infer<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
         // Save references we need later (these are all Copy or references)
         let inner_request = request.request;
@@ -263,10 +263,10 @@ impl InferenceProvider for AWSSagemakerProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: ModelProviderRequest<'a>,
+        request: ProviderInferenceRequest<'a>,
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
-        model_provider: &'a ModelProvider,
+        model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // Save references we need later
         let model_inference_id = request.model_inference_id;
