@@ -172,12 +172,15 @@ async fn load_config_from_path_glob(
 async fn store_config_in_database(
     uninitialized_config: tensorzero_core::config::UninitializedConfig,
     extra_templates: &std::collections::HashMap<String, String>,
+    creation_source: &'static str,
+    command_label: &'static str,
 ) -> Result<(), Error> {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
         Error::new(ErrorDetails::AppState {
-            message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
-                      `--migrate-config` requires a Postgres connection."
-                .to_string(),
+            message: format!(
+                "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
+                 `{command_label}` requires a Postgres connection."
+            ),
         })
     })?;
 
@@ -195,7 +198,7 @@ async fn store_config_in_database(
         .write_stored_config(
             tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
                 config: &uninitialized_config,
-                creation_source: "migrate-config-cli",
+                creation_source,
                 source_autopilot_session_id: None,
                 extra_templates,
             },
@@ -203,6 +206,125 @@ async fn store_config_in_database(
         .await?;
 
     Ok(())
+}
+
+async fn bootstrap_config_in_database(
+    uninitialized_config: tensorzero_core::config::UninitializedConfig,
+    extra_templates: &std::collections::HashMap<String, String>,
+    force: bool,
+) -> Result<(), Error> {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+        Error::new(ErrorDetails::AppState {
+            message: "Missing environment variable `TENSORZERO_POSTGRES_URL`. \
+                      `--bootstrap-config` requires a Postgres connection."
+                .to_string(),
+        })
+    })?;
+
+    let pool = PgPoolOptions::new()
+        .connect(&postgres_url)
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::AppState {
+                message: format!("Failed to connect to Postgres: {e}"),
+            })
+        })?;
+
+    // Empty-DB precondition: by design, `--bootstrap-config` is the
+    // "initialize DB from TOML" command, not the "keep syncing" command.
+    // If any stored-config table has rows, either the operator is trying to
+    // overwrite an existing deployment's config (use --force, confirming
+    // intent) or they meant to run `--migrate-config` (the append-on-top
+    // variant).
+    if !force
+        && let Some(table) =
+            tensorzero_core::db::postgres::stored_config_queries::find_nonempty_stored_config_table(
+                &pool,
+            )
+            .await?
+    {
+        return Err(Error::new(ErrorDetails::AppState {
+            message: format!(
+                "Cannot bootstrap configuration: `{table}` already contains rows. \
+                 Use `--force` to overwrite, or use `--migrate-config` if the file \
+                 is the source of truth."
+            ),
+        }));
+    }
+
+    let postgres = PostgresConnectionInfo::new_with_pool(pool);
+    postgres
+        .write_stored_config(
+            tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams {
+                config: &uninitialized_config,
+                creation_source: "bootstrap-config-cli",
+                source_autopilot_session_id: None,
+                extra_templates,
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+/// Parse a config glob into an `UninitializedConfig` + runtime-discovered
+/// templates suitable for storage. Performs the same validation as the live
+/// load path so the stored config is guaranteed to boot a gateway.
+///
+/// Shared by `--migrate-config` and `--bootstrap-config`: both commands need
+/// the same pipeline — parse, reject filesystem template access, validate,
+/// collect extra templates — and only differ in the preconditions that gate
+/// the subsequent DB write.
+async fn load_config_for_storage(
+    config_path: &std::path::Path,
+    command_label: &'static str,
+) -> Result<
+    (
+        tensorzero_core::config::UninitializedConfig,
+        std::collections::HashMap<String, String>,
+        ConfigFileGlob,
+    ),
+    ExitCode,
+> {
+    let glob = ConfigFileGlob::new_from_path(config_path)
+        .log_err_pretty("Failed to process config file glob")?;
+
+    // Parse glob → UninitializedConfig. TOML path resolution already strips
+    // the shared filesystem prefix from template keys while retaining the
+    // absolute path separately for runtime use.
+    let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
+        .ok()
+        .log_err_pretty("Failed to parse config files")?;
+    let uninitialized_config =
+        tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
+            .ok()
+            .log_err_pretty("Failed to deserialize config")?;
+
+    if uninitialized_config
+        .gateway
+        .as_ref()
+        .and_then(|g| g.template_filesystem_access.as_ref())
+        .is_some_and(|tfa| tfa.is_active())
+    {
+        tracing::error!(
+            "`template_filesystem_access` is set in the gateway config, but \
+             `{command_label}` does not support filesystem-based template access. \
+             Remove or disable `gateway.template_filesystem_access` and modify your \
+             templates to remove file imports before running this command."
+        );
+        return Err(ExitCode::FAILURE);
+    }
+
+    // Validate by running the full load pipeline. Also extracts extra
+    // templates discovered from the filesystem — all prompts, whether
+    // explicitly specified or dynamically included, must be stored in the
+    // database.
+    let validated = Config::load_and_verify_from_path(&glob)
+        .await
+        .ok()
+        .log_err_pretty("Config validation failed")?;
+    let extra_templates = validated.extra_templates().clone();
+
+    Ok((uninitialized_config, extra_templates, glob))
 }
 
 #[expect(clippy::print_stdout)]
@@ -395,49 +517,32 @@ async fn run() -> Result<(), ExitCode> {
     }
 
     if let Some(config_path) = args.early_exit_commands.migrate_config.as_ref() {
-        let glob = ConfigFileGlob::new_from_path(config_path)
-            .log_err_pretty("Failed to process config file glob")?;
+        let (uninitialized_config, extra_templates, glob) =
+            load_config_for_storage(config_path, "--migrate-config").await?;
         print_configuration_info(Some(&glob));
 
-        // Parse the glob into UninitializedConfig (before load/initialization).
-        // TOML path resolution already strips the shared filesystem prefix from
-        // template keys while retaining the absolute path separately for runtime use.
-        let globbed = tensorzero_core::config::UninitializedConfig::read_toml_config(&glob, false)
-            .ok()
-            .log_err_pretty("Failed to parse config files")?;
-        let uninitialized_config =
-            tensorzero_core::config::UninitializedConfig::try_from(globbed.table)
-                .ok()
-                .log_err_pretty("Failed to deserialize config")?;
-
-        if uninitialized_config
-            .gateway
-            .as_ref()
-            .and_then(|g| g.template_filesystem_access.as_ref())
-            .is_some_and(|tfa| tfa.is_active())
-        {
-            tracing::error!(
-                "`template_filesystem_access` is set in the gateway config, but \
-                 `--migrate-config` does not support filesystem-based template access. \
-                 Remove or disable `gateway.template_filesystem_access` and modify your \
-                 templates to remove file imports before migrating config."
-            );
-            return Err(ExitCode::FAILURE);
-        }
-
-        // Validate by running the full load pipeline (ensures the config is valid before storing).
-        // Also extracts extra templates discovered from the filesystem — all prompts, whether
-        // explicitly specified or dynamically included, must be stored in the database.
-        let validated = Config::load_and_verify_from_path(&glob)
-            .await
-            .ok()
-            .log_err_pretty("Config validation failed")?;
-        let extra_templates = validated.extra_templates().clone();
-
-        store_config_in_database(uninitialized_config, &extra_templates)
-            .await
-            .log_err_pretty("Failed to store configuration in the database")?;
+        store_config_in_database(
+            uninitialized_config,
+            &extra_templates,
+            "migrate-config-cli",
+            "--migrate-config",
+        )
+        .await
+        .log_err_pretty("Failed to store configuration in the database")?;
         tracing::info!("Configuration stored in the database.");
+        return Ok(());
+    }
+
+    if let Some(config_path) = args.early_exit_commands.bootstrap_config.as_ref() {
+        let force = args.early_exit_command_arguments.force;
+        let (uninitialized_config, extra_templates, glob) =
+            load_config_for_storage(config_path, "--bootstrap-config").await?;
+        print_configuration_info(Some(&glob));
+
+        bootstrap_config_in_database(uninitialized_config, &extra_templates, force)
+            .await
+            .log_err_pretty("Failed to bootstrap configuration in the database")?;
+        tracing::info!("Configuration bootstrapped in the database.");
         return Ok(());
     }
 

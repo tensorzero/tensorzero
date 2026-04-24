@@ -16,7 +16,10 @@ use tensorzero_core::config::{
 };
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::postgres::function_config_writes::WriteFunctionConfigParams;
-use tensorzero_core::db::postgres::stored_config_queries::load_config_from_db;
+use tensorzero_core::db::postgres::stored_config_queries::{
+    find_nonempty_stored_config_table, load_config_from_db,
+};
+use tensorzero_core::db::postgres::stored_config_writes::WriteStoredConfigParams;
 use tensorzero_core::evaluations::{
     ExactMatchConfig, UninitializedEvaluationConfig, UninitializedEvaluatorConfig,
     UninitializedInferenceEvaluationConfig,
@@ -546,4 +549,50 @@ async fn plain_and_annotated_toml_diverge_when_loading_errors_present(pool: PgPo
     assert_that!(&plain_toml, not(eq(&annotated_toml)));
     assert_that!(&plain_toml, not(contains_substring("# BROKEN (")));
     assert_that!(&annotated_toml, contains_substring("# BROKEN ("));
+}
+
+// ── Tests: find_nonempty_stored_config_table ─────────────────────────────────
+//
+// These tests guard the precondition `gateway --bootstrap-config` uses to
+// refuse to write on top of existing state. If the helper reports "empty"
+// when a table has rows, a bootstrap would silently clobber production
+// config.
+
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn find_nonempty_stored_config_table_returns_none_for_empty_database(pool: PgPool) {
+    let result = find_nonempty_stored_config_table(&pool)
+        .await
+        .expect("empty-check should succeed against a freshly-migrated DB");
+    assert_that!(result, none());
+}
+
+#[sqlx::test(migrator = "tensorzero_stored_config::postgres::MIGRATOR")]
+async fn find_nonempty_stored_config_table_detects_metric_row(pool: PgPool) {
+    // A single metric row touches `metrics_configs`. That is enough to flip
+    // the DB from empty to non-empty; the helper must report it.
+    let postgres = PostgresConnectionInfo::new_with_pool(pool.clone());
+    let mut config = UninitializedConfig::default();
+    config.metrics = Some(HashMap::from([(
+        "test_metric".to_string(),
+        tensorzero_core::config::MetricConfig {
+            r#type: tensorzero_core::config::MetricConfigType::Boolean,
+            optimize: tensorzero_core::config::MetricConfigOptimize::Max,
+            level: tensorzero_core::config::MetricConfigLevel::Episode,
+            description: None,
+        },
+    )]));
+    postgres
+        .write_stored_config(WriteStoredConfigParams {
+            config: &config,
+            creation_source: "test",
+            source_autopilot_session_id: None,
+            extra_templates: &HashMap::new(),
+        })
+        .await
+        .expect("writing a metric-only config should succeed");
+
+    let result = find_nonempty_stored_config_table(&pool)
+        .await
+        .expect("empty-check should succeed on a populated DB");
+    assert_that!(result, some(eq("tensorzero.metrics_configs")));
 }
