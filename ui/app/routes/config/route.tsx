@@ -138,6 +138,7 @@ export default function ConfigEditorRoute({
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
   const hasShownToastRef = useRef(false);
+  const loadingErrors = loaderData.editableConfig.loading_errors ?? [];
 
   const [toml, setToml] = useState(loaderData.editableConfig.toml);
   const [pathContents, setPathContents] = useState(
@@ -406,6 +407,46 @@ export default function ConfigEditorRoute({
               </ReadOnlyGuard>
             </div>
           </div>
+
+          {loadingErrors.length > 0 && (
+            <div className="border-destructive bg-destructive/5 flex flex-col gap-3 rounded-lg border px-4 py-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="space-y-2">
+                  <p className="font-medium text-destructive">
+                    {loadingErrors.length === 1
+                      ? "1 config item failed to load"
+                      : `${loadingErrors.length} config items failed to load`}
+                  </p>
+                  <p className="text-muted-foreground text-sm">
+                    These items were skipped and are not active. Their raw
+                    config is shown in the editor below with{" "}
+                    <code className="font-mono text-xs"># BROKEN:</code>{" "}
+                    annotations so you can fix or remove them.
+                  </p>
+                  <ul className="space-y-1">
+                    {loadingErrors.map((err, i) => (
+                      <li key={i} className="text-sm">
+                        <span className="font-mono font-medium">
+                          {err.parent
+                            ? `${err.parent} / ${err.name}`
+                            : err.name}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          ({err.kind})
+                        </span>
+                        {": "}
+                        <span className="text-muted-foreground">
+                          {err.error}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
 
           {(inlineError || conflictConfig) && (
             <div className="border-border bg-bg-secondary flex flex-col gap-3 rounded-lg border px-4 py-3">

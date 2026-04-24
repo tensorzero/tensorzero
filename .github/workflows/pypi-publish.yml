@@ -1,5 +1,8 @@
 # This workflow builds the PyO3-based native library across several platforms (using different runners),
 # and then publishes the wheels to PyPi as a single release.
+
+# SECURITY NOTE: We should disable all caches when building a public release to mitigate cache poisoning attacks.
+
 name: Publish PyO3 client to PyPI
 
 on:
@@ -16,6 +19,8 @@ jobs:
   build-wheels:
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/python-client-build.yml
+    with:
+      use_cache: false
     permissions:
       contents: read
       id-token: write
@@ -37,6 +42,8 @@ jobs:
     # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
       - name: Generate artifact attestation
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
