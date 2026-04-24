@@ -1559,6 +1559,18 @@ jobs:
         working-directory: docs
         run: pnpm exec mint broken-links --check-anchors
 
+  socket-security:
+    # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
+    # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+    permissions:
+      issues: write
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/socket-security.yml
+    secrets:
+      SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
+
   pinact:
     # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
     # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
@@ -1575,42 +1587,6 @@ jobs:
         with:
           app_id: ${{ secrets.PINACT_APP_ID }}
           app_private_key: ${{ secrets.PINACT_APP_PRIVATE_KEY }}
-
-  socket-security:
-    # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
-    # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
-    permissions:
-      issues: write
-      contents: read
-      pull-requests: write
-    runs-on: ubuntu-latest
-    environment: socket-security
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
-
-      - name: Install Socket CLI
-        run: pip install socketsecurity --upgrade
-
-      - name: Run Socket Security scan
-        env:
-          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
-          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER=0
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            PR_NUMBER=${{ github.event.pull_request.number }}
-          fi
-          socketcli \
-            --target-path $GITHUB_WORKSPACE \
-            --scm github \
-            --pr-number $PR_NUMBER
 
   # See 'ci/README.md' at the repository root for more details.
   # This job queries the GitHub API for all jobs in this workflow run and asserts
