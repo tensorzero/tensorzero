@@ -60,6 +60,10 @@ junit.path = "junit.xml"
 # `docker-compose.db-only-boot.yml` stack.
 [profile.db-only-boot]
 default-filter = 'binary(e2e) and test(db_only_boot::)'
+# The bootstrap tests mutate gateway-wide config via
+# `/internal/config_toml/apply`, so they must not race with the read-only
+# boot-state tests in this profile.
+test-threads = 1
 retries = { backoff = "exponential", count = 2, delay = "5s", jitter = true, max-delay = "30s" }
 slow-timeout = { period = "30s", terminate-after = 2 }
 junit.path = "junit.xml"
