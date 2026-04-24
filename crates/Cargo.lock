@@ -2634,7 +2634,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable"
 version = "0.1.0"
-source = "git+https://github.com/tensorzero/durable?rev=b5f2664bc12e154a3ed00281c1a14a8c7406eae1#b5f2664bc12e154a3ed00281c1a14a8c7406eae1"
+source = "git+https://github.com/tensorzero/durable?rev=06dece0a51bc7ca9a852a1ba26ef747768430352#06dece0a51bc7ca9a852a1ba26ef747768430352"
 dependencies = [
  "anyhow",
  "async-trait",
