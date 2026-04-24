@@ -126,9 +126,8 @@ impl From<&AutopilotConfig> for tensorzero_stored_config::StoredAutopilotConfig 
 /// preserves enough context for the UI to display the error and for operators
 /// to copy/paste the raw config fragment for debugging.
 #[serde_with::skip_serializing_none]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Clone, Debug, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ConfigLoadingError {
     /// The type of config item (e.g. `"function"`, `"variant"`, `"model"`).
     pub kind: &'static str,
