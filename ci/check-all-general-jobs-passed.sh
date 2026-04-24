@@ -53,6 +53,7 @@ ALLOWED_SKIP=(
   "Postgres tests"
   "rust-build"
   "rust-test"
+  "socket-security"
   "ui-tests"
   "ui-tests-e2e"
   "validate"
