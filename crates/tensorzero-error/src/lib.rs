@@ -1040,6 +1040,33 @@ impl ErrorDetails {
         }
     }
 
+    /// Walks through wrapper error variants to surface a 429 when the underlying
+    /// failure is a `RateLimitExceeded`. Returns `None` for any other underlying
+    /// error, so provider-reported statuses (`InferenceClient { status_code }`,
+    /// `Relay { status_code }`, etc.) do not leak through the wrappers; callers
+    /// fall back to the wrapper's default (e.g. 502/500).
+    fn rate_limit_status_code(&self) -> Option<StatusCode> {
+        match self {
+            ErrorDetails::RateLimitExceeded { .. } => Some(StatusCode::TOO_MANY_REQUESTS),
+            ErrorDetails::AllRetriesFailed { errors } => errors
+                .last()
+                .and_then(|error| error.get_details().rate_limit_status_code()),
+            ErrorDetails::AllVariantsFailed { errors } => errors
+                .values()
+                .last()
+                .and_then(|error| error.get_details().rate_limit_status_code()),
+            ErrorDetails::AllCandidatesFailed { candidate_errors } => candidate_errors
+                .values()
+                .last()
+                .and_then(|error| error.get_details().rate_limit_status_code()),
+            ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
+                .values()
+                .last()
+                .and_then(|error| error.get_details().rate_limit_status_code()),
+            _ => None,
+        }
+    }
+
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
@@ -1048,10 +1075,10 @@ impl ErrorDetails {
                 .map(|e| e.status_code())
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorDetails::AllVariantsFailed { .. } => self
-                .underlying_status_code()
+                .rate_limit_status_code()
                 .unwrap_or(StatusCode::BAD_GATEWAY),
             ErrorDetails::AllCandidatesFailed { .. } => self
-                .underlying_status_code()
+                .rate_limit_status_code()
                 .unwrap_or(StatusCode::BAD_GATEWAY),
             ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
@@ -1146,7 +1173,7 @@ impl ErrorDetails {
             ErrorDetails::MissingFileExtension { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ModelNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::AllModelProvidersFailed { .. } => self
-                .underlying_status_code()
+                .rate_limit_status_code()
                 .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::NoFallbackVariantsRemaining => StatusCode::BAD_GATEWAY,
@@ -2438,6 +2465,43 @@ mod tests {
             errors: variant_errors,
         });
         assert_eq!(error.status_code(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn test_status_code_wrappers_do_not_leak_provider_status() {
+        // Provider-reported statuses carried on `InferenceClient { status_code }`
+        // must NOT propagate through `AllModelProvidersFailed` / `AllVariantsFailed` —
+        // only `RateLimitExceeded` (429) does. Everything else flattens to 500/502.
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert(
+            "openai_gpt_4o_mini".to_string(),
+            Error::new(ErrorDetails::InferenceClient {
+                message: "401 Unauthorized from openai server".to_string(),
+                status_code: Some(StatusCode::UNAUTHORIZED),
+                provider_type: "openai".to_string(),
+                api_type: ApiType::ChatCompletions,
+                raw_request: None,
+                raw_response: None,
+            }),
+        );
+        let providers_failed =
+            Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
+        assert_eq!(
+            providers_failed.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AllModelProvidersFailed must not leak provider 401 — should flatten to 500",
+        );
+
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert("gpt-4o-mini".to_string(), providers_failed);
+        let variants_failed = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        assert_eq!(
+            variants_failed.status_code(),
+            StatusCode::BAD_GATEWAY,
+            "AllVariantsFailed must not leak provider 401 — should flatten to 502",
+        );
     }
 
     #[test]
