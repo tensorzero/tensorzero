@@ -18,4 +18,6 @@ dependencies = [
 dev = ["pyright>=1.1.400"]
 
 [tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }
 constraint-dependencies = ["urllib3>=2.6.0"]

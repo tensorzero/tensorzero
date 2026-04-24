@@ -4,3 +4,7 @@ version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["mcp>=1.6.0", "tensorzero"]
+
+[tool.uv]
+exclude-newer = "3 days"
+exclude-newer-package = { tensorzero = false }

@@ -71,4 +71,5 @@ features = ["pyo3/extension-module"]
 include = [".cargo/*", ".sqlx/*"]
 
 [tool.uv]
+exclude-newer = "3 days"
 constraint-dependencies = ["urllib3>=2.6.0"]

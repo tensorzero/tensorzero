@@ -6,3 +6,6 @@ requires-python = ">=3.9"
 dependencies = [
     "openai",
 ]
+
+[tool.uv]
+exclude-newer = "3 days"
