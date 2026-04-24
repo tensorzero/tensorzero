@@ -52,7 +52,7 @@ jobs:
         with:
           node-version: "24.13.0"
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
@@ -147,7 +147,7 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
@@ -277,7 +277,7 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
@@ -414,7 +414,7 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Login to DockerHub
+      - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
@@ -651,8 +651,8 @@ jobs:
             sleep $((10 * attempt))
           done
 
-      - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+      - name: Login to Docker Hub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
