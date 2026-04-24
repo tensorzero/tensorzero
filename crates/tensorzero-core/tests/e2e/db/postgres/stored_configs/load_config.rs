@@ -215,8 +215,10 @@ async fn load_config_from_db_returns_defaults_on_empty_database(pool: PgPool) {
     let loaded = load_config_from_db(&pool)
         .await
         .expect("loading an empty database should succeed");
+    // No rows to load means no per-row loading errors.
+    assert_that!(loaded.loading_errors.is_empty(), eq(true));
     assert_that!(
-        loaded,
+        loaded.config,
         matches_pattern!(UninitializedConfig {
             gateway: some(anything()),
             clickhouse: some(anything()),
