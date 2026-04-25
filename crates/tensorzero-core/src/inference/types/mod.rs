@@ -1695,8 +1695,8 @@ impl ChatInferenceResult {
         json_mode: Option<JsonMode>,
     ) -> Self {
         let created = current_timestamp();
-        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
         let finish_reason = get_finish_reason(&model_inference_results);
+        let content = parse_chat_output(raw_content, tool_config, json_mode, finish_reason).await;
         Self {
             inference_id,
             created,
@@ -1725,10 +1725,19 @@ pub async fn parse_chat_output(
     content: Vec<ContentBlockOutput>,
     tool_config: Option<&ToolCallConfig>,
     json_mode: Option<JsonMode>,
+    finish_reason: Option<FinishReason>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
+        // Surface `finish_reason` so we can tell apart safety filters,
+        // `max_tokens` truncation, and tool-call serialization issues that
+        // all manifest as zero content blocks.
+        let finish_reason_str = finish_reason
+            .map(|r| format!("{r:?}"))
+            .unwrap_or_else(|| "None".to_string());
         Error::new(ErrorDetails::Inference {
-            message: "No content blocks in inference result".to_string(),
+            message: format!(
+                "No content blocks in inference result (finish_reason: {finish_reason_str})"
+            ),
         });
     }
 
