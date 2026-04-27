@@ -265,7 +265,10 @@ async function recordSignature(octokit, comment, pr, env) {
       await commitSignatures(octokit, env, ref, signatures, newEntry);
       return;
     } catch (err) {
-      if (err.status === 422 && attempt < maxAttempts) {
+      // 422: createCommit rejected because base tree/parent is stale.
+      // 409: updateRef rejected as non-fast-forward (concurrent signer or
+      // duplicate webhook delivery). Both indicate a race we should retry.
+      if ((err.status === 422 || err.status === 409) && attempt < maxAttempts) {
         await sleep(100 + Math.floor(Math.random() * 200));
         continue;
       }
