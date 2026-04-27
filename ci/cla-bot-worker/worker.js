@@ -175,6 +175,35 @@ async function evaluatePr(octokit, pr, env, target) {
     per_page: 100,
   });
 
+  const unresolved = findUnresolvedCommits(commits);
+  if (unresolved.length > 0) {
+    await postUnresolvedCommitsCheck(
+      octokit,
+      target,
+      env,
+      pr.head.sha,
+      unresolved,
+    );
+    const commentsForSticky = await octokit.paginate(
+      octokit.rest.issues.listComments,
+      {
+        owner: target.owner,
+        repo: target.repo,
+        issue_number: pr.number,
+        per_page: 100,
+      },
+    );
+    await upsertUnresolvedCommitsComment(
+      octokit,
+      pr,
+      unresolved,
+      env,
+      target,
+      commentsForSticky,
+    );
+    return;
+  }
+
   const candidates = new Map();
   const addUser = (user) => {
     if (!user || !user.login || !user.id) return;
@@ -269,6 +298,12 @@ async function evaluateMergeGroup(octokit, mergeGroup, env, target) {
     return;
   }
 
+  const unresolved = findUnresolvedCommits(cmp.commits);
+  if (unresolved.length > 0) {
+    await postUnresolvedCommitsCheck(octokit, target, env, headSha, unresolved);
+    return;
+  }
+
   const candidates = new Map();
   const addUser = (user) => {
     if (!user || !user.login || !user.id) return;
@@ -335,6 +370,12 @@ async function evaluateForQueueSha(octokit, pr, env, target, headSha) {
     pull_number: pr.number,
     per_page: 100,
   });
+
+  const unresolved = findUnresolvedCommits(commits);
+  if (unresolved.length > 0) {
+    await postUnresolvedCommitsCheck(octokit, target, env, headSha, unresolved);
+    return;
+  }
 
   const candidates = new Map();
   const addUser = (user) => {
@@ -691,6 +732,119 @@ async function commitSignatures(octokit, env, target, ref, signatures, newEntry)
 }
 
 // --- Helpers ---
+
+// A commit whose top-level `author` or `committer` field is null is one whose
+// raw git author/committer email is not linked to any GitHub account. We
+// cannot tell who signed the CLA for that commit, so we fail closed instead
+// of silently treating the commit as not requiring a signature.
+function findUnresolvedCommits(commits) {
+  const unresolved = [];
+  for (const c of commits) {
+    if (c.author === null) {
+      unresolved.push({
+        sha: c.sha,
+        role: "author",
+        name: c.commit?.author?.name || "(unknown)",
+        email: c.commit?.author?.email || "(unknown)",
+      });
+    }
+    if (c.committer === null) {
+      unresolved.push({
+        sha: c.sha,
+        role: "committer",
+        name: c.commit?.committer?.name || "(unknown)",
+        email: c.commit?.committer?.email || "(unknown)",
+      });
+    }
+  }
+  return unresolved;
+}
+
+function buildUnresolvedSummary(unresolved) {
+  const lines = unresolved
+    .slice(0, 25)
+    .map(
+      (u) =>
+        `- \`${u.sha.slice(0, 7)}\` ${u.role}: \`${u.name} <${u.email}>\``,
+    );
+  if (unresolved.length > 25) {
+    lines.push(`- … and ${unresolved.length - 25} more`);
+  }
+  return [
+    "The CLA bot cannot verify CLA coverage for this pull request because some commits are attributed to email addresses not linked to a GitHub account. Without a GitHub identity for those commits, the bot cannot determine whether the contributor has signed the CLA.",
+    "",
+    "**Affected commits:**",
+    "",
+    ...lines,
+    "",
+    "**To resolve:**",
+    "",
+    "- Each affected contributor adds the email above to their GitHub account: https://github.com/settings/emails (recommended), **or**",
+    "- Re-author the affected commits with a GitHub-linked email and force-push.",
+    "",
+    "Once the commits resolve to GitHub users, push or comment `recheck` to re-evaluate.",
+  ].join("\n");
+}
+
+async function postUnresolvedCommitsCheck(
+  octokit,
+  target,
+  env,
+  headSha,
+  unresolved,
+) {
+  await octokit.rest.checks.create({
+    owner: target.owner,
+    repo: target.repo,
+    name: env.CHECK_NAME,
+    head_sha: headSha,
+    status: "completed",
+    conclusion: "action_required",
+    details_url: env.CLA_DOC_URL,
+    output: {
+      title: "Cannot verify CLA: commits with unlinked email addresses",
+      summary: buildUnresolvedSummary(unresolved),
+    },
+  });
+}
+
+async function upsertUnresolvedCommitsComment(
+  octokit,
+  pr,
+  unresolved,
+  env,
+  target,
+  comments,
+) {
+  const appId = Number(env.GITHUB_APP_ID);
+  const existing = comments.find(
+    (c) =>
+      c.performed_via_github_app?.id === appId &&
+      (c.body || "").includes(COMMENT_MARKER),
+  );
+
+  const body = [COMMENT_MARKER, "", buildUnresolvedSummary(unresolved)].join(
+    "\n",
+  );
+
+  if (existing) {
+    if ((existing.body || "") === body) return;
+    await octokit.rest.issues.updateComment({
+      owner: target.owner,
+      repo: target.repo,
+      comment_id: existing.id,
+      body,
+    });
+    return;
+  }
+
+  await octokit.rest.issues.createComment({
+    owner: target.owner,
+    repo: target.repo,
+    issue_number: pr.number,
+    body,
+  });
+}
 
 function isBotOrAllowlisted(login, allowlist) {
   const lower = login.toLowerCase();
