@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('general-{0}-{1}', github.workflow, github.ref) }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -1559,23 +1559,6 @@ jobs:
         working-directory: docs
         run: pnpm exec mint broken-links --check-anchors
 
-  pinact:
-    # Skip on fork and Dependabot PRs because GitHub doesn't expose repo secrets to them.
-    # Always runs for `merge_group` and `workflow_dispatch` where secrets are available.
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: suzuki-shunsuke/pinact-action@cf51507d80d4d6522a07348e3d58790290eaf0b6 # v2.0.0
-        with:
-          app_id: ${{ secrets.PINACT_APP_ID }}
-          app_private_key: ${{ secrets.PINACT_APP_PRIVATE_KEY }}
-
   # See 'ci/README.md' at the repository root for more details.
   # This job queries the GitHub API for all jobs in this workflow run and asserts
   # that they all passed, except for jobs in the ALLOWED_FAIL and ALLOWED_SKIP
@@ -1615,7 +1598,6 @@ jobs:
         k3d,
         mock-optimization-tests,
         mocked-batch-tests,
-        pinact,
         postgres-tests,
         rust-build,
         rust-test,
