@@ -37,7 +37,7 @@
       "picomatch": ">=4.0.4",
       "uuid": ">=14.0.0",
       "yaml": ">=2.8.3",
-      "path-to-regexp": ">=0.1.13"
+      "path-to-regexp": "^0.1.13"
     }
   }
 }
