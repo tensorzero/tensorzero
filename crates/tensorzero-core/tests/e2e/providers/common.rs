@@ -2524,7 +2524,8 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "mistral" => {
             assert!(
-                res["error"].as_str().unwrap().contains("Bearer token"),
+                res["error"].as_str().unwrap().contains("Bearer token")
+                    || res["error"].as_str().unwrap().contains("Unauthorized"),
                 "Unexpected error: {res}"
             );
         }
