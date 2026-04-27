@@ -147,6 +147,25 @@ async function evaluatePr(octokit, pr, env, target) {
     (u) => !isBotOrAllowlisted(u.login, allowlist),
   );
 
+  // List comments once for both signature harvesting and the sticky comment.
+  const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+    owner: target.owner,
+    repo: target.repo,
+    issue_number: pr.number,
+    per_page: 100,
+  });
+
+  // Self-heal: any comment in this PR's thread whose body is exactly the
+  // canonical sign phrase counts as a signature, even if it predates this
+  // bot or was missed by a previous run. recordSignature is idempotent on
+  // user id, so repeats are cheap no-ops.
+  for (const c of comments) {
+    if ((c.body || "").trim() !== env.SIGN_PHRASE) continue;
+    if (!c.user?.id || !c.user?.login) continue;
+    if (c.user.login.toLowerCase().endsWith("[bot]")) continue;
+    await recordSignature(octokit, c, pr, env, target);
+  }
+
   const signatures = await readSignatures(octokit, env, target);
   const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
   const unsigned = required.filter((u) => !signedIds.has(u.id));
@@ -168,7 +187,7 @@ async function evaluatePr(octokit, pr, env, target) {
     },
   });
 
-  await upsertStickyComment(octokit, pr, unsigned, env, target);
+  await upsertStickyComment(octokit, pr, unsigned, env, target, comments);
 }
 
 async function postOversizedPrCheck(octokit, pr, env, target) {
@@ -250,13 +269,7 @@ function buildCheckSummary(unsigned, env) {
   ].join("\n");
 }
 
-async function upsertStickyComment(octokit, pr, unsigned, env, target) {
-  const comments = await octokit.paginate(octokit.rest.issues.listComments, {
-    owner: target.owner,
-    repo: target.repo,
-    issue_number: pr.number,
-    per_page: 100,
-  });
+async function upsertStickyComment(octokit, pr, unsigned, env, target, comments) {
   // Only treat a comment as the sticky comment if this GitHub App authored it.
   // Otherwise a contributor could post the marker themselves and trick the bot
   // into trying to edit a comment it doesn't own (which GitHub rejects).
