@@ -21,7 +21,7 @@ import { restEndpointMethods } from "@octokit/plugin-rest-endpoint-methods";
 
 const MyOctokit = Octokit.plugin(paginateRest, restEndpointMethods);
 
-const COMMENT_MARKER = "<!-- tz-cla-bot -->";
+const COMMENT_MARKER = "<!-- tensorzero-cla-bot -->";
 
 export default {
   async fetch(request, env) {
@@ -179,8 +179,14 @@ async function upsertStickyComment(octokit, pr, unsigned, env) {
     issue_number: pr.number,
     per_page: 100,
   });
-  const existing = comments.find((c) =>
-    (c.body || "").includes(COMMENT_MARKER),
+  // Only treat a comment as the sticky comment if this GitHub App authored it.
+  // Otherwise a contributor could post the marker themselves and trick the bot
+  // into trying to edit a comment it doesn't own (which GitHub rejects).
+  const appId = Number(env.GITHUB_APP_ID);
+  const existing = comments.find(
+    (c) =>
+      c.performed_via_github_app?.id === appId &&
+      (c.body || "").includes(COMMENT_MARKER),
   );
 
   // If everyone was already signed when the PR was opened, stay silent —
