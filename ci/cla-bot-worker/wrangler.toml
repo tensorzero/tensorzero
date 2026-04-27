@@ -5,7 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 GITHUB_ORG = "tensorzero"
-GITHUB_REPO = "tensorzero"
 CLA_BRANCH = "cla-signatures"
 CLA_SIGNATURES_PATH = "ci/cla-signatures.json"
 CLA_DOC_URL = "https://github.com/tensorzero/tensorzero/blob/main/CLA.md"

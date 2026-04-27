@@ -1,5 +1,6 @@
 // Cloudflare Worker that receives GitHub webhook events and enforces the
-// TensorZero Contributor License Agreement on pull requests.
+// TensorZero Contributor License Agreement on pull requests across every
+// repo in the tensorzero org.
 //
 // Required secrets (set via `wrangler secret put`):
 //   GITHUB_APP_ID          - GitHub App ID
@@ -8,7 +9,7 @@
 //   GITHUB_WEBHOOK_SECRET  - the webhook secret configured in the GitHub App
 //
 // Required vars (set in wrangler.toml):
-//   GITHUB_ORG, GITHUB_REPO
+//   GITHUB_ORG
 //   CLA_BRANCH, CLA_SIGNATURES_PATH, CLA_DOC_URL
 //   CHECK_NAME
 //   SIGN_PHRASE, RECHECK_PHRASE
@@ -44,10 +45,14 @@ export default {
     const event = request.headers.get("X-GitHub-Event");
     const payload = JSON.parse(rawBody);
 
-    const expectedRepo = `${env.GITHUB_ORG}/${env.GITHUB_REPO}`;
-    if (payload.repository?.full_name !== expectedRepo) {
-      return new Response("OK (skipped: wrong repo)", { status: 200 });
+    if (payload.repository?.owner?.login !== env.GITHUB_ORG) {
+      return new Response("OK (skipped: wrong org)", { status: 200 });
     }
+
+    const target = {
+      owner: payload.repository.owner.login,
+      repo: payload.repository.name,
+    };
 
     const octokit = await app.getInstallationOctokit(
       Number(env.GITHUB_INSTALLATION_ID),
@@ -57,7 +62,7 @@ export default {
       if (!["opened", "reopened", "synchronize"].includes(payload.action)) {
         return new Response("OK (skipped action)", { status: 200 });
       }
-      await evaluatePr(octokit, payload.pull_request, env);
+      await evaluatePr(octokit, payload.pull_request, env, target);
       return new Response("OK", { status: 200 });
     }
 
@@ -76,15 +81,15 @@ export default {
       }
 
       const { data: pr } = await octokit.rest.pulls.get({
-        owner: env.GITHUB_ORG,
-        repo: env.GITHUB_REPO,
+        owner: target.owner,
+        repo: target.repo,
         pull_number: payload.issue.number,
       });
 
       if (isSign) {
-        await recordSignature(octokit, payload.comment, pr, env);
+        await recordSignature(octokit, payload.comment, pr, env, target);
       }
-      await evaluatePr(octokit, pr, env);
+      await evaluatePr(octokit, pr, env, target);
       return new Response("OK", { status: 200 });
     }
 
@@ -103,12 +108,12 @@ function createApp(env) {
 
 // --- Evaluate a PR: post Check Run + sticky comment ---
 
-async function evaluatePr(octokit, pr, env) {
+async function evaluatePr(octokit, pr, env, target) {
   const allowlist = parseAllowlist(env.ALLOWLIST);
 
   const commits = await octokit.paginate(octokit.rest.pulls.listCommits, {
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     pull_number: pr.number,
     per_page: 100,
   });
@@ -128,18 +133,30 @@ async function evaluatePr(octokit, pr, env) {
     addUser(c.committer);
   }
 
-  const required = [...candidates.values()].filter(
-    (u) => !shouldSkip(u.login, allowlist),
+  // Filter pipeline:
+  // 1. cheap synchronous filters (bots, allowlist)
+  // 2. async org-membership check (one API call per remaining distinct login,
+  //    cached per webhook invocation)
+  const cheapFiltered = [...candidates.values()].filter(
+    (u) => !isBotOrAllowlisted(u.login, allowlist),
   );
+  const memberCache = new Map();
+  const required = [];
+  for (const u of cheapFiltered) {
+    if (!memberCache.has(u.login)) {
+      memberCache.set(u.login, await isOrgMember(octokit, env, u.login));
+    }
+    if (!memberCache.get(u.login)) required.push(u);
+  }
 
-  const signatures = await readSignatures(octokit, env);
+  const signatures = await readSignatures(octokit, env, target);
   const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
   const unsigned = required.filter((u) => !signedIds.has(u.id));
 
   const allSigned = unsigned.length === 0;
   await octokit.rest.checks.create({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     name: env.CHECK_NAME,
     head_sha: pr.head.sha,
     status: "completed",
@@ -153,7 +170,7 @@ async function evaluatePr(octokit, pr, env) {
     },
   });
 
-  await upsertStickyComment(octokit, pr, unsigned, env);
+  await upsertStickyComment(octokit, pr, unsigned, env, target);
 }
 
 function buildCheckSummary(unsigned, env) {
@@ -172,10 +189,10 @@ function buildCheckSummary(unsigned, env) {
   ].join("\n");
 }
 
-async function upsertStickyComment(octokit, pr, unsigned, env) {
+async function upsertStickyComment(octokit, pr, unsigned, env, target) {
   const comments = await octokit.paginate(octokit.rest.issues.listComments, {
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     issue_number: pr.number,
     per_page: 100,
   });
@@ -198,8 +215,8 @@ async function upsertStickyComment(octokit, pr, unsigned, env) {
   if (existing) {
     if ((existing.body || "") === body) return;
     await octokit.rest.issues.updateComment({
-      owner: env.GITHUB_ORG,
-      repo: env.GITHUB_REPO,
+      owner: target.owner,
+      repo: target.repo,
       comment_id: existing.id,
       body,
     });
@@ -207,8 +224,8 @@ async function upsertStickyComment(octokit, pr, unsigned, env) {
   }
 
   await octokit.rest.issues.createComment({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     issue_number: pr.number,
     body,
   });
@@ -242,7 +259,7 @@ function renderStickyBody(unsigned, env) {
 
 // --- Record a signature: append to cla-signatures.json with retry ---
 
-async function recordSignature(octokit, comment, pr, env) {
+async function recordSignature(octokit, comment, pr, env, target) {
   const newEntry = {
     name: comment.user.login,
     id: comment.user.id,
@@ -254,7 +271,11 @@ async function recordSignature(octokit, comment, pr, env) {
 
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const { ref, signatures } = await readSignaturesWithSha(octokit, env);
+    const { ref, signatures } = await readSignaturesWithSha(
+      octokit,
+      env,
+      target,
+    );
 
     if (signatures.signedContributors.some((s) => s.id === newEntry.id)) {
       return;
@@ -262,7 +283,7 @@ async function recordSignature(octokit, comment, pr, env) {
     signatures.signedContributors.push(newEntry);
 
     try {
-      await commitSignatures(octokit, env, ref, signatures, newEntry);
+      await commitSignatures(octokit, env, target, ref, signatures, newEntry);
       return;
     } catch (err) {
       // 422: createCommit rejected because base tree/parent is stale.
@@ -277,48 +298,98 @@ async function recordSignature(octokit, comment, pr, env) {
   }
 }
 
-async function readSignatures(octokit, env) {
-  const { signatures } = await readSignaturesWithSha(octokit, env);
+async function readSignatures(octokit, env, target) {
+  const { signatures } = await readSignaturesWithSha(octokit, env, target);
   return signatures;
 }
 
-async function readSignaturesWithSha(octokit, env) {
-  const { data: ref } = await octokit.rest.git.getRef({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
-    ref: `heads/${env.CLA_BRANCH}`,
-  });
+async function readSignaturesWithSha(octokit, env, target) {
+  let ref;
+  try {
+    const { data } = await octokit.rest.git.getRef({
+      owner: target.owner,
+      repo: target.repo,
+      ref: `heads/${env.CLA_BRANCH}`,
+    });
+    ref = data;
+  } catch (err) {
+    if (err.status !== 404) throw err;
+    ref = await bootstrapClaBranch(octokit, env, target);
+  }
 
-  const { data: file } = await octokit.rest.repos.getContent({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
-    path: env.CLA_SIGNATURES_PATH,
-    ref: env.CLA_BRANCH,
-  });
+  let signatures;
+  try {
+    const { data: file } = await octokit.rest.repos.getContent({
+      owner: target.owner,
+      repo: target.repo,
+      path: env.CLA_SIGNATURES_PATH,
+      ref: env.CLA_BRANCH,
+    });
+    signatures = JSON.parse(decodeBase64Utf8(file.content));
+  } catch (err) {
+    if (err.status !== 404) throw err;
+    signatures = { signedContributors: [] };
+  }
 
-  const content = decodeBase64Utf8(file.content);
-  const signatures = JSON.parse(content);
   return { ref, signatures };
 }
 
-async function commitSignatures(octokit, env, ref, signatures, newEntry) {
+async function bootstrapClaBranch(octokit, env, target) {
+  const initial = JSON.stringify({ signedContributors: [] }, null, 2) + "\n";
+  const { data: blob } = await octokit.rest.git.createBlob({
+    owner: target.owner,
+    repo: target.repo,
+    content: initial,
+    encoding: "utf-8",
+  });
+  const { data: tree } = await octokit.rest.git.createTree({
+    owner: target.owner,
+    repo: target.repo,
+    tree: [
+      {
+        path: env.CLA_SIGNATURES_PATH,
+        mode: "100644",
+        type: "blob",
+        sha: blob.sha,
+      },
+    ],
+  });
+  // Orphan commit (no parents) — keeps the cla-signatures branch isolated
+  // from the repo's main history.
+  const { data: commit } = await octokit.rest.git.createCommit({
+    owner: target.owner,
+    repo: target.repo,
+    message: "Initialize CLA signatures",
+    tree: tree.sha,
+    parents: [],
+  });
+  const { data: ref } = await octokit.rest.git.createRef({
+    owner: target.owner,
+    repo: target.repo,
+    ref: `refs/heads/${env.CLA_BRANCH}`,
+    sha: commit.sha,
+  });
+  return ref;
+}
+
+async function commitSignatures(octokit, env, target, ref, signatures, newEntry) {
   const { data: parentCommit } = await octokit.rest.git.getCommit({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     commit_sha: ref.object.sha,
   });
 
   const newContent = JSON.stringify(signatures, null, 2) + "\n";
   const { data: blob } = await octokit.rest.git.createBlob({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     content: newContent,
     encoding: "utf-8",
   });
 
   const { data: tree } = await octokit.rest.git.createTree({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     base_tree: parentCommit.tree.sha,
     tree: [
       {
@@ -331,16 +402,16 @@ async function commitSignatures(octokit, env, ref, signatures, newEntry) {
   });
 
   const { data: commit } = await octokit.rest.git.createCommit({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     message: `Sign CLA: @${newEntry.name} (#${newEntry.pullRequestNo})`,
     tree: tree.sha,
     parents: [parentCommit.sha],
   });
 
   await octokit.rest.git.updateRef({
-    owner: env.GITHUB_ORG,
-    repo: env.GITHUB_REPO,
+    owner: target.owner,
+    repo: target.repo,
     ref: `heads/${env.CLA_BRANCH}`,
     sha: commit.sha,
     force: false,
@@ -349,10 +420,25 @@ async function commitSignatures(octokit, env, ref, signatures, newEntry) {
 
 // --- Helpers ---
 
-function shouldSkip(login, allowlist) {
+function isBotOrAllowlisted(login, allowlist) {
   const lower = login.toLowerCase();
   if (lower.endsWith("[bot]")) return true;
   return allowlist.some((entry) => entry.toLowerCase() === lower);
+}
+
+async function isOrgMember(octokit, env, login) {
+  try {
+    await octokit.rest.orgs.checkMembershipForUser({
+      org: env.GITHUB_ORG,
+      username: login,
+    });
+    return true;
+  } catch (err) {
+    if (err.status === 404 || err.status === 302) return false;
+    // For other errors (auth failures, rate limits, network), re-throw so we
+    // don't silently bypass enforcement during an outage.
+    throw err;
+  }
 }
 
 function parseAllowlist(csv) {
