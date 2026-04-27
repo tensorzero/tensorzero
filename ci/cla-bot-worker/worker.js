@@ -108,8 +108,18 @@ function createApp(env) {
 
 // --- Evaluate a PR: post Check Run + sticky comment ---
 
+// `pulls.listCommits` is documented to return at most 250 commits per PR,
+// regardless of pagination. Past that, we cannot reliably enumerate every
+// contributor, so we fail closed instead of silently under-enforcing.
+const MAX_COMMITS_INSPECTABLE = 250;
+
 async function evaluatePr(octokit, pr, env, target) {
   const allowlist = parseAllowlist(env.ALLOWLIST);
+
+  if (pr.commits > MAX_COMMITS_INSPECTABLE) {
+    await postOversizedPrCheck(octokit, pr, env, target);
+    return;
+  }
 
   const commits = await octokit.paginate(octokit.rest.pulls.listCommits, {
     owner: target.owner,
@@ -171,6 +181,69 @@ async function evaluatePr(octokit, pr, env, target) {
   });
 
   await upsertStickyComment(octokit, pr, unsigned, env, target);
+}
+
+async function postOversizedPrCheck(octokit, pr, env, target) {
+  const summary = [
+    `This pull request has ${pr.commits} commits, which exceeds the GitHub API's per-PR limit of ${MAX_COMMITS_INSPECTABLE} commits the CLA bot can enumerate.`,
+    "",
+    "The bot cannot reliably verify that every commit author has signed the CLA, so this check fails closed.",
+    "",
+    "Please split this PR into smaller pieces, or contact the maintainers for manual review.",
+  ].join("\n");
+
+  await octokit.rest.checks.create({
+    owner: target.owner,
+    repo: target.repo,
+    name: env.CHECK_NAME,
+    head_sha: pr.head.sha,
+    status: "completed",
+    conclusion: "action_required",
+    details_url: env.CLA_DOC_URL,
+    output: {
+      title: "Pull request too large to verify CLA",
+      summary,
+    },
+  });
+
+  const body = [
+    COMMENT_MARKER,
+    "",
+    `⚠️ This pull request has **${pr.commits} commits**, exceeding GitHub's per-PR limit of ${MAX_COMMITS_INSPECTABLE} commits the CLA bot can enumerate. The bot cannot verify CLA coverage automatically.`,
+    "",
+    "Please split this PR into smaller pieces, or contact the maintainers for manual review.",
+  ].join("\n");
+
+  const comments = await octokit.paginate(octokit.rest.issues.listComments, {
+    owner: target.owner,
+    repo: target.repo,
+    issue_number: pr.number,
+    per_page: 100,
+  });
+  const appId = Number(env.GITHUB_APP_ID);
+  const existing = comments.find(
+    (c) =>
+      c.performed_via_github_app?.id === appId &&
+      (c.body || "").includes(COMMENT_MARKER),
+  );
+
+  if (existing) {
+    if ((existing.body || "") === body) return;
+    await octokit.rest.issues.updateComment({
+      owner: target.owner,
+      repo: target.repo,
+      comment_id: existing.id,
+      body,
+    });
+    return;
+  }
+
+  await octokit.rest.issues.createComment({
+    owner: target.owner,
+    repo: target.repo,
+    issue_number: pr.number,
+    body,
+  });
 }
 
 function buildCheckSummary(unsigned, env) {
@@ -363,13 +436,27 @@ async function bootstrapClaBranch(octokit, env, target) {
     tree: tree.sha,
     parents: [],
   });
-  const { data: ref } = await octokit.rest.git.createRef({
-    owner: target.owner,
-    repo: target.repo,
-    ref: `refs/heads/${env.CLA_BRANCH}`,
-    sha: commit.sha,
-  });
-  return ref;
+  try {
+    const { data: ref } = await octokit.rest.git.createRef({
+      owner: target.owner,
+      repo: target.repo,
+      ref: `refs/heads/${env.CLA_BRANCH}`,
+      sha: commit.sha,
+    });
+    return ref;
+  } catch (err) {
+    // 422 here means another concurrent webhook (or a redelivery) created
+    // the branch between our getRef 404 and this createRef. Fetch and use
+    // whatever they wrote; our orphan blob/tree/commit is unreachable and
+    // GitHub will GC it.
+    if (err.status !== 422) throw err;
+    const { data: ref } = await octokit.rest.git.getRef({
+      owner: target.owner,
+      repo: target.repo,
+      ref: `heads/${env.CLA_BRANCH}`,
+    });
+    return ref;
+  }
 }
 
 async function commitSignatures(octokit, env, target, ref, signatures, newEntry) {
