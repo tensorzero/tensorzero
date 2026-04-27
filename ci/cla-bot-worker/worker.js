@@ -143,21 +143,9 @@ async function evaluatePr(octokit, pr, env, target) {
     addUser(c.committer);
   }
 
-  // Filter pipeline:
-  // 1. cheap synchronous filters (bots, allowlist)
-  // 2. async org-membership check (one API call per remaining distinct login,
-  //    cached per webhook invocation)
-  const cheapFiltered = [...candidates.values()].filter(
+  const required = [...candidates.values()].filter(
     (u) => !isBotOrAllowlisted(u.login, allowlist),
   );
-  const memberCache = new Map();
-  const required = [];
-  for (const u of cheapFiltered) {
-    if (!memberCache.has(u.login)) {
-      memberCache.set(u.login, await isOrgMember(octokit, env, u.login));
-    }
-    if (!memberCache.get(u.login)) required.push(u);
-  }
 
   const signatures = await readSignatures(octokit, env, target);
   const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
@@ -511,21 +499,6 @@ function isBotOrAllowlisted(login, allowlist) {
   const lower = login.toLowerCase();
   if (lower.endsWith("[bot]")) return true;
   return allowlist.some((entry) => entry.toLowerCase() === lower);
-}
-
-async function isOrgMember(octokit, env, login) {
-  try {
-    await octokit.rest.orgs.checkMembershipForUser({
-      org: env.GITHUB_ORG,
-      username: login,
-    });
-    return true;
-  } catch (err) {
-    if (err.status === 404 || err.status === 302) return false;
-    // For other errors (auth failures, rate limits, network), re-throw so we
-    // don't silently bypass enforcement during an outage.
-    throw err;
-  }
 }
 
 function parseAllowlist(csv) {

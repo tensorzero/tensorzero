@@ -6,7 +6,7 @@ Cloudflare Worker that receives GitHub webhook events and enforces the TensorZer
 
 ## Behavior
 
-- On `pull_request` (`opened`, `reopened`, `synchronize`): collects every distinct GitHub user who authored or committed any commit in the PR (plus the PR opener), drops `[bot]` accounts, allowlisted users, and current `tensorzero` org members, and compares the rest against `ci/cla-signatures.json` on the **target repo's** `cla-signatures` branch.
+- On `pull_request` (`opened`, `reopened`, `synchronize`): collects every distinct GitHub user who authored or committed any commit in the PR (plus the PR opener), drops `[bot]` accounts and allowlisted users, and compares the rest against `ci/cla-signatures.json` on the **target repo's** `cla-signatures` branch.
 - On `issue_comment` (`created`) on a PR:
   - Body equals `recheck` → re-evaluate.
   - Body equals the canonical sign phrase → record a signature on the PR's repo, then re-evaluate.
@@ -19,8 +19,6 @@ Cloudflare Worker that receives GitHub webhook events and enforces the TensorZer
 The bot acts on whichever repo a webhook arrives from, as long as the repo's owner matches `GITHUB_ORG`. To extend coverage, just install the GitHub App on more repos (or set the install scope to "All repositories"); no worker change is needed.
 
 Each repo gets **its own** `cla-signatures` branch + `ci/cla-signatures.json`. The bot lazily creates the branch as an orphan commit on first need (no main-branch history pollution).
-
-Org members are auto-skipped (employment-IP coverage); they don't need to sign.
 
 ## Deploy
 
@@ -48,8 +46,6 @@ Set via `wrangler secret put <NAME>`:
   - Pull requests: **Read & write** (list commits / metadata; required by GitHub for posting comments on PR conversations even though the underlying API is `issues.createComment`)
   - Checks: **Read & write** (post the `cla` Check Run)
   - Metadata: **Read**
-- **Organization permissions:**
-  - Members: **Read** (used to skip org members during enforcement)
 - **Subscribe to events:** Pull request, Issue comment
 - Install on the `tensorzero` organization with scope **All repositories** (covers current + future repos automatically).
 
