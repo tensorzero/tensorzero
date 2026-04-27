@@ -30,8 +30,8 @@ importers:
         specifier: ^6.4.0
         version: 6.27.0
       uuid:
-        specifier: ^11.0.5
-        version: 11.1.0
+        specifier: ^14.0.0
+        version: 14.0.0
 
   docs/guides/gateway/generate-structured-outputs:
     dependencies:
@@ -270,8 +270,8 @@ packages:
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
-  uuid@11.1.0:
-    resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
+  uuid@14.0.0:
+    resolution: {integrity: sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==}
     hasBin: true
 
 snapshots:
@@ -407,4 +407,4 @@ snapshots:
 
   undici-types@7.16.0: {}
 
-  uuid@11.1.0: {}
+  uuid@14.0.0: {}
