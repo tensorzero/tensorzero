@@ -26,8 +26,8 @@ jobs:
         with:
           skip_push: "true" # validate only; fail CI on unpinned actions
 
-  check-security-jobs-passed:
-    name: check-security-jobs-passed
+  security:
+    name: security
     permissions: {}
     if: always()
     needs:
