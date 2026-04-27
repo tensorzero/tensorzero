@@ -173,8 +173,6 @@ function buildCheckSummary(unsigned, env) {
 }
 
 async function upsertStickyComment(octokit, pr, unsigned, env) {
-  const body = renderStickyBody(unsigned, env);
-
   const comments = await octokit.paginate(octokit.rest.issues.listComments, {
     owner: env.GITHUB_ORG,
     repo: env.GITHUB_REPO,
@@ -185,6 +183,12 @@ async function upsertStickyComment(octokit, pr, unsigned, env) {
     (c.body || "").includes(COMMENT_MARKER),
   );
 
+  // If everyone was already signed when the PR was opened, stay silent —
+  // the green Check Run is enough. Only edit the comment if we previously
+  // posted one (i.e. someone went from unsigned to signed in this PR).
+  if (unsigned.length === 0 && !existing) return;
+
+  const body = renderStickyBody(unsigned, env);
   if (existing) {
     if ((existing.body || "") === body) return;
     await octokit.rest.issues.updateComment({
