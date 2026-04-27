@@ -45,7 +45,12 @@ export default {
     const event = request.headers.get("X-GitHub-Event");
     const payload = JSON.parse(rawBody);
 
-    if (payload.repository?.owner?.login !== env.GITHUB_ORG) {
+    // Org filter (case-insensitive — guard against a typo'd GITHUB_ORG env var
+    // or any future variation in payload casing).
+    if (
+      payload.repository?.owner?.login?.toLowerCase() !==
+      env.GITHUB_ORG?.toLowerCase()
+    ) {
       return new Response("OK (skipped: wrong org)", { status: 200 });
     }
 
@@ -54,14 +59,18 @@ export default {
       repo: payload.repository.name,
     };
 
-    const octokit = await app.getInstallationOctokit(
-      Number(env.GITHUB_INSTALLATION_ID),
-    );
+    // Installation Octokit is minted lazily per branch — webhook events we
+    // skip don't need a token, so we avoid an authenticated request to GitHub
+    // on every drive-by delivery (`check_suite.requested` on every push,
+    // unhandled events, wrong actions).
+    const installationOctokit = () =>
+      app.getInstallationOctokit(Number(env.GITHUB_INSTALLATION_ID));
 
     if (event === "pull_request") {
       if (!["opened", "reopened", "synchronize"].includes(payload.action)) {
         return new Response("OK (skipped action)", { status: 200 });
       }
+      const octokit = await installationOctokit();
       await evaluatePr(octokit, payload.pull_request, env, target);
       return new Response("OK", { status: 200 });
     }
@@ -70,6 +79,7 @@ export default {
       if (payload.action !== "checks_requested") {
         return new Response("OK (skipped action)", { status: 200 });
       }
+      const octokit = await installationOctokit();
       await evaluateQueueRange(
         octokit,
         env,
@@ -110,6 +120,7 @@ export default {
           status: 200,
         });
       }
+      const octokit = await installationOctokit();
       await evaluateQueueRange(
         octokit,
         env,
@@ -134,12 +145,17 @@ export default {
         return new Response("OK (skipped: not a CLA command)", { status: 200 });
       }
 
+      const octokit = await installationOctokit();
       const { data: pr } = await octokit.rest.pulls.get({
         owner: target.owner,
         repo: target.repo,
         pull_number: payload.issue.number,
       });
 
+      // Explicit recordSignature here is a safety net for read-after-write
+      // lag on the listComments API used inside evaluatePr's harvest loop —
+      // GitHub may not yet return the just-posted comment when we list. The
+      // harvest loop will skip duplicates via local signedIds tracking.
       if (isSign) {
         await recordSignature(octokit, payload.comment, pr, env, target);
       }
