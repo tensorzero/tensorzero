@@ -74,6 +74,45 @@ export default {
       return new Response("OK", { status: 200 });
     }
 
+    // Fallback path for the merge queue: GitHub fires `check_suite` on the
+    // synthetic queue branch (`gh-readonly-queue/...`) for every App with
+    // Checks:write, even when the App's `merge_group` subscription is
+    // misconfigured. We post the CLA check on the queue branch's head SHA
+    // so branch protection unblocks.
+    if (event === "check_suite") {
+      if (
+        payload.action !== "requested" &&
+        payload.action !== "rerequested"
+      ) {
+        return new Response("OK (skipped action)", { status: 200 });
+      }
+      const branch = payload.check_suite.head_branch || "";
+      if (!branch.startsWith("gh-readonly-queue/")) {
+        return new Response("OK (skipped: not a queue branch)", {
+          status: 200,
+        });
+      }
+      const m = branch.match(/\/pr-(\d+)-/);
+      if (!m) {
+        return new Response("OK (skipped: cannot parse PR number)", {
+          status: 200,
+        });
+      }
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner: target.owner,
+        repo: target.repo,
+        pull_number: Number(m[1]),
+      });
+      await evaluateForQueueSha(
+        octokit,
+        pr,
+        env,
+        target,
+        payload.check_suite.head_sha,
+      );
+      return new Response("OK", { status: 200 });
+    }
+
     if (event === "issue_comment") {
       if (payload.action !== "created") {
         return new Response("OK (skipped action)", { status: 200 });
@@ -237,6 +276,74 @@ async function evaluateMergeGroup(octokit, mergeGroup, env, target) {
     candidates.set(user.id, { login: user.login, id: user.id });
   };
   for (const c of cmp.commits) {
+    addUser(c.author);
+    addUser(c.committer);
+  }
+
+  const required = [...candidates.values()].filter(
+    (u) => !isBotOrAllowlisted(u.login, allowlist),
+  );
+
+  const signatures = await readSignatures(octokit, env, target);
+  const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
+  const unsigned = required.filter((u) => !signedIds.has(u.id));
+
+  const allSigned = unsigned.length === 0;
+  await octokit.rest.checks.create({
+    owner: target.owner,
+    repo: target.repo,
+    name: env.CHECK_NAME,
+    head_sha: headSha,
+    status: "completed",
+    conclusion: allSigned ? "success" : "action_required",
+    details_url: env.CLA_DOC_URL,
+    output: {
+      title: allSigned
+        ? "All contributors have signed the CLA"
+        : "CLA signature required",
+      summary: buildCheckSummary(unsigned, env),
+    },
+  });
+}
+
+// Same intent as evaluateMergeGroup, but used from the check_suite fallback
+// path: derives required signers from the source PR's commit list (paginated)
+// and posts the check on the queue branch's head SHA.
+async function evaluateForQueueSha(octokit, pr, env, target, headSha) {
+  const allowlist = parseAllowlist(env.ALLOWLIST);
+
+  if (pr.commits > MAX_COMMITS_INSPECTABLE) {
+    await octokit.rest.checks.create({
+      owner: target.owner,
+      repo: target.repo,
+      name: env.CHECK_NAME,
+      head_sha: headSha,
+      status: "completed",
+      conclusion: "action_required",
+      details_url: env.CLA_DOC_URL,
+      output: {
+        title: "Pull request too large to verify CLA",
+        summary: `This pull request has ${pr.commits} commits, exceeding the GitHub API's limit of ${MAX_COMMITS_INSPECTABLE} the CLA bot can enumerate.`,
+      },
+    });
+    return;
+  }
+
+  const commits = await octokit.paginate(octokit.rest.pulls.listCommits, {
+    owner: target.owner,
+    repo: target.repo,
+    pull_number: pr.number,
+    per_page: 100,
+  });
+
+  const candidates = new Map();
+  const addUser = (user) => {
+    if (!user || !user.login || !user.id) return;
+    if (user.login === "web-flow") return;
+    candidates.set(user.id, { login: user.login, id: user.id });
+  };
+  addUser(pr.user);
+  for (const c of commits) {
     addUser(c.author);
     addUser(c.committer);
   }
