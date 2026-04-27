@@ -25,7 +25,7 @@ dependencies = [
 exclude-newer = "3 days"
 exclude-newer-package = { tensorzero = false }
 required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-override-dependencies = ["pillow>=12.1.1"]
+override-dependencies = ["pillow>=12.1.1", "python-dotenv>=1.2.2"]
 
 [tool.uv.extra-build-dependencies]
 flash-attn = [{ requirement = "torch", match-runtime = true }]
