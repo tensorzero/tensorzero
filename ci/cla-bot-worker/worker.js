@@ -536,11 +536,11 @@ async function bootstrapClaBranch(octokit, env, target) {
     });
     return ref;
   } catch (err) {
-    // 422 here means another concurrent webhook (or a redelivery) created
+    // 422/409 here means another concurrent webhook (or a redelivery) created
     // the branch between our getRef 404 and this createRef. Fetch and use
     // whatever they wrote; our orphan blob/tree/commit is unreachable and
     // GitHub will GC it.
-    if (err.status !== 422) throw err;
+    if (err.status !== 422 && err.status !== 409) throw err;
     const { data: ref } = await octokit.rest.git.getRef({
       owner: target.owner,
       repo: target.repo,
