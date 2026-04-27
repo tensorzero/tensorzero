@@ -66,6 +66,14 @@ export default {
       return new Response("OK", { status: 200 });
     }
 
+    if (event === "merge_group") {
+      if (payload.action !== "checks_requested") {
+        return new Response("OK (skipped action)", { status: 200 });
+      }
+      await evaluateMergeGroup(octokit, payload.merge_group, env, target);
+      return new Response("OK", { status: 200 });
+    }
+
     if (event === "issue_comment") {
       if (payload.action !== "created") {
         return new Response("OK (skipped action)", { status: 200 });
@@ -188,6 +196,75 @@ async function evaluatePr(octokit, pr, env, target) {
   });
 
   await upsertStickyComment(octokit, pr, unsigned, env, target, comments);
+}
+
+// Re-validate CLA on the merge-queue's synthetic head SHA. GitHub's branch
+// protection runs required status checks on the queue branch (a fresh SHA),
+// not the source PR's head, so without this the queue stalls. We do not edit
+// the sticky comment or harvest signatures here — those happen on PR events.
+async function evaluateMergeGroup(octokit, mergeGroup, env, target) {
+  const headSha = mergeGroup.head_sha;
+  const allowlist = parseAllowlist(env.ALLOWLIST);
+
+  const { data: cmp } = await octokit.rest.repos.compareCommits({
+    owner: target.owner,
+    repo: target.repo,
+    base: mergeGroup.base_sha,
+    head: headSha,
+  });
+
+  if (cmp.total_commits > MAX_COMMITS_INSPECTABLE) {
+    await octokit.rest.checks.create({
+      owner: target.owner,
+      repo: target.repo,
+      name: env.CHECK_NAME,
+      head_sha: headSha,
+      status: "completed",
+      conclusion: "action_required",
+      details_url: env.CLA_DOC_URL,
+      output: {
+        title: "Merge group too large to verify CLA",
+        summary: `This merge group includes ${cmp.total_commits} commits, exceeding the GitHub API's limit of ${MAX_COMMITS_INSPECTABLE} the CLA bot can enumerate.`,
+      },
+    });
+    return;
+  }
+
+  const candidates = new Map();
+  const addUser = (user) => {
+    if (!user || !user.login || !user.id) return;
+    if (user.login === "web-flow") return;
+    candidates.set(user.id, { login: user.login, id: user.id });
+  };
+  for (const c of cmp.commits) {
+    addUser(c.author);
+    addUser(c.committer);
+  }
+
+  const required = [...candidates.values()].filter(
+    (u) => !isBotOrAllowlisted(u.login, allowlist),
+  );
+
+  const signatures = await readSignatures(octokit, env, target);
+  const signedIds = new Set(signatures.signedContributors.map((s) => s.id));
+  const unsigned = required.filter((u) => !signedIds.has(u.id));
+
+  const allSigned = unsigned.length === 0;
+  await octokit.rest.checks.create({
+    owner: target.owner,
+    repo: target.repo,
+    name: env.CHECK_NAME,
+    head_sha: headSha,
+    status: "completed",
+    conclusion: allSigned ? "success" : "action_required",
+    details_url: env.CLA_DOC_URL,
+    output: {
+      title: allSigned
+        ? "All contributors have signed the CLA"
+        : "CLA signature required",
+      summary: buildCheckSummary(unsigned, env),
+    },
+  });
 }
 
 async function postOversizedPrCheck(octokit, pr, env, target) {

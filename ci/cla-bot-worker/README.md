@@ -46,7 +46,7 @@ Set via `wrangler secret put <NAME>`:
   - Pull requests: **Read & write** (list commits / metadata; required by GitHub for posting comments on PR conversations even though the underlying API is `issues.createComment`)
   - Checks: **Read & write** (post the `cla` Check Run)
   - Metadata: **Read**
-- **Subscribe to events:** Pull request, Issue comment
+- **Subscribe to events:** Pull request, Issue comment, Merge queue entry (`merge_group`)
 - Install on the `tensorzero` organization with scope **All repositories** (covers current + future repos automatically).
 
 If you change permissions on an existing app, the org owner must re-accept them on the installation page before they take effect. The installation ID does not change; no secret update needed.
