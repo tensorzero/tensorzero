@@ -429,10 +429,11 @@ async function ensureLabelAbsent(octokit, target, env, prNumber) {
 
 // --- Helpers ---
 
-// Retry a one-shot async operation on transient failures (5xx, 429, network
-// errors with no status). Non-transient errors (4xx other than 429, etc.)
-// throw immediately. Used to harden waitUntil-deferred work that GitHub
-// won't redeliver after we ack with 200.
+// Retry a one-shot async operation on transient failures: network errors
+// (no status), 5xx, 429, and rate-limit-style 403s. Non-transient errors
+// (4xx other than 429, permission-style 403s, etc.) throw immediately. Used
+// to harden waitUntil-deferred work that GitHub won't redeliver after we
+// ack with 200.
 async function withRetry(fn, label, maxAttempts = 3) {
   let lastErr;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -441,16 +442,38 @@ async function withRetry(fn, label, maxAttempts = 3) {
       return await fn();
     } catch (err) {
       lastErr = err;
-      const status = err?.status;
-      const transient = !status || status >= 500 || status === 429;
-      if (!transient) throw err;
+      if (!isTransientError(err)) throw err;
       console.error(
-        `withRetry(${label}): attempt ${attempt + 1} failed (status=${status}):`,
+        `withRetry(${label}): attempt ${attempt + 1} failed (status=${err?.status}):`,
         err?.message,
       );
     }
   }
   throw lastErr;
+}
+
+// GitHub returns 403 for both genuine permission errors and secondary rate
+// limits. Heuristic: a rate-limit-style 403 carries a `Retry-After` header
+// or a body message containing "rate limit" or "abuse". Permission-style
+// 403s have neither, so retrying them just wastes attempts.
+function isTransientError(err) {
+  const status = err?.status;
+  if (!status) return true; // network error / no response
+  if (status >= 500) return true;
+  if (status === 429) return true;
+  if (status === 403) {
+    const headers = err?.response?.headers || {};
+    if (headers["retry-after"]) return true;
+    const message = (
+      err?.response?.data?.message ||
+      err?.message ||
+      ""
+    ).toLowerCase();
+    if (message.includes("rate limit") || message.includes("abuse")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function sleep(ms) {
