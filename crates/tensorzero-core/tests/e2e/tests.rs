@@ -15,6 +15,7 @@ mod config;
 mod config_editing;
 mod cost;
 mod db;
+mod db_only_boot;
 mod dicl;
 mod dynamic_variants;
 mod endpoints;
