@@ -28,7 +28,7 @@ env:
   DOCKERHUB_USER: tensorzero
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  group: docker-hub-publish-${{ github.event.pull_request.number || github.ref || github.run_id }}
   cancel-in-progress: false
 
 jobs:

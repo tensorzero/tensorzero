@@ -86,7 +86,7 @@ permissions:
   actions: read # Required to read workflow run, cache, or artifact metadata.
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  group: live-batch-tests-${{ github.event.pull_request.number || github.ref || github.run_id }}
   cancel-in-progress: false
 
 jobs:
