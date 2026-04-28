@@ -68,7 +68,7 @@ export default {
           return new Response("OK (skipped label)", { status: 200 });
         }
         const octokit = await installationOctokit();
-        await forceMergeQueue(octokit, payload.pull_request, target, env);
+        await forceMergeQueue(octokit, payload.pull_request, target, env, ctx);
         return new Response("OK", { status: 200 });
       }
       if (
@@ -141,50 +141,20 @@ function createApp(env) {
 // success commit status for `check-all-general-jobs-passed` so the PR can
 // enter the merge queue without waiting on general.yml. The merge queue still
 // runs the real check on the queue branch's SHA, so this is always safe.
-async function forceMergeQueue(octokit, pr, target, env) {
-  // Best-effort: if there's a failed `general.yml` run for this SHA, restart
-  // it so the real check eventually flips to success without the contributor
-  // having to push an empty commit. GitHub's UI shows the failed run last
-  // even though our success status is posted, which is confusing — restarting
-  // resolves that. Errors here are not fatal; the success status is the
-  // important part.
-  try {
-    const { data: checks } = await octokit.rest.checks.listForRef({
-      owner: target.owner,
-      repo: target.repo,
-      ref: pr.head.sha,
-      check_name: env.GENERAL_CHECK_RUN_NAME,
-      per_page: 100,
-    });
-    const failed = checks.check_runs.filter(
-      (c) => c.conclusion === "failure",
-    );
-    const restartedRunIds = new Set();
-    for (const c of failed) {
-      const m = (c.details_url || "").match(/\/actions\/runs\/(\d+)/);
-      if (!m) continue;
-      const runId = Number(m[1]);
-      if (restartedRunIds.has(runId)) continue;
-      restartedRunIds.add(runId);
-      await octokit.rest.actions
-        .reRunWorkflow({
-          owner: target.owner,
-          repo: target.repo,
-          run_id: runId,
-        })
-        .catch(() => {
-          // Best-effort. GitHub rejects re-runs on certain workflow states
-          // (e.g. already running, too old). Ignore and proceed.
-        });
-    }
-  } catch (err) {
-    // Same: best-effort. Proceed to the status post.
-    if (err.status !== 404) {
-      // Don't swallow non-404 entirely — log via the thrown response if it
-      // matters. Practically: continue.
-    }
-  }
+async function forceMergeQueue(octokit, pr, target, env, ctx) {
+  // If the PR was closed/merged between the labeled event and our
+  // processing, posting a status on the (now stale) head SHA is harmless
+  // but pointless. Skip.
+  if (pr.state !== "open") return;
 
+  // Post the success status FIRST. This is the load-bearing step that
+  // unblocks merge-queue entry. If it fails, we throw to Cloudflare → 500
+  // → GitHub redelivers the webhook so we get another shot.
+  //
+  // Note: if the contributor pushes during this flow, the new head SHA
+  // gets its own general.yml run and our success status lands on the old
+  // (no longer head) SHA. That's the correct outcome — pushing should
+  // reset the gate.
   await octokit.rest.repos.createCommitStatus({
     owner: target.owner,
     repo: target.repo,
@@ -194,12 +164,66 @@ async function forceMergeQueue(octokit, pr, target, env) {
     description: "Forced via force-add-to-merge-queue label",
     target_url: `https://github.com/${target.owner}/${target.repo}/pull/${pr.number}`,
   });
+
+  // Best-effort: if there's a failed `general.yml` run for this SHA, restart
+  // it so the real check eventually flips to success without the contributor
+  // having to push an empty commit. GitHub's UI shows the failed run last
+  // even though our success status is posted, which is confusing —
+  // restarting resolves that. Done in the background so we never block the
+  // status post on Actions API latency.
+  ctx.waitUntil(rerunFailedGeneralRuns(octokit, pr.head.sha, target, env));
+}
+
+async function rerunFailedGeneralRuns(octokit, headSha, target, env) {
+  try {
+    const { data: checks } = await octokit.rest.checks.listForRef({
+      owner: target.owner,
+      repo: target.repo,
+      ref: headSha,
+      check_name: env.GENERAL_CHECK_RUN_NAME,
+      per_page: 100,
+    });
+    const seenRunIds = new Set();
+    const reruns = [];
+    for (const c of checks.check_runs) {
+      if (c.conclusion !== "failure") continue;
+      const m = (c.details_url || "").match(/\/actions\/runs\/(\d+)/);
+      if (!m) continue;
+      const runId = Number(m[1]);
+      if (seenRunIds.has(runId)) continue;
+      seenRunIds.add(runId);
+      reruns.push(
+        octokit.rest.actions
+          .reRunWorkflow({
+            owner: target.owner,
+            repo: target.repo,
+            run_id: runId,
+          })
+          .catch((e) => {
+            console.error(
+              `forceMergeQueue: reRunWorkflow ${runId} failed:`,
+              e?.status,
+              e?.message,
+            );
+          }),
+      );
+    }
+    await Promise.allSettled(reruns);
+  } catch (err) {
+    if (err?.status !== 404) {
+      console.error(
+        "forceMergeQueue: listForRef failed:",
+        err?.status,
+        err?.message,
+      );
+    }
+  }
 }
 
 // --- Label merge conflicts ---
 
-async function labelMergeConflicts(octokit, prNumber, target, env, pollAttempts) {
-  const pr = await getMergeableState(octokit, target, prNumber, pollAttempts);
+async function labelMergeConflicts(octokit, prNumber, target, env) {
+  const pr = await getMergeableState(octokit, target, prNumber);
   if (!pr) return; // gave up; next webhook event will re-evaluate
   // pr.state can be "closed" if the PR was closed between the event firing
   // and our processing — skip those.
@@ -232,23 +256,73 @@ async function labelMergeConflictsForPushedRef(octokit, payload, target, env) {
     base: baseRef,
     per_page: 100,
   });
-  // Cloudflare cancels ctx.waitUntil after ~30s. With the default 10s poll
-  // budget, a base-branch push to a repo with >15 open PRs would drop the
-  // tail of the fan-out. Use a tighter 3-attempt (~3s) poll budget here and
-  // a wider concurrency window so up to ~100 PRs fit comfortably:
-  //   100 PRs / 10 in parallel = 10 batches × ~3s = 30s.
-  // PRs whose mergeable is still null after 3s are picked up by the next
-  // webhook event (subsequent push, contributor sync, etc.).
-  await processInBatches(prs, 10, (pr) =>
-    labelMergeConflicts(octokit, pr.number, target, env, /*pollAttempts*/ 3),
-  );
+
+  // Round-based fan-out: each round makes a single pulls.get per pending
+  // PR (with concurrency cap), labels the ones with definitive mergeable,
+  // and carries over the null ones to the next round. This amortizes the
+  // mergeable-poll wait across ALL pending PRs instead of paying a 3s
+  // backoff per batch sequentially. For 100 PRs:
+  //   round 1 (immediate): 5 batches of 20 × ~500ms ≈ 2.5s
+  //   round 2 (after 1s):  ~50% still null → ~1.5s
+  //   round 3 (after 2s):  ~10% still null → ~0.5s
+  //   total ≈ 7-9s including wait, well under the ~30s ctx.waitUntil budget.
+  // PRs whose mergeable is still null after 3 rounds are dropped this
+  // round; the next webhook event will re-evaluate them.
+  let pending = prs.map((p) => p.number);
+  const roundWaits = [0, 1000, 2000];
+  for (let i = 0; i < roundWaits.length && pending.length > 0; i++) {
+    if (roundWaits[i]) await sleep(roundWaits[i]);
+    pending = await runMergeableRound(octokit, target, env, pending);
+  }
 }
 
-// GitHub computes `mergeable` lazily and returns null on the first read after
-// a relevant change. Poll up to N times (default 5 = ~10s for single-PR
-// events; tighter budgets for fan-out paths) before giving up.
-async function getMergeableState(octokit, target, prNumber, attempts = 5) {
-  const delays = [0, 1000, 2000, 3000, 4000].slice(0, attempts);
+// One pulls.get per PR + at most one label upsert. Returns the PR numbers
+// whose mergeable was still null (need another round).
+async function runMergeableRound(octokit, target, env, prNumbers, concurrency = 20) {
+  const stillPending = [];
+  const evaluate = async (n) => {
+    const { data } = await octokit.rest.pulls.get({
+      owner: target.owner,
+      repo: target.repo,
+      pull_number: n,
+    });
+    if (data.state !== "open") return null;
+    if (data.mergeable === true) {
+      await ensureLabelAbsent(octokit, target, env, n);
+      return null;
+    }
+    if (data.mergeable === false) {
+      await ensureLabelPresent(octokit, target, env, n);
+      return null;
+    }
+    return n; // mergeable === null → carry over
+  };
+  for (let i = 0; i < prNumbers.length; i += concurrency) {
+    const batch = prNumbers.slice(i, i + concurrency);
+    const results = await Promise.allSettled(batch.map(evaluate));
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      if (r.status === "rejected") {
+        console.error(
+          "runMergeableRound: PR",
+          batch[j],
+          "failed:",
+          r.reason,
+        );
+      } else if (r.value !== null) {
+        stillPending.push(r.value);
+      }
+    }
+  }
+  return stillPending;
+}
+
+// GitHub computes `mergeable` lazily and returns null on the first read
+// after a relevant change. Poll up to 5 times (~10s total) before giving
+// up. Used by single-PR paths (synchronize/opened/reopened); the push
+// fan-out has its own round-based polling that amortizes the wait.
+async function getMergeableState(octokit, target, prNumber) {
+  const delays = [0, 1000, 2000, 3000, 4000];
   for (const d of delays) {
     if (d) await sleep(d);
     const { data } = await octokit.rest.pulls.get({
@@ -311,22 +385,6 @@ async function ensureLabelAbsent(octokit, target, env, prNumber) {
 }
 
 // --- Helpers ---
-
-// Process items in concurrent batches, isolating per-item failures: one
-// rejected task must NOT abort the rest of the fan-out. The webhook is
-// already acknowledged (200 + waitUntil), so a thrown error here would not
-// trigger a GitHub retry — the unprocessed PRs would just stay stale.
-async function processInBatches(items, batchSize, fn) {
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const results = await Promise.allSettled(batch.map(fn));
-    for (const r of results) {
-      if (r.status === "rejected") {
-        console.error("processInBatches: task failed:", r.reason);
-      }
-    }
-  }
-}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
