@@ -23,6 +23,7 @@ export const EMPTY_CONFIG: UiConfig = {
   model_names: [],
   config_hash: "",
   config_in_database: false,
+  auth_enabled: false,
 };
 
 const ConfigContext = createContext<UiConfig>(EMPTY_CONFIG);

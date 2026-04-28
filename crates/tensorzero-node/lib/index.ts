@@ -60,6 +60,11 @@ export class PostgresClient {
     );
     return JSON.parse(result) as KeyInfo;
   }
+
+  async validateApiKey(key: string): Promise<KeyInfo> {
+    const result = await this.nativePostgresClient.validateApiKey(key);
+    return JSON.parse(result) as KeyInfo;
+  }
 }
 
 /**

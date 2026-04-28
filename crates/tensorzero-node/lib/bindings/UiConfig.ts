@@ -22,4 +22,10 @@ export type UiConfig = {
    * Used by the UI to decide whether to show the config editor.
    */
   config_in_database: boolean;
+  /**
+   * Whether the gateway is enforcing API key authentication (`[gateway.auth] enabled = true`).
+   * Used by the UI to decide whether routes that bypass the gateway (e.g. the API keys page)
+   * must validate the caller's key themselves.
+   */
+  auth_enabled: boolean;
 };

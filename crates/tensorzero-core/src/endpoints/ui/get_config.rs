@@ -36,6 +36,10 @@ pub struct UiConfig {
     /// Whether the gateway config was loaded from the database (as opposed to a file on disk).
     /// Used by the UI to decide whether to show the config editor.
     pub config_in_database: bool,
+    /// Whether the gateway is enforcing API key authentication (`[gateway.auth] enabled = true`).
+    /// Used by the UI to decide whether routes that bypass the gateway (e.g. the API keys page)
+    /// must validate the caller's key themselves.
+    pub auth_enabled: bool,
 }
 
 impl UiConfig {
@@ -60,6 +64,7 @@ impl UiConfig {
             model_names: config.models.table.keys().map(|s| s.to_string()).collect(),
             config_hash: config.hash.to_string(),
             config_in_database,
+            auth_enabled: config.gateway.auth.enabled,
         }
     }
 
@@ -68,7 +73,10 @@ impl UiConfig {
     /// This initializes only the parts needed by the UI (functions, tools, evaluations,
     /// metrics, model names), skipping heavy initialization like model credentials, HTTP
     /// clients, gateway config, object store, and rate limiting.
-    pub fn from_snapshot(snapshot: ConfigSnapshot) -> Result<Self, Error> {
+    ///
+    /// `auth_enabled` is sourced from the live gateway config rather than the snapshot —
+    /// auth state is a deployment-level concern, not a snapshot-level one.
+    pub fn from_snapshot(snapshot: ConfigSnapshot, auth_enabled: bool) -> Result<Self, Error> {
         let hash = snapshot.hash.to_string();
         let uninit_config: UninitializedConfig =
             snapshot.config.try_into().map_err(|e: &'static str| {
@@ -138,6 +146,7 @@ impl UiConfig {
             model_names,
             config_hash: hash,
             config_in_database: false,
+            auth_enabled,
         })
     }
 }
@@ -169,7 +178,10 @@ pub async fn ui_config_by_hash_handler(
     let db = app_state.get_delegating_database();
     let snapshot = db.get_config_snapshot(snapshot_hash).await?;
 
-    Ok(Json(UiConfig::from_snapshot(snapshot)?))
+    Ok(Json(UiConfig::from_snapshot(
+        snapshot,
+        app_state.config.gateway.auth.enabled,
+    )?))
 }
 
 #[cfg(test)]
@@ -236,6 +248,16 @@ mod tests {
         assert!(ui_config.tools.is_empty());
         assert!(ui_config.evaluations.is_empty());
         assert!(!ui_config.config_hash.is_empty());
+        assert!(!ui_config.auth_enabled);
+    }
+
+    #[test]
+    fn test_ui_config_propagates_auth_enabled() {
+        let mut config = Config::default();
+        config.gateway.auth.enabled = true;
+
+        let ui_config = UiConfig::from_config(&config, false);
+        assert!(ui_config.auth_enabled);
     }
 
     #[test]
