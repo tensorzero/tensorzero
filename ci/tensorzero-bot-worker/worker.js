@@ -126,7 +126,14 @@ export default {
       // keeps the worker alive in the background after we ack.
       ctx.waitUntil(
         (async () => {
-          const octokit = await installationOctokit();
+          // Retry just the token mint — `pulls.list` and the per-PR fan-out
+          // already have their own retries inside
+          // labelMergeConflictsForPushedRef, so wrapping the whole closure
+          // would double-count.
+          const octokit = await withRetry(
+            installationOctokit,
+            "installationOctokit (push)",
+          );
           await labelMergeConflictsForPushedRef(octokit, payload, target, env);
         })().catch((err) => {
           console.error(
