@@ -45,7 +45,7 @@ export async function requireValidApiKeyIfEnabled(): Promise<void> {
   if (key) {
     const client = await getPostgresClient();
     const result = await client.validateApiKey(key);
-    if (result.type === "valid") return;
+    if (result.type === "success") return;
     logger.warn(`Rejected request: API key validation failed (${result.type})`);
     throw data(
       { errorType: InfraErrorType.GatewayAuthFailed },

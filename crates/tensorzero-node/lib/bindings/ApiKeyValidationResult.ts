@@ -8,7 +8,7 @@ import type { KeyInfo } from "./KeyInfo";
  * errors at the NAPI layer).
  */
 export type ApiKeyValidationResult =
-  | { type: "valid"; key_info: KeyInfo }
+  | { type: "success"; key_info: KeyInfo }
   | { type: "invalid_format" }
   | { type: "missing" }
   | { type: "disabled" }

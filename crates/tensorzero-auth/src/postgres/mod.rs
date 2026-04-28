@@ -97,7 +97,7 @@ pub enum AuthResult {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ApiKeyValidationResult {
     /// The API key parsed and matches an active, non-expired row.
-    Valid { key_info: KeyInfo },
+    Success { key_info: KeyInfo },
     /// The provided string did not parse as a TensorZero API key.
     InvalidFormat,
     /// The provided key parsed but does not exist in the database.
@@ -111,7 +111,7 @@ pub enum ApiKeyValidationResult {
 impl From<AuthResult> for ApiKeyValidationResult {
     fn from(result: AuthResult) -> Self {
         match result {
-            AuthResult::Success(key_info) => Self::Valid { key_info },
+            AuthResult::Success(key_info) => Self::Success { key_info },
             AuthResult::Disabled(_, _) => Self::Disabled,
             AuthResult::Expired(_, _) => Self::Expired,
             AuthResult::MissingKey => Self::Missing,
