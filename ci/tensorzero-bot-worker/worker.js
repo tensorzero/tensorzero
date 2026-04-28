@@ -80,16 +80,26 @@ export default {
         // is GitHub's webhook delivery deadline. Acknowledging immediately
         // and continuing in the background keeps deliveries marked
         // successful even when GitHub is slow to compute mergeable state.
+        //
+        // Wrapped in withRetry: GitHub doesn't redeliver acknowledged
+        // webhooks, so transient 5xx/429 on pulls.get / addLabels /
+        // removeLabel would otherwise leave the label stale until an
+        // unrelated later event. Retry with backoff before giving up.
+        const prNumber = payload.pull_request.number;
         ctx.waitUntil(
-          (async () => {
-            const octokit = await installationOctokit();
-            await labelMergeConflicts(
-              octokit,
-              payload.pull_request.number,
-              target,
-              env,
+          withRetry(
+            async () => {
+              const octokit = await installationOctokit();
+              await labelMergeConflicts(octokit, prNumber, target, env);
+            },
+            `labelMergeConflicts(PR #${prNumber})`,
+          ).catch((err) => {
+            console.error(
+              `labelMergeConflicts: exhausted retries for PR #${prNumber}:`,
+              err?.status,
+              err?.message,
             );
-          })(),
+          }),
         );
         return new Response("OK", { status: 200 });
       }
@@ -118,7 +128,13 @@ export default {
         (async () => {
           const octokit = await installationOctokit();
           await labelMergeConflictsForPushedRef(octokit, payload, target, env);
-        })(),
+        })().catch((err) => {
+          console.error(
+            "labelMergeConflictsForPushedRef: failed:",
+            err?.status,
+            err?.message,
+          );
+        }),
       );
       return new Response("OK", { status: 200 });
     }
@@ -250,13 +266,21 @@ async function labelMergeConflictsForPushedRef(octokit, payload, target, env) {
   // Branch deletion fires push events with after === all-zeros; skip.
   if (/^0+$/.test(payload.after || "")) return;
 
-  const prs = await octokit.paginate(octokit.rest.pulls.list, {
-    owner: target.owner,
-    repo: target.repo,
-    state: "open",
-    base: baseRef,
-    per_page: 100,
-  });
+  // Retry pulls.list specifically — if it transiently fails on a busy
+  // base-branch push, the entire fan-out drops with no GitHub redelivery
+  // (waitUntil already 200'd) and every PR's label stays stale until the
+  // next event.
+  const prs = await withRetry(
+    () =>
+      octokit.paginate(octokit.rest.pulls.list, {
+        owner: target.owner,
+        repo: target.repo,
+        state: "open",
+        base: baseRef,
+        per_page: 100,
+      }),
+    `pulls.list(base=${baseRef})`,
+  );
 
   // Round-based fan-out: each round makes a single pulls.get per pending
   // PR (with concurrency cap), labels the ones with definitive mergeable,
@@ -391,6 +415,30 @@ async function ensureLabelAbsent(octokit, target, env, prNumber) {
 }
 
 // --- Helpers ---
+
+// Retry a one-shot async operation on transient failures (5xx, 429, network
+// errors with no status). Non-transient errors (4xx other than 429, etc.)
+// throw immediately. Used to harden waitUntil-deferred work that GitHub
+// won't redeliver after we ack with 200.
+async function withRetry(fn, label, maxAttempts = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await sleep(1000 * attempt); // 1s, 2s
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = err?.status;
+      const transient = !status || status >= 500 || status === 429;
+      if (!transient) throw err;
+      console.error(
+        `withRetry(${label}): attempt ${attempt + 1} failed (status=${status}):`,
+        err?.message,
+      );
+    }
+  }
+  throw lastErr;
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
