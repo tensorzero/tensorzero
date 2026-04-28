@@ -13,9 +13,8 @@ use tensorzero_derive::TensorZeroDeserialize;
 use uuid::Uuid;
 
 /// SSE event types for evaluation streaming.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum EvaluationRunEvent {
@@ -26,9 +25,8 @@ pub enum EvaluationRunEvent {
     Complete(EvaluationRunCompleteEvent),
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
@@ -42,13 +40,12 @@ pub struct EvaluationRunStartEvent {
     /// This allows HTTP clients to compute summary_stats() without having
     /// the config locally.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub evaluation_config: Option<EvaluationConfig>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct EvaluationRunSuccessEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint: Value,
@@ -59,36 +56,32 @@ pub struct EvaluationRunSuccessEvent {
     pub processing_time_ms: f64,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct EvaluationRunErrorEvent {
     pub evaluation_run_id: Uuid,
     pub datapoint_id: Uuid,
     pub message: String,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationRunFatalErrorEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evaluation_run_id: Option<Uuid>,
     pub message: String,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct EvaluationRunCompleteEvent {
     pub evaluation_run_id: Uuid,
     pub usage: EvaluationRunUsageSummary,
 }
 
 /// Aggregated usage statistics for a completed evaluation run.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Default, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct EvaluationRunUsageSummary {
     /// Number of successful inferences
     pub success_count: u32,
@@ -103,7 +96,7 @@ pub struct EvaluationRunUsageSummary {
         skip_serializing_if = "Option::is_none",
         with = "rust_decimal::serde::float_option"
     )]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    #[ts(type = "number | null")]
     pub total_cost: Option<Decimal>,
     /// Total wall-clock processing time in milliseconds
     pub total_processing_time_ms: f64,

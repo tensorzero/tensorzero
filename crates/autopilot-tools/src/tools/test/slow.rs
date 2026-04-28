@@ -53,15 +53,19 @@ impl ToolMetadata for SlowTool {
             "Sleeps for the specified duration before returning. Used for testing timeout behavior.",
         )
     }
+
     fn llm_params_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
+
     fn llm_params_ts_bundle_type_name() -> String {
         "void".to_string()
     }
+
     fn output_ts_bundle() -> tensorzero_ts_types::TsTypeBundle {
         tensorzero_ts_types::UNIT
     }
+
     fn output_ts_bundle_type_name() -> String {
         "void".to_string()
     }

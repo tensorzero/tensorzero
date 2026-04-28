@@ -16,9 +16,8 @@ use crate::{
 };
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Default, Serialize)]
+#[ts(export)]
 pub struct ChatTemplates {
     #[serde(flatten)]
     templates: HashMap<String, Arc<TemplateWithSchema>>,

@@ -10,7 +10,7 @@ use super::{
 
 use crate::config::snapshot::SnapshotHash;
 use crate::inference::types::StoredRequestMessage;
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::deserialize_optional_json_string;
 use tensorzero_inference_types::ProviderToolCallConfig;
 
 use crate::{
@@ -119,30 +119,7 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
 
 pub use tensorzero_inference_types::PollBatchInferenceResponse;
 
-/// Data retrieved from the BatchRequest table.
-/// In Postgres, `raw_request` and `raw_response` live in a separate
-/// `batch_request_data` table with daily partitions. They may be `None`
-/// if the data was dropped due to retention policy.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BatchRequestRow<'a> {
-    pub batch_id: Uuid,
-    pub id: Uuid,
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub batch_params: Cow<'a, Value>,
-    pub model_name: Arc<str>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub raw_request: Option<Cow<'a, str>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub raw_response: Option<Cow<'a, str>>,
-    pub model_provider_name: Cow<'a, str>,
-    pub status: BatchStatus,
-    pub function_name: Cow<'a, str>,
-    pub variant_name: Cow<'a, str>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub snapshot_hash: Option<SnapshotHash>,
-}
+pub use tensorzero_inference_types::BatchRequestRow;
 
 pub use tensorzero_inference_types::ProviderBatchInferenceOutput;
 
@@ -189,52 +166,7 @@ pub struct BatchModelInferenceRow<'a> {
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
-pub struct UnparsedBatchRequestRow<'a> {
-    pub batch_id: Uuid,
-    pub batch_params: &'a Value,
-    pub function_name: &'a str,
-    pub variant_name: &'a str,
-    pub model_name: &'a str,
-    pub raw_request: &'a str,
-    pub raw_response: &'a str,
-    pub model_provider_name: &'a str,
-    pub status: BatchStatus,
-    pub errors: Vec<Value>,
-    pub snapshot_hash: Option<SnapshotHash>,
-}
-
-impl<'a> BatchRequestRow<'a> {
-    pub fn new(unparsed: UnparsedBatchRequestRow<'a>) -> Self {
-        let UnparsedBatchRequestRow {
-            batch_id,
-            batch_params,
-            function_name,
-            variant_name,
-            model_name,
-            raw_request,
-            raw_response,
-            model_provider_name,
-            status,
-            errors,
-            snapshot_hash,
-        } = unparsed;
-        let id = Uuid::now_v7();
-        Self {
-            batch_id,
-            id,
-            batch_params: Cow::Borrowed(batch_params),
-            function_name: Cow::Borrowed(function_name),
-            variant_name: Cow::Borrowed(variant_name),
-            model_name: Arc::from(model_name),
-            raw_request: Some(Cow::Borrowed(raw_request)),
-            raw_response: Some(Cow::Borrowed(raw_response)),
-            model_provider_name: Cow::Borrowed(model_provider_name),
-            status,
-            errors,
-            snapshot_hash,
-        }
-    }
-}
+pub use tensorzero_inference_types::UnparsedBatchRequestRow;
 
 /*  Below are types required for parsing and processing inputs for batch inference requests.
  *  The idea here is that we need to get a vector of the length of the number of inferences

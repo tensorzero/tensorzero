@@ -1,0 +1,109 @@
+use std::borrow::Cow;
+use std::fmt::Debug;
+use std::pin::Pin;
+
+use async_trait::async_trait;
+use futures::{Future, Stream};
+use reqwest_sse_stream::Event;
+use tensorzero_error::Error;
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_types::inference_params::InferenceCredentials;
+use tokio::time::Instant;
+use uuid::Uuid;
+
+use crate::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use crate::{
+    BatchRequestRow, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    PollBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseStreamInner,
+    StartBatchProviderInferenceResponse,
+};
+
+/// A helper type for preserving custom errors when working with `reqwest_sse_stream`.
+/// This is currently used by `stream_openai` to allow using it with a provider
+/// that needs to do additional validation when streaming (e.g. Sagemaker).
+#[derive(Debug)]
+pub enum TensorZeroEventError {
+    TensorZero(Error),
+    EventSource(Box<reqwest_sse_stream::ReqwestSseStreamError>),
+}
+
+impl std::fmt::Display for TensorZeroEventError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorZeroEventError::TensorZero(e) => write!(f, "{e}"),
+            TensorZeroEventError::EventSource(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for TensorZeroEventError {}
+
+pub trait InferenceProvider {
+    fn infer<'a>(
+        &'a self,
+        request: ProviderInferenceRequest<'a>,
+        client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProviderRequestInfo,
+    ) -> impl Future<Output = Result<ProviderInferenceResponse, Error>> + Send + 'a;
+
+    fn infer_stream<'a>(
+        &'a self,
+        request: ProviderInferenceRequest<'a>,
+        client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProviderRequestInfo,
+    ) -> impl Future<Output = Result<(PeekableProviderInferenceResponseStream, String), Error>> + Send + 'a;
+
+    fn start_batch_inference<'a>(
+        &'a self,
+        requests: &'a [ModelInferenceRequest],
+        client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> impl Future<Output = Result<StartBatchProviderInferenceResponse, Error>> + Send + 'a;
+
+    fn poll_batch_inference<'a>(
+        &'a self,
+        batch_request: &'a BatchRequestRow<'a>,
+        http_client: &'a TensorzeroHttpClient,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send + 'a;
+}
+
+/// A trait implemented for providers which can be 'wrapped' by another provider.
+/// The AWS Sagemaker provider takes in a 'WrappedProvider', and uses it to build the request
+/// body (which gets wrapped in SigV4) and to deserialized the response body retrieved from the
+/// AWS sdk.
+///
+/// Currently, we only implement `WrappedProvider` for `OpenAI`
+#[async_trait]
+pub trait WrappedProvider: Debug {
+    fn thought_block_provider_type_suffix(&self) -> Cow<'static, str>;
+
+    async fn make_body<'a>(
+        &'a self,
+        request: ProviderInferenceRequest<'a>,
+    ) -> Result<serde_json::Value, Error>;
+
+    #[expect(clippy::too_many_arguments)]
+    fn parse_response(
+        &self,
+        request: &ModelInferenceRequest,
+        raw_request: String,
+        raw_response: String,
+        latency: Latency,
+        model_name: &str,
+        provider_name: &str,
+        model_inference_id: Uuid,
+    ) -> Result<ProviderInferenceResponse, Error>;
+
+    fn stream_events(
+        &self,
+        event_source: Pin<
+            Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
+        >,
+        start_time: Instant,
+        raw_request: &str,
+        model_inference_id: Uuid,
+    ) -> ProviderInferenceResponseStreamInner;
+}

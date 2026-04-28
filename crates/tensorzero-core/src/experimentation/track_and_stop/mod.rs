@@ -80,9 +80,8 @@ mod check_stopping;
 mod error;
 pub mod estimate_optimal_probabilities;
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct TrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
@@ -90,14 +89,14 @@ pub struct TrackAndStopConfig {
     min_samples_per_variant: u64,
     delta: f64,
     epsilon: f64,
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     update_period: Duration,
     min_prob: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     max_samples_per_variant: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     namespace: Option<String>,
     #[serde(skip)]
     metric_optimize: MetricConfigOptimize,
@@ -155,9 +154,8 @@ pub fn compute_track_and_stop_state(
 /// Public representation of Track-and-Stop state for external callers (tests, UI, monitoring).
 /// This type exposes sampling probabilities but hides internal implementation details like
 /// the `Nursery` struct and atomic counters.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum TrackAndStopState {
@@ -186,14 +184,13 @@ pub enum TrackAndStopState {
 /// variant gets sampled until it graduates to the bandit phase.
 ///
 /// When serialized for external use, only the variant list is exposed (not the atomic counter).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct Nursery {
     pub variants: Vec<String>,
     #[serde(skip)]
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     index: AtomicU64,
 }
 
@@ -264,9 +261,8 @@ impl Nursery {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct UninitializedTrackAndStopExperimentationConfig {
     pub(crate) metric: String,
     pub(crate) candidate_variants: Vec<String>,

@@ -1,0 +1,13 @@
+{
+  "name": "tensorzero-cla-bot-worker",
+  "version": "0.0.0",
+  "description": "Cloudflare Worker that processes GitHub webhooks to enforce the TensorZero Contributor License Agreement.",
+  "license": "Apache-2.0",
+  "main": "worker.js",
+  "dependencies": {
+    "@octokit/app": "^16.1.2",
+    "@octokit/core": "^7.0.6",
+    "@octokit/plugin-paginate-rest": "^14.0.0",
+    "@octokit/plugin-rest-endpoint-methods": "^17.0.0"
+  }
+}

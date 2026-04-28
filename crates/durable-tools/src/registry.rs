@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::{FunctionTool, Tool};
-#[cfg(feature = "ts-bindings")]
 use tensorzero_ts_types::TsTypeBundle;
 
 use crate::ToolResult;
@@ -61,22 +60,18 @@ pub trait ErasedTool: Send + Sync {
     ///
     /// Contains all declarations needed to fully define the type and its
     /// transitive dependencies, concatenated in dependency order.
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle(&self) -> TsTypeBundle;
 
     /// Returns the TypeScript type name for the `LlmParams` type.
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name(&self) -> String;
 
     /// Returns the TypeScript type bundle for the `Output` type.
     ///
     /// Contains all declarations needed to fully define the type and its
     /// transitive dependencies, concatenated in dependency order.
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle(&self) -> TsTypeBundle;
 
     /// Returns the TypeScript type name for the `Output` type.
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name(&self) -> String;
 }
 
@@ -141,22 +136,18 @@ impl<T: TaskTool> ErasedTool for ErasedTaskToolWrapper<T> {
         self.0.validate_params(llm_params, side_info)
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle(&self) -> TsTypeBundle {
         T::llm_params_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name(&self) -> String {
         T::llm_params_ts_bundle_type_name()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle(&self) -> TsTypeBundle {
         T::output_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name(&self) -> String {
         T::output_ts_bundle_type_name()
     }
@@ -192,22 +183,18 @@ impl<T: SimpleTool> ErasedTool for T {
         ToolMetadata::validate_params(self, llm_params, side_info)
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle(&self) -> TsTypeBundle {
         T::llm_params_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn llm_params_ts_bundle_type_name(&self) -> String {
         T::llm_params_ts_bundle_type_name()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle(&self) -> TsTypeBundle {
         T::output_ts_bundle()
     }
 
-    #[cfg(feature = "ts-bindings")]
     fn output_ts_bundle_type_name(&self) -> String {
         T::output_ts_bundle_type_name()
     }

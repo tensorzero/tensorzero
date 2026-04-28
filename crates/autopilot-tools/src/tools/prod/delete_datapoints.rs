@@ -13,9 +13,8 @@ use tensorzero::DeleteDatapointsResponse;
 use uuid::Uuid;
 
 /// Parameters for the delete_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct DeleteDatapointsToolParams {
     /// The name of the dataset containing the datapoints.
     pub dataset_name: String,

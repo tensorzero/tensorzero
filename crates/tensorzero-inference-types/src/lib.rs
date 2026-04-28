@@ -12,8 +12,10 @@ pub mod embeddings;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod inference_response;
-pub(crate) mod serde_helpers;
+pub mod provider_trait;
+pub mod serde_helpers;
 pub mod tool;
+pub mod utils;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -177,9 +179,8 @@ impl LazyFileExt for LazyFile {
 // =============================================================================
 
 /// Types of content blocks that can be returned by a model provider
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, TensorZeroDeserialize)]
+#[ts(export)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum ContentBlockOutput {
@@ -654,6 +655,113 @@ pub enum BatchStatus {
     Failed,
 }
 
+/// Data retrieved from the BatchRequest table.
+/// In Postgres, `raw_request` and `raw_response` live in a separate
+/// `batch_request_data` table with daily partitions. They may be `None`
+/// if the data was dropped due to retention policy.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatchRequestRow<'a> {
+    pub batch_id: Uuid,
+    pub id: Uuid,
+    #[serde(deserialize_with = "crate::serde_helpers::deserialize_json_string")]
+    pub batch_params: Cow<'a, Value>,
+    pub model_name: std::sync::Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_request: Option<Cow<'a, str>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_response: Option<Cow<'a, str>>,
+    pub model_provider_name: Cow<'a, str>,
+    pub status: BatchStatus,
+    pub function_name: Cow<'a, str>,
+    pub variant_name: Cow<'a, str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash>,
+}
+
+pub struct UnparsedBatchRequestRow<'a> {
+    pub batch_id: Uuid,
+    pub batch_params: &'a Value,
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub model_name: &'a str,
+    pub raw_request: &'a str,
+    pub raw_response: &'a str,
+    pub model_provider_name: &'a str,
+    pub status: BatchStatus,
+    pub errors: Vec<Value>,
+    pub snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash>,
+}
+
+/// Manual implementation of FromRow for BatchRequestRow.
+/// raw_request and raw_response come from LEFT JOIN with batch_request_data
+/// and may be NULL if the data was dropped due to retention policy.
+impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchRequestRow<'static> {
+    fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+        use sqlx::types::Json;
+        let batch_params: Json<Value> = row.try_get("batch_params")?;
+        let status: BatchStatus = row.try_get("status")?;
+        let errors: Option<Json<Vec<Value>>> = row.try_get("errors")?;
+        let model_name: String = row.try_get("model_name")?;
+
+        let snapshot_hash: Option<tensorzero_types::snapshot::SnapshotHash> =
+            row.try_get("snapshot_hash")?;
+
+        let raw_request: Option<String> = row.try_get("raw_request")?;
+        let raw_response: Option<String> = row.try_get("raw_response")?;
+
+        Ok(BatchRequestRow {
+            batch_id: row.try_get("batch_id")?,
+            id: row.try_get("id")?,
+            batch_params: Cow::Owned(batch_params.0),
+            model_name: std::sync::Arc::from(model_name.as_str()),
+            model_provider_name: Cow::Owned(row.try_get("model_provider_name")?),
+            status,
+            function_name: Cow::Owned(row.try_get("function_name")?),
+            variant_name: Cow::Owned(row.try_get("variant_name")?),
+            raw_request: raw_request.map(Cow::Owned),
+            raw_response: raw_response.map(Cow::Owned),
+            errors: errors.map(|e| e.0).unwrap_or_default(),
+            snapshot_hash,
+        })
+    }
+}
+
+impl<'a> BatchRequestRow<'a> {
+    pub fn new(unparsed: UnparsedBatchRequestRow<'a>) -> Self {
+        let UnparsedBatchRequestRow {
+            batch_id,
+            batch_params,
+            function_name,
+            variant_name,
+            model_name,
+            raw_request,
+            raw_response,
+            model_provider_name,
+            status,
+            errors,
+            snapshot_hash,
+        } = unparsed;
+        let id = Uuid::now_v7();
+        Self {
+            batch_id,
+            id,
+            batch_params: Cow::Borrowed(batch_params),
+            function_name: Cow::Borrowed(function_name),
+            variant_name: Cow::Borrowed(variant_name),
+            model_name: std::sync::Arc::from(model_name),
+            raw_request: Some(Cow::Borrowed(raw_request)),
+            raw_response: Some(Cow::Borrowed(raw_response)),
+            model_provider_name: Cow::Borrowed(model_provider_name),
+            status,
+            errors,
+            snapshot_hash,
+        }
+    }
+}
+
 /// Returned from start_batch_inference from an InferenceProvider
 pub struct StartBatchProviderInferenceResponse {
     pub batch_id: Uuid,
@@ -698,21 +806,19 @@ pub struct ProviderBatchInferenceResponse {
 // Tool types (no core deps)
 // =============================================================================
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+#[ts(optional_fields)]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,
     #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
     pub provider_name: Option<String>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
-#[cfg_attr(feature = "ts-bindings", ts(optional_fields))]
+#[ts(optional_fields)]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
@@ -736,9 +842,8 @@ impl ProviderToolScope {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
@@ -754,9 +859,8 @@ impl std::fmt::Display for ProviderTool {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAICustomTool {
@@ -812,9 +916,8 @@ impl OpenAICustomTool {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
     #[schemars(title = "OpenAICustomToolFormatText")]
@@ -823,17 +926,15 @@ pub enum OpenAICustomToolFormat {
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 pub struct OpenAIGrammarDefinition {
     pub syntax: OpenAIGrammarSyntax,
     pub definition: String,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIGrammarSyntax {
     Lark,
@@ -842,18 +943,16 @@ pub enum OpenAIGrammarSyntax {
 
 /// Records / lists the tools that were allowed in the request.
 /// Also lists how they were set (default, dynamically set).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     /// If `allowed_tools` is not explicitly passed, we set the function tools

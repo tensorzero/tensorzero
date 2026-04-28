@@ -65,8 +65,7 @@ impl From<UninitializedEmbeddingModelConfig> for StoredEmbeddingModelConfig {
 /// Stored version of `UninitializedEmbeddingProviderConfig`.
 ///
 /// Accepts the deprecated `timeouts` field for backward compatibility.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
 pub struct StoredEmbeddingProviderConfig {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -78,10 +77,10 @@ pub struct StoredEmbeddingProviderConfig {
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[ts(optional)]
     pub extra_headers: Option<ExtraHeadersConfig>,
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub cost: Option<UninitializedUnifiedCostConfig>,
 }
 

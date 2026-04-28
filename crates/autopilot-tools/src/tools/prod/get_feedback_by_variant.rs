@@ -18,9 +18,8 @@ use tensorzero_core::db::feedback::FeedbackByVariant;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the get_feedback_by_variant tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct GetFeedbackByVariantToolParams {
     /// The name of the metric to query.
     pub metric_name: String,

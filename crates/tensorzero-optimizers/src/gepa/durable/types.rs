@@ -19,9 +19,8 @@ use crate::gepa::validate::SerializableFunctionContext;
 // ── Tool params & output (visible to LLM / used as spawn params) ────────
 
 /// Parameters for the durable GEPA tool (visible to LLM / used as spawn params).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct GepaToolParams {
     /// Name of the function being optimized.
     pub function_name: String,
@@ -71,9 +70,8 @@ pub struct GepaToolParams {
 }
 
 /// Output of the durable GEPA tool.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GepaToolOutput {
     /// Map of variant_name to its configuration (the Pareto frontier).
     pub variants: HashMap<String, UninitializedChatCompletionConfig>,

@@ -13,9 +13,8 @@ use tensorzero::{GetDatapointsResponse, ListDatapointsRequest};
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_datapoints tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct ListDatapointsToolParams {
     /// The name of the dataset to list datapoints from.
     pub dataset_name: String,

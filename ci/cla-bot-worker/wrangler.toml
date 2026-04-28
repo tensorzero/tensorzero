@@ -1,0 +1,20 @@
+name = "tensorzero-cla-bot"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+GITHUB_ORG = "tensorzero"
+CLA_BRANCH = "cla-signatures"
+CLA_SIGNATURES_PATH = "ci/cla-signatures.json"
+CLA_DOC_URL = "https://github.com/tensorzero/tensorzero/blob/main/CLA.md"
+CHECK_NAME = "cla"
+SIGN_PHRASE = "I have read the Contributor License Agreement (CLA) and hereby sign the CLA."
+RECHECK_PHRASE = "recheck"
+ALLOWLIST = "claude,cursoragent,dependabot[bot],TensorZero-Experimental-CI-Bot[bot]"
+
+# Secrets (set via `wrangler secret put`):
+#   GITHUB_APP_ID
+#   GITHUB_APP_PRIVATE_KEY
+#   GITHUB_INSTALLATION_ID
+#   GITHUB_WEBHOOK_SECRET

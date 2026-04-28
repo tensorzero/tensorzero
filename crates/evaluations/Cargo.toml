@@ -33,7 +33,7 @@ chrono = { workspace = true }
 futures = { workspace = true }
 regex = { workspace = true }
 indicatif = "0.18.4"
-ts-rs = { workspace = true, optional = true }
+ts-rs.workspace = true
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
@@ -49,7 +49,6 @@ default = ["ts-executor-pool"]
 # Forward this feature to 'tensorzero-core', so that our
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests", "ts-executor-pool"]
-ts-bindings = ["dep:ts-rs"]
 # Enables the TypeScript judge evaluator. When disabled, attempts to run
 # a TypeScript judge evaluator at runtime return an error and the v8/deno
 # stack is not pulled into the build (relevant for builds that target

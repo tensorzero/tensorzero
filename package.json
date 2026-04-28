@@ -29,9 +29,16 @@
       "on-headers": ">=1.1.0",
       "qs": ">=6.14.1",
       "react-router": ">=7.12.0",
-      "lodash": ">=4.17.23",
+      "lodash": ">=4.18.0",
       "valibot": ">=1.2.0",
-      "@lezer/highlight": "1.2.3"
+      "@lezer/highlight": "1.2.3",
+      "brace-expansion": ">=5.0.5",
+      "minimatch@3>brace-expansion": "^1.1.12",
+      "flatted": ">=3.4.2",
+      "picomatch": ">=4.0.4",
+      "uuid": ">=14.0.0",
+      "yaml": ">=2.8.3",
+      "path-to-regexp": "^0.1.13"
     }
   }
 }

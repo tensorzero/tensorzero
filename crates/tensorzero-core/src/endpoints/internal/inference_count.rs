@@ -29,9 +29,8 @@ pub struct InferenceCountQueryParams {
 }
 
 /// Grouping options for inference count
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceCountGroupBy {
     /// Group by variant name
@@ -39,9 +38,8 @@ pub enum InferenceCountGroupBy {
 }
 
 /// Response containing inference count
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct InferenceCountResponse {
     /// The count of inferences for the function (and optionally variant)
     pub inference_count: u64,
@@ -51,9 +49,8 @@ pub struct InferenceCountResponse {
 }
 
 /// Inference count for a variant
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct InferenceCountByVariant {
     /// The variant name
     pub variant_name: String,
@@ -82,9 +79,8 @@ pub struct InferenceWithFeedbackCountQueryParams {
 }
 
 /// Response containing inference count with feedback count
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct InferenceWithFeedbackCountResponse {
     /// Number of feedbacks for the metric
     pub feedback_count: u64,
@@ -107,18 +103,16 @@ fn default_max_periods() -> u32 {
 }
 
 /// Response containing function throughput data grouped by variant and time period
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetFunctionThroughputByVariantResponse {
     /// Throughput data for each (period, variant) combination
     pub throughput: Vec<VariantThroughput>,
 }
 
 /// Response containing all functions with their inference counts
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct ListFunctionsWithInferenceCountResponse {
     /// List of functions with their inference counts, ordered by most recent inference
     pub functions: Vec<FunctionInferenceCount>,

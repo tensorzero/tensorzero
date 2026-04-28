@@ -34,9 +34,8 @@ use crate::utils::gateway::{
 const CONFIG_EDITOR_ADVISORY_LOCK_KEY: i64 = 0x434F_4E46_4947_544D;
 
 /// Response containing a TOML-editable config from stored config.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export, optional_fields)]
 pub struct GetConfigTomlResponse {
     /// Human-readable TOML config with path strings instead of inlined file contents.
     pub toml: String,
@@ -52,8 +51,7 @@ pub struct GetConfigTomlResponse {
     /// Present when some config items failed to load but the gateway started anyway.
     /// Serialized as an optional field — absent when the Vec is empty — so the
     /// TS binding declares it optional.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<ConfigLoadingError>>"))]
+    #[ts(optional, as = "Option<Vec<ConfigLoadingError>>")]
     #[serde(skip_serializing_if = "Vec::is_empty", default, skip_deserializing)]
     pub loading_errors: Vec<ConfigLoadingError>,
 }
@@ -78,9 +76,8 @@ impl GetConfigTomlResponse {
     }
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ApplyConfigTomlRequest {
     pub base_signature: String,
     pub toml: String,
@@ -88,9 +85,8 @@ pub struct ApplyConfigTomlRequest {
     pub path_contents: HashMap<String, String>,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ApplyConfigTomlResponse {
     pub toml: String,
     pub path_contents: HashMap<String, String>,
@@ -179,9 +175,8 @@ pub async fn get_latest_config_toml_handler(
 }
 
 /// Request body for validating editable config TOML.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ValidateConfigTomlRequest {
     /// Human-readable TOML config with path strings.
     pub toml: String,
@@ -191,9 +186,8 @@ pub struct ValidateConfigTomlRequest {
 }
 
 /// Response from validating editable config TOML.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ValidateConfigTomlResponse {
     pub valid: bool,
 }

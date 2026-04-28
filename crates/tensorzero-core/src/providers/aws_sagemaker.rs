@@ -33,9 +33,8 @@ const PROVIDER_NAME: &str = "AWS Sagemaker";
 pub const PROVIDER_TYPE: &str = "aws_sagemaker";
 
 /// AWS SageMaker provider using direct HTTP calls.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]

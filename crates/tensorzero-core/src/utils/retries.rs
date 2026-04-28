@@ -20,9 +20,8 @@ use pyo3::prelude::*;
  * this code.
  */
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Copy, Clone, PartialEq, JsonSchema, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize, Copy, Clone, PartialEq, JsonSchema, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {
     #[serde(default = "default_num_retries")]

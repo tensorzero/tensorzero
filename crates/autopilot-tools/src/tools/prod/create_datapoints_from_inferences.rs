@@ -12,9 +12,8 @@ use serde::{Deserialize, Serialize};
 use tensorzero::{CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse};
 
 /// Parameters for the create_datapoints_from_inferences tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
+#[ts(export)]
 pub struct CreateDatapointsFromInferencesToolParams {
     /// The name of the dataset to create datapoints in.
     pub dataset_name: String,

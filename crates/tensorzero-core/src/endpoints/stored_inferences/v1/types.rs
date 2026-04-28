@@ -20,9 +20,8 @@ pub use tensorzero_types::inference_filters::{
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Default, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Default, Serialize, JsonSchema)]
+#[ts(export, optional_fields)]
 #[export_schema]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
@@ -41,7 +40,7 @@ pub struct ListInferencesRequest {
     /// inference output or demonstration feedback (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
+    #[ts(as = "Option<InferenceOutputSource>")]
     pub output_source: InferenceOutputSource,
 
     /// The maximum number of inferences to return.
@@ -69,7 +68,7 @@ pub struct ListInferencesRequest {
     /// **Deprecated:** Use `filters` instead. This field will be removed in a future release.
     #[deprecated(note = "Use `filters` instead")]
     #[serde(skip_serializing)]
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     pub filter: Option<InferenceFilter>,
 
     /// Optional ordering criteria for the results.
@@ -149,9 +148,8 @@ impl ListInferencesRequest {
 
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize, JsonSchema)]
+#[ts(export, optional_fields)]
 #[export_schema]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
@@ -168,14 +166,13 @@ pub struct GetInferencesRequest {
     /// (manually-curated output) if available.
     /// Defaults to `Inference` if not specified.
     #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<InferenceOutputSource>"))]
+    #[ts(as = "Option<InferenceOutputSource>")]
     pub output_source: InferenceOutputSource,
 }
 
 /// Response containing the requested inferences.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize, JsonSchema)]
+#[ts(export)]
 #[export_schema]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.

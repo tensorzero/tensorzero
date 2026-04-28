@@ -61,9 +61,8 @@ fn default_inference_cache() -> CacheEnabledMode {
 }
 
 /// Parameters for running an evaluation.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct RunEvaluationParams {
     /// Name of the evaluation to run (legacy named-evaluation path).
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.
@@ -110,21 +109,20 @@ pub struct RunEvaluationParams {
     /// Internal: dynamic variant config for GEPA.
     /// When set, uses `EvaluationVariant::Info` instead of `EvaluationVariant::Name`.
     /// Not exposed to the LLM-facing tool.
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     /// Internal: whether to include full `EvaluationInfo` objects in the response.
     /// Used by the durable GEPA path for analysis. Not exposed to the LLM-facing tool.
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     #[serde(default)]
     pub include_evaluation_infos: bool,
 }
 
 /// Result for a single datapoint evaluation.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct DatapointResult {
     /// ID of the datapoint that was evaluated.
     pub datapoint_id: Uuid,
@@ -142,9 +140,8 @@ pub struct DatapointResult {
 }
 
 /// Response from running an evaluation.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 pub struct RunEvaluationResponse {
     /// Unique identifier for this evaluation run.
     pub evaluation_run_id: Uuid,
@@ -161,7 +158,7 @@ pub struct RunEvaluationResponse {
     pub datapoint_results: Option<Vec<DatapointResult>>,
     /// Full evaluation info objects (only populated if `include_evaluation_infos` was true).
     /// Used internally by the durable GEPA path for analysis.
-    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[ts(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evaluation_infos: Option<Vec<EvaluationInfo>>,
 }

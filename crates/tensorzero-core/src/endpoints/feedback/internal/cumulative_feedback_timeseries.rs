@@ -20,9 +20,8 @@ pub struct GetCumulativeFeedbackTimeseriesParams {
     pub max_periods: u32,
 }
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct GetCumulativeFeedbackTimeseriesResponse {
     pub timeseries: Vec<CumulativeFeedbackTimeSeriesPoint>,
 }

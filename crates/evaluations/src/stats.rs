@@ -222,9 +222,8 @@ pub struct EvaluationError {
 
 /// Statistics computed about a particular evaluator
 /// We anticipate extending this over time
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, Deserialize)]
+#[ts(export)]
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,

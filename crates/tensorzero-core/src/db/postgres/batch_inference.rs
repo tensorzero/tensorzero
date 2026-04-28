@@ -9,7 +9,6 @@ use sqlx::Row;
 use sqlx::types::Json;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::config::snapshot::SnapshotHash;
@@ -633,38 +632,6 @@ fn build_get_completed_json_batch_inferences_query(
 // =====================================================================
 // FromRow implementations for batch data
 // =====================================================================
-
-/// Manual implementation of FromRow for BatchRequestRow.
-/// raw_request and raw_response come from LEFT JOIN with batch_request_data
-/// and may be NULL if the data was dropped due to retention policy.
-impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for BatchRequestRow<'static> {
-    fn from_row(row: &'r sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
-        let batch_params: Json<Value> = row.try_get("batch_params")?;
-        let status: BatchStatus = row.try_get("status")?;
-        let errors: Option<Json<Vec<Value>>> = row.try_get("errors")?;
-        let model_name: String = row.try_get("model_name")?;
-
-        let snapshot_hash: Option<SnapshotHash> = row.try_get("snapshot_hash")?;
-
-        let raw_request: Option<String> = row.try_get("raw_request")?;
-        let raw_response: Option<String> = row.try_get("raw_response")?;
-
-        Ok(BatchRequestRow {
-            batch_id: row.try_get("batch_id")?,
-            id: row.try_get("id")?,
-            batch_params: Cow::Owned(batch_params.0),
-            model_name: Arc::from(model_name.as_str()),
-            model_provider_name: Cow::Owned(row.try_get("model_provider_name")?),
-            status,
-            function_name: Cow::Owned(row.try_get("function_name")?),
-            variant_name: Cow::Owned(row.try_get("variant_name")?),
-            raw_request: raw_request.map(Cow::Owned),
-            raw_response: raw_response.map(Cow::Owned),
-            errors: errors.map(|e| e.0).unwrap_or_default(),
-            snapshot_hash,
-        })
-    }
-}
 
 /// Manual implementation of FromRow for BatchModelInferenceRow.
 /// Data fields (input, input_messages, system, tool params, inference_params,

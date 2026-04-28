@@ -135,9 +135,8 @@ pub struct EvaluationUsageStatisticsRow {
 /// This is used to determine if a human has already provided feedback for a
 /// (metric_name, datapoint_id, output) combination, allowing the evaluation
 /// system to use human feedback instead of running automated evaluators.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, serde::Serialize)]
+#[ts(export)]
 pub struct InferenceEvaluationHumanFeedbackRow {
     /// The human-provided evaluation value (JSON).
     #[serde(deserialize_with = "deserialize_json_string")]
@@ -183,9 +182,8 @@ pub(crate) struct RawEvaluationResultRow {
 }
 
 /// Evaluation result for a chat function.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct ChatEvaluationResultRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -238,9 +236,8 @@ pub struct ChatEvaluationResultRow {
 }
 
 /// Evaluation result for a JSON function.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Deserialize, Serialize)]
+#[ts(export, optional_fields)]
 pub struct JsonEvaluationResultRow {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -293,11 +290,10 @@ pub struct JsonEvaluationResultRow {
 }
 
 /// Evaluation result row that can represent either chat or JSON function output.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, TensorZeroDeserialize)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[ts(export)]
 pub enum EvaluationResultRow {
     Chat(ChatEvaluationResultRow),
     Json(JsonEvaluationResultRow),

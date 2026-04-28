@@ -18,9 +18,8 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the run_evaluation tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct RunEvaluationToolParams {
     /// Name of the evaluation to run (must be defined in config).
     /// Either `evaluation_name` or both (`function_name`, `evaluator_names`) must be provided.

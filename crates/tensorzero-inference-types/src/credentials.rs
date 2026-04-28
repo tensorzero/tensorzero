@@ -12,9 +12,8 @@ use crate::extra_headers::ExtraHeadersConfig;
 // CredentialLocation
 // =============================================================================
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
+#[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -78,17 +77,16 @@ impl Serialize for CredentialLocation {
 // =============================================================================
 
 /// Credential location with optional fallback support
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(#[cfg_attr(feature = "ts-bindings", ts(type = "string"))] CredentialLocation),
+    Single(#[ts(type = "string")] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
-        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+        #[ts(type = "string")]
         default: CredentialLocation,
-        #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+        #[ts(type = "string")]
         fallback: CredentialLocation,
     },
 }
@@ -188,14 +186,13 @@ impl<'de> Deserialize<'de> for CredentialLocationWithFallback {
 
 /// Credential location that also allows hardcoded string values.
 /// Used for non-sensitive fields like AWS region and endpoint_url.
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
+#[ts(export)]
 pub enum CredentialLocationOrHardcoded {
     /// Hardcoded value (e.g., region = "us-east-1")
     Hardcoded(String),
     /// Standard credential location (env::, dynamic::, sdk, etc.)
-    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    #[ts(type = "string")]
     Location(CredentialLocation),
 }
 
@@ -253,9 +250,8 @@ impl Serialize for CredentialLocationOrHardcoded {
 // EndpointLocation
 // =============================================================================
 
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "ts-bindings", ts(export))]
+#[derive(ts_rs::TS, Debug, PartialEq, Clone)]
+#[ts(export)]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),

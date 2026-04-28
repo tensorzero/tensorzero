@@ -1,7 +1,7 @@
 [project]
 name = "tensorzero-recipes"
 version = "0.0.0"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "clickhouse-connect",
     "pandas",

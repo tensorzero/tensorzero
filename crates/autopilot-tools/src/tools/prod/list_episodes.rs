@@ -14,9 +14,8 @@ use uuid::Uuid;
 use autopilot_client::AutopilotSideInfo;
 
 /// Parameters for the list_episodes tool (visible to LLM).
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[cfg_attr(feature = "ts-bindings", ts(export, optional_fields))]
+#[derive(ts_rs::TS, Debug, Serialize, Deserialize, JsonSchema)]
+#[ts(export, optional_fields)]
 pub struct ListEpisodesToolParams {
     /// Maximum number of episodes to return (max 100).
     pub limit: u32,

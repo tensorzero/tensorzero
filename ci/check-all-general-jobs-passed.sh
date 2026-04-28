@@ -50,7 +50,6 @@ ALLOWED_SKIP=(
   "minikube"
   "mock-optimization-tests"
   "mocked-batch-tests"
-  "pinact"
   "Postgres tests"
   "rust-build"
   "rust-test"
