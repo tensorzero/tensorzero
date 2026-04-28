@@ -22,7 +22,7 @@ import { restEndpointMethods } from "@octokit/plugin-rest-endpoint-methods";
 const MyOctokit = Octokit.plugin(paginateRest, restEndpointMethods);
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }
@@ -76,12 +76,20 @@ export default {
         payload.action === "reopened" ||
         payload.action === "synchronize"
       ) {
-        const octokit = await installationOctokit();
-        await labelMergeConflicts(
-          octokit,
-          payload.pull_request.number,
-          target,
-          env,
+        // Defer to ctx.waitUntil: getMergeableState polls up to ~10s, which
+        // is GitHub's webhook delivery deadline. Acknowledging immediately
+        // and continuing in the background keeps deliveries marked
+        // successful even when GitHub is slow to compute mergeable state.
+        ctx.waitUntil(
+          (async () => {
+            const octokit = await installationOctokit();
+            await labelMergeConflicts(
+              octokit,
+              payload.pull_request.number,
+              target,
+              env,
+            );
+          })(),
         );
         return new Response("OK", { status: 200 });
       }
@@ -92,8 +100,16 @@ export default {
     }
 
     if (event === "push") {
-      const octokit = await installationOctokit();
-      await labelMergeConflictsForPushedRef(octokit, payload, target, env);
+      // Defer: a push to a base branch fans out to every open PR targeting
+      // it, each with up to ~10s of mergeable polling. Far past GitHub's
+      // 10s webhook deadline. ctx.waitUntil keeps the worker alive in the
+      // background after we ack.
+      ctx.waitUntil(
+        (async () => {
+          const octokit = await installationOctokit();
+          await labelMergeConflictsForPushedRef(octokit, payload, target, env);
+        })(),
+      );
       return new Response("OK", { status: 200 });
     }
 
@@ -235,8 +251,10 @@ async function ensureLabelPresent(octokit, target, env, prNumber) {
       labels: [env.DIRTY_LABEL],
     });
   } catch (err) {
-    if (err.status !== 404) throw err;
-    // Label doesn't exist on this repo yet; create then retry.
+    // GitHub returns 422 ("Validation Failed") when the label name doesn't
+    // exist on the repo, and 404 in some edge cases. Either way: create the
+    // label, then retry. Any other status is a real failure — propagate.
+    if (err.status !== 404 && err.status !== 422) throw err;
     await octokit.rest.issues
       .createLabel({
         owner: target.owner,
@@ -246,7 +264,7 @@ async function ensureLabelPresent(octokit, target, env, prNumber) {
         description: env.DIRTY_LABEL_DESCRIPTION,
       })
       .catch((e) => {
-        // 422 = already exists (lost a race with another concurrent webhook).
+        // 422 here = already exists (lost a race with a concurrent webhook).
         if (e.status !== 422) throw e;
       });
     await octokit.rest.issues.addLabels({
