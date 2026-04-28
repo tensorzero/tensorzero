@@ -6,9 +6,11 @@ name: Cancel workflows on status failure
 on:
   status:
 
-permissions:
-  actions: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   cancel-on-failure:
@@ -18,6 +20,9 @@ jobs:
       github.repository == 'tensorzero/tensorzero' && (
         (github.event_name == 'status' && (github.event.state == 'failure' || github.event.state == 'error'))
       )
+    permissions:
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - name: Find workflows to cancel
         id: find-workflows
@@ -25,6 +30,9 @@ jobs:
           EVENT_SHA: ${{ github.event.sha }}
           EVENT_STATE: ${{ github.event.state }}
           EVENT_CONTEXT: ${{ github.event.context }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
         run: |
           SHA="$EVENT_SHA"
           echo "Status event details:"
@@ -33,11 +41,11 @@ jobs:
           echo "Context: $EVENT_CONTEXT"
 
           # Get all workflow runs for the specific SHA
-          workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=$SHA")
+          workflow_runs=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs?head_sha=$SHA")
 
           # Find running general.yml workflows on merge queue branches
-          current_run_id="${{ github.run_id }}"
+          current_run_id="$CURRENT_RUN_ID"
           matching_runs=$(echo "$workflow_runs" | jq -r --arg current_run "$current_run_id" '.workflow_runs[] | select(.path == ".github/workflows/general.yml" and .status != "completed" and (.head_branch // "" | test("^gh-readonly-queue/main/pr-")) and (.id | tostring) != $current_run) | "\(.id) \(.head_branch)"')
 
           if [ -n "$matching_runs" ]; then
@@ -55,14 +63,17 @@ jobs:
         if: steps.find-workflows.outputs.workflows != ''
         env:
           EVENT_SHA: ${{ github.event.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOWS_TO_CANCEL: ${{ steps.find-workflows.outputs.workflows }}
         run: |
           SHA="$EVENT_SHA"
 
           echo "Cancelling workflows..."
-          echo "${{ steps.find-workflows.outputs.workflows }}" | while read -r run_id branch; do
+          printf '%s\n' "$WORKFLOWS_TO_CANCEL" | while read -r run_id branch; do
             if [ -n "$run_id" ]; then
               echo "Cancelling general.yml workflow run $run_id on branch $branch for SHA $SHA"
-              curl -X POST -H "Authorization: Bearer ${{ github.token }}" \
-                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel"
+              curl -X POST -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPOSITORY/actions/runs/$run_id/cancel"
             fi
           done

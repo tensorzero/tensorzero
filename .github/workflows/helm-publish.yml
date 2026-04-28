@@ -1,10 +1,16 @@
 # This workflow publishes the Helm chart to R2 when we tag a release.
 name: Publish Helm chart
 
+permissions: {}
+
 on:
   workflow_dispatch:
   release:
     types: [released]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   publish-helm-chart:
@@ -12,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     # Required secrets:
     # - HELM_PUBLISH_ACCESS_KEY_ID: Cloudflare R2 access key ID
     # - HELM_PUBLISH_SECRET_ACCESS_KEY: Cloudflare R2 secret access key
@@ -45,6 +51,8 @@ jobs:
           echo "========================="
 
       - name: Update Chart.yaml version
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           cd examples/production-deployment-k8s-helm
           echo "=== Updating Chart.yaml ==="
@@ -56,9 +64,9 @@ jobs:
           echo "----------------------------"
           echo ""
           # Update the version field in Chart.yaml
-          sed -i "s/^version:.*/version: ${{ steps.version.outputs.VERSION }}/" Chart.yaml
+          sed -i "s/^version:.*/version: ${VERSION}/" Chart.yaml
           # Update the appVersion field in Chart.yaml to match
-          sed -i "s/^appVersion:.*/appVersion: \"${{ steps.version.outputs.VERSION }}\"/" Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" Chart.yaml
           echo "Chart.yaml AFTER updates:"
           echo "----------------------------"
           cat Chart.yaml
@@ -95,30 +103,33 @@ jobs:
           echo "========================="
 
       - name: Configure AWS CLI for R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.HELM_PUBLISH_ACCESS_KEY_ID }}
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.HELM_PUBLISH_SECRET_ACCESS_KEY }}
         run: |
           echo "=== Configuring AWS CLI for R2 ==="
-          echo "R2 endpoint: ${{ vars.R2_ENDPOINT_URL }}"
-          aws configure set aws_access_key_id ${{ secrets.HELM_PUBLISH_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.HELM_PUBLISH_SECRET_ACCESS_KEY }}
+          echo "R2 endpoint: $R2_ENDPOINT_URL"
+          aws configure set aws_access_key_id "$R2_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_SECRET_ACCESS_KEY"
           aws configure set default.region auto
           aws configure set default.s3.signature_version s3v4
           echo "AWS CLI configured"
           echo "========================="
-        env:
-          R2_ACCESS_KEY_ID: ${{ secrets.HELM_PUBLISH_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.HELM_PUBLISH_SECRET_ACCESS_KEY }}
 
       - name: Download existing index.yaml
         continue-on-error: true
+        env:
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
         run: |
           cd examples/production-deployment-k8s-helm
           echo "=== Downloading existing index.yaml from R2 ==="
           echo "Current directory: $(pwd)"
-          echo "R2 endpoint: ${{ vars.R2_ENDPOINT_URL }}"
+          echo "R2 endpoint: $R2_ENDPOINT_URL"
           echo ""
           # Try to download existing index.yaml from R2
           if aws s3 cp s3://tensorzero-helm-charts/index.yaml ./existing-index.yaml \
-            --endpoint-url ${{ vars.R2_ENDPOINT_URL }}; then
+            --endpoint-url "$R2_ENDPOINT_URL"; then
             echo "Successfully downloaded existing index.yaml"
             echo ""
             echo "Existing index.yaml contents:"
@@ -159,16 +170,20 @@ jobs:
           echo "========================="
 
       - name: Upload chart package to R2
+        env:
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
         run: |
           cd examples/production-deployment-k8s-helm
           CHART_FILE=$(ls tensorzero-*.tgz)
-          aws s3 cp ${CHART_FILE} s3://tensorzero-helm-charts/${CHART_FILE} \
-            --endpoint-url ${{ vars.R2_ENDPOINT_URL }}
+          aws s3 cp "${CHART_FILE}" "s3://tensorzero-helm-charts/${CHART_FILE}" \
+            --endpoint-url "$R2_ENDPOINT_URL"
           echo "Uploaded ${CHART_FILE} to R2"
 
       - name: Upload index.yaml to R2
+        env:
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
         run: |
           cd examples/production-deployment-k8s-helm
           aws s3 cp index.yaml s3://tensorzero-helm-charts/index.yaml \
-            --endpoint-url ${{ vars.R2_ENDPOINT_URL }}
+            --endpoint-url "$R2_ENDPOINT_URL"
           echo "Uploaded index.yaml to R2"

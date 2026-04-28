@@ -1,5 +1,7 @@
 name: Build Live Tests Container
 
+permissions: {}
+
 on:
   workflow_call:
     secrets:
@@ -8,13 +10,14 @@ on:
 
 jobs:
   build-live-tests-container:
+    name: build-live-tests-container
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
 
     steps:
       - name: Check out the repo
@@ -43,11 +46,11 @@ jobs:
 
       - name: Build and push `live-tests` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/tensorzero-core/tests/e2e/Dockerfile.live . -t tensorzero/live-tests:sha-${{ github.sha }} --push
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f crates/tensorzero-core/tests/e2e/Dockerfile.live . -t tensorzero/live-tests:sha-$GITHUB_SHA --push
 
       - name: Wait for image to be available on Docker Hub
         run: |
-          IMAGE="tensorzero/live-tests:sha-${{ github.sha }}"
+          IMAGE="tensorzero/live-tests:sha-$GITHUB_SHA"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 60); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then

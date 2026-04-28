@@ -1,6 +1,8 @@
 name: General Checks
 run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
+permissions: {}
+
 on:
   merge_group:
   pull_request:
@@ -20,9 +22,10 @@ env:
 
 jobs:
   detect-changes:
+    name: detect-changes
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read # Required for checkout or repository metadata reads.
+      pull-requests: read # Required to inspect PR metadata and labels.
     runs-on: ubuntu-latest
     outputs:
       clickhouse-tests-merge-queue: ${{ steps.filter.outputs.clickhouse-tests-merge-queue || 'true' }}
@@ -71,10 +74,11 @@ jobs:
               - '!ui/**'
 
   check-version-consistency:
+    name: check-version-consistency
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -92,10 +96,11 @@ jobs:
   # Only runs on Pull Requests; merge queue jobs can't access the 'skip-if-edited-check' label so we
   # always mark them as successful.
   check-if-edited-then-edit:
+    name: check-if-edited-then-edit
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -120,12 +125,13 @@ jobs:
   # Like `check-docker-compose-released`, but loads the freshly built `gateway` and `ui` container images first
   # This checks that all of our docker-compose files work with the changes in the PR
   check-docker-compose-commit:
+    name: check-docker-compose-commit
     needs: [build-gateway-container, build-ui-container]
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
 
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
@@ -142,11 +148,12 @@ jobs:
 
       - name: Pull and retag `gateway` and `ui` containers
         run: |
+          image_tag="sha-$GITHUB_SHA"
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:latest
+            "tensorzero/gateway-dev:${image_tag}" \
+            "tensorzero/ui-dev:${image_tag}"
+          docker tag "tensorzero/gateway-dev:${image_tag}" tensorzero/gateway:latest
+          docker tag "tensorzero/ui-dev:${image_tag}" tensorzero/ui:latest
 
       - name: Create the `object_storage` directory for the multimodal-vision-finetuning example
         run: |
@@ -168,13 +175,14 @@ jobs:
   # Checks our docker-compose files against the most recent published `gateway` and `ui` container images
   # (not the ones built for this PR)
   check-docker-compose-released:
+    name: check-docker-compose-released
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -219,16 +227,17 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
+    name: check-node-bindings
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to upload artifacts
-      actions: write
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -288,10 +297,11 @@ jobs:
         run: pnpm --filter=@tensorzero/tensorzero-node run check-exports
 
   check-python-schemas:
+    name: check-python-schemas
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -340,12 +350,13 @@ jobs:
         run: git diff --exit-code
 
   build-windows:
+    name: build-windows
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission for rust-cache to read/write cache
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -397,12 +408,13 @@ jobs:
         run: cargo build --workspace
 
   lint-rust:
+    name: lint-rust
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission for rust-cache
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -438,14 +450,18 @@ jobs:
 
       - name: Lint (Rust)
         working-directory: crates
+        env:
+          PARTITION: ${{ matrix.partition }}
+          TOTAL_PARTITIONS: ${{ matrix.total_partitions }}
         run: |
-          cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
+          cargo hack --partition "${PARTITION}/${TOTAL_PARTITIONS}" clippy --all-targets --each-feature -- -D warnings
 
   validate-python:
+    name: validate-python
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -525,10 +541,11 @@ jobs:
         run: ci/compile-check-notebooks.sh
 
   validate-node:
+    name: validate-node
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -608,10 +625,11 @@ jobs:
         run: pnpm --filter=tensorzero-ui run typecheck
 
   rust-build:
+    name: rust-build
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -653,10 +671,11 @@ jobs:
           cargo run-e2e --validate-and-exit
 
   rust-test:
+    name: rust-test
     needs: [detect-changes]
     if: needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -689,14 +708,20 @@ jobs:
         env:
           # Write the exported bindings to somewhere we don't care about
           TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
+          CARGO_NEXTEST_EXTRA_ARGS: ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
         run: |
-          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
+          extra_args=()
+          if [ -n "${CARGO_NEXTEST_EXTRA_ARGS:-}" ]; then
+            read -r -a extra_args <<< "$CARGO_NEXTEST_EXTRA_ARGS"
+          fi
+          cargo test-unit "${extra_args[@]}"
 
   validate:
+    name: validate
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
 
     timeout-minutes: 30
@@ -896,10 +921,11 @@ jobs:
   # This job is intentionally NOT included in check-all-general-jobs-passed
   # It runs as an optional check that shows up in the PR but doesn't block merging
   cargo-deny:
+    name: cargo-deny
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.code == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -932,9 +958,9 @@ jobs:
         (github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository))
       }}
     permissions:
-      contents: read
-      actions: read
-      id-token: write
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
+      id-token: write # Required for OIDC-backed build or publish tooling.
     uses: ./.github/workflows/clickhouse-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
@@ -948,9 +974,9 @@ jobs:
   postgres-tests:
     name: "Postgres tests"
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission for rust-cache
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     runs-on: ubuntu-latest
     needs: [build-gateway-container, build-fixtures-container]
     if: ${{ github.event_name == 'merge_group' || (github.event.pull_request.head.repo.full_name == github.repository) }}
@@ -999,17 +1025,18 @@ jobs:
 
       - name: Download container images
         run: |
+          image_tag="sha-$GITHUB_SHA"
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            "tensorzero/gateway-dev:${image_tag}" \
+            "tensorzero/fixtures:${image_tag}"
+          docker tag "tensorzero/gateway-dev:${image_tag}" "tensorzero/gateway:${image_tag}"
+          docker tag "tensorzero/fixtures:${image_tag}" "tensorzero/fixtures-postgres:${image_tag}"
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set container image tags
         run: |
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
 
       - name: Set environment variables for Postgres
         run: |
@@ -1031,8 +1058,8 @@ jobs:
   endpoint-tests:
     name: "Endpoint tests (database: ${{ matrix.database }})"
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     needs:
       [
         build-gateway-container,
@@ -1089,21 +1116,22 @@ jobs:
 
       - name: Download container images
         run: |
+          image_tag="sha-$GITHUB_SHA"
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            "tensorzero/gateway-dev:${image_tag}" \
+            "tensorzero/mock-provider-api:${image_tag}" \
+            "tensorzero/fixtures:${image_tag}"
+          docker tag "tensorzero/gateway-dev:${image_tag}" "tensorzero/gateway:${image_tag}"
+          docker tag "tensorzero/fixtures:${image_tag}" "tensorzero/fixtures-postgres:${image_tag}"
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set environment variables
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
           echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
 
       - name: Set Postgres as primary datastore
@@ -1120,8 +1148,10 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         working-directory: crates
+        env:
+          DATABASE: ${{ matrix.database }}
         run: |
-          if [ "${{ matrix.database }}" = "postgres" ]; then
+          if [ "$DATABASE" = "postgres" ]; then
             cargo run-e2e-postgres > e2e_logs.txt 2>&1 &
           else
             cargo run-e2e > e2e_logs.txt 2>&1 &
@@ -1153,10 +1183,11 @@ jobs:
 
   # Run 'cargo test-optimization' against mock-provider-api
   mock-optimization-tests:
+    name: mock-optimization-tests
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission for rust-cache
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     needs: [build-gateway-container, build-fixtures-container]
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'))
@@ -1209,17 +1240,18 @@ jobs:
 
       - name: Download container images
         run: |
+          image_tag="sha-$GITHUB_SHA"
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            "tensorzero/gateway-dev:${image_tag}" \
+            "tensorzero/fixtures:${image_tag}"
+          docker tag "tensorzero/gateway-dev:${image_tag}" "tensorzero/gateway:${image_tag}"
+          docker tag "tensorzero/fixtures:${image_tag}" "tensorzero/fixtures-postgres:${image_tag}"
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
 
       - name: Make sure dependency services are up
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --wait
@@ -1257,9 +1289,9 @@ jobs:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1269,9 +1301,9 @@ jobs:
     uses: ./.github/workflows/build-provider-proxy-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1281,9 +1313,9 @@ jobs:
     uses: ./.github/workflows/build-live-tests-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1293,9 +1325,9 @@ jobs:
     uses: ./.github/workflows/build-gateway-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1305,9 +1337,9 @@ jobs:
     uses: ./.github/workflows/build-ui-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1317,9 +1349,9 @@ jobs:
     uses: ./.github/workflows/build-mock-provider-api-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
@@ -1329,17 +1361,17 @@ jobs:
     uses: ./.github/workflows/build-fixtures-container.yml
     permissions:
       # Permission to checkout the repository
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   ui-tests:
     if: ${{ !(github.event_name == 'pull_request' && github.actor == 'dependabot[bot]') }}
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
@@ -1351,8 +1383,8 @@ jobs:
 
   ui-tests-e2e:
     permissions:
-      contents: read
-      actions: write
+      contents: read # Required for checkout or repository metadata reads.
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
@@ -1381,9 +1413,10 @@ jobs:
       TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
 
   check-production-deployment-docker-compose:
+    name: check-production-deployment-docker-compose
     needs: [build-gateway-container]
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     steps:
@@ -1399,17 +1432,20 @@ jobs:
 
       - name: Pull and retag gateway container
         run: |
+          image_tag="sha-$GITHUB_SHA"
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:latest
+            "tensorzero/gateway-dev:${image_tag}"
+          docker tag "tensorzero/gateway-dev:${image_tag}" tensorzero/gateway:latest
 
       - name: Launch ClickHouse container for E2E tests
         run: |
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
 
       - name: Set up .env file for production deployment tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > ci/check-production-deployment-docker-compose/.env
+          printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" > ci/check-production-deployment-docker-compose/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> ci/check-production-deployment-docker-compose/.env
           echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> ci/check-production-deployment-docker-compose/.env
 
@@ -1441,10 +1477,39 @@ jobs:
         build-live-tests-container,
       ]
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/live-tests.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      MODAL_KEY: ${{ secrets.MODAL_KEY }}
+      MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   live-tests-config-in-database:
     if: ${{ needs.detect-changes.outputs.live-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
@@ -1458,10 +1523,39 @@ jobs:
         build-live-tests-container,
       ]
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/live-tests-config-in-database.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      MODAL_KEY: ${{ secrets.MODAL_KEY }}
+      MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   db-only-boot-e2e:
     if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
@@ -1473,10 +1567,11 @@ jobs:
         build-live-tests-container,
       ]
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/db-only-boot-e2e.yml
-    secrets: inherit
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   inference-cache-tests:
     if: ${{ needs.detect-changes.outputs.code == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
@@ -1488,10 +1583,14 @@ jobs:
         build-provider-proxy-container,
       ]
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/inference-cache-tests.yml
-    secrets: inherit
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   client-tests:
     if: ${{ needs.detect-changes.outputs.client-tests == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
@@ -1505,33 +1604,66 @@ jobs:
         build-provider-proxy-container,
       ]
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/client-tests.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      MODAL_KEY: ${{ secrets.MODAL_KEY }}
+      MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   k3d:
     needs: [build-gateway-container, build-ui-container]
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     uses: ./.github/workflows/k3d.yml
     secrets:
       DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   mocked-batch-tests:
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
     needs: [build-gateway-container, build-mock-provider-api-container]
-    secrets: inherit
+    secrets:
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
 
   check-docs-broken-links:
+    name: check-docs-broken-links
     needs: [detect-changes]
     if: github.repository == 'tensorzero/tensorzero' && needs.detect-changes.outputs.docs == 'true'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1581,9 +1713,10 @@ jobs:
   # The `needs` list below is for scheduling only (so this job waits for others
   # to finish). The actual pass/fail logic is in the script.
   check-all-general-jobs-passed:
+    name: check-all-general-jobs-passed
     permissions:
-      actions: read
-      contents: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
+      contents: read # Required for checkout or repository metadata reads.
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [

@@ -6,15 +6,21 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch: # Allow manual triggering
 
-permissions:
-  actions: write
-  pull-requests: read
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   auto-approve-workflows:
+    name: auto-approve-workflows
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    permissions:
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
+      pull-requests: read # Required to inspect PR metadata and labels.
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - name: Auto-approve workflow runs for trusted external PRs
         env:
@@ -23,7 +29,7 @@ jobs:
           echo "Checking for trusted external PRs..."
 
           # Get all open PRs with the 'trusted-external-pr' label
-          prs=$(gh pr list --repo ${{ github.repository }} --state open --label "trusted-external-pr" --json number,headRefName,headRefOid,author --jq '.[] | "\(.number)|\(.headRefName)|\(.headRefOid)|\(.author.login)"')
+          prs=$(gh pr list --repo $GITHUB_REPOSITORY --state open --label "trusted-external-pr" --json number,headRefName,headRefOid,author --jq '.[] | "\(.number)|\(.headRefName)|\(.headRefOid)|\(.author.login)"')
 
           if [ -z "$prs" ]; then
             echo "No open PRs with 'trusted-external-pr' label found."
@@ -44,7 +50,7 @@ jobs:
             run_id=$(HEAD_REF="$head_ref" HEAD_SHA="$head_sha" gh api \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${{ github.repository }}/actions/runs?event=pull_request&status=action_required&per_page=100" \
+              "/repos/$GITHUB_REPOSITORY/actions/runs?event=pull_request&status=action_required&per_page=100" \
               --jq '[.workflow_runs[] | select(.head_branch == env.HEAD_REF and .head_sha == env.HEAD_SHA)] | sort_by(.created_at) | reverse | .[0].id')
 
             if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
@@ -59,7 +65,7 @@ jobs:
               --method POST \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/repos/${{ github.repository }}/actions/runs/$run_id/approve" 2>&1)
+              "/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/approve" 2>&1)
 
             if [ $? -eq 0 ]; then
               echo "  ✓ Successfully approved workflow run $run_id"

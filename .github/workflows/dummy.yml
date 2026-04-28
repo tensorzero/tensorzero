@@ -6,9 +6,14 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   # See 'ci/README.md' at the repository root for more details.
   merge-checks-buildkite:
+    name: merge-checks-buildkite
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:

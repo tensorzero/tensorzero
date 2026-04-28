@@ -10,10 +10,11 @@ on:
   release:
     types: [released]
 
-permissions:
-  contents: write
-  id-token: write
-  pull-requests: write
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build-wheels:
@@ -22,8 +23,8 @@ jobs:
     with:
       use_cache: false
     permissions:
-      contents: read
-      id-token: write
+      contents: read # Required for checkout or repository metadata reads.
+      id-token: write # Required for OIDC-backed build or publish tooling.
 
   release:
     if: github.repository == 'tensorzero/tensorzero'
@@ -33,11 +34,11 @@ jobs:
     environment: pypi-publish
     permissions:
       # Use to sign the release artifacts
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
       # Used to upload release artifacts
-      contents: write
+      contents: write # Required to push generated branch changes.
       # Used to generate artifact attestation
-      attestations: write
+      attestations: write # Required to publish artifact attestations.
     # Download all of the wheel artifacts published by the other jobs,
     # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.
     steps:
@@ -68,6 +69,5 @@ jobs:
     needs: [release]
     uses: ./.github/workflows/upgrade-tensorzero-deps.yml
     permissions:
-      contents: write
-      pull-requests: write
-    secrets: inherit
+      contents: write # Required to push generated branch changes.
+      pull-requests: write # Required to update PR comments, labels, or branches.

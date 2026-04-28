@@ -9,8 +9,13 @@ name: Live Tests (DB-only Boot)
 # the compose override (no `gateway-migrate-config` step, on-disk
 # bind mounts dropped) and the nextest profile (`db-only-boot`).
 
+permissions: {}
+
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -33,8 +38,8 @@ jobs:
     name: "db-only-boot-e2e (database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     timeout-minutes: 20
     strategy:
       matrix:
@@ -42,13 +47,15 @@ jobs:
       fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Cleanup disk space
         run: bash ci/free-disk-space.sh
 
       - name: Login to DockerHub
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
@@ -56,14 +63,14 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/live-tests:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/live-tests:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/fixtures:sha-$GITHUB_SHA tensorzero/fixtures-postgres:sha-$GITHUB_SHA
 
       - name: Pull images referenced by the compose files
-        run: docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy pull --ignore-pull-failures
+        run: docker compose $COMPOSE_FILES --profile provider-proxy pull --ignore-pull-failures
 
       - name: Set Postgres as primary datastore
         if: matrix.database == 'postgres'
@@ -76,7 +83,7 @@ jobs:
         # gateway's REST endpoints and assert it serves back the defaulted
         # config.
         run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy run --rm \
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose $COMPOSE_FILES --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests \
@@ -84,11 +91,11 @@ jobs:
 
       - name: Print gateway and test logs
         if: always()
-        run: docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs -t
+        run: docker compose $COMPOSE_FILES --profile provider-proxy logs -t
 
       - name: Check e2e logs for impossible error messages
         run: |
-          LOGS=$(docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs gateway)
+          LOGS=$(docker compose $COMPOSE_FILES --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
@@ -97,7 +104,7 @@ jobs:
 
       - name: Check gateway loaded config from database
         run: |
-          LOGS=$(docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs gateway)
+          LOGS=$(docker compose $COMPOSE_FILES --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1

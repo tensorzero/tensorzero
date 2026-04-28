@@ -4,6 +4,8 @@
 # `ui/app/utils/config/index.server.ts`.
 name: Dispatch Autopilot E2E Tests
 
+permissions: {}
+
 on:
   workflow_call:
     secrets:
@@ -14,10 +16,11 @@ on:
 
 jobs:
   dispatch-autopilot:
+    name: dispatch-autopilot
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - name: Generate GitHub App token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0

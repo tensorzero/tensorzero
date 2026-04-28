@@ -1,9 +1,5 @@
 name: Force add to merge queue
-permissions:
-  checks: read
-  contents: read
-  actions: write
-  statuses: write
+permissions: {}
 
 # This workflow allows us to add PRs to the merge queue without waiting on PR checks to pass.
 # It's activated by adding the special 'force-add-to-merge-queue' label to a PR.
@@ -21,12 +17,21 @@ on:
     types: [labeled, unlabeled]
   workflow_call:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   attach-successful-status:
     name: Attach a 'check-all-general-jobs-passed' status to the PR
     # Only run this job if the force-add-to-merge-queue label is present
     if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue')
     runs-on: ubuntu-latest
+    permissions:
+      checks: read # Required to inspect check runs for the PR head commit.
+      contents: read # Required for checkout or repository metadata reads.
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
+      statuses: write # Required to create commit statuses.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -37,13 +42,14 @@ jobs:
       - name: Restart general.yml if it failed for this PR
         if: github.event.action == 'labeled'
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-
           # Find the workflow run ID through the check-runs API, which works reliably
           # for both fork and non-fork PRs (fork commits are reachable via refs/pull/N/head).
           # gh run list --commit doesn't always find runs for fork PRs.
-          DETAILS_URL=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/check-runs?per_page=100" \
+          DETAILS_URL=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name == "check-all-general-jobs-passed" and .conclusion == "failure")] | .[0].details_url // empty')
 
           if [ -n "$DETAILS_URL" ]; then
@@ -54,8 +60,6 @@ jobs:
           else
             echo "No failed general.yml run found for this commit"
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attach a 'check-all-general-jobs-passed' status to the PR
         # Note that GitHub doesn't let you remove a commit status, so we don't do anything if the label is removed.
@@ -64,10 +68,11 @@ jobs:
         # This only controls when a PR can be added to the merge queue, **NOT** whether or not it will pass in the merge queue,
         # so this behavior is fine.
         if: github.event.action == 'labeled'
-        run: |
-          gh api repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
-            -f context=check-all-general-jobs-passed \
-            -f state=success \
-            -f target_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f context=check-all-general-jobs-passed \
+            -f state=success \
+            -f target_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID

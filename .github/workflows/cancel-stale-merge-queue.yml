@@ -4,39 +4,46 @@ on:
     types:
       - destroyed
 
-permissions:
-  actions: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   cancel-workflows:
     name: Cancel Workflow Runs
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero' && github.event.reason != 'merged'
+    permissions:
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - name: Get Merge Queue Commit SHA
         id: get-sha
         env:
           EVENT_REASON: ${{ github.event.reason }}
         run: |
-          echo "Repository: ${{ github.repository }}"
-          echo "Head SHA: ${{ github.sha }}"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Head SHA: $GITHUB_SHA"
           echo "Merge Group Reason: $EVENT_REASON"
 
       - name: Cancel Workflow Runs by SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Get all workflow runs for the specific SHA
-          workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}")
+          workflow_runs=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA")
 
           # Extract run IDs and cancel them (except current workflow)
-          current_run_id="${{ github.run_id }}"
+          current_run_id="$GITHUB_RUN_ID"
           echo "Current Run ID: $current_run_id"
           echo "$workflow_runs" | jq -r '.workflow_runs[] | select(.status != "completed") | .id' | while read -r run_id; do
             echo "Run ID: $run_id"
             if [ -n "$run_id" ] && [ "$run_id" != "$current_run_id" ]; then
               echo "Cancelling workflow run $run_id"
-              curl -X POST -H "Authorization: Bearer ${{ github.token }}" \
-                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel"
+              curl -X POST -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel"
             fi
           done

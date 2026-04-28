@@ -1,5 +1,7 @@
 name: ClickHouse Tests
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
@@ -23,11 +25,11 @@ jobs:
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
       # Permission for rust-cache
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
       # Permission to fetch GitHub OIDC token authentication
-      id-token: write
+      id-token: write # Required for OIDC-backed build or publish tooling.
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -111,13 +113,13 @@ jobs:
       - name: Download container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
           # Retag gateway-e2e as gateway so docker-compose migrations work
-          docker tag tensorzero/gateway-e2e:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-e2e:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
           # Retag fixtures as fixtures-postgres for docker-compose
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-$GITHUB_SHA tensorzero/fixtures-postgres:sha-$GITHUB_SHA
         continue-on-error: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') }}
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests (non-replicated)
@@ -133,24 +135,30 @@ jobs:
 
       - name: Set container image tags
         run: |
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
+        env:
+          TENSORZERO_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version.tag }}
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml up --no-build --wait
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
+        env:
+          TENSORZERO_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version.tag }}
+        run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml up --no-build --wait
 
       # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
       - name: Check ClickHouse version
+        env:
+          CLICKHOUSE_VERSION_PREFIX: ${{ matrix.clickhouse_version.prefix }}
         run: |
           CLICKHOUSE_VERSION=$(curl -s "http://localhost:8123/query?user=chuser&password=chpassword" --data-binary "SELECT version()")
           echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
-          echo "$CLICKHOUSE_VERSION" | grep -q "${{ matrix.clickhouse_version.prefix }}" || echo "WARNING: ClickHouse version does not match expected ${{ matrix.clickhouse_version.prefix }}"
+          echo "$CLICKHOUSE_VERSION" | grep -q "$CLICKHOUSE_VERSION_PREFIX" || echo "WARNING: ClickHouse version does not match expected $CLICKHOUSE_VERSION_PREFIX"
 
       - name: Launch the gateway for E2E tests (not configured for replication)
         if: matrix.replicated == false
@@ -163,7 +171,7 @@ jobs:
             -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
           count=0
           max_attempts=20
@@ -186,7 +194,7 @@ jobs:
             -e TENSORZERO_CLICKHOUSE_CLUSTER_NAME \
             -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml' \
             --run-clickhouse-migrations
           # Start the gateway connected to the first replica (port 8123)
@@ -200,7 +208,7 @@ jobs:
             -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
           count=0
           max_attempts=40
@@ -223,8 +231,10 @@ jobs:
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
+        env:
+          TENSORZERO_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version.tag }}
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
 
       - name: Print ClickHouse error logs (replicated)
         if: always() && matrix.replicated == true
@@ -260,8 +270,10 @@ jobs:
 
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
+        env:
+          TENSORZERO_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version.tag }}
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.yml logs -t
 
       - name: Print ClickHouse error logs (non-replicated)
         if: always() && matrix.replicated == false

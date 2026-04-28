@@ -1,18 +1,25 @@
 name: Slash Command Dispatch
 
-permissions:
-  pull-requests: write # For doing the emoji reaction on a PR comment
-  issues: write # For doing the emoji reaction on an issue comment
-  contents: write # For executing the repository_dispatch event
+permissions: {}
 
 on:
   issue_comment:
     types: [created]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   slashCommandDispatch:
+    name: slashCommandDispatch
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      pull-requests: write # For doing the emoji reaction on a PR comment
+      issues: write # For doing the emoji reaction on an issue comment
+      contents: write # For executing the repository_dispatch event
     steps:
       - name: "Check permission"
         id: check-permission
@@ -25,13 +32,11 @@ jobs:
 
       - name: Leave a comment if permission check fails for a slash command
         if: ${{ steps.check-permission.outputs.ACTOR_MEMBER != '1' && (startsWith(github.event.comment.body, '/')) }}
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          issue-number: ${{ github.event.issue.number }}
-          body: |
-            ❌ Only public members of the `tensorzero` organization can use slash commands
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "❌ Only public members of the \`tensorzero\` organization can use slash commands"
 
       - name: Slash Command Dispatch
         if: ${{ steps.check-permission.outputs.ACTOR_MEMBER == '1' }}

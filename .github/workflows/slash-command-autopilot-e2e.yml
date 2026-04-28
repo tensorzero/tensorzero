@@ -8,22 +8,31 @@ name: Trigger Autopilot E2E from slash command
 on:
   workflow_dispatch:
 
-permissions:
-  pull-requests: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   trigger-autopilot-e2e:
+    name: trigger-autopilot-e2e
     runs-on: ubuntu-latest
     if: false # autopilot integration disabled; see header comment
+    permissions:
+      pull-requests: write # Required to update PR comments, labels, or branches.
+      issues: write # Required to comment on and react to PR issue comments.
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - name: Add initial reaction
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: eyes
+        env:
+          COMMENT_ID: ${{ github.event.client_payload.github.payload.comment.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+        run: |
+          gh api --method POST "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -H "Accept: application/vnd.github+json" \
+            -f content=eyes
 
       - name: Generate GitHub App token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -101,30 +110,34 @@ jobs:
 
       - name: Comment with workflow link
         if: always()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          issue-number: ${{ github.event.client_payload.pull_request.number }}
-          body: |
-            🚀 Autopilot E2E tests triggered!
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.client_payload.pull_request.number }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          RUN_URL: ${{ steps.wait-for-autopilot.outputs.run_url }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "🚀 Autopilot E2E tests triggered!
 
-            View the run: ${{ steps.wait-for-autopilot.outputs.run_url }}
+          View the run: $RUN_URL"
 
       - name: Add success reaction
         if: success()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: hooray
+        env:
+          COMMENT_ID: ${{ github.event.client_payload.github.payload.comment.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+        run: |
+          gh api --method POST "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -H "Accept: application/vnd.github+json" \
+            -f content=hooray
 
       - name: Add failure reaction
         if: failure()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: -1
+        env:
+          COMMENT_ID: ${{ github.event.client_payload.github.payload.comment.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+        run: |
+          gh api --method POST "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -H "Accept: application/vnd.github+json" \
+            -f content='-1'

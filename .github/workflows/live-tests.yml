@@ -1,7 +1,68 @@
 name: Live Tests
 
+permissions: {}
+
 on:
   workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_BEARER_TOKEN_BEDROCK:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AZURE_API_KEY_NEW:
+        required: true
+      DEEPSEEK_API_KEY:
+        required: true
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+      FIREWORKS_ACCOUNT_ID:
+        required: true
+      FIREWORKS_API_KEY:
+        required: true
+      GCP_JWT_KEY:
+        required: true
+      GCP_STORAGE_ACCESS_KEY_ID:
+        required: true
+      GCP_STORAGE_SECRET_ACCESS_KEY:
+        required: true
+      GOOGLE_AI_STUDIO_API_KEY:
+        required: true
+      GROQ_API_KEY:
+        required: true
+      HYPERBOLIC_API_KEY:
+        required: true
+      MISTRAL_API_KEY:
+        required: true
+      MODAL_KEY:
+        required: true
+      MODAL_SECRET:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      SGLANG_API_KEY:
+        required: true
+      TGI_API_KEY:
+        required: true
+      TOGETHER_API_KEY:
+        required: true
+      VLLM_API_BASE:
+        required: true
+      VLLM_API_KEY:
+        required: true
+      VOYAGE_API_KEY:
+        required: true
+      XAI_API_KEY:
+        required: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -52,8 +113,8 @@ jobs:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }}, database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     timeout-minutes: 45
     strategy:
       matrix:
@@ -79,13 +140,13 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/provider-proxy:sha-${{ github.sha }} \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/live-tests:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/provider-proxy:sha-$GITHUB_SHA \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/live-tests:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/fixtures:sha-$GITHUB_SHA tensorzero/fixtures-postgres:sha-$GITHUB_SHA
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -125,10 +186,12 @@ jobs:
         run: docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy pull --ignore-pull-failures
 
       - name: Run live tests container via Docker Compose
+        env:
+          BATCH_WRITES: ${{ matrix.batch_writes }}
         run: |
           DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --rm \
             -e TENSORZERO_CI=1 \
-            -e TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }} \
+            -e TENSORZERO_CLICKHOUSE_BATCH_WRITES="$BATCH_WRITES" \
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
             live-tests
 
@@ -146,13 +209,15 @@ jobs:
           grep --invert-match -i "please file a bug report" <<< "$LOGS"
 
       - name: Check gateway started with correct batch writes mode
+        env:
+          BATCH_WRITES: ${{ matrix.batch_writes }}
         run: |
           LOGS=$(docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy logs gateway)
           if [ -z "$LOGS" ]; then
             echo "ERROR: Gateway logs are empty"
             exit 1
           fi
-          if [ "${{ matrix.batch_writes }}" = "true" ]; then
+          if [ "$BATCH_WRITES" = "true" ]; then
             echo "Checking that batch writes are enabled..."
             grep "Batch Writes: enabled" <<< "$LOGS"
           else
@@ -185,8 +250,8 @@ jobs:
     name: "evaluation-tests (database: ${{ matrix.database }})"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     timeout-minutes: 45
     strategy:
       matrix:
@@ -210,13 +275,13 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/provider-proxy:sha-${{ github.sha }} \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/live-tests:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/provider-proxy:sha-$GITHUB_SHA \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/live-tests:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/fixtures:sha-$GITHUB_SHA tensorzero/fixtures-postgres:sha-$GITHUB_SHA
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'

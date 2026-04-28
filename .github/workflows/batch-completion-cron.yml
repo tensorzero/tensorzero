@@ -12,11 +12,16 @@ env:
     {"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "What is the capital of France?"}], "max_tokens": 100}}
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   openai-batch:
+    name: openai-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
     steps:
@@ -37,7 +42,7 @@ jobs:
       - name: Create batch input file
         run: |
           mkdir -p batch_inputs
-          echo '${{ env.BATCH_INPUT }}' > batch_inputs/input.jsonl
+          printf '%s\n' "$BATCH_INPUT" > batch_inputs/input.jsonl
 
       - name: OpenAI Batch Inference
         env:
@@ -95,6 +100,7 @@ jobs:
           rm -rf batch_inputs/
 
   google-vertex-batch:
+    name: google-vertex-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
     steps:
@@ -119,7 +125,7 @@ jobs:
           GOOGLE_CLOUD_REGION: us-east1
         run: |
           # Create service account key file
-          echo '${{ secrets.GCP_JWT_KEY }}' > /tmp/gcp-key.json
+          printf '%s\n' "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/gcp-key.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
 
           python -c "
@@ -185,6 +191,7 @@ jobs:
           rm -f /tmp/gcp-key.json
 
   anthropic-batch:
+    name: anthropic-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
     steps:
@@ -241,6 +248,7 @@ jobs:
           "
 
   log-completion:
+    name: log-completion
     if: github.repository == 'tensorzero/tensorzero'
     needs: [openai-batch, google-vertex-batch, anthropic-batch]
     runs-on: ubuntu-latest

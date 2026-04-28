@@ -1,8 +1,5 @@
 name: PR Base Branch Check
-permissions:
-  contents: read
-  pull-requests: write # Required for adding/removing labels
-  statuses: write # Required for creating commit statuses
+permissions: {}
 
 on:
   # We use pull_request rather than pull_request_target to avoid any security
@@ -12,9 +9,18 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened, unlabeled]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   check-base-branch:
+    name: check-base-branch
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required for checkout or repository metadata reads.
+      pull-requests: write # Required for adding/removing labels
+      statuses: write # Required for creating commit statuses
     steps:
       - name: Check PR base branch
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0

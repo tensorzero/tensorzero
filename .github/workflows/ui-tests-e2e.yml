@@ -1,7 +1,6 @@
 name: UI E2E Tests
 permissions:
-  actions: write
-  contents: read
+  contents: read # Required for checkout or repository metadata reads.
 
 on:
   workflow_call:
@@ -39,6 +38,7 @@ on:
 
 jobs:
   ui-tests-no-network:
+    name: ui-tests-no-network
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -61,12 +61,12 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
 
       - name: Start docker containers without external network access
         working-directory: ui
@@ -76,10 +76,10 @@ jobs:
         run: |
           # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-$GITHUB_SHA" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/empty.toml" >> fixtures/.env
 
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
@@ -96,6 +96,7 @@ jobs:
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
   ui-tests-gateway-prefix:
+    name: ui-tests-gateway-prefix
     runs-on: ubuntu-latest
     steps:
       - name: Set DNS
@@ -156,18 +157,20 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           # Fall back to HTTP download for fork PRs (secrets unavailable)
           TENSORZERO_DOWNLOAD_FIXTURES_WITHOUT_CREDENTIALS: ${{ github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
         run: |
@@ -177,14 +180,14 @@ jobs:
           echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000/custom/prefix" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_CONFIG=/app/config/base-path.toml" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-$GITHUB_SHA" >> fixtures/.env
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --no-build -d
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml wait fixtures
@@ -224,6 +227,7 @@ jobs:
           retention-days: 7
 
   ui-tests-e2e-mock:
+    name: ui-tests-e2e-mock
     runs-on: ubuntu-latest
     # Same conditions as ui-tests-e2e-main
     if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group }}
@@ -286,27 +290,30 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
 
       - name: Set common fixture environment variables
         working-directory: ui
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
         run: |
           # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-$GITHUB_SHA" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
           # S3 credentials are required - gateway validates object store at startup
-          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> fixtures/.env
           # Dummy values - not used since mock server handles requests
           echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
@@ -423,14 +430,14 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/provider-proxy:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/provider-proxy:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
 
       - name: Download provider-proxy cache from R2
         env:
@@ -443,23 +450,31 @@ jobs:
 
       - name: Set common fixture environment variables
         working-directory: ui
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'not_used' }}
+          FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY || 'not_used' }}
         run: |
           # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_PROVIDER_PROXY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_PROVIDER_PROXY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> fixtures/.env
           # Real API keys for cache misses (forwarded through provider-proxy to real providers)
-          echo "FIREWORKS_ACCOUNT_ID=${{ secrets.FIREWORKS_ACCOUNT_ID }}" >> fixtures/.env-gateway
-          echo "FIREWORKS_API_KEY=${{ secrets.FIREWORKS_API_KEY }}" >> fixtures/.env-gateway
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> fixtures/.env-gateway
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
-          echo "TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY || 'not_used' }}" >> fixtures/.env-gateway
+          echo "FIREWORKS_ACCOUNT_ID=$FIREWORKS_ACCOUNT_ID" >> fixtures/.env-gateway
+          echo "FIREWORKS_API_KEY=$FIREWORKS_API_KEY" >> fixtures/.env-gateway
+          echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> fixtures/.env-gateway
+          echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> fixtures/.env-gateway
+          echo "TOGETHER_API_KEY=$TOGETHER_API_KEY" >> fixtures/.env-gateway
 
       - name: Enable gateway authentication in config
         if: matrix.auth_mode != 'no_gateway_auth'
@@ -496,14 +511,14 @@ jobs:
           docker run --rm \
             --network fixtures_default \
             -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --run-postgres-migrations
 
           echo "Generating API key..."
           API_KEY=$(docker run --rm \
             --network fixtures_default \
             -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --create-api-key)
 
           if [ "${MATRIX_AUTH_MODE}" = "gateway_auth_with_ui_server_key" ]; then
@@ -599,16 +614,17 @@ jobs:
   # /internal/config_toml/apply, so they need TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE
   # and a pre-loaded config — they cannot run in the main e2e job.
   ui-tests-e2e-config-editing:
+    name: ui-tests-e2e-config-editing
     runs-on: ubuntu-latest
     if: ${{ github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group) }}
     steps:
       - name: Check out the repo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.13.0"
 
@@ -660,26 +676,29 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
 
       - name: Set common fixture environment variables
         working-directory: ui
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
         run: |
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_FIXTURES_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_E2E_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_FIXTURES_TAG=sha-$GITHUB_SHA" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.S3_ACCESS_KEY_ID }}" >> fixtures/.env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.S3_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY" >> fixtures/.env
           # Dummy values — config editing tests do not make real inference calls
           echo "ANTHROPIC_API_KEY=not_used" >> fixtures/.env-gateway
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
@@ -726,7 +745,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: playwright-report-e2e-config-editing
           path: |

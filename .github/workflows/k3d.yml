@@ -1,7 +1,7 @@
 name: CI
 
 permissions:
-  contents: read
+  contents: read # Required for checkout or repository metadata reads.
 
 on:
   workflow_call:
@@ -35,11 +35,11 @@ jobs:
       - name: Pull and load gateway and ui containers
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/ui-dev:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/ui-dev:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }}
-          k3d image import tensorzero/gateway:sha-${{ github.sha }} tensorzero/ui:sha-${{ github.sha }} -c tensorzero
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/ui-dev:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/ui-dev:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA
+          k3d image import tensorzero/gateway:sha-$GITHUB_SHA tensorzero/ui:sha-$GITHUB_SHA -c tensorzero
 
       - name: Create helm overrides file
         run: |
@@ -49,7 +49,7 @@ jobs:
             image:
               repository: tensorzero/gateway
               # We load this from the build-gateway-container job
-              tag: sha-${{ github.sha }}
+              tag: sha-$GITHUB_SHA
               pullPolicy: Never
             service:
               type: NodePort
@@ -57,7 +57,7 @@ jobs:
             image:
               repository: tensorzero/ui
               # We load this from the build-ui-container job
-              tag: sha-${{ github.sha }}
+              tag: sha-$GITHUB_SHA
               pullPolicy: Never
             service:
               type: NodePort
