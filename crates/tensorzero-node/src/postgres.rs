@@ -2,7 +2,7 @@ use secrecy::ExposeSecret;
 use tensorzero_auth::{
     constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE},
     key::TensorZeroApiKey,
-    postgres::AuthResult,
+    postgres::ApiKeyValidationResult,
 };
 use tensorzero_core::{
     config::Config, db::postgres::PostgresConnectionInfo, utils::gateway::setup_postgres,
@@ -99,8 +99,13 @@ impl PostgresClient {
 
     /// Validates an API key against the `tensorzero_auth_api_key` table, reusing the same
     /// parsing and lookup that the gateway's auth middleware uses
-    /// (`tensorzero_auth::postgres::check_key`). Returns the matching `KeyInfo` (serialized as
-    /// JSON) on success; throws on invalid format, missing keys, disabled keys, or expired keys.
+    /// (`tensorzero_auth::postgres::check_key`).
+    ///
+    /// Returns a JSON-encoded `ApiKeyValidationResult` describing the auth outcome (valid,
+    /// invalid format, missing, disabled, or expired). Throws `napi::Error` only for
+    /// infrastructure failures (Postgres unavailable, query errors, serialization failures)
+    /// — callers must therefore distinguish auth failures (parsed `type != "valid"`) from
+    /// infra failures (thrown error); only the former should map to a 401.
     #[napi]
     pub async fn validate_api_key(&self, key: String) -> Result<String, napi::Error> {
         let pool = self
@@ -108,27 +113,17 @@ impl PostgresClient {
             .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
-        let parsed_key = TensorZeroApiKey::parse(&key)
-            .map_err(|e| napi::Error::from_reason(format!("Invalid API key: {e}")))?;
+        let result = match TensorZeroApiKey::parse(&key) {
+            Ok(parsed_key) => tensorzero_auth::postgres::check_key(&parsed_key, pool)
+                .await
+                .map_err(|e| napi::Error::from_reason(format!("Failed to validate API key: {e}")))?
+                .into(),
+            Err(_) => ApiKeyValidationResult::InvalidFormat,
+        };
 
-        let result = tensorzero_auth::postgres::check_key(&parsed_key, pool)
-            .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to validate API key: {e}")))?;
-
-        match result {
-            AuthResult::Success(key_info) => serde_json::to_string(&key_info).map_err(|e| {
-                napi::Error::from_reason(format!("Failed to serialize key info: {e}"))
-            }),
-            AuthResult::Disabled(disabled_at, _) => Err(napi::Error::from_reason(format!(
-                "API key was disabled at: {disabled_at}"
-            ))),
-            AuthResult::Expired(expired_at, _) => Err(napi::Error::from_reason(format!(
-                "API key expired at: {expired_at}"
-            ))),
-            AuthResult::MissingKey => Err(napi::Error::from_reason(
-                "Provided API key does not exist in the database".to_string(),
-            )),
-        }
+        serde_json::to_string(&result).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize validation result: {e}"))
+        })
     }
 
     #[napi]
