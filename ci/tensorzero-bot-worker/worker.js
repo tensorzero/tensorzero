@@ -172,22 +172,28 @@ async function forceMergeQueue(octokit, pr, target, env, ctx) {
   if (pr.state !== "open") return;
 
   // Post the success status FIRST. This is the load-bearing step that
-  // unblocks merge-queue entry. If it fails, we throw to Cloudflare → 500
-  // → GitHub redelivers the webhook so we get another shot.
+  // unblocks merge-queue entry. Wrapped in withRetry so a transient
+  // 5xx/429 recovers in seconds instead of waiting for GitHub's webhook
+  // redelivery cycle (~1+ minute). On persistent failure, we still throw
+  // → Cloudflare 500 → GitHub redelivers as the eventual fallback.
   //
   // Note: if the contributor pushes during this flow, the new head SHA
   // gets its own general.yml run and our success status lands on the old
   // (no longer head) SHA. That's the correct outcome — pushing should
   // reset the gate.
-  await octokit.rest.repos.createCommitStatus({
-    owner: target.owner,
-    repo: target.repo,
-    sha: pr.head.sha,
-    context: env.FORCE_MERGE_QUEUE_STATUS_CONTEXT,
-    state: "success",
-    description: "Forced via force-add-to-merge-queue label",
-    target_url: `https://github.com/${target.owner}/${target.repo}/pull/${pr.number}`,
-  });
+  await withRetry(
+    () =>
+      octokit.rest.repos.createCommitStatus({
+        owner: target.owner,
+        repo: target.repo,
+        sha: pr.head.sha,
+        context: env.FORCE_MERGE_QUEUE_STATUS_CONTEXT,
+        state: "success",
+        description: "Forced via force-add-to-merge-queue label",
+        target_url: `https://github.com/${target.owner}/${target.repo}/pull/${pr.number}`,
+      }),
+    `createCommitStatus(PR #${pr.number})`,
+  );
 
   // Best-effort: if there's a failed `general.yml` run for this SHA, restart
   // it so the real check eventually flips to success without the contributor
