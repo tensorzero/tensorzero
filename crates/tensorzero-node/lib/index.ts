@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import type { EditPayload, KeyInfo } from "./bindings";
+import type { ApiKeyValidationResult, EditPayload, KeyInfo } from "./bindings";
 import type {
   ConfigApplier as NativeConfigApplierType,
   PostgresClient as NativePostgresClientType,
@@ -61,9 +61,17 @@ export class PostgresClient {
     return JSON.parse(result) as KeyInfo;
   }
 
-  async validateApiKey(key: string): Promise<KeyInfo> {
+  /**
+   * Validates an API key against the auth table.
+   *
+   * Resolves with an `ApiKeyValidationResult` describing the auth outcome — callers
+   * must inspect `kind` to distinguish a valid key from rejection reasons (missing,
+   * disabled, expired, invalid format). Rejects (throws) only on infrastructure
+   * failures, so a thrown error must NOT be treated as an auth failure.
+   */
+  async validateApiKey(key: string): Promise<ApiKeyValidationResult> {
     const result = await this.nativePostgresClient.validateApiKey(key);
-    return JSON.parse(result) as KeyInfo;
+    return JSON.parse(result) as ApiKeyValidationResult;
   }
 }
 

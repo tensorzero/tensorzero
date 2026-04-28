@@ -21,7 +21,6 @@ import {
   isPostgresAvailable,
 } from "~/utils/postgres.server";
 import { requireValidApiKeyIfEnabled } from "~/utils/auth.server";
-import { getConfig } from "~/utils/config/index.server";
 import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
@@ -148,7 +147,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     };
   }
 
-  await requireValidApiKeyIfEnabled(await getConfig());
+  await requireValidApiKeyIfEnabled();
 
   return {
     postgresAvailable: true as const,
@@ -157,7 +156,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireValidApiKeyIfEnabled(await getConfig());
+  await requireValidApiKeyIfEnabled();
 
   const formData = await request.formData();
   const actionType = formData.get("action");

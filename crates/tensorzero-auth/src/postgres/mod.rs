@@ -88,6 +88,37 @@ pub enum AuthResult {
     MissingKey,
 }
 
+/// Result of validating an API key, suitable for serialization across language boundaries
+/// (NAPI → TypeScript). Auth-related outcomes are encoded as variants here so that
+/// callers can distinguish them from infrastructure failures (which propagate as thrown
+/// errors at the NAPI layer).
+#[derive(ts_rs::TS, Debug, Clone, Serialize)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApiKeyValidationResult {
+    /// The API key parsed and matches an active, non-expired row.
+    Valid { key_info: KeyInfo },
+    /// The provided string did not parse as a TensorZero API key.
+    InvalidFormat,
+    /// The provided key parsed but does not exist in the database.
+    Missing,
+    /// The provided key exists but has been disabled.
+    Disabled,
+    /// The provided key exists but is past its expiration.
+    Expired,
+}
+
+impl From<AuthResult> for ApiKeyValidationResult {
+    fn from(result: AuthResult) -> Self {
+        match result {
+            AuthResult::Success(key_info) => Self::Valid { key_info },
+            AuthResult::Disabled(_, _) => Self::Disabled,
+            AuthResult::Expired(_, _) => Self::Expired,
+            AuthResult::MissingKey => Self::Missing,
+        }
+    }
+}
+
 #[derive(ts_rs::TS, sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
 #[ts(export)]
 pub struct KeyInfo {

@@ -7,6 +7,7 @@ export * from "./AllowedToolsChoice";
 export * from "./AnthropicProvider";
 export * from "./ApiKeyPublicIdConfigScope";
 export * from "./ApiKeyPublicIdValueScope";
+export * from "./ApiKeyValidationResult";
 export * from "./ApiType";
 export * from "./ApplyConfigTomlRequest";
 export * from "./ApplyConfigTomlResponse";
