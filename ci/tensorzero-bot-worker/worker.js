@@ -109,10 +109,11 @@ export default {
       ) {
         return new Response("OK (skipped: not a branch push)", { status: 200 });
       }
-      // Defer: a push to a base branch fans out to every open PR targeting
-      // it, each with up to ~3s of mergeable polling. Far past GitHub's
-      // 10s webhook deadline. ctx.waitUntil keeps the worker alive in the
-      // background after we ack.
+      // Defer: a push to a base branch fans out across every open PR
+      // targeting it. The round-based fan-out (see
+      // labelMergeConflictsForPushedRef) takes ~7-12s for tensorzero scale
+      // — comfortably past GitHub's 10s webhook deadline. ctx.waitUntil
+      // keeps the worker alive in the background after we ack.
       ctx.waitUntil(
         (async () => {
           const octokit = await installationOctokit();
