@@ -1,0 +1,111 @@
+name: Live Tests (DB-only Boot)
+
+# Fourth flavor of live tests: gateway booted from a migrated-but-empty
+# Postgres + ClickHouse stack with `ENABLE_CONFIG_IN_DATABASE=true` and
+# no `--config-file`. This is the deploy shape the configure-via-UI
+# story builds on — schema present, no config rows, no files on disk.
+#
+# Mirrors `live-tests-config-in-database.yml`; the only difference is
+# the compose override (no `gateway-migrate-config` step, on-disk
+# bind mounts dropped) and the nextest profile (`db-only-boot`).
+
+on:
+  workflow_call:
+
+env:
+  CARGO_INCREMENTAL: 0
+  FORCE_COLOR: 1
+  SQLX_OFFLINE: 1
+  TENSORZERO_CI: 1
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
+  TENSORZERO_GATEWAY_TAG: sha-${{ github.sha }}
+  # Two compose files merge: the standard live setup plus the override
+  # that swaps the gateway onto the DB-only-boot path.
+  COMPOSE_FILES: "-f crates/tensorzero-core/tests/e2e/docker-compose.live.yml -f crates/tensorzero-core/tests/e2e/docker-compose.db-only-boot.yml"
+
+jobs:
+  db-only-boot-e2e:
+    if: github.repository == 'tensorzero/tensorzero'
+    # Run the zero-config scenario in both observability modes: with
+    # ClickHouse as the data backend (default) and with Postgres as
+    # the data backend (single-datastore deploy). Config always lives
+    # in Postgres; this matrix only varies where observability data goes.
+    name: "db-only-boot-e2e (database: ${{ matrix.database }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        database: [clickhouse, postgres]
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Cleanup disk space
+        run: bash ci/free-disk-space.sh
+
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
+      - name: Pull container images
+        run: |
+          ./ci/docker-pull-with-retry.sh \
+            tensorzero/gateway-dev:sha-${{ github.sha }} \
+            tensorzero/live-tests:sha-${{ github.sha }} \
+            tensorzero/fixtures:sha-${{ github.sha }}
+          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+
+      - name: Pull images referenced by the compose files
+        run: docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy pull --ignore-pull-failures
+
+      - name: Set Postgres as primary datastore
+        if: matrix.database == 'postgres'
+        run: |
+          echo "TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres" >> $GITHUB_ENV
+
+      - name: Run db-only-boot e2e tests
+        # The `db-only-boot` nextest profile filters down to the tests in
+        # `tensorzero-core/tests/e2e/db_only_boot/`, which hit the running
+        # gateway's REST endpoints and assert it serves back the defaulted
+        # config.
+        run: |
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy run --rm \
+            -e TENSORZERO_CI=1 \
+            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=${TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND:-} \
+            live-tests \
+            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile db-only-boot"
+
+      - name: Print gateway and test logs
+        if: always()
+        run: docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs -t
+
+      - name: Check e2e logs for impossible error messages
+        run: |
+          LOGS=$(docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs gateway)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          grep --invert-match -i "please file a bug report" <<< "$LOGS"
+
+      - name: Check gateway loaded config from database
+        run: |
+          LOGS=$(docker compose ${{ env.COMPOSE_FILES }} --profile provider-proxy logs gateway)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          # When ENABLE_CONFIG_IN_DATABASE is on and no --config-file is passed,
+          # main.rs prints a "Configuration: database" banner line. Fail fast
+          # if that path wasn't exercised (means the override wasn't applied).
+          grep -q "Configuration: database" <<< "$LOGS" || {
+            echo "ERROR: Gateway does not appear to have loaded its config from the database"
+            exit 1
+          }

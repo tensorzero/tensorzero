@@ -1,0 +1,63 @@
+# Override for docker-compose.live.yml that runs the live gateway against the
+# config-in-database read path with NO pre-migrated config rows and NO files
+# on disk — the "zero config, configure via UI" boot scenario.
+#
+# Usage:
+#   docker compose -f docker-compose.live.yml -f docker-compose.db-only-boot.yml ...
+#
+# Compared to `docker-compose.config-in-db.yml`, this override
+#   1. Omits `gateway-migrate-config`: schema migrations still run (via the
+#      shared `gateway-postgres-migrations` / `gateway-clickhouse-migrations`
+#      services from `docker-compose-common.yml`), but nothing populates
+#      `stored_config` tables — so the gateway's config is whatever
+#      `load_config_from_db` returns for a fresh DB: singletons defaulted,
+#      collections empty.
+#   2. Drops the on-disk config/template/credential bind mounts inherited
+#      from `docker-compose.live.yml`. The point of the scenario is that
+#      the gateway works with ONLY databases and nothing on the filesystem.
+#   3. Turns on `ENABLE_CONFIG_IN_DATABASE` and clears `--config-file`.
+
+services:
+  # Drop the fixture-loading deps: the zero-config scenario starts with an
+  # empty DB by definition, so loading fixtures against it is either a
+  # no-op or a semantic mismatch. Keeping only the infra + gateway deps.
+  live-tests:
+    depends_on: !override
+      gateway:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
+      provider-proxy:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  gateway:
+    # Use the plain gateway image rather than the e2e-test build: this
+    # scenario exercises the production boot path, not e2e-only hooks.
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    environment:
+      TENSORZERO_INTERNAL_FLAG_ENABLE_CONFIG_IN_DATABASE: "true"
+    # No `--config-file` / `--default-config` — main.rs falls through to the
+    # DB load path when no config flag is set and the feature flag is on.
+    command: []
+    # Replace (not extend) the bind-mount list so no TOML config, templates,
+    # fixtures, or GCP credentials leak in from the host filesystem. Keep
+    # only the shared tmpdir that other services in the stack expect.
+    volumes: !override
+      - shared-tmpdir:/tmp
+    depends_on:
+      gateway-postgres-migrations:
+        condition: service_healthy
