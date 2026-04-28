@@ -304,12 +304,17 @@ async function runMergeableRound(octokit, target, env, prNumbers, concurrency = 
     for (let j = 0; j < results.length; j++) {
       const r = results[j];
       if (r.status === "rejected") {
+        // Transient errors (network, 5xx, 429) on pulls.get or label
+        // upsert: re-queue to the next round so we get up to 3 attempts
+        // (0+1+2s backoff). After the last round, persistent errors are
+        // dropped — the next webhook event will re-evaluate.
         console.error(
           "runMergeableRound: PR",
           batch[j],
-          "failed:",
+          "failed (will retry next round):",
           r.reason,
         );
+        stillPending.push(batch[j]);
       } else if (r.value !== null) {
         stillPending.push(r.value);
       }
