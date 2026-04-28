@@ -100,8 +100,17 @@ export default {
     }
 
     if (event === "push") {
+      // Tag pushes (refs/tags/*) cannot be the base of any PR; skip without
+      // even minting an installation token. Branch deletions push with
+      // all-zeros `after`; same treatment.
+      if (
+        !payload.ref?.startsWith("refs/heads/") ||
+        /^0+$/.test(payload.after || "")
+      ) {
+        return new Response("OK (skipped: not a branch push)", { status: 200 });
+      }
       // Defer: a push to a base branch fans out to every open PR targeting
-      // it, each with up to ~10s of mergeable polling. Far past GitHub's
+      // it, each with up to ~3s of mergeable polling. Far past GitHub's
       // 10s webhook deadline. ctx.waitUntil keeps the worker alive in the
       // background after we ack.
       ctx.waitUntil(
@@ -207,10 +216,13 @@ async function labelMergeConflictsForPushedRef(octokit, payload, target, env) {
   // Pushes to a PR's head branch are already covered by
   // pull_request.synchronize. Pushes to a base branch can flip mergeable for
   // every PR targeting it — list those and re-evaluate.
-  const baseRef = payload.ref?.replace(/^refs\/heads\//, "");
+  const ref = payload.ref || "";
+  // Tag pushes (refs/tags/*) cannot be the base of any PR. Skip.
+  if (!ref.startsWith("refs/heads/")) return;
+  const baseRef = ref.slice("refs/heads/".length);
   if (!baseRef) return;
 
-  // Tag/branch deletion fires push events with after === all-zeros; skip.
+  // Branch deletion fires push events with after === all-zeros; skip.
   if (/^0+$/.test(payload.after || "")) return;
 
   const prs = await octokit.paginate(octokit.rest.pulls.list, {
@@ -300,9 +312,19 @@ async function ensureLabelAbsent(octokit, target, env, prNumber) {
 
 // --- Helpers ---
 
+// Process items in concurrent batches, isolating per-item failures: one
+// rejected task must NOT abort the rest of the fan-out. The webhook is
+// already acknowledged (200 + waitUntil), so a thrown error here would not
+// trigger a GitHub retry — the unprocessed PRs would just stay stale.
 async function processInBatches(items, batchSize, fn) {
   for (let i = 0; i < items.length; i += batchSize) {
-    await Promise.all(items.slice(i, i + batchSize).map(fn));
+    const batch = items.slice(i, i + batchSize);
+    const results = await Promise.allSettled(batch.map(fn));
+    for (const r of results) {
+      if (r.status === "rejected") {
+        console.error("processInBatches: task failed:", r.reason);
+      }
+    }
   }
 }
 
