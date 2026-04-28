@@ -13,6 +13,7 @@ import type { FunctionConfig, UiConfig } from "~/types/tensorzero";
 import { getTensorZeroClient } from "../get-tensorzero-client.server";
 import { DEFAULT_FUNCTION } from "../constants";
 import { hexToDecimal } from "../common";
+import { getEnv } from "../env.server";
 import { logger } from "../logger";
 
 // Poll interval in milliseconds (5 seconds)
@@ -27,6 +28,17 @@ let pollingStarted = false;
 export async function loadConfig(): Promise<UiConfig> {
   const client = getTensorZeroClient();
   return await client.getUiConfig();
+}
+
+/**
+ * In cookie-auth deployments (no TENSORZERO_API_KEY), the gateway credential
+ * comes from a per-request cookie via AsyncLocalStorage. A process-global
+ * cache populated under one request's cookie would (a) leak that user's
+ * config to later unauthenticated requests and (b) suppress the 401 the
+ * root loader uses to render the API-key dialog. Skip caching in that mode.
+ */
+function isCookieAuthMode(): boolean {
+  return !getEnv().TENSORZERO_API_KEY;
 }
 
 let configCache: UiConfig | undefined = undefined;
@@ -71,9 +83,13 @@ async function checkConfigHash(): Promise<void> {
  * Starts the periodic config hash polling.
  * This is called automatically when getConfig() is first called.
  * The polling runs once for the entire server process.
+ *
+ * No-op in cookie-auth mode: the setInterval tick has no request context, so
+ * its `getEffectiveApiKey()` would return undefined and every poll would 401.
+ * There is also no shared cache to invalidate in that mode.
  */
 function startConfigHashPolling(): void {
-  if (pollingStarted) {
+  if (pollingStarted || isCookieAuthMode()) {
     return;
   }
   pollingStarted = true;
@@ -105,11 +121,25 @@ const defaultFunctionConfig: FunctionConfig = {
   },
 };
 
+async function loadAndDecorateConfig(): Promise<UiConfig> {
+  const freshConfig = await loadConfig();
+  // eslint-disable-next-line no-restricted-syntax
+  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
+  return freshConfig;
+}
+
 /**
  * Gets the config, using the cache if available.
  * Also starts the background polling for config hash changes if not already started.
+ *
+ * In cookie-auth mode, no caching: each call hits the gateway with the
+ * current request's cookie so credential checks aren't bypassed.
  */
 export async function getConfig(): Promise<UiConfig> {
+  if (isCookieAuthMode()) {
+    return loadAndDecorateConfig();
+  }
+
   // Start polling for config hash changes (only starts once)
   startConfigHashPolling();
 
@@ -119,11 +149,7 @@ export async function getConfig(): Promise<UiConfig> {
   }
 
   // Cache doesn't exist or was invalidated, load it.
-  const freshConfig = await loadConfig();
-  // eslint-disable-next-line no-restricted-syntax
-  freshConfig.functions[DEFAULT_FUNCTION] = defaultFunctionConfig;
-
-  configCache = freshConfig;
+  configCache = await loadAndDecorateConfig();
   return configCache;
 }
 
