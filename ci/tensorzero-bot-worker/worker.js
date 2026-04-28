@@ -189,8 +189,8 @@ async function forceMergeQueue(octokit, pr, target, env) {
 
 // --- Label merge conflicts ---
 
-async function labelMergeConflicts(octokit, prNumber, target, env) {
-  const pr = await getMergeableState(octokit, target, prNumber);
+async function labelMergeConflicts(octokit, prNumber, target, env, pollAttempts) {
+  const pr = await getMergeableState(octokit, target, prNumber, pollAttempts);
   if (!pr) return; // gave up; next webhook event will re-evaluate
   // pr.state can be "closed" if the PR was closed between the event firing
   // and our processing — skip those.
@@ -220,16 +220,23 @@ async function labelMergeConflictsForPushedRef(octokit, payload, target, env) {
     base: baseRef,
     per_page: 100,
   });
-  await processInBatches(prs, 5, (pr) =>
-    labelMergeConflicts(octokit, pr.number, target, env),
+  // Cloudflare cancels ctx.waitUntil after ~30s. With the default 10s poll
+  // budget, a base-branch push to a repo with >15 open PRs would drop the
+  // tail of the fan-out. Use a tighter 3-attempt (~3s) poll budget here and
+  // a wider concurrency window so up to ~100 PRs fit comfortably:
+  //   100 PRs / 10 in parallel = 10 batches × ~3s = 30s.
+  // PRs whose mergeable is still null after 3s are picked up by the next
+  // webhook event (subsequent push, contributor sync, etc.).
+  await processInBatches(prs, 10, (pr) =>
+    labelMergeConflicts(octokit, pr.number, target, env, /*pollAttempts*/ 3),
   );
 }
 
 // GitHub computes `mergeable` lazily and returns null on the first read after
-// a relevant change. Poll up to 5 times (~10s total) before giving up. The
-// third-party action this replaces does the same thing.
-async function getMergeableState(octokit, target, prNumber) {
-  const delays = [0, 1000, 2000, 3000, 4000];
+// a relevant change. Poll up to N times (default 5 = ~10s for single-PR
+// events; tighter budgets for fan-out paths) before giving up.
+async function getMergeableState(octokit, target, prNumber, attempts = 5) {
+  const delays = [0, 1000, 2000, 3000, 4000].slice(0, attempts);
   for (const d of delays) {
     if (d) await sleep(d);
     const { data } = await octokit.rest.pulls.get({
