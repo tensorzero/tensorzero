@@ -30,9 +30,10 @@ import { InfraErrorType } from "./tensorzero/errors";
  * Postgres before touching the gateway. In `gateway_auth_with_browser_key`
  * mode the UI server has no API key of its own, so a `getConfig()` fetch on
  * the cold path would 401 against the gateway and surface as a 500 — running
- * this guard first short-circuits that. Only when no key is present do we
- * fall back to inspecting `auth_enabled`, and a config fetch failing there
- * is itself treated as evidence that auth is enabled.
+ * this guard first short-circuits that. A valid key short-circuits; otherwise
+ * we fall through to inspecting `auth_enabled`, so a stale or wrong key is
+ * still allowed when the gateway is not enforcing auth. A config fetch
+ * failing in that fallback is itself treated as evidence that auth is enabled.
  *
  * Infrastructure errors (Postgres unavailable, query failures) propagate
  * unchanged so they aren't masked as auth failures.
@@ -46,16 +47,15 @@ export async function requireValidApiKeyIfEnabled(): Promise<void> {
     const client = await getPostgresClient();
     const result = await client.validateApiKey(key);
     if (result.type === "success") return;
-    logger.warn(`Rejected request: API key validation failed (${result.type})`);
-    throw data(
-      { errorType: InfraErrorType.GatewayAuthFailed },
-      { status: 401 },
+    logger.warn(
+      `API key validation failed (${result.type}); falling back to auth_enabled check`,
     );
   }
 
-  // No key — only reject if the gateway is enforcing auth. If the config
-  // fetch itself fails (most plausibly because the gateway demands auth that
-  // we cannot supply), treat that as confirmation that auth is enabled.
+  // No valid key — only reject if the gateway is enforcing auth. If the
+  // config fetch itself fails (most plausibly because the gateway demands
+  // auth that we cannot supply), treat that as confirmation that auth is
+  // enabled.
   let authEnabled: boolean;
   try {
     const config = await getConfig();
