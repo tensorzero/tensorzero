@@ -1,5 +1,9 @@
 use secrecy::ExposeSecret;
-use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
+use tensorzero_auth::{
+    constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE},
+    key::TensorZeroApiKey,
+    postgres::AuthResult,
+};
 use tensorzero_core::{
     config::Config, db::postgres::PostgresConnectionInfo, utils::gateway::setup_postgres,
 };
@@ -91,6 +95,40 @@ impl PostgresClient {
         serde_json::to_string(&disabled_at).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize disabled_at timestamp: {e}"))
         })
+    }
+
+    /// Validates an API key against the `tensorzero_auth_api_key` table, reusing the same
+    /// parsing and lookup that the gateway's auth middleware uses
+    /// (`tensorzero_auth::postgres::check_key`). Returns the matching `KeyInfo` (serialized as
+    /// JSON) on success; throws on invalid format, missing keys, disabled keys, or expired keys.
+    #[napi]
+    pub async fn validate_api_key(&self, key: String) -> Result<String, napi::Error> {
+        let pool = self
+            .connection_info
+            .get_pool()
+            .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
+
+        let parsed_key = TensorZeroApiKey::parse(&key)
+            .map_err(|e| napi::Error::from_reason(format!("Invalid API key: {e}")))?;
+
+        let result = tensorzero_auth::postgres::check_key(&parsed_key, pool)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to validate API key: {e}")))?;
+
+        match result {
+            AuthResult::Success(key_info) => serde_json::to_string(&key_info).map_err(|e| {
+                napi::Error::from_reason(format!("Failed to serialize key info: {e}"))
+            }),
+            AuthResult::Disabled(disabled_at, _) => Err(napi::Error::from_reason(format!(
+                "API key was disabled at: {disabled_at}"
+            ))),
+            AuthResult::Expired(expired_at, _) => Err(napi::Error::from_reason(format!(
+                "API key expired at: {expired_at}"
+            ))),
+            AuthResult::MissingKey => Err(napi::Error::from_reason(
+                "Provided API key does not exist in the database".to_string(),
+            )),
+        }
     }
 
     #[napi]
