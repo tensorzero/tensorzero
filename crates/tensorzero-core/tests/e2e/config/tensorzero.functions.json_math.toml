@@ -8,7 +8,7 @@ type = "chat_completion"
 model = "claude-haiku-4-5-thinking"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "strict"
-max_tokens = 4096
+max_tokens = 8192
 thinking_budget_tokens = 1024
 
 [functions.json_math.variants.anthropic-sonnet-4-6-reasoning]
