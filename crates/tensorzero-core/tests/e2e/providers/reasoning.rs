@@ -97,7 +97,11 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     }
 
     assert!(found_text, "Expected to find a text block");
-    assert!(found_thought, "Expected to find a thought block");
+    // Gemini's thought summaries are non-deterministic even with `includeThoughts=true`
+    // (per Google's docs), so don't require a thought block for `gcp_vertex_gemini`.
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(found_thought, "Expected to find a thought block");
+    }
     // We only check that the response contains digits rather than a specific answer,
     // since models can make arithmetic mistakes.
     assert!(
@@ -172,7 +176,9 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     }
 
     assert!(found_text, "Expected to find a text block");
-    assert!(found_thought, "Expected to find a thought block");
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(found_thought, "Expected to find a thought block");
+    }
     assert_eq!(clickhouse_content, text_content);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
