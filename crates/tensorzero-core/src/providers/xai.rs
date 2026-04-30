@@ -907,6 +907,7 @@ mod tests {
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage,
     };
     use crate::providers::test_helpers::{WEATHER_PROVIDER_TOOL_CONFIG, WEATHER_TOOL};
+    use tensorzero_types_providers::openai::OpenAIPromptTokensDetails;
     use tensorzero_types_providers::xai::XAIUsage;
 
     #[tokio::test]
@@ -1119,6 +1120,86 @@ mod tests {
             Latency::NonStreaming {
                 response_time: Duration::from_secs(0)
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_xai_response_with_metadata_propagates_cached_tokens() {
+        // Regression guard: a non-streaming xAI response that reports
+        // `prompt_tokens_details.cached_tokens` must end up in
+        // `provider_cache_read_input_tokens` on the final
+        // `ProviderInferenceResponse`. This complements the unit tests
+        // for `From<XAIUsage> for Usage` by exercising the full
+        // non-streaming response handler that fires in production.
+        let response = XAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    reasoning_content: None,
+                    tool_calls: None,
+                },
+                finish_reason: OpenAIFinishReason::Stop,
+            }],
+            usage: XAIUsage {
+                prompt_tokens: Some(42_500),
+                completion_tokens: Some(710),
+                completion_tokens_details: None,
+                prompt_tokens_details: Some(OpenAIPromptTokensDetails {
+                    cached_tokens: Some(22_058),
+                }),
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+        let xai_response_with_metadata = XAIResponseWithMetadata {
+            response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            raw_request: serde_json::to_string(
+                &XAIRequest::new("grok-beta", &generic_request)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap(),
+            generic_request: &generic_request,
+            model_inference_id: Uuid::now_v7(),
+        };
+        let inference_response: ProviderInferenceResponse =
+            xai_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.usage.input_tokens, Some(42_500));
+        assert_eq!(inference_response.usage.output_tokens, Some(710));
+        assert_eq!(
+            inference_response.usage.provider_cache_read_input_tokens,
+            Some(22_058),
+            "cache_read should propagate from XAIUsage.prompt_tokens_details.cached_tokens \
+             through XAIResponseWithMetadata::try_into to ProviderInferenceResponse",
+        );
+        assert_eq!(
+            inference_response.usage.provider_cache_write_input_tokens, None,
+            "xAI doesn't report cache_write",
         );
     }
 

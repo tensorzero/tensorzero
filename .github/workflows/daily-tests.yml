@@ -1,6 +1,8 @@
 name: Daily Tests
 run-name: Daily Tests
 
+permissions: {}
+
 # Runs live-tests, client-tests, and batch-tests daily.
 # Live/client tests run without provider-proxy cache to detect provider flakiness.
 on:
@@ -8,33 +10,120 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   live-tests:
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/live-tests.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      MODAL_KEY: ${{ secrets.MODAL_KEY }}
+      MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   client-tests:
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/client-tests.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GCP_STORAGE_ACCESS_KEY_ID: ${{ secrets.GCP_STORAGE_ACCESS_KEY_ID }}
+      GCP_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.GCP_STORAGE_SECRET_ACCESS_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      MODAL_KEY: ${{ secrets.MODAL_KEY }}
+      MODAL_SECRET: ${{ secrets.MODAL_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   live-batch-tests:
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     uses: ./.github/workflows/live-batch-tests.yml
-    secrets: inherit
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AZURE_API_KEY_NEW: ${{ secrets.AZURE_API_KEY_NEW }}
+      CLICKHOUSE_CLOUD_URL: ${{ secrets.CLICKHOUSE_CLOUD_URL }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+      FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+      GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HYPERBOLIC_API_KEY: ${{ secrets.HYPERBOLIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
+      TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
+      TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+      VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+      VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
   # Post to Slack on failure for scheduled (cron) runs only.
   # Scheduled runs bypass the provider-proxy cache to detect provider flakiness.
   # See: https://github.com/tensorzero/tensorzero/issues/5380
   notify-on-failure:
+    name: notify-on-failure
     permissions: {}
     if: always() && github.event_name == 'schedule' && (needs.live-tests.result != 'success' || needs.client-tests.result != 'success' || needs.live-batch-tests.result != 'success')
     needs: [live-tests, client-tests, live-batch-tests]

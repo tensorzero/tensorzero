@@ -1,6 +1,6 @@
 {
   "name": "tensorzero-ui",
-  "version": "2026.4.1",
+  "version": "2026.4.2",
   "private": true,
   "type": "module",
   "scripts": {

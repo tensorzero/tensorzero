@@ -9,14 +9,14 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: read # Required for checkout or repository metadata reads.
 
 jobs:
   pinact:
     name: pinact
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required for checkout or repository metadata reads.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -26,12 +26,29 @@ jobs:
         with:
           skip_push: "true" # validate only; fail CI on unpinned actions
 
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # required by upload-sarif to read workflow run metadata
+      contents: read # Required for checkout or repository metadata reads.
+      security-events: write # upload SARIF to Code Scanning
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: zizmorcore/zizmor-action@b1d7e1fb5de872772f31590499237e7cce841e8e # v0.5.3
+        with:
+          persona: pedantic
+
   security:
     name: security
     permissions: {}
     if: always()
     needs:
       - pinact
+      - zizmor
     runs-on: ubuntu-latest
     steps:
       - name: Print all job results

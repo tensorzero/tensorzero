@@ -1,7 +1,18 @@
 name: Inference Cache Tests
 
+permissions: {}
+
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -19,8 +30,8 @@ jobs:
     name: "cache-tests (backend: ${{ matrix.cache_backend }})"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     timeout-minutes: 30
     strategy:
       matrix:
@@ -56,10 +67,10 @@ jobs:
 
       - name: Pull container images
         run: |
-          docker pull tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker pull tensorzero/live-tests:sha-${{ github.sha }}
-          docker pull tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+          docker pull tensorzero/gateway-dev:sha-$GITHUB_SHA
+          docker pull tensorzero/live-tests:sha-$GITHUB_SHA
+          docker pull tensorzero/provider-proxy:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
 
       - name: Restore provider-proxy cache
         if: github.event_name != 'schedule'
@@ -75,20 +86,26 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/download-provider-proxy-cache.sh
 
       - name: Start infrastructure services
+        env:
+          SERVICES: ${{ matrix.services }}
         run: >
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy
-          up ${{ matrix.services }} -d --wait
+          up $SERVICES -d --wait
 
       - name: Run cache tests
+        env:
+          CACHE_BACKEND_ENV: ${{ matrix.cache_backend_env }}
+          TEST_FILTER: ${{ matrix.test_filter }}
+          VALKEY_URL: ${{ matrix.valkey_url }}
         run: |
           docker compose -f crates/tensorzero-core/tests/e2e/docker-compose.live.yml --profile provider-proxy run --no-deps --rm \
             -e TENSORZERO_CI=1 \
-            -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND=${{ matrix.cache_backend_env }} \
-            -e TENSORZERO_VALKEY_URL=${{ matrix.valkey_url }} \
+            -e TENSORZERO_INTERNAL_TEST_CACHE_BACKEND="$CACHE_BACKEND_ENV" \
+            -e TENSORZERO_VALKEY_URL="$VALKEY_URL" \
             live-tests \
             sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst \
             --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml \
-            --profile cache -E '${{ matrix.test_filter }}' -j 4"
+            --profile cache -E '$TEST_FILTER' -j 4"
 
       - name: Upload provider-proxy cache
         if: github.event_name == 'merge_group' && matrix.cache_backend == 'clickhouse'

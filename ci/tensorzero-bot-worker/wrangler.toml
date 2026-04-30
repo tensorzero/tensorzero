@@ -1,0 +1,19 @@
+name = "tensorzero-bot"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+GITHUB_ORG = "tensorzero"
+FORCE_MERGE_QUEUE_LABEL = "force-add-to-merge-queue"
+FORCE_MERGE_QUEUE_STATUS_CONTEXT = "check-all-general-jobs-passed"
+GENERAL_CHECK_RUN_NAME = "check-all-general-jobs-passed"
+DIRTY_LABEL = "has-merge-conflicts"
+DIRTY_LABEL_COLOR = "d93f0b"
+DIRTY_LABEL_DESCRIPTION = "PR has merge conflicts that must be resolved before it can be merged"
+
+# Secrets (set via `wrangler secret put`):
+#   GITHUB_APP_ID
+#   GITHUB_APP_PRIVATE_KEY
+#   GITHUB_INSTALLATION_ID
+#   GITHUB_WEBHOOK_SECRET

@@ -4,8 +4,14 @@ on:
   workflow_call:
   workflow_dispatch:
 
+permissions: {}
+
 env:
   FORCE_COLOR: 1
+
+concurrency:
+  group: upgrade-tensorzero-deps-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   upgrade-dependencies:
@@ -14,8 +20,8 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
 
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # Required to push generated branch changes.
+      pull-requests: write # Required to update PR comments, labels, or branches.
 
     steps:
       - name: Checkout repository
@@ -73,8 +79,10 @@ jobs:
           echo "project_count=$project_count" >> $GITHUB_OUTPUT
 
       - name: Upgrade TensorZero in each project
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          echo "Upgrading tensorzero to version ${{ steps.get_version.outputs.version }} in each project..."
+          echo "Upgrading tensorzero to version $VERSION in each project..."
 
           while IFS= read -r project_file; do
             if [ -n "$project_file" ]; then
@@ -117,7 +125,7 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         id: create_pr
         run: |
-          version="${{ steps.get_version.outputs.version }}"
+          version="$VERSION"
           branch_name="auto/upgrade-tensorzero-${version}"
 
           # Configure git
@@ -139,7 +147,7 @@ jobs:
           # Create commit
           git commit -m "chore: upgrade tensorzero to ${version}
 
-          Auto-upgrade of tensorzero dependency across ${{ steps.discover_projects.outputs.project_count }} projects.
+          Auto-upgrade of tensorzero dependency across ${PROJECT_COUNT} projects.
 
           🤖 Generated with GitHub Actions"
 
@@ -152,7 +160,7 @@ jobs:
           Automatically upgrade \`tensorzero\` dependency to version **${version}** across all projects in the monorepo.
 
           ## Changes
-          - Upgraded tensorzero dependency in ${{ steps.discover_projects.outputs.project_count }} projects
+          - Upgraded tensorzero dependency in ${PROJECT_COUNT} projects
           - Regenerated uv.lock files using \`uv lock\`
 
           ## Projects Updated
@@ -173,12 +181,18 @@ jobs:
             --label "automated"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_COUNT: ${{ steps.discover_projects.outputs.project_count }}
+          VERSION: ${{ steps.get_version.outputs.version }}
 
       - name: Summary
+        env:
+          HAS_CHANGES: ${{ steps.check_changes.outputs.has_changes }}
+          PROJECT_COUNT: ${{ steps.discover_projects.outputs.project_count }}
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          if [ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]; then
-            echo "✅ Successfully created PR to upgrade tensorzero to ${{ steps.get_version.outputs.version }}"
-            echo "   Updated ${{ steps.discover_projects.outputs.project_count }} projects"
+          if [ "$HAS_CHANGES" == "true" ]; then
+            echo "✅ Successfully created PR to upgrade tensorzero to $VERSION"
+            echo "   Updated $PROJECT_COUNT projects"
           else
             echo "ℹ️  No changes needed - all projects already use the latest version"
           fi

@@ -13,8 +13,8 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
 
 env:
   CARGO_INCREMENTAL: 0
@@ -25,8 +25,13 @@ env:
   GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
   WEEKLY_TESTS: "test_slow_optimization_openai_rft"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   optimization-tests:
+    name: optimization-tests
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
 
@@ -77,12 +82,12 @@ jobs:
       - name: Run daily optimization tests
         working-directory: crates
         if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast -- --skip ${{ env.WEEKLY_TESTS }}
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast -- --skip "$WEEKLY_TESTS"
 
       - name: Run weekly optimization tests
         working-directory: crates
         if: github.event.schedule == '0 2 * * 0'
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast ${{ env.WEEKLY_TESTS }}
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests cargo test-optimization --nocapture --no-fail-fast "$WEEKLY_TESTS"
 
       - name: Print ClickHouse container logs
         if: always()
@@ -91,9 +96,11 @@ jobs:
 
       - name: Log test completion
         if: always()
+        env:
+          TEST_RESULT: ${{ job.status }}
         run: |
           echo "Optimization tests completed at $(date)"
-          echo "Test result: ${{ job.status }}"
+          echo "Test result: $TEST_RESULT"
 
       - name: Post to Slack on failure
         if: failure()

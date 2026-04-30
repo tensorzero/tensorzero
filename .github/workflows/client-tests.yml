@@ -1,7 +1,68 @@
 name: Client Tests
 
+permissions: {}
+
 on:
   workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_BEARER_TOKEN_BEDROCK:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AZURE_API_KEY_NEW:
+        required: true
+      DEEPSEEK_API_KEY:
+        required: true
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+      FIREWORKS_ACCOUNT_ID:
+        required: true
+      FIREWORKS_API_KEY:
+        required: true
+      GCP_JWT_KEY:
+        required: true
+      GCP_STORAGE_ACCESS_KEY_ID:
+        required: true
+      GCP_STORAGE_SECRET_ACCESS_KEY:
+        required: true
+      GOOGLE_AI_STUDIO_API_KEY:
+        required: true
+      GROQ_API_KEY:
+        required: true
+      HYPERBOLIC_API_KEY:
+        required: true
+      MISTRAL_API_KEY:
+        required: true
+      MODAL_KEY:
+        required: true
+      MODAL_SECRET:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      SGLANG_API_KEY:
+        required: true
+      TGI_API_KEY:
+        required: true
+      TOGETHER_API_KEY:
+        required: true
+      VLLM_API_BASE:
+        required: true
+      VLLM_API_KEY:
+        required: true
+      VOYAGE_API_KEY:
+        required: true
+      XAI_API_KEY:
+        required: true
 
 env:
   CARGO_INCREMENTAL: 0
@@ -52,8 +113,8 @@ jobs:
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: read
+      contents: read # Required for checkout or repository metadata reads.
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     timeout-minutes: 45
     strategy:
       matrix:
@@ -103,13 +164,13 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }} \
-            tensorzero/fixtures:sha-${{ github.sha }} \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
-            tensorzero/provider-proxy:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
-          docker tag tensorzero/fixtures:sha-${{ github.sha }} tensorzero/fixtures-postgres:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA \
+            tensorzero/fixtures:sha-$GITHUB_SHA \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
+            tensorzero/provider-proxy:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
+          docker tag tensorzero/fixtures:sha-$GITHUB_SHA tensorzero/fixtures-postgres:sha-$GITHUB_SHA
 
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
@@ -179,9 +240,11 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Set up database URLs for E2E tests
+        env:
+          BATCH_WRITES: ${{ matrix.batch_writes }}
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
-          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=$BATCH_WRITES" >> $GITHUB_ENV
           echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_VALKEY_URL=redis://localhost:6379" >> $GITHUB_ENV
@@ -246,7 +309,7 @@ jobs:
         run: |
           docker run --rm --network host \
             --env-file gateway.env \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --run-postgres-migrations
 
       - name: Launch the gateway for E2E tests
@@ -254,10 +317,10 @@ jobs:
         run: |
           docker run -d --name gateway-e2e --network host \
             --env-file gateway.env \
-            -v ${{ github.workspace }}/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
-            -v ${{ github.workspace }}/crates/tensorzero-core:/app/tensorzero-core:ro \
-            -v ${{ github.workspace }}/ui/fixtures:/app/ui/fixtures:ro \
-            tensorzero/gateway-e2e:sha-${{ github.sha }} \
+            -v $GITHUB_WORKSPACE/gcp_jwt_key.json:/app/gcp_jwt_key.json:ro \
+            -v $GITHUB_WORKSPACE/crates/tensorzero-core:/app/tensorzero-core:ro \
+            -v $GITHUB_WORKSPACE/ui/fixtures:/app/ui/fixtures:ro \
+            tensorzero/gateway-e2e:sha-$GITHUB_SHA \
             --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."

@@ -13,11 +13,15 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
 
 env:
   CARGO_INCREMENTAL: 0
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   check-python-client-build:
@@ -25,6 +29,7 @@ jobs:
     uses: ./.github/workflows/python-client-build.yml
 
   build-gateway:
+    name: build-gateway
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:

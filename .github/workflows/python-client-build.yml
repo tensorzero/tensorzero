@@ -2,6 +2,8 @@
 # If you ever switch this to a non-free runner (e.g. a Namespace runner), be aware that
 # this might end up costing us much more than expected.
 
+name: Python Client Build
+
 on:
   workflow_call:
     inputs:
@@ -11,13 +13,14 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: read # Required for checkout or repository metadata reads.
 
 env:
   CARGO_INCREMENTAL: 0
 
 jobs:
   linux:
+    name: linux
     runs-on: ${{ matrix.platform.runner }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -85,6 +88,7 @@ jobs:
           ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   musllinux:
+    name: musllinux
     runs-on: ${{ matrix.platform.runner }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -149,6 +153,7 @@ jobs:
           ./ci/check-musl-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   windows:
+    name: windows
     runs-on: ${{ matrix.platform.runner }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -212,6 +217,7 @@ jobs:
         shell: bash
 
   macos:
+    name: macos
     runs-on: ${{ matrix.platform.runner }}
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -277,6 +283,7 @@ jobs:
           ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero*.whl
 
   sdist:
+    name: sdist
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -321,6 +328,7 @@ jobs:
           uv run twine check ./crates/tensorzero-python/dist/tensorzero-*.tar.gz
 
   check-artifacts:
+    name: check-artifacts
     needs: [linux, musllinux, windows, macos, sdist]
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'

@@ -32,13 +32,25 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      AWS_BEARER_TOKEN_BEDROCK:
+        required: true
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
+      GCP_JWT_KEY:
+        required: true
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
+
+concurrency:
+  group: mocked-batch-test-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   mocked-batch-tests:
+    name: mocked-batch-tests
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
@@ -88,24 +100,24 @@ jobs:
         continue-on-error: true # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/mock-provider-api:sha-${{ github.sha }}
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA
 
       - name: Pull gateway container
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
 
       - name: Set TENSORZERO_MOCK_PROVIDER_API_TAG
         if: steps.pull-mock-provider-api.outcome == 'success' # Only run if pull was successful
         run: |
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
 
       # This is for postgres migrations to run the correct gateway
       - name: Set container image tags
         run: |
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
-          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TENSORZERO_COMMIT_TAG=sha-$GITHUB_SHA" >> $GITHUB_ENV
 
       - name: Start Docker services (mock-provider-api + dependencies)
         run: |

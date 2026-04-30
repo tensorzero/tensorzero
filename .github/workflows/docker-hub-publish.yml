@@ -5,6 +5,8 @@
 
 name: Publish docker images
 
+permissions: {}
+
 on:
   workflow_dispatch:
   workflow_call:
@@ -24,6 +26,10 @@ on:
 
 env:
   DOCKERHUB_USER: tensorzero
+
+concurrency:
+  group: docker-hub-publish-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -49,10 +55,10 @@ jobs:
             path: crates/evaluations
 
     permissions:
-      packages: write
-      contents: read
-      attestations: write
-      id-token: write
+      packages: write # Required to publish package or container metadata.
+      contents: read # Required for checkout or repository metadata reads.
+      attestations: write # Required to publish artifact attestations.
+      id-token: write # Required for OIDC-backed build or publish tooling.
     steps:
       - name: Check out the repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -60,8 +66,10 @@ jobs:
           persist-credentials: false
 
       - name: Prepare
+        env:
+          PLATFORM_TARGET: ${{ matrix.platform.target }}
         run: |
-          platform=${{ matrix.platform.target }}
+          platform="$PLATFORM_TARGET"
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
@@ -109,10 +117,12 @@ jobs:
             DEBUG_BUILD=${{ inputs.is_dev && '1' || '0' }}
 
       - name: Export digest
+        env:
+          PUSH_DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          mkdir -p ${{ runner.temp }}/digests
-          digest="${{ steps.push.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          mkdir -p "$RUNNER_TEMP/digests"
+          digest="$PUSH_DIGEST"
+          touch "$RUNNER_TEMP/digests/${digest#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
@@ -123,8 +133,9 @@ jobs:
           retention-days: 1
 
   merge:
+    name: merge
     permissions:
-      actions: read
+      actions: read # Required to read workflow run, cache, or artifact metadata.
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -168,13 +179,13 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}@sha256:%s " *)
+            $(printf "${DOCKERHUB_USER}/${MATRIX_CONTAINER_NAME}@sha256:%s " *)
         env:
           MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
 
       - name: Wait for image to be available on Docker Hub
         run: |
-          IMAGE="${{ env.DOCKERHUB_USER }}/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
+          IMAGE="${DOCKERHUB_USER}/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 30); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then

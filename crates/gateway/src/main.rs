@@ -21,7 +21,7 @@ use tracing::Level;
 use autopilot_worker::{AutopilotWorkerConfig, AutopilotWorkerHandle, spawn_autopilot_worker};
 use durable_tools::{EmbeddedClient, WorkerOptions};
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, unwritten::UnwrittenConfig};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::delegating_connection::PrimaryDatastore;
 use tensorzero_core::db::postgres::postgres_setup::{
@@ -51,41 +51,73 @@ static GLOBAL: MiMalloc = MiMalloc;
 /// so this number must stay above 2 (and we use a number >15 for performance).
 const STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS: u32 = 20;
 
-async fn load_startup_config(
-    args: &GatewayArgs,
-) -> Result<
-    (
-        tensorzero_core::config::unwritten::UnwrittenConfig,
-        Option<ConfigFileGlob>,
-        bool, // config_in_database
-    ),
-    ExitCode,
-> {
+/// Name of the environment variable holding the Postgres connection string.
+const TENSORZERO_POSTGRES_URL_ENV: &str = "TENSORZERO_POSTGRES_URL";
+
+struct StartupConfig {
+    unwritten: UnwrittenConfig,
+    glob: Option<ConfigFileGlob>,
+    from_database: bool,
+}
+
+/// Reads `TENSORZERO_POSTGRES_URL` and treats an unset or empty value as absent.
+/// A present-but-empty env var is almost always a shell/compose misconfiguration;
+/// propagating it forward produces an opaque sqlx dial error, so we normalize it
+/// to `None` here and let callers handle the "missing" case uniformly.
+fn read_postgres_url_env() -> Option<String> {
+    std::env::var(TENSORZERO_POSTGRES_URL_ENV)
+        .ok()
+        .filter(|url| !url.is_empty())
+}
+
+async fn load_startup_config(args: &GatewayArgs) -> Result<StartupConfig, ExitCode> {
     if args.default_config && args.config_file.is_some() {
         tracing::error!("You must not specify both `--config-file` and `--default-config`.");
         return Err(ExitCode::FAILURE);
     }
 
     if let Some(path) = args.config_file.as_ref() {
-        let (unwritten_config, glob) = load_config_from_path_glob(path).await?;
-        return Ok((unwritten_config, Some(glob), false));
+        let (unwritten, glob) = load_config_from_path_glob(path).await?;
+        return Ok(StartupConfig {
+            unwritten,
+            glob: Some(glob),
+            from_database: false,
+        });
     }
 
     if args.default_config {
         tracing::warn!(
             "No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file."
         );
-        let unwritten_config = Config::new_empty()
+        let unwritten = Config::new_empty()
             .await
             .log_err_pretty("Failed to load default config")?;
-        return Ok((unwritten_config, None, false));
+        return Ok(StartupConfig {
+            unwritten,
+            glob: None,
+            from_database: false,
+        });
     }
 
+    // Load configuration from Postgres only when the operator has explicitly
+    // opted in via the `ENABLE_CONFIG_IN_DATABASE` feature flag. An empty
+    // database is a valid starting point: the gateway will serve a functional
+    // runtime with no functions/variants, and operators populate config
+    // through the REST API (or the UI). `TENSORZERO_POSTGRES_URL` by itself
+    // is NOT sufficient to take this path — many deployments set that env
+    // var for observability or rate-limiting without intending to boot from
+    // DB config, and config-in-database is still behind the flag while we
+    // harden it.
     if feature_flags::ENABLE_CONFIG_IN_DATABASE.get() {
-        let unwritten_config = load_startup_config_from_database()
+        let postgres_url = read_postgres_url_env();
+        let unwritten = load_startup_config_from_database(postgres_url.as_deref())
             .await
             .log_err_pretty("Failed to load configuration from database")?;
-        return Ok((unwritten_config, None, true));
+        return Ok(StartupConfig {
+            unwritten,
+            glob: None,
+            from_database: true,
+        });
     }
 
     tracing::error!("You must specify either `--config-file` or `--default-config`.");
@@ -115,13 +147,14 @@ fn merge_db_config_load_errors(errors: Vec<Error>) -> Error {
     })
 }
 
-async fn load_startup_config_from_database()
--> Result<tensorzero_core::config::unwritten::UnwrittenConfig, Error> {
-    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
+async fn load_startup_config_from_database(
+    postgres_url: Option<&str>,
+) -> Result<UnwrittenConfig, Error> {
+    let postgres_url = postgres_url.ok_or_else(|| {
         Error::new(ErrorDetails::PostgresConnectionInitialization {
-            message:
-                "Missing environment variable `TENSORZERO_POSTGRES_URL` required to load configuration from database."
-                    .to_string(),
+            message: format!(
+                "Missing environment variable `{TENSORZERO_POSTGRES_URL_ENV}` required to load configuration from database."
+            ),
         })
     })?;
     // `load_config_from_db` fans out into 14 parallel snapshot readers plus a
@@ -130,7 +163,7 @@ async fn load_startup_config_from_database()
     // hitting the default 30s acquire timeout during gateway startup.
     let pool = PgPoolOptions::new()
         .max_connections(STARTUP_CONFIG_DB_POOL_MAX_CONNECTIONS)
-        .connect(&postgres_url)
+        .connect(postgres_url)
         .await
         .map_err(|error| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -443,7 +476,11 @@ async fn run() -> Result<(), ExitCode> {
 
     tracing::info!("Starting TensorZero Gateway {TENSORZERO_VERSION}");
 
-    let (unwritten_config, glob, config_in_database) = load_startup_config(&args).await?;
+    let StartupConfig {
+        unwritten: unwritten_config,
+        glob,
+        from_database: config_in_database,
+    } = load_startup_config(&args).await?;
 
     let metrics_handle = observability::setup_metrics(Some(&unwritten_config.gateway.metrics))
         .log_err_pretty("Failed to set up metrics")?;

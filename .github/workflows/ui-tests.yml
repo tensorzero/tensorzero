@@ -15,14 +15,15 @@ on:
         type: boolean
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
 
 env:
   CARGO_INCREMENTAL: 0
 
 jobs:
   ui-tests:
+    name: ui-tests
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
@@ -101,9 +102,9 @@ jobs:
       - name: Pull container images
         run: |
           ./ci/docker-pull-with-retry.sh \
-            tensorzero/gateway-dev:sha-${{ github.sha }} \
-            tensorzero/mock-provider-api:sha-${{ github.sha }}
-          docker tag tensorzero/gateway-dev:sha-${{ github.sha }} tensorzero/gateway:sha-${{ github.sha }}
+            tensorzero/gateway-dev:sha-$GITHUB_SHA \
+            tensorzero/mock-provider-api:sha-$GITHUB_SHA
+          docker tag tensorzero/gateway-dev:sha-$GITHUB_SHA tensorzero/gateway:sha-$GITHUB_SHA
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
@@ -113,10 +114,10 @@ jobs:
           MATRIX_CLICKHOUSE_VERSION: ${{ matrix.clickhouse_version }}
         run: |
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_TAG=sha-$GITHUB_SHA" >> fixtures/.env
           echo "TENSORZERO_INTERNAL_MOCK_PROVIDER_API=http://mock-provider-api:3030" >> fixtures/.env
-          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-${{ github.sha }}" >> fixtures/.env
-          echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_PROVIDER_API_TAG=sha-$GITHUB_SHA" >> fixtures/.env
+          echo "TENSORZERO_UI_TAG=sha-$GITHUB_SHA" >> fixtures/.env
 
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure

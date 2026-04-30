@@ -12,18 +12,25 @@ on:
   repository_dispatch:
     types: [check-fork-command]
 
-permissions:
-  pull-requests: write
-  contents: write
-  actions: write
+permissions: {}
 
 env:
   TARGET_BRANCH: external-contributor/pr-${{ github.event.client_payload.pull_request.number }}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   check-fork:
+    name: check-fork
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      pull-requests: write # Required to update PR comments, labels, or branches.
+      issues: write # Required to comment on and react to PR issue comments.
+      contents: write # Required to push generated branch changes.
+      actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -34,56 +41,62 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Add initial reaction
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: eyes
+        env:
+          COMMENT_ID: ${{ github.event.client_payload.github.payload.comment.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+        run: |
+          gh api --method POST "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -H "Accept: application/vnd.github+json" \
+            -f content=eyes
 
       - name: Force-push to a branch named ${{ env.TARGET_BRANCH }}
+        env:
+          UPSTREAM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git remote add upstream https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/tensorzero/tensorzero.git
-          git checkout -b ${{ env.TARGET_BRANCH }}
-          git push --force upstream ${{ env.TARGET_BRANCH }}
+          git remote add upstream "https://x-access-token:${UPSTREAM_TOKEN}@github.com/tensorzero/tensorzero.git"
+          git checkout -b "$TARGET_BRANCH"
+          git push --force upstream "$TARGET_BRANCH"
       - name: Trigger 'General Checks' workflow on ${{ env.TARGET_BRANCH }}
         id: trigger
         run: |
           set -e
-          gh workflow run general.yml --ref ${{ env.TARGET_BRANCH }}
+          gh workflow run general.yml --ref "$TARGET_BRANCH"
 
           # Wait 30s for the workflow to be created
           sleep 30
 
           # Get the most recent workflow run for this branch
-          RUN_ID=$(gh run list --workflow=general.yml --branch=${{ env.TARGET_BRANCH }} --limit=1 --json databaseId --jq '.[0].databaseId')
+          RUN_ID=$(gh run list --workflow=general.yml --branch="$TARGET_BRANCH" --limit=1 --json databaseId --jq '.[0].databaseId')
 
           if [ -n "$RUN_ID" ]; then
             echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-            echo "run_url=https://github.com/${{ github.repository }}/actions/runs/$RUN_ID" >> $GITHUB_OUTPUT
+            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" >> $GITHUB_OUTPUT
           else
             echo "Failed to get run ID"
-            echo "run_url=https://github.com/${{ github.repository }}/actions" >> $GITHUB_OUTPUT
+            echo "run_url=https://github.com/$GITHUB_REPOSITORY/actions" >> $GITHUB_OUTPUT
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Comment with workflow link
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          issue-number: ${{ github.event.client_payload.pull_request.number }}
-          body: |
-            🚀 General Checks workflow triggered on new branch ${{ env.TARGET_BRANCH }}!
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.client_payload.pull_request.number }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          RUN_URL: ${{ steps.trigger.outputs.run_url }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPOSITORY" --body "🚀 General Checks workflow triggered on new branch $TARGET_BRANCH!
 
-            View the run: ${{ steps.trigger.outputs.run_url }}
+          View the run: $RUN_URL"
 
       - name: Add success reaction
         if: success()
-        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043 # v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
-          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
-          reactions: hooray
+        env:
+          COMMENT_ID: ${{ github.event.client_payload.github.payload.comment.id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.event.client_payload.github.payload.repository.full_name }}
+        run: |
+          gh api --method POST "repos/$REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -H "Accept: application/vnd.github+json" \
+            -f content=hooray

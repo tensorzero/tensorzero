@@ -31,13 +31,67 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_BEARER_TOKEN_BEDROCK:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      AZURE_API_KEY_NEW:
+        required: true
+      CLICKHOUSE_CLOUD_URL:
+        required: true
+      DEEPSEEK_API_KEY:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+      FIREWORKS_ACCOUNT_ID:
+        required: true
+      FIREWORKS_API_KEY:
+        required: true
+      GCP_JWT_KEY:
+        required: true
+      GOOGLE_AI_STUDIO_API_KEY:
+        required: true
+      GROQ_API_KEY:
+        required: true
+      HYPERBOLIC_API_KEY:
+        required: true
+      MISTRAL_API_KEY:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
+      SGLANG_API_KEY:
+        required: true
+      TGI_API_KEY:
+        required: true
+      TOGETHER_API_KEY:
+        required: true
+      VLLM_API_BASE:
+        required: true
+      VLLM_API_KEY:
+        required: true
+      XAI_API_KEY:
+        required: true
 
 permissions:
-  contents: read
-  actions: read
+  contents: read # Required for checkout or repository metadata reads.
+  actions: read # Required to read workflow run, cache, or artifact metadata.
+
+concurrency:
+  group: live-batch-tests-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   batch-tests:
+    name: batch-tests
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
@@ -73,8 +127,10 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Wake up ClickHouse cloud (for batch tests)
+        env:
+          CLICKHOUSE_CLOUD_URL: ${{ secrets.CLICKHOUSE_CLOUD_URL }}
         run: |
-          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
+          curl "$CLICKHOUSE_CLOUD_URL" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@60581cd7025e0e855cebd745379013e286d9c787 # v2.64.2
@@ -87,13 +143,17 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
+        env:
+          CLICKHOUSE_CLOUD_URL: ${{ secrets.CLICKHOUSE_CLOUD_URL }}
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=$CLICKHOUSE_CLOUD_URL" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
         working-directory: crates
+        env:
+          CLICKHOUSE_CLOUD_URL: ${{ secrets.CLICKHOUSE_CLOUD_URL }}
         run: |
-          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
+          curl "$CLICKHOUSE_CLOUD_URL" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
           cargo run-e2e > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
