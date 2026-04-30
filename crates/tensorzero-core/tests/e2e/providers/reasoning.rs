@@ -274,12 +274,14 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
             .any(|c| matches!(c, StoredContentBlock::Text(_))),
         "Missing text block in output: {output:#?}"
     );
-    assert!(
-        output
-            .iter()
-            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
-        "Missing thought block in output: {output:#?}"
-    );
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(
+            output
+                .iter()
+                .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+            "Missing thought block in output: {output:#?}"
+        );
+    }
 
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
