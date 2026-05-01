@@ -41,8 +41,7 @@ pub async fn convert_stream_error(
     // to avoid holding open a broken stream (which will delay gateway shutdown when we
     // wait on the parent `Span` to finish)
     match e {
-        reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(_, resp)
-        | reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(_, resp) => {
+        reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, resp) => {
             let raw_response = resp.text().await.ok();
             let message = match (&raw_response, request_id) {
                 (Some(body), Some(id)) => format!("{base_message}: {body} [request_id: {id}]"),
@@ -52,6 +51,25 @@ pub async fn convert_stream_error(
             };
             ErrorDetails::FatalStreamError {
                 message,
+                status_code: Some(status),
+                provider_type,
+                api_type,
+                raw_request: Some(raw_request),
+                raw_response,
+            }
+            .into()
+        }
+        reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(_, resp) => {
+            let raw_response = resp.text().await.ok();
+            let message = match (&raw_response, request_id) {
+                (Some(body), Some(id)) => format!("{base_message}: {body} [request_id: {id}]"),
+                (Some(body), None) => format!("{base_message}: {body}"),
+                (None, Some(id)) => format!("{base_message} [request_id: {id}]"),
+                (None, None) => base_message,
+            };
+            ErrorDetails::FatalStreamError {
+                message,
+                status_code: None,
                 provider_type,
                 api_type,
                 raw_request: Some(raw_request),
@@ -80,6 +98,7 @@ pub async fn convert_stream_error(
             };
             ErrorDetails::FatalStreamError {
                 message,
+                status_code: None,
                 provider_type,
                 api_type,
                 raw_request: Some(raw_request),
@@ -382,7 +401,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
         Ok(result) => result,
         Err((e, headers)) => {
             // Extract status code first (by borrowing), then consume Response to read body
-            let (message, raw_response) = match e {
+            let (message, raw_response, status_code) = match e {
                 reqwest_sse_stream::ReqwestSseStreamError::InvalidStatusCode(status, resp) => {
                     let body = resp.text().await.ok();
                     let message = match &body {
@@ -391,7 +410,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                         }
                         None => format!("Error sending request: InvalidStatusCode({status})"),
                     };
-                    (message, body)
+                    (message, body, Some(status))
                 }
                 reqwest_sse_stream::ReqwestSseStreamError::InvalidContentType(
                     content_type,
@@ -408,7 +427,7 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                             content_type.to_str().unwrap_or("<invalid>")
                         ),
                     };
-                    (message, body)
+                    (message, body, None)
                 }
                 other => {
                     // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
@@ -426,11 +445,12 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                             DisplayOrDebugGateway::new(other)
                         )
                     };
-                    (message, None)
+                    (message, None, None)
                 }
             };
             let error = Error::new(ErrorDetails::FatalStreamError {
                 message,
+                status_code,
                 provider_type: provider_type.to_string(),
                 api_type,
                 raw_request: Some(raw_request),
