@@ -550,7 +550,7 @@ dependencies = [
  "durable-tools-spawn",
  "futures",
  "moka",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "schemars 1.2.1",
  "secrecy",
@@ -1347,9 +1347,9 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.8.4"
+version = "1.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d2d5991425dfd0785aed03aedcf0b321d61975c9b5b3689c774a2610ae0b51e"
+checksum = "0aa83c34e62843d924f905e0f5c866eb1dd6545fc4d719e803d9ba6030371fce"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -2932,9 +2932,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+checksum = "e1e1dacd0d2082dfcf1351c4bdd566bbe89a2b263235a2b50058f1e130a47277"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -3265,7 +3265,7 @@ dependencies = [
  "http-body-util",
  "metrics-exporter-prometheus",
  "mimalloc",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "rmcp",
  "secrecy",
@@ -3397,7 +3397,7 @@ dependencies = [
  "hmac 0.13.0",
  "http 1.4.0",
  "jsonwebtoken",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "rustc_version",
  "rustls",
  "rustls-pki-types",
@@ -4364,9 +4364,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.46.2"
+version = "0.46.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50180452e7808015fe083eae3efcf1ec98b89b45dd8cc204f7b4a6b7b81ea675"
+checksum = "cbe92a2f8b00686061eab5cdcfd6f382c27f2084456e7be90ae9f0fe4a30552a"
 dependencies = [
  "ahash 0.8.12",
  "bytecount",
@@ -4383,7 +4383,7 @@ dependencies = [
  "referencing",
  "regex",
  "regex-syntax",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "rustls",
  "serde",
  "serde_json",
@@ -4725,12 +4725,12 @@ dependencies = [
 
 [[package]]
 name = "metrics"
-version = "0.24.3"
+version = "0.24.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d5312e9ba3771cfa961b585728215e3d972c950a3eed9252aa093d6301277e8"
+checksum = "b7cd3e9eb685089c784f5769b1197d348c7274bc20d4e1349650f63b91b6d0af"
 dependencies = [
- "ahash 0.8.12",
  "portable-atomic",
+ "rapidhash",
 ]
 
 [[package]]
@@ -4877,7 +4877,7 @@ dependencies = [
  "mimalloc",
  "object_store",
  "rand 0.10.1",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "serde",
  "serde_json",
  "sse-stream",
@@ -5618,7 +5618,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "rlt",
  "serde",
  "serde_json",
@@ -5812,7 +5812,7 @@ dependencies = [
  "pin-project",
  "rand 0.10.1",
  "rcgen",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "rustls",
  "serde",
@@ -6168,6 +6168,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rapidhash"
+version = "4.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e48930979c155e2f33aa36ab3119b5ee81332beb6482199a8ecd6029b80b59"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ratatui"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6423,9 +6432,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.46.2"
+version = "0.46.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acb0c66c7b78c1da928bee668b5cc638c678642ff587faff6e6222f797be9d4c"
+checksum = "e125f10bdcd507598c702daada18c47fe5bfba4d7a9545b015b5d432f7168ca3"
 dependencies = [
  "ahash 0.8.12",
  "fluent-uri",
@@ -6527,9 +6536,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.2"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -6579,7 +6588,7 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "http-body 1.0.1",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "sse-stream",
  "thiserror 2.0.18",
 ]
@@ -6703,7 +6712,7 @@ dependencies = [
  "pastey 0.2.1",
  "pin-project-lite",
  "rand 0.10.1",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "rmcp-macros",
  "schemars 1.2.1",
  "serde",
@@ -6820,9 +6829,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.39"
+version = "0.23.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c2c118cb077cca2822033836dfb1b975355dfb784b5e8da48f7b6c5db74e60e"
+checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -7663,9 +7672,9 @@ dependencies = [
 
 [[package]]
 name = "sse-stream"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c5e6deb40826033bd7b11c7ef25ef71193fabd71f680f40dd16538a2704d2f4"
+checksum = "f3962b63f038885f15bce2c6e02c0e7925c072f1ac86bb60fd44c5c6b762fb72"
 dependencies = [
  "bytes",
  "futures-util",
@@ -7973,7 +7982,7 @@ dependencies = [
  "mime 0.4.0-a.0",
  "paste",
  "pyo3",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "serde",
  "serde_json",
@@ -8095,7 +8104,7 @@ dependencies = [
  "redis",
  "redis-test",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "rmcp",
  "rust_decimal",
@@ -8189,7 +8198,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-http",
  "pin-project",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "reqwest-sse-stream",
  "serde",
  "serde_json",
@@ -8282,7 +8291,7 @@ dependencies = [
  "object_store",
  "paste",
  "rand 0.10.1",
- "reqwest 0.13.2",
+ "reqwest 0.13.3",
  "schemars 1.2.1",
  "secrecy",
  "serde",
