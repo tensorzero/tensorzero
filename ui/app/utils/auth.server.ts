@@ -13,7 +13,7 @@ import { getEffectiveApiKey } from "./api-key-override.server";
 import { getConfig } from "./config/index.server";
 import { logger } from "./logger";
 import { getPostgresClient, isPostgresAvailable } from "./postgres.server";
-import { InfraErrorType } from "./tensorzero/errors";
+import { InfraErrorType, isAuthenticationError } from "./tensorzero/errors";
 
 /**
  * Throws an `InfraErrorType.GatewayAuthFailed` 401 response when the deployment
@@ -32,8 +32,11 @@ import { InfraErrorType } from "./tensorzero/errors";
  * the cold path would 401 against the gateway and surface as a 500 — running
  * this guard first short-circuits that. A valid key short-circuits; otherwise
  * we fall through to inspecting `auth_enabled`, so a stale or wrong key is
- * still allowed when the gateway is not enforcing auth. A config fetch
- * failing in that fallback is itself treated as evidence that auth is enabled.
+ * still allowed when the gateway is not enforcing auth. If the gateway
+ * answers the config fetch with a 401, we treat that as confirmation that
+ * auth is enabled; any other failure (gateway down, DNS, 5xx) is a real
+ * infrastructure problem and propagates so the boundary renders the matching
+ * dialog rather than a misleading "Authentication Required."
  *
  * Infrastructure errors (Postgres unavailable, query failures) propagate
  * unchanged so they aren't masked as auth failures.
@@ -52,20 +55,20 @@ export async function requireValidApiKeyIfEnabled(): Promise<void> {
     );
   }
 
-  // No valid key — only reject if the gateway is enforcing auth. If the
-  // config fetch itself fails (most plausibly because the gateway demands
-  // auth that we cannot supply), treat that as confirmation that auth is
-  // enabled.
   let authEnabled: boolean;
   try {
     const config = await getConfig();
     authEnabled = config.auth_enabled;
   } catch (error) {
-    logger.warn(
-      "Failed to load UI config while checking auth state; assuming auth is enabled",
-      error,
-    );
-    authEnabled = true;
+    if (isAuthenticationError(error)) {
+      logger.warn(
+        "UI config fetch returned 401; assuming gateway auth is enabled",
+        error,
+      );
+      authEnabled = true;
+    } else {
+      throw error;
+    }
   }
 
   if (!authEnabled) return;
