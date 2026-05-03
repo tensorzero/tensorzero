@@ -27,6 +27,22 @@ pub struct JsonlBatchFileInfo {
     pub file_id: String,
 }
 
+/// Walks the `std::error::Error::source()` chain and produces a single string of the form
+/// `"<top>; caused by: <next>; caused by: <next>"`.
+///
+/// `reqwest::Error`'s `Display` only prints the top-level kind (e.g. `"error decoding response body"`)
+/// without the underlying transport cause, so wrapping it in this helper is what surfaces the
+/// actual `hyper`/`h2`/`io` reason a stream failed.
+pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
+    let mut message = err.to_string();
+    let mut current = err.source();
+    while let Some(next) = current {
+        message.push_str(&format!("; caused by: {next}"));
+        current = next.source();
+    }
+    message
+}
+
 pub async fn convert_stream_error(
     raw_request: String,
     provider_type: String,
@@ -34,7 +50,7 @@ pub async fn convert_stream_error(
     e: reqwest_sse_stream::ReqwestSseStreamError,
     request_id: Option<&str>,
 ) -> Error {
-    let base_message = e.to_string();
+    let base_message = format_error_chain(&e);
     // If we get an invalid status code, content type, or generic transport error,
     // then we assume that we're never going to be able to read more chunks from the stream,
     // The `wrap_provider_stream` function will bail out when it sees this error,
@@ -415,16 +431,13 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
                     // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
                     let is_timeout = matches!(&other, reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_timeout());
+                    let chain = format_error_chain(&other);
                     let message = if is_timeout {
                         format!(
-                            "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
-                            DisplayOrDebugGateway::new(&other)
+                            "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({chain})"
                         )
                     } else {
-                        format!(
-                            "Error sending request: {}",
-                            DisplayOrDebugGateway::new(other)
-                        )
+                        format!("Error sending request: {chain}")
                     };
                     (message, None)
                 }
@@ -1054,6 +1067,58 @@ mod tests {
     use futures::{StreamExt, stream};
 
     use super::*;
+
+    #[test]
+    fn test_format_error_chain_walks_sources() {
+        #[derive(Debug)]
+        struct Layered {
+            msg: &'static str,
+            source: Option<Box<dyn std::error::Error + Send + Sync>>,
+        }
+        impl std::fmt::Display for Layered {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.msg)
+            }
+        }
+        impl std::error::Error for Layered {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.source
+                    .as_deref()
+                    .map(|s| s as &(dyn std::error::Error + 'static))
+            }
+        }
+
+        let inner = Layered {
+            msg: "connection reset by peer",
+            source: None,
+        };
+        let mid = Layered {
+            msg: "error decoding response body",
+            source: Some(Box::new(inner)),
+        };
+        let outer = Layered {
+            msg: "SSE error: body error",
+            source: Some(Box::new(mid)),
+        };
+
+        assert_eq!(
+            format_error_chain(&outer),
+            "SSE error: body error; caused by: error decoding response body; caused by: connection reset by peer"
+        );
+    }
+
+    #[test]
+    fn test_format_error_chain_no_sources() {
+        #[derive(Debug)]
+        struct Bare;
+        impl std::fmt::Display for Bare {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("standalone error")
+            }
+        }
+        impl std::error::Error for Bare {}
+        assert_eq!(format_error_chain(&Bare), "standalone error");
+    }
 
     #[tokio::test]
     async fn test_peek_empty() {
