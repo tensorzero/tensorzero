@@ -181,6 +181,11 @@ filter = 'binary(e2e) and test(providers::azure::)'
 retries = { backoff = "exponential", count = 16, delay = "5s", jitter = true, max-delay = "120s" }
 
 [[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::together::)'
+# Together can be flaky, so we need to retry several times
+retries = { backoff = "exponential", count = 10, delay = "5s", jitter = true, max-delay = "120s" }
+
+[[profile.default.overrides]]
 filter = 'test(test_clickhouse_migration_manager)'
 test-group = 'clickhouse_migration'
 
