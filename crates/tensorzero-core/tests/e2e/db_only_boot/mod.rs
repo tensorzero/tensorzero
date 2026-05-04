@@ -15,7 +15,7 @@
 
 use googletest::prelude::*;
 use reqwest::{Client, StatusCode};
-use tensorzero_core::endpoints::internal::config_toml::GetConfigTomlResponse;
+use tensorzero_core::endpoints::internal::config::GetConfigResponse;
 use tensorzero_core::endpoints::status::{StatusResponse, TENSORZERO_VERSION};
 
 use crate::common::get_gateway_endpoint;
@@ -48,7 +48,10 @@ async fn db_only_boot_serves_status_with_defaulted_config() {
 
 #[gtest]
 #[tokio::test]
-async fn db_only_boot_returns_default_config_via_config_toml_endpoint() {
+async fn db_only_boot_returns_default_config_via_config_endpoint() {
+    // The legacy `/internal/config_toml` endpoint was removed alongside
+    // the file-mode TOML editor. The replacement, `/internal/config`,
+    // returns a JSON view of the live snapshot — what the UI reads.
     let client = Client::new();
 
     let status: StatusResponse = client
@@ -60,26 +63,27 @@ async fn db_only_boot_returns_default_config_via_config_toml_endpoint() {
         .await
         .expect("status response should deserialize");
 
-    let config: GetConfigTomlResponse = client
-        .get(get_gateway_endpoint("/internal/config_toml"))
+    let config: GetConfigResponse = client
+        .get(get_gateway_endpoint("/internal/config"))
         .send()
         .await
-        .expect("config_toml request should succeed")
+        .expect("config request should succeed")
         .json()
         .await
-        .expect("config_toml response should deserialize");
+        .expect("config response should deserialize");
 
-    // The two endpoints must agree on the live config hash; otherwise the
-    // UI could read one version and write against another.
+    // The two endpoints must agree on the live config hash; otherwise
+    // the UI could read one version and write against another.
     expect_that!(&config.hash, eq(&status.config_hash));
 
-    // No user config means no file-backed templates referenced by the TOML.
-    expect_that!(&config.path_contents, is_empty());
+    // No user config means no file-backed templates referenced.
+    expect_that!(&config.extra_templates, is_empty());
 
-    // The serialized editable TOML should still be non-empty — every config
-    // singleton renders its defaulted section header — and it must parse
-    // back as a valid TOML table.
-    expect_that!(&config.toml, not(eq("")));
-    let parsed = toml::from_str::<toml::Value>(&config.toml);
-    expect_that!(parsed, ok(predicate(toml::Value::is_table)));
+    // The defaulted config still serializes to a non-null JSON object —
+    // every config singleton renders its defaulted section.
+    assert!(
+        config.config.is_object(),
+        "config field should be a JSON object; got: {:?}",
+        config.config,
+    );
 }

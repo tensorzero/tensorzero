@@ -76,7 +76,7 @@ use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
 pub mod built_in;
-pub mod editable;
+pub mod comment_harvest;
 pub mod gateway;
 pub mod namespace;
 pub mod path;
@@ -1729,6 +1729,16 @@ impl Config {
             }
         }
 
+        // `Config.hash` is the canonical hash (computed from the
+        // structural JSON form of `StoredConfig`), not the legacy
+        // canonical-TOML-bytes hash carried by `snapshot.hash`. Going
+        // forward this is the hash every caller sees — `/status`,
+        // `/internal/config`, autopilot tags, and the `snapshot_hash`
+        // value written into every new inference / feedback / datapoint
+        // row. Old rows continue to have their original (legacy) bytes
+        // and are still findable via the legacy lookup path; new rows
+        // have canonical bytes.
+        let canonical_hash = snapshot.config.canonical_hash()?;
         let mut config = Config {
             gateway: gateway_config,
             clickhouse,
@@ -1746,7 +1756,7 @@ impl Config {
             rate_limiting: rate_limiting.try_into()?,
             http_client,
             autopilot,
-            hash: snapshot.hash.clone(),
+            hash: canonical_hash,
             loading_errors,
         };
 
@@ -2472,10 +2482,27 @@ impl UninitializedSchemas {
     }
 }
 
+/// Returns true when a `u32` is zero. Used as `skip_serializing_if` for
+/// `version` fields so a default-zero version produces TOML/JSON identical to
+/// configs written before the field existed (preserves snapshot hashes).
+///
+/// Takes a reference because serde's `skip_serializing_if` always passes by
+/// reference; clippy's `trivially_copy_pass_by_ref` is suppressed for the
+/// same reason.
+#[expect(clippy::trivially_copy_pass_by_ref)]
+fn u32_is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
+    /// Version of this function. `0` means unversioned (the field is omitted
+    /// when serialized). Persisted in `config_snapshots.config_jsonb` so
+    /// snapshots can be queried by function version via JSONB containment.
+    #[serde(default, skip_serializing_if = "u32_is_zero")]
+    pub version: u32,
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     pub system_schema: Option<ResolvedTomlPathData>,
     pub user_schema: Option<ResolvedTomlPathData>,
@@ -2497,6 +2524,8 @@ pub struct UninitializedFunctionConfigChat {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
+    #[serde(default, skip_serializing_if = "u32_is_zero")]
+    pub version: u32,
     pub variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
     pub system_schema: Option<ResolvedTomlPathData>,
     pub user_schema: Option<ResolvedTomlPathData>,
@@ -2926,6 +2955,11 @@ pub struct UninitializedVariantInfo {
     pub timeouts: Option<TimeoutsConfig>,
     #[ts(optional)]
     pub namespace: Option<Namespace>,
+    /// Version of this variant. `0` means unversioned (the field is omitted
+    /// when serialized). Persisted in `config_snapshots.config_jsonb` so
+    /// snapshots can be queried by variant version via JSONB containment.
+    #[serde(default, skip_serializing_if = "u32_is_zero")]
+    pub version: u32,
 }
 
 /// NOTE: Contains deprecated variant `ChainOfThought` (#5298 / 2026.2+)

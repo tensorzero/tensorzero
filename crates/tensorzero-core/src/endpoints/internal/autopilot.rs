@@ -347,8 +347,10 @@ pub async fn create_event_handler(
         .clone()
         .ok_or_else(|| Error::new(ErrorDetails::AutopilotUnavailable))?;
 
-    // Construct the full request with deployment_id
-    // If starting a new session (nil session_id), include the current config hash
+    // Construct the full request with deployment_id. If starting a new
+    // session (nil session_id), include the current config hash.
+    // Self-describing transport form via `Display` — autopilot stores
+    // it and passes it back, and the gateway parses with `FromStr`.
     let config_snapshot_hash = if session_id.is_nil() {
         Some(app_state.config.hash.to_string())
     } else {

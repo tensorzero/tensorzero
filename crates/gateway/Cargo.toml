@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 evaluations = { path = "../evaluations" }
 axum = { workspace = true }

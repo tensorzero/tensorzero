@@ -1,0 +1,39 @@
+# Exercise every non-deprecated variant type so the round-trip test
+# catches drift in any single variant's serde shape.
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[embedding_models.dummy_embedding]
+routing = ["dummy"]
+
+[embedding_models.dummy_embedding.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.varied]
+type = "chat"
+
+[functions.varied.variants.cc]
+type = "chat_completion"
+model = "dummy"
+weight = 0.4
+
+[functions.varied.variants.best]
+type = "experimental_best_of_n_sampling"
+weight = 0.3
+candidates = ["cc"]
+
+[functions.varied.variants.best.evaluator]
+model = "dummy"
+
+[functions.varied.variants.mix]
+type = "experimental_mixture_of_n"
+weight = 0.3
+candidates = ["cc"]
+
+[functions.varied.variants.mix.fuser]
+model = "dummy"

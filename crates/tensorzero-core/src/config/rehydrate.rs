@@ -182,6 +182,7 @@ pub fn rehydrate_variant(
         variant,
         timeouts,
         namespace,
+        version,
     } = stored;
 
     let inner = match variant {
@@ -287,6 +288,10 @@ pub fn rehydrate_variant(
         inner,
         timeouts: timeouts.map(Into::into),
         namespace: ns,
+        // `None` (pre-feature row) → 0; `Some(n)` → n. Matches the
+        // `skip_serializing_if = u32_is_zero` invariant on the
+        // `Uninitialized*` side: 0 and absent are byte-equivalent.
+        version: version.unwrap_or(0),
     })
 }
 
@@ -613,6 +618,7 @@ fn rehydrate_chat_function(
     files: &FileMap,
 ) -> Result<(UninitializedFunctionConfigChat, Vec<(String, Error)>), Error> {
     let tensorzero_stored_config::StoredChatFunctionConfig {
+        version,
         variants,
         system_schema,
         user_schema,
@@ -637,6 +643,8 @@ fn rehydrate_chat_function(
 
     Ok((
         UninitializedFunctionConfigChat {
+            // `None` (pre-feature row) → 0, byte-equivalent to absent.
+            version: version.unwrap_or(0),
             variants: resolved_variants,
             system_schema: resolved.system,
             user_schema: resolved.user,
@@ -659,6 +667,7 @@ fn rehydrate_json_function(
     files: &FileMap,
 ) -> Result<(UninitializedFunctionConfigJson, Vec<(String, Error)>), Error> {
     let tensorzero_stored_config::StoredJsonFunctionConfig {
+        version,
         variants,
         system_schema,
         user_schema,
@@ -681,6 +690,7 @@ fn rehydrate_json_function(
 
     Ok((
         UninitializedFunctionConfigJson {
+            version: version.unwrap_or(0),
             variants: resolved_variants,
             system_schema: resolved.system,
             user_schema: resolved.user,
@@ -832,6 +842,7 @@ mod tests {
                 streaming: None,
             }),
             namespace: Some("tenant_a".to_string()),
+            version: None,
         };
 
         let rehydrated = rehydrate_variant(stored, &files)?;
@@ -900,6 +911,7 @@ mod tests {
             description: None,
             experimentation: None,
             evaluators: None,
+            version: None,
         });
 
         let (config, variant_errors) = rehydrate_function(stored, &HashMap::new(), &FileMap::new())
@@ -1007,6 +1019,7 @@ mod tests {
             }),
             timeouts: None,
             namespace: None,
+            version: None,
         };
         let rehydrated = rehydrate_variant(stored, &files)?;
         let UninitializedVariantConfig::BestOfNSampling(cfg) = rehydrated.inner else {
@@ -1036,6 +1049,7 @@ mod tests {
             }),
             timeouts: None,
             namespace: None,
+            version: None,
         };
         let rehydrated = rehydrate_variant(stored, &files)?;
         let UninitializedVariantConfig::MixtureOfN(cfg) = rehydrated.inner else {
@@ -1060,6 +1074,7 @@ mod tests {
             variant: StoredVariantConfig::ChainOfThought(minimal_chat_completion(prompt_id)),
             timeouts: None,
             namespace: None,
+            version: None,
         };
         let rehydrated = rehydrate_variant(stored, &files)?;
         let UninitializedVariantConfig::ChainOfThought(cfg) = rehydrated.inner else {
@@ -1103,6 +1118,7 @@ mod tests {
             }),
             timeouts: None,
             namespace: None,
+            version: None,
         };
         let rehydrated = rehydrate_variant(stored, &files)?;
         let UninitializedVariantConfig::Dicl(cfg) = rehydrated.inner else {
@@ -1140,6 +1156,7 @@ mod tests {
             variant: StoredVariantConfig::ChatCompletion(chat),
             timeouts: None,
             namespace: None,
+            version: None,
         };
 
         let rehydrated = rehydrate_variant(stored, &files)?;
@@ -1192,6 +1209,7 @@ mod tests {
                     )),
                     timeouts: None,
                     namespace: None,
+                    version: None,
                 },
             ),
         )]);
@@ -1212,6 +1230,7 @@ mod tests {
             description: Some("a json function".to_string()),
             experimentation: None,
             evaluators: None,
+            version: None,
         });
 
         let (rehydrated, variant_errors) = rehydrate_function(stored, &variant_rows, &files)?;

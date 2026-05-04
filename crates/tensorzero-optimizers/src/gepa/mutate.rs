@@ -171,6 +171,7 @@ pub async fn mutate_variant(
         inner: UninitializedVariantConfig::ChatCompletion(mutate_variant_config),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     // Build input Arguments for the mutate function

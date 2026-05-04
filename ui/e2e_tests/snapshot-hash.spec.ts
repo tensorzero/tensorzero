@@ -86,14 +86,23 @@ test("snapshot_hash with real historical config shows banner and propagates", as
   await expect(
     page.getByText("Viewing historical configuration"),
   ).toBeVisible();
-  expect(page.url()).toContain(`snapshot_hash=${historicalHash}`);
+  // `historicalHash` is `can:DECIMAL` (canonical-by-default). The
+  // browser URL-encodes the colon in `href` attributes (`can%3A...`).
+  // Decode before comparing so the test doesn't depend on browser
+  // encoding behavior.
+  expect(decodeURIComponent(page.url())).toContain(
+    `snapshot_hash=${historicalHash}`,
+  );
 
   // Variant links should carry the snapshot hash
   const variantLink = page.getByRole("link").filter({ hasText: /prompt/ });
   const firstLink = variantLink.first();
   await expect(firstLink).toBeVisible();
   const href = await firstLink.getAttribute("href");
-  expect(href).toContain(`snapshot_hash=${historicalHash}`);
+  expect(href).not.toBeNull();
+  expect(decodeURIComponent(href!)).toContain(
+    `snapshot_hash=${historicalHash}`,
+  );
 });
 
 test("snapshot_hash matching current config is stripped via redirect", async ({

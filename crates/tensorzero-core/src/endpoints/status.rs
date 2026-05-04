@@ -25,6 +25,9 @@ pub async fn status_handler(State(app_state): AppState) -> Json<StatusResponse> 
     Json(StatusResponse {
         status: "ok".to_string(),
         version: TENSORZERO_VERSION.to_string(),
+        // Self-describing transport form via `Display`: legacy hashes
+        // are bare decimal (matching every pre-canonical-hash writer);
+        // canonical hashes carry the `can:` prefix.
         config_hash: app_state.config.hash.to_string(),
     })
 }

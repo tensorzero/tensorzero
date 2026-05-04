@@ -26,6 +26,10 @@ pub struct BooleanMetricFeedbackInsert {
     pub metric_name: String,
     pub value: bool,
     pub tags: HashMap<String, String>,
+    // Bare-decimal serializer: this row goes into a CH `UInt256`
+    // column that can't accept the canonical-scheme `can:` prefix
+    // emitted by the default `Serialize` impl.
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_hash_bare_decimal")]
     pub snapshot_hash: SnapshotHash,
 }
 
@@ -37,6 +41,10 @@ pub struct FloatMetricFeedbackInsert {
     pub metric_name: String,
     pub value: f64,
     pub tags: HashMap<String, String>,
+    // Bare-decimal serializer: this row goes into a CH `UInt256`
+    // column that can't accept the canonical-scheme `can:` prefix
+    // emitted by the default `Serialize` impl.
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_hash_bare_decimal")]
     pub snapshot_hash: SnapshotHash,
 }
 
@@ -48,6 +56,10 @@ pub struct CommentFeedbackInsert {
     pub target_type: CommentTargetType,
     pub value: String,
     pub tags: HashMap<String, String>,
+    // Bare-decimal serializer: this row goes into a CH `UInt256`
+    // column that can't accept the canonical-scheme `can:` prefix
+    // emitted by the default `Serialize` impl.
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_hash_bare_decimal")]
     pub snapshot_hash: SnapshotHash,
 }
 
@@ -58,6 +70,10 @@ pub struct DemonstrationFeedbackInsert {
     pub inference_id: Uuid,
     pub value: String,
     pub tags: HashMap<String, String>,
+    // Bare-decimal serializer: this row goes into a CH `UInt256`
+    // column that can't accept the canonical-scheme `can:` prefix
+    // emitted by the default `Serialize` impl.
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_hash_bare_decimal")]
     pub snapshot_hash: SnapshotHash,
 }
 

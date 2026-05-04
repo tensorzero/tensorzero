@@ -80,6 +80,7 @@ impl VariantInfo {
             inner: self.inner.as_uninitialized(),
             timeouts: Some(self.timeouts.clone()),
             namespace: self.namespace.clone(),
+            version: 0,
         }
     }
 }

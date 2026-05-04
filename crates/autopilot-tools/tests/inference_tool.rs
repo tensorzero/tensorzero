@@ -71,7 +71,9 @@ async fn test_inference_tool_with_snapshot_hash(pool: PgPool) {
             let ActionInput::Inference(params) = input else {
                 return false;
             };
-            snapshot_hash.to_string() == test_snapshot_hash
+            // `to_string()` now prefixes the scheme (`v1:`/`v2:`); compare
+            // against the bare-decimal form the autopilot side stores.
+            snapshot_hash.to_decimal_string() == test_snapshot_hash
                 && params.function_name == Some("test_function".to_string())
                 && params.episode_id.is_none()
                 && params.dryrun == Some(false)

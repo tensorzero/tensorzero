@@ -214,6 +214,7 @@ impl FunctionConfig {
 impl FunctionConfigChat {
     pub fn as_uninitialized(&self) -> UninitializedFunctionConfigChat {
         UninitializedFunctionConfigChat {
+            version: 0,
             variants: self
                 .variants
                 .iter()
@@ -240,6 +241,7 @@ impl FunctionConfigChat {
 impl FunctionConfigJson {
     pub fn as_uninitialized(&self) -> UninitializedFunctionConfigJson {
         UninitializedFunctionConfigJson {
+            version: 0,
             variants: self
                 .variants
                 .iter()

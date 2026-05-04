@@ -790,6 +790,7 @@ async fn rehydrate_loaded_config_rows(
                     variant: stored.variant,
                     timeouts: stored.timeouts,
                     namespace: stored.namespace,
+                    version: stored.version,
                 },
             ),
         );

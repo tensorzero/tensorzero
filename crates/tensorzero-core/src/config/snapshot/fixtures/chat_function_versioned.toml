@@ -1,0 +1,27 @@
+# Function and variants carry explicit non-zero versions. Mixed: one variant
+# is left at the default (no `version` key).
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.versioned_fn]
+type = "chat"
+version = 3
+
+[functions.versioned_fn.variants.v1]
+type = "chat_completion"
+model = "dummy"
+version = 7
+
+[functions.versioned_fn.variants.v2]
+type = "chat_completion"
+model = "dummy"
+version = 2
+temperature = 0.7
+
+[functions.versioned_fn.variants.legacy]
+type = "chat_completion"
+model = "dummy"

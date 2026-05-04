@@ -80,7 +80,9 @@ async fn test_run_evaluation_tool_with_snapshot_hash(pool: PgPool) {
             let ActionInput::RunEvaluation(params) = input else {
                 return false;
             };
-            snapshot_hash.to_string() == test_snapshot_hash
+            // `to_string()` now prefixes the scheme (`v1:`/`v2:`); compare
+            // against the bare-decimal form the autopilot side stores.
+            snapshot_hash.to_decimal_string() == test_snapshot_hash
                 && params.evaluation_name.as_deref() == Some("test_evaluation")
                 && params.dataset_name == Some("test_dataset".to_string())
                 && params.datapoint_ids.is_none()

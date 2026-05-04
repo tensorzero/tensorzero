@@ -161,14 +161,45 @@ impl ConfigSnapshot {
         })
     }
 
-    /// Create a ConfigSnapshot from data loaded from the database.
+    /// Create a ConfigSnapshot from a previously-deserialized `StoredConfig`
+    /// and the original hash from the database.
     ///
-    /// This is used when loading a previously stored config snapshot from ClickHouse.
-    /// The hash is recomputed from the config and templates to ensure consistency.
+    /// This is the **canonical read path** post-JSONB migration:
+    /// `config_jsonb` is loaded from the database, deserialized as
+    /// `StoredConfig` directly via serde_json, and paired with the
+    /// `original_hash` from the row. The hash is *not* recomputed — it
+    /// would drift through float reformatting (see `from_stored` for the
+    /// historical context on why recomputation is unsafe).
     ///
-    /// Note: We deserialize as `StoredConfig` (not `UninitializedConfig`) to support
-    /// backward compatibility with historical snapshots that may contain deprecated
-    /// fields like `timeouts`.
+    /// The companion `from_stored` (TOML-based) remains for fallback when
+    /// `config_jsonb` is NULL on a pre-backfill legacy row.
+    pub fn from_stored_with_hash(
+        config: StoredConfig,
+        extra_templates: HashMap<String, String>,
+        tags: HashMap<String, String>,
+        original_hash: SnapshotHash,
+    ) -> Self {
+        Self {
+            config,
+            hash: original_hash,
+            extra_templates,
+            tags,
+            __private: (),
+        }
+    }
+
+    /// Legacy fallback: create a ConfigSnapshot from the deprecated
+    /// `config TEXT` (TOML) column.
+    ///
+    /// Kept for the migration window described in the roadmap: rows
+    /// written before the `config_jsonb` column existed have NULL JSONB
+    /// until startup backfill catches them. During that window, the read
+    /// path falls through here. After the planned `hash_v2` cutover (out
+    /// of V0), the TOML column is dropped and this method goes with it.
+    ///
+    /// We deserialize as `StoredConfig` (not `UninitializedConfig`) to
+    /// support backward compatibility with historical snapshots that may
+    /// contain deprecated fields like `timeouts`.
     pub fn from_stored(
         config_toml: &str,
         extra_templates: HashMap<String, String>,

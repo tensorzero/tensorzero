@@ -162,7 +162,11 @@ pub struct BatchModelInferenceRow<'a> {
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
+    // See `ChatInferenceDatabaseInsert.snapshot_hash` for the rationale:
+    // bare-decimal serializer because this row goes into a CH `UInt256`
+    // column that can't accept the canonical-scheme `can:` prefix.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
 }
 

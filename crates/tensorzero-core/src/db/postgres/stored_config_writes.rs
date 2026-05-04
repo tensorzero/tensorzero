@@ -2,15 +2,15 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use sqlx::{Postgres, QueryBuilder, Transaction};
 use tensorzero_stored_config::{
-    STORED_AUTOPILOT_CONFIG_SCHEMA_REVISION, STORED_CLICKHOUSE_CONFIG_SCHEMA_REVISION,
-    STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION, STORED_EVALUATION_CONFIG_SCHEMA_REVISION,
-    STORED_GATEWAY_CONFIG_SCHEMA_REVISION, STORED_METRIC_CONFIG_SCHEMA_REVISION,
-    STORED_MODEL_CONFIG_SCHEMA_REVISION, STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION,
-    STORED_POSTGRES_CONFIG_SCHEMA_REVISION, STORED_PROVIDER_TYPES_CONFIG_SCHEMA_REVISION,
-    STORED_RATE_LIMITING_CONFIG_SCHEMA_REVISION, STORED_STORAGE_KIND_SCHEMA_REVISION,
-    STORED_TOOL_CONFIG_SCHEMA_REVISION, StoredAutopilotConfig, StoredClickHouseConfig,
-    StoredEmbeddingModelConfig, StoredGatewayConfig, StoredMetricConfig, StoredModelConfig,
-    StoredOptimizerConfig, StoredPostgresConfig, StoredProviderTypesConfig,
+    ConfigObjectMetadata, PerObjectMetadata, STORED_AUTOPILOT_CONFIG_SCHEMA_REVISION,
+    STORED_CLICKHOUSE_CONFIG_SCHEMA_REVISION, STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION,
+    STORED_EVALUATION_CONFIG_SCHEMA_REVISION, STORED_GATEWAY_CONFIG_SCHEMA_REVISION,
+    STORED_METRIC_CONFIG_SCHEMA_REVISION, STORED_MODEL_CONFIG_SCHEMA_REVISION,
+    STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION, STORED_POSTGRES_CONFIG_SCHEMA_REVISION,
+    STORED_PROVIDER_TYPES_CONFIG_SCHEMA_REVISION, STORED_RATE_LIMITING_CONFIG_SCHEMA_REVISION,
+    STORED_STORAGE_KIND_SCHEMA_REVISION, STORED_TOOL_CONFIG_SCHEMA_REVISION, StoredAutopilotConfig,
+    StoredClickHouseConfig, StoredEmbeddingModelConfig, StoredGatewayConfig, StoredMetricConfig,
+    StoredModelConfig, StoredOptimizerConfig, StoredPostgresConfig, StoredProviderTypesConfig,
     StoredRateLimitingConfig, StoredStorageKind,
 };
 use uuid::Uuid;
@@ -35,6 +35,12 @@ pub struct WriteStoredConfigParams<'a> {
     /// MiniJinja `{% include %}` — must be stored in the database for the config to be
     /// self-contained.
     pub extra_templates: &'a HashMap<String, String>,
+    /// Per-object descriptive metadata (notes, tags, source-file provenance,
+    /// etc.) keyed by canonical object path (`"functions/foo"`,
+    /// `"models/gpt-4o"`, `"gateway"`, …). Excluded from snapshot hashes.
+    /// Empty by default; populated by the file-mode TOML-comment harvester
+    /// and by REST endpoints that surface a Notes / tags UI.
+    pub metadata: &'a PerObjectMetadata,
 }
 
 impl PostgresConnectionInfo {
@@ -69,11 +75,12 @@ pub(crate) async fn write_stored_config_in_tx(
     // (broken references, missing templates, schema errors, etc.) fail fast
     // without partial writes. We also return the resulting `UnwrittenConfig`
     // so callers can use its validated `Config` + hash directly (e.g. for the
-    // `apply_config_toml_handler` hot-swap) instead of re-reading + revalidating
-    // from the database on the happy path. Credential validation is skipped:
-    // the caller is responsible for deciding when to exercise provider
-    // credentials, since the write path runs under the `config_editor`
-    // advisory lock and shouldn't be making outbound network calls.
+    // post-write hot-swap on `--migrate-config`) instead of re-reading +
+    // revalidating from the database on the happy path. Credential validation
+    // is skipped: the caller is responsible for deciding when to exercise
+    // provider credentials, since the write path runs under the global
+    // stored-config advisory lock and shouldn't be making outbound network
+    // calls.
     let unwritten = Config::load_from_uninitialized(params.config.clone(), false).await?;
 
     // Acquire a single global advisory lock to serialize concurrent
@@ -93,6 +100,7 @@ pub(crate) async fn write_stored_config_in_tx(
         creation_source,
         source_autopilot_session_id,
         extra_templates: caller_extra_templates,
+        metadata,
     } = params;
 
     // Merge the caller-provided templates with the ones discovered during
@@ -129,7 +137,8 @@ pub(crate) async fn write_stored_config_in_tx(
         autopilot,
     } = config;
 
-    // 1. Singleton tables (append-only)
+    // 1. Singleton tables (append-only). Each singleton's metadata is
+    //    looked up by its top-level path (`"gateway"`, `"clickhouse"`, …).
     if let Some(gateway) = gateway {
         let stored = StoredGatewayConfig::from(gateway.clone());
         insert_singleton_config_row(
@@ -137,6 +146,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "gateway_configs",
             STORED_GATEWAY_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "gateway"),
         )
         .await?;
     }
@@ -148,6 +158,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "clickhouse_configs",
             STORED_CLICKHOUSE_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "clickhouse"),
         )
         .await?;
     }
@@ -159,6 +170,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "postgres_configs",
             STORED_POSTGRES_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "postgres"),
         )
         .await?;
     }
@@ -170,6 +182,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "object_storage_configs",
             STORED_STORAGE_KIND_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "object_storage"),
         )
         .await?;
     }
@@ -181,6 +194,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "rate_limiting_configs",
             STORED_RATE_LIMITING_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "rate_limiting"),
         )
         .await?;
     }
@@ -192,6 +206,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "autopilot_configs",
             STORED_AUTOPILOT_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "autopilot"),
         )
         .await?;
     }
@@ -203,6 +218,7 @@ pub(crate) async fn write_stored_config_in_tx(
             "provider_types_configs",
             STORED_PROVIDER_TYPES_CONFIG_SCHEMA_REVISION,
             &serialize_stored(&stored)?,
+            &metadata_for(metadata, "provider_types"),
         )
         .await?;
     }
@@ -221,9 +237,11 @@ pub(crate) async fn write_stored_config_in_tx(
     let models_new_names = write_named_section(
         tx,
         "models_configs",
+        "models",
         STORED_MODEL_CONFIG_SCHEMA_REVISION,
         models.as_ref().into_iter().flat_map(|m| m.iter()),
         |model_config| serialize_stored(&StoredModelConfig::try_from(model_config)?),
+        metadata,
     )
     .await?;
     tombstone_removed_names(tx, "models_configs", &models_new_names).await?;
@@ -231,6 +249,7 @@ pub(crate) async fn write_stored_config_in_tx(
     let embedding_models_new_names = write_named_section(
         tx,
         "embedding_models_configs",
+        "embedding_models",
         STORED_EMBEDDING_MODEL_CONFIG_SCHEMA_REVISION,
         embedding_models.as_ref().into_iter().flat_map(|m| m.iter()),
         |embedding_model_config| {
@@ -238,6 +257,7 @@ pub(crate) async fn write_stored_config_in_tx(
                 embedding_model_config,
             )?)
         },
+        metadata,
     )
     .await?;
     tombstone_removed_names(tx, "embedding_models_configs", &embedding_models_new_names).await?;
@@ -245,9 +265,11 @@ pub(crate) async fn write_stored_config_in_tx(
     let metrics_new_names = write_named_section(
         tx,
         "metrics_configs",
+        "metrics",
         STORED_METRIC_CONFIG_SCHEMA_REVISION,
         metrics.as_ref().into_iter().flat_map(|m| m.iter()),
         |metric_config| serialize_stored(&StoredMetricConfig::from(metric_config)),
+        metadata,
     )
     .await?;
     tombstone_removed_names(tx, "metrics_configs", &metrics_new_names).await?;
@@ -255,16 +277,18 @@ pub(crate) async fn write_stored_config_in_tx(
     let optimizers_new_names = write_named_section(
         tx,
         "optimizers_configs",
+        "optimizers",
         STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION,
         optimizers.as_ref().into_iter().flat_map(|m| m.iter()),
         |optimizer_info| serialize_stored(&StoredOptimizerConfig::from(optimizer_info.clone())),
+        metadata,
     )
     .await?;
     tombstone_removed_names(tx, "optimizers_configs", &optimizers_new_names).await?;
 
     // 3. Tools (with stored files)
     let mut tools_new_names: HashSet<String> = HashSet::new();
-    let mut tool_rows: Vec<(String, serde_json::Value)> = Vec::new();
+    let mut tool_rows: Vec<(String, serde_json::Value, serde_json::Value)> = Vec::new();
     for (name, tool_config) in tools.as_ref().into_iter().flat_map(|m| m.iter()) {
         let file_version_ids = write_files_in_tx(
             tx,
@@ -279,7 +303,8 @@ pub(crate) async fn write_stored_config_in_tx(
                 message: format!("Failed to serialize tool `{name}` for DB: {e}"),
             })
         })?;
-        tool_rows.push((name.clone(), config_json));
+        let row_metadata = metadata_for(metadata, &format!("tools/{name}"));
+        tool_rows.push((name.clone(), config_json, row_metadata));
         tools_new_names.insert(name.clone());
     }
     upsert_named_config_rows(
@@ -293,7 +318,7 @@ pub(crate) async fn write_stored_config_in_tx(
 
     // 4. Evaluations (with stored files)
     let mut evaluations_new_names: HashSet<String> = HashSet::new();
-    let mut evaluation_rows: Vec<(String, serde_json::Value)> = Vec::new();
+    let mut evaluation_rows: Vec<(String, serde_json::Value, serde_json::Value)> = Vec::new();
     for (name, eval_config) in evaluations.as_ref().into_iter().flat_map(|m| m.iter()) {
         let file_version_ids = write_files_in_tx(
             tx,
@@ -308,7 +333,8 @@ pub(crate) async fn write_stored_config_in_tx(
                 message: format!("Failed to serialize evaluation `{name}` for DB: {e}"),
             })
         })?;
-        evaluation_rows.push((name.clone(), config_json));
+        let row_metadata = metadata_for(metadata, &format!("evaluations/{name}"));
+        evaluation_rows.push((name.clone(), config_json, row_metadata));
         evaluations_new_names.insert(name.clone());
     }
     upsert_named_config_rows(
@@ -331,6 +357,20 @@ pub(crate) async fn write_stored_config_in_tx(
     // has no way to provide since it only sees the `UninitializedConfig`.
     let mut functions_new_names: HashSet<String> = HashSet::new();
     for (function_name, function_config) in functions.as_ref().into_iter().flat_map(|m| m.iter()) {
+        // Lift any per-object metadata for this function and its variants
+        // out of the `PerObjectMetadata` map. Variant metadata keys are
+        // `functions/{name}/variants/{variant}` per the canonical path scheme.
+        let function_metadata = metadata
+            .get(&format!("functions/{function_name}"))
+            .cloned()
+            .unwrap_or_default();
+        let mut variant_metadata: BTreeMap<String, ConfigObjectMetadata> = BTreeMap::new();
+        let variant_prefix = format!("functions/{function_name}/variants/");
+        for (path, m) in metadata {
+            if let Some(variant_name) = path.strip_prefix(&variant_prefix) {
+                variant_metadata.insert(variant_name.to_string(), m.clone());
+            }
+        }
         // This bulk path is the single approved caller of the skipping-CAS
         // variant (enforced via `disallowed-methods` in `clippy.toml`).
         #[expect(clippy::disallowed_methods)]
@@ -341,6 +381,8 @@ pub(crate) async fn write_stored_config_in_tx(
             creation_source,
             source_autopilot_session_id,
             extra_templates,
+            &function_metadata,
+            &variant_metadata,
         )
         .await?;
         functions_new_names.insert(function_name.clone());
@@ -395,12 +437,18 @@ async fn acquire_stored_config_advisory_lock(
 /// single batched query and returns the set of names that were written —
 /// the caller uses this set as the "new" side of the diff when tombstoning
 /// removed rows.
+///
+/// `metadata_path_prefix` (e.g. `"models"`, `"tools"`) is the canonical
+/// section path; per-row metadata is looked up at `<prefix>/<name>` in
+/// `per_object_metadata`.
 async fn write_named_section<'a, K, T, I, F>(
     tx: &mut Transaction<'_, Postgres>,
     table_name: &'static str,
+    metadata_path_prefix: &str,
     schema_revision: i32,
     items: I,
     mut serialize: F,
+    per_object_metadata: &PerObjectMetadata,
 ) -> Result<HashSet<String>, Error>
 where
     K: AsRef<str> + 'a,
@@ -409,15 +457,33 @@ where
     F: FnMut(&T) -> Result<serde_json::Value, Error>,
 {
     let mut new_names: HashSet<String> = HashSet::new();
-    let mut rows: Vec<(String, serde_json::Value)> = Vec::new();
+    let mut rows: Vec<(String, serde_json::Value, serde_json::Value)> = Vec::new();
     for (name, item) in items {
         let config_json = serialize(item)?;
         let name_str = name.as_ref().to_string();
+        let row_metadata = metadata_for(
+            per_object_metadata,
+            &format!("{metadata_path_prefix}/{name_str}"),
+        );
         new_names.insert(name_str.clone());
-        rows.push((name_str, config_json));
+        rows.push((name_str, config_json, row_metadata));
     }
     upsert_named_config_rows(tx, table_name, schema_revision, &rows).await?;
     Ok(new_names)
+}
+
+/// Looks up metadata for a canonical object path (e.g. `"functions/foo"`,
+/// `"gateway"`) in the provided map and serializes it as a `serde_json::Value`
+/// suitable for binding into the `metadata JSONB` column.
+///
+/// Returns `'{}'` (an empty JSON object) when the path is absent from the
+/// map — matching the column default in Postgres so a row that has no
+/// associated metadata stays trivially equivalent to a default-row insert.
+fn metadata_for(map: &PerObjectMetadata, path: &str) -> serde_json::Value {
+    match map.get(path) {
+        Some(m) => serde_json::to_value(m).unwrap_or_else(|_| serde_json::json!({})),
+        None => serde_json::json!({}),
+    }
 }
 
 /// Tombstones rows in `table_name` whose `name` is in the DB's active set
@@ -448,16 +514,19 @@ async fn insert_singleton_config_row(
     table_name: &str,
     schema_revision: i32,
     config_json: &serde_json::Value,
+    metadata: &serde_json::Value,
 ) -> Result<(), Error> {
     let id = Uuid::now_v7();
     let mut qb = QueryBuilder::new("INSERT INTO tensorzero.");
     qb.push(table_name);
-    qb.push(" (id, schema_revision, config) VALUES (");
+    qb.push(" (id, schema_revision, config, metadata) VALUES (");
     qb.push_bind(id);
     qb.push(", ");
     qb.push_bind(schema_revision);
     qb.push(", ");
     qb.push_bind(config_json.clone());
+    qb.push(", ");
+    qb.push_bind(metadata.clone());
     qb.push(")");
     qb.build().execute(&mut **tx).await.map_err(|e| {
         postgres_query_error(
@@ -468,28 +537,36 @@ async fn insert_singleton_config_row(
     Ok(())
 }
 
-/// Upserts a batch of `(name, config)` rows into a named collection table
-/// in a single query. Clears `deleted_at` on conflict so that re-adding a
-/// previously tombstoned name revives its row.
+/// Upserts a batch of `(name, config, metadata)` rows into a named
+/// collection table in a single query. Clears `deleted_at` on conflict so
+/// that re-adding a previously tombstoned name revives its row.
+///
+/// On conflict, `metadata` is overwritten with the EXCLUDED value (the
+/// caller's freshly-provided metadata). This is the right behavior for
+/// file-mode applies (TOML-comment changes propagate) and for explicit
+/// REST PATCHes (the caller is the source of truth). If you need
+/// "preserve existing metadata on update" behavior, do the lookup +
+/// merge above this layer.
 async fn upsert_named_config_rows(
     tx: &mut Transaction<'_, Postgres>,
     table_name: &str,
     schema_revision: i32,
-    rows: &[(String, serde_json::Value)],
+    rows: &[(String, serde_json::Value, serde_json::Value)],
 ) -> Result<(), Error> {
     if rows.is_empty() {
         return Ok(());
     }
     let mut qb = QueryBuilder::new("INSERT INTO tensorzero.");
     qb.push(table_name);
-    qb.push(" (id, name, schema_revision, config) ");
-    qb.push_values(rows, |mut b, (name, config_json)| {
+    qb.push(" (id, name, schema_revision, config, metadata) ");
+    qb.push_values(rows, |mut b, (name, config_json, metadata)| {
         b.push_bind(Uuid::now_v7())
             .push_bind(name.clone())
             .push_bind(schema_revision)
-            .push_bind(config_json.clone());
+            .push_bind(config_json.clone())
+            .push_bind(metadata.clone());
     });
-    qb.push(" ON CONFLICT (name) DO UPDATE SET schema_revision = EXCLUDED.schema_revision, config = EXCLUDED.config, updated_at = NOW(), deleted_at = NULL");
+    qb.push(" ON CONFLICT (name) DO UPDATE SET schema_revision = EXCLUDED.schema_revision, config = EXCLUDED.config, metadata = EXCLUDED.metadata, updated_at = NOW(), deleted_at = NULL");
     qb.build().execute(&mut **tx).await.map_err(|e| {
         postgres_query_error(
             &format!("Failed to upsert named config rows into `{table_name}`"),

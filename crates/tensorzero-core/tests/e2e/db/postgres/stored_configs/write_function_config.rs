@@ -189,6 +189,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                         }),
                     }),
                     namespace: Some(Namespace::new("alpha").expect("namespace should be valid")),
+                    version: 0,
                 },
             ),
             (
@@ -209,6 +210,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                     ),
                     timeouts: None,
                     namespace: None,
+                    version: 0,
                 },
             ),
             (
@@ -227,6 +229,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                     }),
                     timeouts: None,
                     namespace: None,
+                    version: 0,
                 },
             ),
             (
@@ -262,6 +265,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                     }),
                     timeouts: None,
                     namespace: None,
+                    version: 0,
                 },
             ),
             (
@@ -277,6 +281,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                     ),
                     timeouts: None,
                     namespace: None,
+                    version: 0,
                 },
             ),
         ]),
@@ -408,6 +413,7 @@ fn sample_json_function() -> UninitializedFunctionConfig {
                 }),
             ),
         ]),
+        version: 0,
     })
 }
 
@@ -441,6 +447,8 @@ async fn write_function_config_persists_expected_rows(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("write path should succeed");
@@ -536,6 +544,8 @@ async fn write_function_config_round_trips_via_load_config_from_db(pool: PgPool)
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("write should succeed");
@@ -564,6 +574,8 @@ async fn write_function_config_compare_and_swap(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("initial write should succeed");
@@ -578,6 +590,8 @@ async fn write_function_config_compare_and_swap(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("write with correct expected version should succeed");
@@ -592,6 +606,8 @@ async fn write_function_config_compare_and_swap(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect_err("write with stale expected version should fail");
@@ -616,6 +632,7 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
         ))),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
     let variant_b = UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(sample_chat_completion(fake_template(
@@ -624,6 +641,7 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
         ))),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let config_v1 = UninitializedFunctionConfig::Json(UninitializedFunctionConfigJson {
@@ -639,6 +657,7 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
         description: Some("reuse test v1".to_string()),
         experimentation: None,
         evaluators: HashMap::new(),
+        version: 0,
     });
 
     let result_v1 = postgres
@@ -649,6 +668,8 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("v1 write should succeed");
@@ -670,6 +691,7 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
         ))),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let config_v2 = UninitializedFunctionConfig::Json(UninitializedFunctionConfigJson {
@@ -698,6 +720,7 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
             namespaces: HashMap::new(),
         }),
         evaluators: HashMap::new(),
+        version: 0,
     });
 
     let result_v2 = postgres
@@ -708,6 +731,8 @@ async fn write_function_config_reuses_unchanged_variants(pool: PgPool) {
             creation_source: "ui",
             source_autopilot_session_id: None,
             extra_templates: &HashMap::new(),
+            function_metadata: &Default::default(),
+            variant_metadata: &Default::default(),
         })
         .await
         .expect("v2 write should succeed");

@@ -177,17 +177,6 @@ jobs:
             -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres \
             live-tests
 
-      - name: Run config editing e2e tests
-        # The config-editing profile filters down to tests that mutate
-        # gateway-wide config via `/internal/config_toml/apply`. They run
-        # after the main live suite so they don't race with concurrent tests.
-        run: |
-          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose $COMPOSE_FILES --profile provider-proxy run --rm \
-            -e TENSORZERO_CI=1 \
-            -e TENSORZERO_INTERNAL_TEST_OBSERVABILITY_BACKEND=postgres \
-            live-tests \
-            sh -c "cargo-nextest nextest run --no-fail-fast --archive-file tests.tar.zst --workspace-remap /app/crates --config-file /app/crates/.config/nextest.toml --profile config-editing -j 1"
-
       - name: Print gateway and test logs
         if: always()
         run: docker compose $COMPOSE_FILES --profile provider-proxy logs -t

@@ -28,6 +28,16 @@ pub struct StoredVariantVersionConfig {
     pub variant: StoredVariantConfig,
     pub timeouts: Option<StoredTimeoutsConfig>,
     pub namespace: Option<String>,
+    /// Author-managed editorial version label. `None` means "row predates
+    /// the field" (defaults to 0 in the rehydrated `UninitializedVariantInfo`).
+    /// Part of canonical content — a bump produces a new variant row and a
+    /// new snapshot canonical hash, by deliberate design.
+    ///
+    /// NOTE: `variant_configs.content_hash` is computed over the serialized
+    /// JSON of this struct. With `skip_serializing_none`, `None` is omitted,
+    /// so pre-feature rows remain content-equivalent to fresh rows that
+    /// haven't set a version. Existing dedup behavior is preserved.
+    pub version: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -100,7 +100,10 @@ Do a historical inference successfully!
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -225,7 +228,10 @@ model = "action_test_model_{id}"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -298,7 +304,10 @@ model = "eval_test_model_{id}"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -388,7 +397,10 @@ json_mode = "on"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -478,7 +490,10 @@ json_mode = "on"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -571,7 +586,10 @@ json_mode = "on"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
 
@@ -771,7 +789,10 @@ json_mode = "on"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
 
@@ -947,7 +968,10 @@ model = "eval_test_model_{id}"
 
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&historical_config, HashMap::new()).unwrap();
-    let snapshot_hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — that's what the gateway
+    // stores in the `hash` column going forward (post canonical-default
+    // switch). `snapshot.hash` is the legacy hash and would 404.
+    let snapshot_hash = snapshot.config.canonical_hash().unwrap();
 
     database.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;

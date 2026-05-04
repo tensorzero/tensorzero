@@ -13,7 +13,7 @@ import {
   SidebarCollapse,
   SidebarExpand,
 } from "~/components/icons/Icons";
-import { FileCode2, KeyRound, LayoutGrid, Plus } from "lucide-react";
+import { KeyRound, LayoutGrid, Plus } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -96,6 +96,18 @@ const navigation: NavigationSection[] = [
         title: "Supervised Fine-Tuning",
         url: "/optimization/supervised-fine-tuning",
         icon: SupervisedFineTuning,
+      },
+    ],
+  },
+  {
+    title: "Configuration",
+    items: [
+      // Edit functions / variants directly via the narrow REST endpoints.
+      // Replacement for the legacy `/config` TOML editor.
+      {
+        title: "Functions",
+        url: "/functions",
+        icon: Functions,
       },
     ],
   },
@@ -188,47 +200,41 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 )}
               </SidebarMenuItem>
             )}
-            {config.config_in_database && (
-              <SidebarMenuItem className="list-none">
-                <SidebarMenuButton
-                  asChild
-                  tooltip={state === "collapsed" ? "Configuration" : undefined}
-                  isActive={activePathUtils.isActive("/config")}
-                >
-                  <Link to="/config" className="flex items-center gap-2">
-                    <FileCode2 className="h-4 w-4" />
-                    <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                      Configuration
-                    </span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
           </SidebarGroupContent>
         </SidebarGroup>
-        {navigation.map((section) => (
-          <SidebarGroup key={section.title}>
-            <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
-            <SidebarGroupContent className="flex flex-col gap-1">
-              {section.items?.map((item) => (
-                <SidebarMenuItem key={item.title} className="list-none">
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={state === "collapsed" ? item.title : undefined}
-                    isActive={activePathUtils.isActive(item.url)}
-                  >
-                    <Link to={item.url} className="flex items-center gap-2">
-                      <item.icon className="h-4 w-4" />
-                      <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
-                        {item.title}
-                      </span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        {navigation
+          // Hide the "Configuration" section unless the gateway is in
+          // config-in-database mode. The Functions/Variants endpoints
+          // require Postgres-backed per-object tables; in file mode the
+          // source of truth is `tensorzero.toml` and editing must happen
+          // there. Same gating model used by Autopilot above.
+          .filter(
+            (section) =>
+              section.title !== "Configuration" || config.config_in_database,
+          )
+          .map((section) => (
+            <SidebarGroup key={section.title}>
+              <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
+              <SidebarGroupContent className="flex flex-col gap-1">
+                {section.items?.map((item) => (
+                  <SidebarMenuItem key={item.title} className="list-none">
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={state === "collapsed" ? item.title : undefined}
+                      isActive={activePathUtils.isActive(item.url)}
+                    >
+                      <Link to={item.url} className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4" />
+                        <span className="whitespace-nowrap transition-opacity duration-200 group-data-[collapsible=icon]:opacity-0">
+                          {item.title}
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
       </SidebarContent>
       <SidebarFooter className="relative">
         <ReadOnlyBadge />

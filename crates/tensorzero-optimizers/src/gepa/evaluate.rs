@@ -170,6 +170,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     // Extract function name and evaluators from evaluation config

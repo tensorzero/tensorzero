@@ -411,6 +411,10 @@ function variantInfoToUninitializedVariantInfo(
 ): UninitializedVariantInfo {
   const baseUninitialized = {
     timeouts: variantInfo.timeouts,
+    // `version: 0` means unversioned — playground/edit flows don't
+    // express a version on the wire; the gateway auto-bumps when
+    // PATCHing an existing variant.
+    version: 0,
   };
 
   const inner = variantInfo.inner;

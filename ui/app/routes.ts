@@ -19,6 +19,8 @@ export default [
 
     route("inferences/count", "routes/api/inferences/count.route.ts"),
 
+    route("providers/available", "routes/api/providers/available.route.ts"),
+
     ...prefix("datasets", [
       route("counts", "routes/api/datasets/counts.route.ts"),
     ]),
@@ -197,8 +199,9 @@ export default [
   // API Keys
   route("api-keys", "routes/api-keys/route.tsx"),
 
-  // Config editor
-  route("config", "routes/config/route.tsx"),
+  // Per-object configuration views.
+  route("functions", "routes/functions/route.tsx"),
+  route("functions/:name", "routes/functions/$name/route.tsx"),
 
   // Health
   route("health", "routes/health/route.tsx"),

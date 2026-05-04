@@ -205,6 +205,7 @@ async fn load_config_from_path_glob(
 async fn store_config_in_database(
     uninitialized_config: tensorzero_core::config::UninitializedConfig,
     extra_templates: &std::collections::HashMap<String, String>,
+    metadata: &tensorzero_stored_config::PerObjectMetadata,
 ) -> Result<(), Error> {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").map_err(|_| {
         Error::new(ErrorDetails::AppState {
@@ -231,11 +232,54 @@ async fn store_config_in_database(
                 creation_source: "migrate-config-cli",
                 source_autopilot_session_id: None,
                 extra_templates,
+                metadata,
             },
         )
         .await?;
 
     Ok(())
+}
+
+/// Walk the glob's resolved files, harvest block-level TOML comments
+/// from each, merge into a single `PerObjectMetadata`, and stamp every
+/// entry with `created_by = "file-import"` plus the file path it came
+/// from. Later files in the glob (sorted) win on duplicate paths,
+/// matching the merge precedence of the parsed TOML.
+fn harvest_comments_for_glob(
+    glob: &tensorzero_core::config::ConfigFileGlob,
+) -> tensorzero_stored_config::PerObjectMetadata {
+    use tensorzero_core::config::comment_harvest;
+    let mut merged = tensorzero_stored_config::PerObjectMetadata::new();
+    for path in &glob.paths {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(
+                    "comment harvest: skipping `{}` (read failed: {e})",
+                    path.display()
+                );
+                continue;
+            }
+        };
+        let mut per_file = match comment_harvest::harvest_block_comments(&raw) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(
+                    "comment harvest: skipping `{}` (parse failed: {e})",
+                    path.display()
+                );
+                continue;
+            }
+        };
+        comment_harvest::stamp_provenance(
+            &mut per_file,
+            Some("file-import"),
+            Some(&path.display().to_string()),
+        );
+        // Last-file-wins on duplicate paths. Matches TOML merge semantics.
+        merged.extend(per_file);
+    }
+    merged
 }
 
 #[expect(clippy::print_stdout)]
@@ -467,7 +511,13 @@ async fn run() -> Result<(), ExitCode> {
             .log_err_pretty("Config validation failed")?;
         let extra_templates = validated.extra_templates().clone();
 
-        store_config_in_database(uninitialized_config, &extra_templates)
+        // Harvest block-level TOML comments from each glob file and stamp
+        // them with `file-import` provenance + source-file paths. Empty
+        // when the config has no comments (the common case); never fails
+        // the migrate — comment harvesting is descriptive metadata only.
+        let metadata = harvest_comments_for_glob(&glob);
+
+        store_config_in_database(uninitialized_config, &extra_templates, &metadata)
             .await
             .log_err_pretty("Failed to store configuration in the database")?;
         tracing::info!("Configuration stored in the database.");

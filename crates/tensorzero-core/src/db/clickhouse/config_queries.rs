@@ -22,11 +22,16 @@ impl ConfigQueries for ClickHouseConnectionInfo {
             tags: HashMap<String, String>,
         }
 
-        let hash_str = snapshot_hash.to_string();
+        // ClickHouse stores `hash` as `UInt256`; only the decimal digits are
+        // valid input to `toUInt256(...)`. The `Display` form prefixes
+        // `can:` for canonical hashes (legacy is bare decimal already),
+        // so use `to_decimal_string()` for the SQL literal. The error
+        // message uses `Display` so callers can tell schemes apart.
+        let hash_decimal = snapshot_hash.to_decimal_string();
         let query = format!(
             "SELECT config, extra_templates, tags \
              FROM ConfigSnapshot FINAL \
-             WHERE hash = toUInt256('{hash_str}') \
+             WHERE hash = toUInt256('{hash_decimal}') \
              LIMIT 1 \
              FORMAT JSONEachRow"
         );
@@ -35,7 +40,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
 
         if response.response.is_empty() {
             return Err(Error::new(ErrorDetails::ConfigSnapshotNotFound {
-                snapshot_hash: hash_str,
+                snapshot_hash: snapshot_hash.to_string(),
             }));
         }
 
@@ -49,16 +54,35 @@ impl ConfigQueries for ClickHouseConnectionInfo {
     }
 
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError> {
+        // The CH `hash` column is `UInt256`. We send the decimal-only
+        // form through the JSONEachRow body and inline literals —
+        // `SnapshotHash`'s `Display` / `Serialize` impls prefix `can:`
+        // for canonical hashes, which `toUInt256` cannot parse.
+        //
+        // Going forward, CH only stores the **canonical** hash here:
+        // every reader (e.g. `/internal/config/{hash}`) routes through
+        // `Config.hash` which is now canonical (computed from the
+        // structural JSON form). Postgres has both `hash` (legacy) and
+        // `canonical_hash` columns; CH currently has one column. A
+        // follow-up adds a CH-side migration for parity (see task
+        // "ClickHouse parity for snapshot canonical_hash"). For now
+        // the column holds canonical bytes, matching the lookup.
         #[derive(Serialize)]
         struct ConfigSnapshotRow<'a> {
             config: &'a str,
             extra_templates: &'a HashMap<String, String>,
-            hash: SnapshotHash,
+            hash: &'a str,
             tensorzero_version: &'static str,
             tags: &'a HashMap<String, String>,
         }
 
-        let version_hash = snapshot.hash.clone();
+        let canonical_hash = snapshot.config.canonical_hash().map_err(|e| {
+            DelayedError::new(ErrorDetails::Serialization {
+                message: format!("Failed to compute canonical hash: {e}"),
+            })
+        })?;
+        let hash_decimal = canonical_hash.to_decimal_string().to_string();
+        let hash_decimal = hash_decimal.as_str();
 
         let config_string = toml::to_string(&snapshot.config).map_err(|e| {
             DelayedError::new(ErrorDetails::Serialization {
@@ -69,7 +93,7 @@ impl ConfigQueries for ClickHouseConnectionInfo {
         let row = ConfigSnapshotRow {
             config: &config_string,
             extra_templates: &snapshot.extra_templates,
-            hash: version_hash.clone(),
+            hash: hash_decimal,
             tensorzero_version: crate::endpoints::status::TENSORZERO_VERSION,
             tags: &snapshot.tags,
         };
@@ -96,10 +120,10 @@ SELECT
     toUInt256(new_data.hash) as hash,
     new_data.tensorzero_version,
     mapUpdate(
-        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')),
+        (SELECT any(tags) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash_decimal}')),
         new_data.tags
     ) as tags,
-    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}')), now64()) as created_at,
+    ifNull((SELECT any(created_at) FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash_decimal}')), now64()) as created_at,
     now64() as last_used
 FROM new_data"
         );

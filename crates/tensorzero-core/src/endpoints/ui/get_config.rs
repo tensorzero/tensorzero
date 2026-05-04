@@ -58,6 +58,8 @@ impl UiConfig {
                 .map(|(k, v)| (k.clone(), Arc::clone(v)))
                 .collect(),
             model_names: config.models.table.keys().map(|s| s.to_string()).collect(),
+            // Self-describing transport form via `Display`. UI strips
+            // the `can:` prefix when converting to hex.
             config_hash: config.hash.to_string(),
             config_in_database,
         }

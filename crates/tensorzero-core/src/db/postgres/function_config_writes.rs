@@ -2,20 +2,20 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use sqlx::{FromRow, Postgres, Transaction};
 use tensorzero_stored_config::{
-    STORED_FUNCTION_CONFIG_SCHEMA_REVISION, STORED_VARIANT_CONFIG_SCHEMA_REVISION,
-    StoredAdaptiveExperimentationAlgorithm, StoredAdaptiveExperimentationConfig,
-    StoredBestOfNVariantConfig, StoredChatCompletionVariantConfig, StoredChatFunctionConfig,
-    StoredDiclVariantConfig, StoredEvaluatorConfig, StoredExactMatchConfig,
-    StoredExperimentationConfig, StoredExperimentationConfigWithNamespaces, StoredFileRef,
-    StoredFunctionConfig, StoredInputWrappers, StoredJsonFunctionConfig,
-    StoredLLMJudgeBestOfNVariantConfig, StoredLLMJudgeChainOfThoughtVariantConfig,
-    StoredLLMJudgeChatCompletionVariantConfig, StoredLLMJudgeConfig,
-    StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig, StoredLLMJudgeInputFormat,
-    StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize, StoredLLMJudgeOutputType,
-    StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo, StoredMixtureOfNVariantConfig,
-    StoredRegexConfig, StoredRetryConfig, StoredStaticExperimentationConfig, StoredTimeoutsConfig,
-    StoredToolChoice, StoredToolUseConfig, StoredTypescriptJudgeConfig, StoredVariantConfig,
-    StoredVariantRef, StoredVariantVersionConfig,
+    ConfigObjectMetadata, STORED_FUNCTION_CONFIG_SCHEMA_REVISION,
+    STORED_VARIANT_CONFIG_SCHEMA_REVISION, StoredAdaptiveExperimentationAlgorithm,
+    StoredAdaptiveExperimentationConfig, StoredBestOfNVariantConfig,
+    StoredChatCompletionVariantConfig, StoredChatFunctionConfig, StoredDiclVariantConfig,
+    StoredEvaluatorConfig, StoredExactMatchConfig, StoredExperimentationConfig,
+    StoredExperimentationConfigWithNamespaces, StoredFileRef, StoredFunctionConfig,
+    StoredInputWrappers, StoredJsonFunctionConfig, StoredLLMJudgeBestOfNVariantConfig,
+    StoredLLMJudgeChainOfThoughtVariantConfig, StoredLLMJudgeChatCompletionVariantConfig,
+    StoredLLMJudgeConfig, StoredLLMJudgeDiclVariantConfig, StoredLLMJudgeIncludeConfig,
+    StoredLLMJudgeInputFormat, StoredLLMJudgeMixtureOfNVariantConfig, StoredLLMJudgeOptimize,
+    StoredLLMJudgeOutputType, StoredLLMJudgeVariantConfig, StoredLLMJudgeVariantInfo,
+    StoredMixtureOfNVariantConfig, StoredRegexConfig, StoredRetryConfig,
+    StoredStaticExperimentationConfig, StoredTimeoutsConfig, StoredToolChoice, StoredToolUseConfig,
+    StoredTypescriptJudgeConfig, StoredVariantConfig, StoredVariantRef, StoredVariantVersionConfig,
 };
 use uuid::Uuid;
 
@@ -70,6 +70,18 @@ pub struct WriteFunctionConfigParams<'a> {
     /// MiniJinja `{% include %}` — must be stored in the database for the config to be
     /// self-contained.
     pub extra_templates: &'a HashMap<String, String>,
+    /// Descriptive metadata to attach to the new `function_configs` row.
+    /// Defaults to empty when the caller has nothing to attach.
+    pub function_metadata: &'a ConfigObjectMetadata,
+    /// Per-variant descriptive metadata to attach to NEWLY inserted variant
+    /// rows, keyed by variant name. Reused (content-hash deduped) rows
+    /// keep their original metadata — that's intentional: metadata is not
+    /// part of content identity, so updating a variant whose content
+    /// didn't change must not produce a new row, and therefore can't
+    /// re-attach metadata. To change metadata on an existing variant,
+    /// edit something content-bearing too (or use a future explicit
+    /// metadata-only PATCH).
+    pub variant_metadata: &'a BTreeMap<String, ConfigObjectMetadata>,
 }
 
 /// Compare-and-swap mode for the internal `write_function_config_in_tx_impl`.
@@ -135,41 +147,39 @@ pub(super) async fn write_function_config_in_tx(
         params.creation_source,
         params.source_autopilot_session_id,
         params.extra_templates,
+        params.function_metadata,
+        params.variant_metadata,
     )
     .await
 }
 
 /// Writes a function config version **without** the per-function CAS check.
 ///
-/// # Invariant: full-config bulk write path only
+/// # Invariant: bulk write path only
 ///
 /// This entry point must only ever be called from
-/// `write_stored_config_in_tx`, the bulk "apply a full editable TOML" path.
-/// That path provides equivalent protection at a higher level:
-///
-/// 1. It holds the global `config_editor` transaction-level advisory lock
-///    (`acquire_config_editor_lock` in `endpoints/internal/config.rs`), which
-///    serializes all config-editor writes — no other bulk or single-function
-///    UI-driven write can interleave.
-/// 2. It verifies the full editable-TOML signature against the `base_signature`
-///    the UI was editing from (see `apply_config_toml_handler`). If anything
-///    in the config has changed between the read and the write, the apply
-///    is rejected before we get here.
-///
-/// Together, those guarantees make the per-function CAS redundant: every
-/// function row we append is guaranteed to sit on top of the same state the
-/// caller snapshotted. Dropping the per-function CAS is also *necessary* in
-/// the bulk path because the bulk writer never reads the current function
-/// version IDs — it only has the `UninitializedConfig` — and there is no
-/// safe value to pass for `expected_current_version_id` on an existing row.
+/// `write_stored_config_in_tx`, the bulk "apply an entire `UninitializedConfig`"
+/// path used by `--migrate-config` (importing a TOML on disk into the DB)
+/// and the migrator-style API caller. That path takes the global
+/// `STORED_CONFIG_ADVISORY_LOCK_KEY` transaction-level advisory lock, which
+/// serializes all bulk writes against each other and against the per-object
+/// CAS path. Dropping the per-function CAS is necessary in the bulk path
+/// because the bulk writer never reads the current function version IDs —
+/// it only has the `UninitializedConfig` — and there is no safe value to
+/// pass for `expected_current_version_id` on an existing row.
 ///
 /// # Do not call from anywhere else
 ///
-/// Any single-function edit path (UI function editor, API) must go through
-/// `write_function_config` / `write_function_config_in_tx`, which enforces
-/// the CAS against a caller-supplied `expected_current_version_id`. Calling
-/// this skipping-CAS variant from such a path would allow concurrent writers
-/// to silently clobber each other's edits.
+/// Any single-function edit path (the per-object REST endpoints in
+/// `endpoints/internal/functions_rest.rs`, the UI function editor) must go
+/// through `write_function_config` / `write_function_config_in_tx`, which
+/// enforces the CAS against a caller-supplied `expected_current_version_id`.
+/// Calling this skipping-CAS variant from such a path would allow concurrent
+/// writers to silently clobber each other's edits.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "internal entry threads provenance + metadata + CAS bypass through a single transaction"
+)]
 pub(crate) async fn write_function_config_in_tx_skipping_cas(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
@@ -177,6 +187,8 @@ pub(crate) async fn write_function_config_in_tx_skipping_cas(
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
     extra_templates: &HashMap<String, String>,
+    function_metadata: &ConfigObjectMetadata,
+    variant_metadata: &BTreeMap<String, ConfigObjectMetadata>,
 ) -> Result<WriteFunctionConfigResult, Error> {
     write_function_config_in_tx_impl(
         tx,
@@ -186,10 +198,16 @@ pub(crate) async fn write_function_config_in_tx_skipping_cas(
         creation_source,
         source_autopilot_session_id,
         extra_templates,
+        function_metadata,
+        variant_metadata,
     )
     .await
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "internal write impl threads provenance + metadata + CAS through a single transaction"
+)]
 async fn write_function_config_in_tx_impl(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
@@ -198,6 +216,8 @@ async fn write_function_config_in_tx_impl(
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
     extra_templates: &HashMap<String, String>,
+    function_metadata: &ConfigObjectMetadata,
+    variant_metadata: &BTreeMap<String, ConfigObjectMetadata>,
 ) -> Result<WriteFunctionConfigResult, Error> {
     // Acquire an advisory lock on the function name to serialize concurrent writes,
     // including first writes where there is no existing row to lock via FOR UPDATE.
@@ -208,7 +228,10 @@ async fn write_function_config_in_tx_impl(
             // With the advisory lock held, read the latest version for the CAS check.
             let actual_latest_id = fetch_latest_function_version(tx, function_name).await?;
             if actual_latest_id != expected {
-                return Err(Error::new(ErrorDetails::Config {
+                // Returns 400, not 500 — this is a client-correctable
+                // condition (the caller's `expected_current_function_version_id`
+                // is stale; they should re-fetch and retry).
+                return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Function `{function_name}` was updated during your edit; please refresh before retrying.",
                     ),
@@ -236,6 +259,7 @@ async fn write_function_config_in_tx_impl(
         &file_version_ids,
         creation_source,
         source_autopilot_session_id,
+        variant_metadata,
     )
     .await?;
 
@@ -247,6 +271,7 @@ async fn write_function_config_in_tx_impl(
         &variant_version_ids,
         creation_source,
         source_autopilot_session_id,
+        function_metadata,
     )
     .await?;
 
@@ -346,6 +371,7 @@ async fn write_variant_versions(
     file_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
+    variant_metadata: &BTreeMap<String, ConfigObjectMetadata>,
 ) -> Result<HashMap<String, Uuid>, Error> {
     let variants = function_variants(config);
     let mut variant_names: Vec<_> = variants.keys().cloned().collect();
@@ -423,15 +449,23 @@ async fn write_variant_versions(
         }
     }
 
-    // Batch insert only new variants
+    // Batch insert only new variants. Each new row carries the
+    // caller-supplied metadata for that variant name (or `'{}'` if the
+    // caller has none). Reused (content-hash deduped) variants are not
+    // touched here, so their metadata is whatever was set when they
+    // were first inserted — see the doc on `WriteFunctionConfigParams::variant_metadata`.
     if !new_variant_names.is_empty() {
         let mut qb = sqlx::QueryBuilder::new(
             "INSERT INTO tensorzero.variant_configs \
-             (id, function_name, variant_type, name, schema_revision, config, content_hash, creation_source, source_autopilot_session_id) ",
+             (id, function_name, variant_type, name, schema_revision, config, content_hash, creation_source, source_autopilot_session_id, metadata) ",
         );
         qb.push_values(&new_variant_names, |mut b, name: &String| {
             let pv = &prepared[name];
             let id = variant_version_ids[name];
+            let metadata = variant_metadata
+                .get(name)
+                .map(|m| serde_json::to_value(m).unwrap_or_else(|_| serde_json::json!({})))
+                .unwrap_or_else(|| serde_json::json!({}));
             b.push_bind(id)
                 .push_bind(function_name.to_string())
                 .push_bind(pv.variant_type.clone())
@@ -440,7 +474,8 @@ async fn write_variant_versions(
                 .push_bind(pv.config_json.clone())
                 .push_bind(pv.content_hash.clone())
                 .push_bind(creation_source.to_string())
-                .push_bind(source_autopilot_session_id);
+                .push_bind(source_autopilot_session_id)
+                .push_bind(metadata);
         });
         qb.build()
             .execute(&mut **tx)
@@ -451,6 +486,10 @@ async fn write_variant_versions(
     Ok(variant_version_ids)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "internal writer threads provenance + metadata + ID maps in one call"
+)]
 async fn write_function_version(
     tx: &mut Transaction<'_, Postgres>,
     function_name: &str,
@@ -459,6 +498,7 @@ async fn write_function_version(
     variant_version_ids: &HashMap<String, Uuid>,
     creation_source: &str,
     source_autopilot_session_id: Option<Uuid>,
+    function_metadata: &ConfigObjectMetadata,
 ) -> Result<Uuid, Error> {
     let function_version_id = Uuid::now_v7();
     let stored_config = convert_function_config(config, file_version_ids, variant_version_ids)?;
@@ -467,10 +507,12 @@ async fn write_function_version(
     validate_function_config_refs(&stored_config, &valid_variant_ids, &valid_file_ids)?;
     let config_json = serde_json::to_value(&stored_config)
         .map_err(|e| serialization_error("Failed to serialize stored function config", e))?;
+    let metadata_json =
+        serde_json::to_value(function_metadata).unwrap_or_else(|_| serde_json::json!({}));
     sqlx::query(
         "INSERT INTO tensorzero.function_configs \
-         (id, name, function_type, schema_revision, config, creation_source, source_autopilot_session_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+         (id, name, function_type, schema_revision, config, creation_source, source_autopilot_session_id, metadata) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(function_version_id)
     .bind(function_name)
@@ -479,6 +521,7 @@ async fn write_function_version(
     .bind(&config_json)
     .bind(creation_source)
     .bind(source_autopilot_session_id)
+    .bind(&metadata_json)
     .execute(&mut **tx)
     .await
     .map_err(|e| postgres_query_error("Failed to insert function config version", e))?;
@@ -667,6 +710,10 @@ fn convert_function_config(
     match config {
         UninitializedFunctionConfig::Chat(config) => {
             Ok(StoredFunctionConfig::Chat(StoredChatFunctionConfig {
+                // `0` is "unversioned" — preserved as `None` in the
+                // stored row so the row stays content-equivalent to a
+                // pre-feature row that never set the field.
+                version: (config.version != 0).then_some(config.version),
                 variants: Some(convert_variant_refs(&config.variants, variant_version_ids)?),
                 system_schema: config
                     .system_schema
@@ -700,6 +747,7 @@ fn convert_function_config(
         }
         UninitializedFunctionConfig::Json(config) => {
             Ok(StoredFunctionConfig::Json(StoredJsonFunctionConfig {
+                version: (config.version != 0).then_some(config.version),
                 variants: Some(convert_variant_refs(&config.variants, variant_version_ids)?),
                 system_schema: config
                     .system_schema
@@ -835,6 +883,7 @@ fn convert_variant_info(
             .namespace
             .as_ref()
             .map(|namespace| namespace.as_str().to_string()),
+        version: (variant_info.version != 0).then_some(variant_info.version),
     })
 }
 
@@ -1583,6 +1632,7 @@ mod tests {
             description: None,
             experimentation: None,
             evaluators: Some(BTreeMap::new()),
+            version: None,
         });
         let error = validate_function_config_refs(&config, &HashSet::new(), &HashSet::new())
             .expect_err("unknown variant refs should fail");

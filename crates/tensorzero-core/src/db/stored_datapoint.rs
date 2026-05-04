@@ -80,7 +80,9 @@ pub struct StoredChatInferenceDatapoint {
     /// Hash of the configuration snapshot that created this datapoint. Optional.
     /// This should always be Some when writing (after the feature flag is removed)
     /// but since we also read this type, it will remain an Option.
+    /// Bare-decimal serializer because the CH column is `UInt256`.
     #[serde(default)]
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
 
     // ================================
@@ -159,7 +161,9 @@ pub struct StoredJsonInferenceDatapoint {
     /// Hash of the configuration snapshot that created this datapoint. Optional.
     /// This should always be Some when writing (after the feature flag is removed)
     /// but since we also read this type, it will remain an Option.
+    /// Bare-decimal serializer because the CH column is `UInt256`.
     #[serde(default)]
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
 
     // ================================

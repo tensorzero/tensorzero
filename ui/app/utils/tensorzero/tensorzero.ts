@@ -12,8 +12,6 @@ import {
 } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
-  ApplyConfigTomlRequest,
-  ApplyConfigTomlResponse,
   AutopilotStatusResponse,
   CacheEnabledMode,
   CloneDatapointsResponse,
@@ -39,7 +37,6 @@ import type {
   EvaluationRunStatsResponse,
   FeedbackRow,
   FunctionInferenceCount,
-  GetConfigTomlResponse,
   GetDatapointCountResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
@@ -94,8 +91,6 @@ import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsRequest,
   UpdateDatapointsResponse,
-  ValidateConfigTomlRequest,
-  ValidateConfigTomlResponse,
   VariantPerformancesResponse,
   ClientInferenceParams,
   InferenceResponse,
@@ -643,45 +638,6 @@ export class TensorZeroClient extends BaseTensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as UiConfig;
-  }
-
-  async getConfigToml(): Promise<GetConfigTomlResponse> {
-    const response = await this.fetch("/internal/config_toml", {
-      method: "GET",
-    });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as GetConfigTomlResponse;
-  }
-
-  async applyConfigToml(
-    request: ApplyConfigTomlRequest,
-  ): Promise<ApplyConfigTomlResponse> {
-    const response = await this.fetch("/internal/config_toml/apply", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as ApplyConfigTomlResponse;
-  }
-
-  async validateConfigToml(
-    request: ValidateConfigTomlRequest,
-  ): Promise<ValidateConfigTomlResponse> {
-    const response = await this.fetch("/internal/config_toml/validate", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    return (await response.json()) as ValidateConfigTomlResponse;
   }
 
   /**
@@ -1980,6 +1936,212 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     }
     return (await response.json()) as ResolveUuidResponse;
   }
+
+  // ─── Narrow per-object config endpoints (Phase 2B) ──────────────────────
+  //
+  // The shapes here are intentionally `unknown`/loose: the typed Rust
+  // surface for `UninitializedFunctionConfig` / `UninitializedVariantInfo`
+  // is large and not currently exported as TS bindings. Callers (UI forms,
+  // tests) construct request bodies as plain JSON.
+
+  async listFunctions(): Promise<{ functions: FunctionSummary[] }> {
+    const response = await this.fetch("/internal/functions", { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as { functions: FunctionSummary[] };
+  }
+
+  async getFunction(name: string): Promise<GetFunctionResponse> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(name)}`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetFunctionResponse;
+  }
+
+  async createFunction(req: {
+    name: string;
+    config: unknown;
+    metadata?: unknown;
+  }): Promise<ConfigEditResult> {
+    const response = await this.fetch("/internal/functions", {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+
+  async updateFunction(
+    name: string,
+    req: {
+      config: unknown;
+      expected_current_function_version_id: string;
+      metadata?: unknown;
+    },
+  ): Promise<ConfigEditResult> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(name)}`,
+      { method: "PATCH", body: JSON.stringify(req) },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+
+  async deleteFunction(
+    name: string,
+    expected_current_function_version_id: string,
+  ): Promise<ConfigEditResult> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(name)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ expected_current_function_version_id }),
+      },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+
+  async listVariants(
+    functionName: string,
+  ): Promise<{ variants: VariantSummary[] }> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(functionName)}/variants`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as { variants: VariantSummary[] };
+  }
+
+  async createVariant(
+    functionName: string,
+    req: {
+      variant_name: string;
+      config: unknown;
+      expected_current_function_version_id: string;
+      metadata?: unknown;
+    },
+  ): Promise<ConfigEditResult> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(functionName)}/variants`,
+      { method: "POST", body: JSON.stringify(req) },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+
+  async updateVariant(
+    functionName: string,
+    variantName: string,
+    req: {
+      config: unknown;
+      expected_current_function_version_id: string;
+      metadata?: unknown;
+    },
+  ): Promise<ConfigEditResult> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(
+        functionName,
+      )}/variants/${encodeURIComponent(variantName)}`,
+      { method: "PATCH", body: JSON.stringify(req) },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+
+  async deleteVariant(
+    functionName: string,
+    variantName: string,
+    expected_current_function_version_id: string,
+  ): Promise<ConfigEditResult> {
+    const response = await this.fetch(
+      `/internal/functions/${encodeURIComponent(
+        functionName,
+      )}/variants/${encodeURIComponent(variantName)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ expected_current_function_version_id }),
+      },
+    );
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as ConfigEditResult;
+  }
+}
+
+// ─── Response types for the narrow per-object endpoints ───────────────────
+//
+// Shapes mirror `crates/tensorzero-core/src/endpoints/internal/functions_rest.rs`.
+// We type the wrapping fields (names, IDs, timestamps) but leave nested
+// `config` payloads as `unknown` until ts-rs bindings cover the full
+// `UninitializedFunctionConfig` / `UninitializedVariantInfo` tree.
+
+export interface FunctionSummary {
+  name: string;
+  function_type: string;
+  function_version_id: string;
+  created_at: string;
+  creation_source: string;
+  metadata: ConfigObjectMetadata;
+}
+
+export interface VariantSummary {
+  name: string;
+  variant_type: string;
+  variant_version_id: string;
+  created_at: string;
+  creation_source: string;
+  version: number;
+}
+
+export interface GetFunctionResponse {
+  name: string;
+  config: unknown;
+  function_version_id: string;
+  created_at: string;
+  creation_source: string;
+  metadata: ConfigObjectMetadata;
+}
+
+export interface ConfigEditResult {
+  function: { function_name: string; function_version_id: string };
+  variant_version_ids: Record<string, string>;
+  snapshot_hash: string;
+}
+
+export interface ConfigObjectMetadata {
+  notes?: string | null;
+  created_by?: string | null;
+  tags?: string[] | null;
+  source_file?: string | null;
+  created_at_source?: string | null;
 }
 
 /**

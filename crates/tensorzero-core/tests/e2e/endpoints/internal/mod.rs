@@ -5,6 +5,7 @@ mod episodes;
 mod evaluations;
 mod feedback;
 mod functions;
+mod functions_rest;
 mod inference_count;
 mod inference_metadata;
 mod model_inferences;

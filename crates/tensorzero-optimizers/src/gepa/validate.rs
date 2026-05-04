@@ -1848,6 +1848,7 @@ mod tests {
         config.functions.get_or_insert_with(HashMap::new).insert(
             function_name.to_string(),
             UninitializedFunctionConfig::Chat(UninitializedFunctionConfigChat {
+                version: 0,
                 variants,
                 system_schema: None,
                 user_schema: None,
@@ -1884,6 +1885,7 @@ mod tests {
             ),
             timeouts: None,
             namespace: None,
+            version: 0,
         }
     }
 
@@ -1924,6 +1926,7 @@ mod tests {
                 "test_function".to_string(),
                 tensorzero_core::config::UninitializedFunctionConfig::Chat(
                     tensorzero_core::config::UninitializedFunctionConfigChat {
+                        version: 0,
                         variants,
                         system_schema: None,
                         user_schema: None,

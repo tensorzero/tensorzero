@@ -1280,7 +1280,13 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub extra_body: Option<UnfilteredInferenceExtraBody>,
+    // Bare-decimal serializer: this struct is JSONEachRow-encoded into
+    // CH's `UInt256 snapshot_hash` column, which can't parse the
+    // canonical-scheme `can:` prefix. The default `Serialize` form is
+    // for self-describing transport identifiers; DB-row inserts opt
+    // out via the helper from `tensorzero_types::snapshot`.
     #[serde(default)]
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
@@ -1307,6 +1313,7 @@ pub struct JsonInferenceDatabaseInsert {
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub extra_body: Option<UnfilteredInferenceExtraBody>,
     #[serde(default)]
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
 }
 
@@ -1363,6 +1370,7 @@ pub struct StoredModelInference {
     #[serde(default, with = "rust_decimal::serde::float_option")]
     pub cost: Option<Decimal>,
     pub finish_reason: Option<FinishReason>,
+    #[serde(serialize_with = "tensorzero_types::snapshot::serialize_optional_hash_bare_decimal")]
     pub snapshot_hash: Option<SnapshotHash>,
     /// Materialized column in ClickHouse - only present when reading from the database.
     /// Ignored during insert (computed from `UUIDv7ToDateTime(id)`).

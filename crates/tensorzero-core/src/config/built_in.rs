@@ -69,6 +69,7 @@ fn get_hello_chat_function() -> Result<UninitializedFunctionConfig, Error> {
 
     Ok(UninitializedFunctionConfig::Chat(
         UninitializedFunctionConfigChat {
+            version: 0,
             variants: HashMap::new(),
             system_schema: Some(system_schema_path),
             user_schema: None,
@@ -94,6 +95,7 @@ fn get_hello_chat_function() -> Result<UninitializedFunctionConfig, Error> {
 fn get_hello_json_function() -> UninitializedFunctionConfig {
     // output_schema is None - will default to {} during load
     UninitializedFunctionConfig::Json(UninitializedFunctionConfigJson {
+        version: 0,
         variants: HashMap::new(),
         system_schema: None,
         user_schema: None,
@@ -177,6 +179,7 @@ fn get_gepa_analyze_function() -> Result<UninitializedFunctionConfig, Error> {
 
     Ok(UninitializedFunctionConfig::Chat(
         UninitializedFunctionConfigChat {
+            version: 0,
             variants: HashMap::new(),
             system_schema: None,
             user_schema: Some(user_schema_path),
@@ -306,6 +309,7 @@ fn get_gepa_mutate_function() -> Result<UninitializedFunctionConfig, Error> {
 
     Ok(UninitializedFunctionConfig::Json(
         UninitializedFunctionConfigJson {
+            version: 0,
             variants: HashMap::new(),
             system_schema: None,
             user_schema: Some(user_schema_path),

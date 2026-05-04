@@ -1,0 +1,16 @@
+# JSON function with version on both function and variant.
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.json_fn]
+type = "json"
+version = 1
+
+[functions.json_fn.variants.main]
+type = "chat_completion"
+model = "dummy"
+version = 4

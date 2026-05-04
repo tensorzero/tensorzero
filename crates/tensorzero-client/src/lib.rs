@@ -1482,7 +1482,14 @@ impl ClientExt for Client {
                         .map_err(err_to_http)?;
                     snapshot.tags = request.tags;
 
-                    let hash = snapshot.hash.to_string();
+                    // Return the canonical hash so callers can pass it
+                    // straight back to `get_config_snapshot`. Mirrors
+                    // the HTTP `write_config_handler`. Using
+                    // `snapshot.hash` (legacy) here would 404 on CH
+                    // since the CH column stores canonical bytes
+                    // going forward.
+                    let canonical_hash = snapshot.config.canonical_hash().map_err(err_to_http)?;
+                    let hash = canonical_hash.to_string();
 
                     gateway
                         .handle

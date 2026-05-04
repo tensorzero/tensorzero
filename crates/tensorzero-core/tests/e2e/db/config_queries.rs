@@ -19,13 +19,14 @@ use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{
     Config, ConfigFileGlob, ObjectStoreInfo, PostgresConfig, RuntimeOverlay, UninitializedConfig,
 };
-use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::db::clickhouse::test_helpers::{
     CLICKHOUSE_URL, get_clickhouse, select_chat_inference_clickhouse,
 };
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
+use tensorzero_core::db::{ConfigQueries, ConfigSnapshotSearch};
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::inference::types::Text;
+use tensorzero_types::SnapshotHashScheme;
 use uuid::Uuid;
 
 // ===== DUAL-BACKEND TESTS (ClickHouse + Postgres) =====
@@ -56,7 +57,11 @@ optimize = "max"
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — it's what's in the
+    // CH `hash` column going forward, and what new PG rows index
+    // under `canonical_hash`. Old PG `hash` lookups still work,
+    // but tests are written against the new convention.
+    let hash = snapshot.config.canonical_hash().unwrap();
 
     conn.write_config_snapshot(&snapshot).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
@@ -121,7 +126,11 @@ optimize = "max"
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash.clone();
+    // Lookup must use the canonical hash — it's what's in the
+    // CH `hash` column going forward, and what new PG rows index
+    // under `canonical_hash`. Old PG `hash` lookups still work,
+    // but tests are written against the new convention.
+    let hash = snapshot.config.canonical_hash().unwrap();
 
     conn.write_config_snapshot(&snapshot).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
@@ -220,7 +229,10 @@ optimize = "max"
     let snapshot1 =
         ConfigSnapshot::from_stored_config(stored_config.clone(), HashMap::new(), tags1).unwrap();
 
-    let hash = snapshot1.hash.clone();
+    // Lookup must use the canonical hash — it's what's in the
+    // CH `hash` column going forward, and what new PG rows index
+    // under `canonical_hash`.
+    let hash = snapshot1.config.canonical_hash().unwrap();
 
     conn.write_config_snapshot(&snapshot1).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
@@ -246,7 +258,11 @@ optimize = "max"
     let snapshot2 =
         ConfigSnapshot::from_stored_config(stored_config.clone(), HashMap::new(), tags2).unwrap();
 
-    assert_eq!(snapshot2.hash, hash, "Same config should produce same hash");
+    assert_eq!(
+        snapshot2.config.canonical_hash().unwrap(),
+        hash,
+        "Same config should produce same hash"
+    );
 
     conn.write_config_snapshot(&snapshot2).await.unwrap();
     conn.sleep_for_writes_to_be_visible().await;
@@ -296,8 +312,13 @@ optimize = "max"
     let snapshot =
         ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash.clone();
-    let hash_number = hash.to_string();
+    // Lookup must use the canonical hash — it's what's in the
+    // CH `hash` column going forward.
+    let hash = snapshot.config.canonical_hash().unwrap();
+    // Raw SQL below uses `toUInt256('{hash_number}')`, which can't
+    // parse the `can:` prefix that `Display` adds — use the bare
+    // decimal form.
+    let hash_number = hash.to_decimal_string().to_string();
 
     clickhouse.write_config_snapshot(&snapshot).await.unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -454,6 +475,739 @@ optimize = "max"
     assert!(
         stored_config2.contains(&format!("test_metric_{random_id}")),
         "Config should still contain our test metric after upsert"
+    );
+}
+
+// ===== Postgres `config_jsonb` JSONB tests =====
+//
+// These cover the new column added alongside `config TEXT`:
+// - `write_config_snapshot` populates `config_jsonb` with the JSON form of
+//   the same `StoredConfig` that's serialized to TOML in `config`.
+// - The `ConfigSnapshotSearch` trait queries the JSONB column via `@>`
+//   containment, which is what the GIN index
+//   `config_snapshots_config_jsonb_gin` is built for.
+// - `backfill_config_snapshot_jsonb` populates rows that predate the column.
+// - `get_config_snapshot` continues to read from `config TEXT` (TOML), NOT
+//   from `config_jsonb`. This is the V0 invariant: the TOML column stays
+//   the source of truth for hashing until the planned `hash_v2` cutover
+//   (out of V0). Switching the read path to JSONB right now would drift
+//   hashes for snapshots persisted before the cutover migration.
+
+/// Helper: insert a row with `config_jsonb = NULL` to simulate a snapshot
+/// written before the JSONB column existed. Mirrors the on-disk shape of
+/// rows from earlier gateway versions.
+async fn insert_legacy_snapshot_row(
+    postgres: &tensorzero_core::db::postgres::PostgresConnectionInfo,
+    snapshot: &ConfigSnapshot,
+) {
+    let pool = postgres.get_pool().unwrap();
+    let config_string = toml::to_string(&snapshot.config).expect("serialize config to TOML");
+    sqlx::query(
+        r"INSERT INTO tensorzero.config_snapshots (hash, config, extra_templates, tensorzero_version, tags, config_jsonb)
+           VALUES ($1, $2, '{}'::jsonb, $3, '{}'::jsonb, NULL)
+           ON CONFLICT (hash) DO UPDATE SET config_jsonb = NULL",
+    )
+    .bind(snapshot.hash.as_bytes())
+    .bind(&config_string)
+    .bind(tensorzero_core::endpoints::status::TENSORZERO_VERSION)
+    .execute(pool)
+    .await
+    .expect("legacy snapshot insert should succeed");
+}
+
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn config_jsonb_column_is_populated_on_write_postgres() {
+    let postgres = get_test_postgres().await;
+    let random_id = Uuid::now_v7();
+
+    // Versioned function and variant — must round-trip into JSONB.
+    let config_toml = format!(
+        r#"
+[models.dummy_{random_id}]
+routing = ["dummy"]
+
+[models.dummy_{random_id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.f_{random_id}]
+type = "chat"
+version = 4
+
+[functions.f_{random_id}.variants.v1]
+type = "chat_completion"
+model = "dummy_{random_id}"
+version = 9
+"#
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse fixture");
+    let hash = snapshot.hash.clone();
+    postgres.write_config_snapshot(&snapshot).await.unwrap();
+
+    let pool = postgres.get_pool().unwrap();
+    let row = sqlx::query(r"SELECT config_jsonb FROM tensorzero.config_snapshots WHERE hash = $1")
+        .bind(hash.as_bytes())
+        .fetch_one(pool)
+        .await
+        .unwrap();
+
+    let stored_json: serde_json::Value = row.try_get("config_jsonb").unwrap();
+    let in_memory_json = serde_json::to_value(&snapshot.config).unwrap();
+
+    // JSONB is content-equal even though Postgres normalizes key order
+    // (serde_json::Value compares by content, not by string).
+    assert_eq!(
+        stored_json, in_memory_json,
+        "config_jsonb column must equal serde_json::to_value(&snapshot.config)",
+    );
+
+    // The version fields landed at the expected paths — same paths the GIN
+    // queries target.
+    assert_eq!(
+        stored_json
+            .pointer(&format!("/functions/f_{random_id}/version"))
+            .and_then(|v| v.as_u64()),
+        Some(4),
+    );
+    assert_eq!(
+        stored_json
+            .pointer(&format!("/functions/f_{random_id}/variants/v1/version"))
+            .and_then(|v| v.as_u64()),
+        Some(9),
+    );
+}
+
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn snapshots_with_path_value_finds_matching_function_version() {
+    let postgres = get_test_postgres().await;
+    let target_id = Uuid::now_v7();
+
+    // Three snapshots: two with the SAME function name but different
+    // versions, one with a different function name. Only the rows whose
+    // version matches the query should come back.
+    for (function_version, marker) in [(7, "alpha"), (7, "beta"), (8, "gamma")] {
+        let config_toml = format!(
+            r#"
+[models.dummy_{target_id}_{marker}]
+routing = ["dummy"]
+
+[models.dummy_{target_id}_{marker}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.target_{target_id}]
+type = "chat"
+version = {function_version}
+
+[functions.target_{target_id}.variants.{marker}]
+type = "chat_completion"
+model = "dummy_{target_id}_{marker}"
+"#
+        );
+        let snap = ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new())
+            .expect("fixture parse");
+        postgres.write_config_snapshot(&snap).await.unwrap();
+    }
+    // Decoy: same function name doesn't appear, so this row must not match.
+    let decoy = format!(
+        r#"
+[models.decoy_{target_id}]
+routing = ["dummy"]
+
+[models.decoy_{target_id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.unrelated_{target_id}]
+type = "chat"
+version = 7
+
+[functions.unrelated_{target_id}.variants.only]
+type = "chat_completion"
+model = "decoy_{target_id}"
+"#
+    );
+    let decoy_snap =
+        ConfigSnapshot::new_from_toml_string(&decoy, HashMap::new()).expect("decoy parse");
+    postgres.write_config_snapshot(&decoy_snap).await.unwrap();
+
+    // Query for function_version = 7 on the target function name.
+    let hits = postgres
+        .snapshots_with_path_value(
+            &format!("functions/target_{target_id}/version"),
+            &serde_json::json!(7),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        hits.len(),
+        2,
+        "expected 2 snapshots with target function at version 7, got {}",
+        hits.len(),
+    );
+
+    // Query for function_version = 8 — only one match.
+    let hits_v8 = postgres
+        .snapshots_with_path_value(
+            &format!("functions/target_{target_id}/version"),
+            &serde_json::json!(8),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits_v8.len(), 1, "expected 1 snapshot at version 8");
+
+    // Query for a non-existent version — zero matches.
+    let hits_v999 = postgres
+        .snapshots_with_path_value(
+            &format!("functions/target_{target_id}/version"),
+            &serde_json::json!(999),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits_v999.len(), 0, "expected no matches for version 999");
+}
+
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn snapshots_containing_finds_variant_version_via_explicit_fragment() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+
+    // Two variants: `a` at version 3, `b` at version 5.
+    let config_toml = format!(
+        r#"
+[models.m_{id}]
+routing = ["dummy"]
+
+[models.m_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.fn_{id}]
+type = "chat"
+
+[functions.fn_{id}.variants.a]
+type = "chat_completion"
+model = "m_{id}"
+version = 3
+
+[functions.fn_{id}.variants.b]
+type = "chat_completion"
+model = "m_{id}"
+version = 5
+"#
+    );
+    let snap = ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).unwrap();
+    postgres.write_config_snapshot(&snap).await.unwrap();
+
+    // Use `snapshots_containing` with an explicit nested fragment — this
+    // is the equivalent of the previous specialized `find_snapshots_with_variant_version` helper.
+    let hits_a3 = postgres
+        .snapshots_containing(serde_json::json!({
+            "functions": {format!("fn_{id}"): {"variants": {"a": {"version": 3}}}}
+        }))
+        .await
+        .unwrap();
+    assert_eq!(hits_a3.len(), 1, "variant a at version 3 should match");
+    assert_eq!(hits_a3[0].as_bytes(), snap.hash.as_bytes());
+
+    let hits_a5 = postgres
+        .snapshots_containing(serde_json::json!({
+            "functions": {format!("fn_{id}"): {"variants": {"a": {"version": 5}}}}
+        }))
+        .await
+        .unwrap();
+    assert_eq!(
+        hits_a5.len(),
+        0,
+        "variant a is at version 3, not 5; should not match",
+    );
+
+    // Equivalent via the path-value convenience.
+    let hits_b5 = postgres
+        .snapshots_with_path_value(
+            &format!("functions/fn_{id}/variants/b/version"),
+            &serde_json::json!(5),
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits_b5.len(), 1, "variant b at version 5 should match");
+}
+
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn config_jsonb_gin_index_exists_and_serves_containment_queries() {
+    // We test two production-faithful invariants:
+    //
+    // 1. `config_snapshots_config_jsonb_gin` exists with the
+    //    `jsonb_path_ops` operator class — without it, no plan the
+    //    planner could ever pick would use index scan.
+    // 2. A `@>` containment query returns the right row.
+    //
+    // We deliberately do NOT assert "the planner picks GIN here". On a
+    // small test table (`SELECT count(*) FROM config_snapshots ≪ 1000`)
+    // Postgres correctly prefers Seq Scan even with the GIN index
+    // available — that's the same logic production uses; the planner
+    // flips to GIN once the table is big enough that walking it
+    // beats the index. Forcing the choice with `enable_seqscan = off`
+    // would make the test pass but diverge from production behavior.
+    let postgres = get_test_postgres().await;
+    let pool = postgres.get_pool().unwrap();
+
+    // Invariant 1: index exists with the right operator class.
+    let index_def: Option<String> = sqlx::query_scalar(
+        r"SELECT indexdef FROM pg_indexes
+           WHERE schemaname = 'tensorzero'
+             AND tablename  = 'config_snapshots'
+             AND indexname  = 'config_snapshots_config_jsonb_gin'",
+    )
+    .fetch_optional(pool)
+    .await
+    .unwrap();
+    let index_def = index_def.expect(
+        "GIN index `config_snapshots_config_jsonb_gin` must exist; \
+         the migration that defines it is the whole reason for this test",
+    );
+    assert!(
+        index_def.contains("USING gin") && index_def.contains("jsonb_path_ops"),
+        "GIN index must use the `jsonb_path_ops` operator class for `@>` \
+         containment to be supported. Got: {index_def}",
+    );
+
+    // Invariant 2: `@>` containment query against `config_jsonb`
+    // returns the correct row. This exercises the full code path the
+    // `ConfigSnapshotSearch` helpers use — whether the planner picks
+    // Seq Scan or Bitmap Index Scan, the result is the same row.
+    let id = Uuid::now_v7();
+    let toml = format!(
+        r#"
+[models.m_{id}]
+routing = ["dummy"]
+
+[models.m_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.f_{id}]
+type = "chat"
+version = 5
+
+[functions.f_{id}.variants.only]
+type = "chat_completion"
+model = "m_{id}"
+"#
+    );
+    let snap = ConfigSnapshot::new_from_toml_string(&toml, HashMap::new()).unwrap();
+    postgres.write_config_snapshot(&snap).await.unwrap();
+
+    let needle = serde_json::json!({
+        "functions": {
+            format!("f_{id}"): { "version": 5 }
+        }
+    });
+    let hits: Vec<Vec<u8>> = sqlx::query_scalar(
+        r"SELECT hash FROM tensorzero.config_snapshots WHERE config_jsonb @> $1",
+    )
+    .bind(&needle)
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        hits.len(),
+        1,
+        "containment query should match exactly the row we just wrote",
+    );
+    assert_eq!(hits[0], snap.hash.as_bytes());
+}
+
+#[tokio::test]
+async fn backfill_populates_config_jsonb_for_legacy_rows() {
+    use tensorzero_core::db::postgres::config_queries::backfill_config_snapshot_jsonb;
+    let postgres = get_test_postgres().await;
+    let pool = postgres.get_pool().unwrap();
+
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.bf_{id}]
+routing = ["dummy"]
+
+[models.bf_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.bf_{id}]
+type = "chat"
+version = 2
+
+[functions.bf_{id}.variants.only]
+type = "chat_completion"
+model = "bf_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    let hash = snapshot.hash.clone();
+
+    // Insert as if from a pre-jsonb gateway (config_jsonb = NULL).
+    insert_legacy_snapshot_row(&postgres, &snapshot).await;
+
+    // Sanity: the row really has NULL config_jsonb before backfill.
+    let nullness: Option<serde_json::Value> =
+        sqlx::query_scalar(r"SELECT config_jsonb FROM tensorzero.config_snapshots WHERE hash = $1")
+            .bind(hash.as_bytes())
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert!(
+        nullness.is_none(),
+        "test setup should leave config_jsonb NULL pre-backfill",
+    );
+
+    // Run the backfill.
+    backfill_config_snapshot_jsonb(pool).await.unwrap();
+
+    let after: serde_json::Value =
+        sqlx::query_scalar(r"SELECT config_jsonb FROM tensorzero.config_snapshots WHERE hash = $1")
+            .bind(hash.as_bytes())
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let expected = serde_json::to_value(&snapshot.config).unwrap();
+    assert_eq!(
+        after, expected,
+        "backfilled config_jsonb must equal serde_json::to_value(&snapshot.config)",
+    );
+
+    // The version field is reachable via the same JSONB path the queries
+    // target. (Direct DB-side query rather than the helper, so this remains
+    // a tight test of the column contents.)
+    let cnt: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM tensorzero.config_snapshots WHERE hash = $1 AND config_jsonb @> $2",
+    )
+    .bind(hash.as_bytes())
+    .bind(serde_json::json!({"functions": {format!("bf_{id}"): {"version": 2}}}))
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        cnt, 1,
+        "post-backfill row must match the version-containment query"
+    );
+
+    // Re-running backfill is a no-op. Run it again and ensure the value
+    // didn't change.
+    backfill_config_snapshot_jsonb(pool).await.unwrap();
+    let after_again: serde_json::Value =
+        sqlx::query_scalar(r"SELECT config_jsonb FROM tensorzero.config_snapshots WHERE hash = $1")
+            .bind(hash.as_bytes())
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(after_again, expected, "backfill must be idempotent");
+}
+
+/// Canonical invariant: `get_config_snapshot` reads `config_jsonb` (JSON
+/// is the source of truth). `config TEXT` (TOML) is the deprecated
+/// migration column; reading it on the canonical path would force the
+/// system to keep TOML consistent with JSON forever, defeating the goal of
+/// the migration.
+///
+/// Test: write a snapshot, tamper with the deprecated `config TEXT` column
+/// (set it to garbage TOML that wouldn't parse), confirm the read still
+/// succeeds and returns the original content — because we never look at
+/// the TOML column on this path.
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn get_config_snapshot_reads_jsonb_not_toml() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.j_{id}]
+routing = ["dummy"]
+
+[models.j_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.j_fn_{id}]
+type = "chat"
+version = 1
+
+[functions.j_fn_{id}.variants.only]
+type = "chat_completion"
+model = "j_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    let hash = snapshot.hash.clone();
+    postgres.write_config_snapshot(&snapshot).await.unwrap();
+
+    // Corrupt the deprecated TOML column. If the read path ever falls back
+    // to TOML when JSONB is present, this corruption surfaces as a parse
+    // error or content mismatch.
+    let pool = postgres.get_pool().unwrap();
+    sqlx::query(
+        r"UPDATE tensorzero.config_snapshots
+           SET config = 'this is not valid TOML // <<< corrupted by test'
+           WHERE hash = $1",
+    )
+    .bind(hash.as_bytes())
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Read via the public API. The corrupted TOML must NOT be observed.
+    let retrieved = postgres.get_config_snapshot(hash.clone()).await.unwrap();
+    assert_eq!(
+        retrieved.hash.to_hex_string(),
+        hash.to_hex_string(),
+        "get_config_snapshot must return the original hash verbatim",
+    );
+    let original_json = serde_json::to_value(&snapshot.config).unwrap();
+    let retrieved_json = serde_json::to_value(&retrieved.config).unwrap();
+    assert_eq!(
+        retrieved_json, original_json,
+        "get_config_snapshot must return content-equal config sourced from JSONB",
+    );
+}
+
+/// `canonical_hash` column is populated on every new write and equals
+/// `StoredConfig::canonical_hash` of the same in-memory config.
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn canonical_hash_column_is_populated_on_write_postgres() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.dummy_{id}]
+routing = ["dummy"]
+
+[models.dummy_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.f_{id}]
+type = "chat"
+version = 5
+
+[functions.f_{id}.variants.v]
+type = "chat_completion"
+model = "dummy_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    let legacy_hash = snapshot.hash.clone();
+    let expected_canonical = snapshot.config.canonical_hash().expect("canonical hash");
+    postgres.write_config_snapshot(&snapshot).await.unwrap();
+
+    let pool = postgres.get_pool().unwrap();
+    let stored_canonical: Vec<u8> = sqlx::query_scalar(
+        r"SELECT canonical_hash FROM tensorzero.config_snapshots WHERE hash = $1",
+    )
+    .bind(legacy_hash.as_bytes())
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        stored_canonical.as_slice(),
+        expected_canonical.as_bytes(),
+        "canonical_hash column must equal StoredConfig::canonical_hash",
+    );
+}
+
+/// `get_config_snapshot` resolves the same row whether passed the legacy
+/// hash (queries `hash` column) or the canonical hash (queries
+/// `canonical_hash` column). Both lookups return the same content.
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn get_config_snapshot_dispatches_on_scheme() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.disp_{id}]
+routing = ["dummy"]
+
+[models.disp_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.disp_fn_{id}]
+type = "chat"
+
+[functions.disp_fn_{id}.variants.v]
+type = "chat_completion"
+model = "disp_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    let legacy_hash = snapshot.hash.clone();
+    let canonical_hash = snapshot.config.canonical_hash().expect("canonical");
+    assert_eq!(legacy_hash.scheme(), SnapshotHashScheme::LegacyToml);
+    assert_eq!(canonical_hash.scheme(), SnapshotHashScheme::Canonical);
+    postgres.write_config_snapshot(&snapshot).await.unwrap();
+
+    // Lookup via legacy scheme.
+    let via_legacy = postgres
+        .get_config_snapshot(legacy_hash.clone())
+        .await
+        .expect("legacy lookup");
+    // Lookup via canonical scheme.
+    let via_canonical = postgres
+        .get_config_snapshot(canonical_hash)
+        .await
+        .expect("canonical lookup");
+
+    // Both lookups returned the same row — same hash returned (the legacy
+    // one, because the row's primary key is legacy).
+    assert_eq!(via_legacy.hash.as_bytes(), legacy_hash.as_bytes());
+    let via_legacy_json = serde_json::to_value(&via_legacy.config).unwrap();
+    let via_canonical_json = serde_json::to_value(&via_canonical.config).unwrap();
+    assert_eq!(
+        via_legacy_json, via_canonical_json,
+        "two scheme lookups must resolve to content-equal config",
+    );
+}
+
+/// Lookup via canonical hash on a non-existent row returns the
+/// `ConfigSnapshotNotFound` error (and not, say, a generic SQL error).
+#[tokio::test]
+async fn get_config_snapshot_via_canonical_returns_not_found() {
+    let postgres = get_test_postgres().await;
+    // Construct a canonical-scheme hash from random bytes that won't
+    // appear in the DB.
+    let synthetic = SnapshotHash::from_canonical_bytes(&[0xFFu8; 32]);
+    let result = postgres.get_config_snapshot(synthetic).await;
+    let err = result.expect_err("non-existent canonical hash must error");
+    assert!(matches!(
+        err.get_details(),
+        tensorzero_core::error::ErrorDetails::ConfigSnapshotNotFound { .. }
+    ));
+}
+
+/// `SnapshotHash` round-trips through Postgres and serde-JSON: a
+/// canonical-scheme hash, serialized to JSON (bare decimal — matches
+/// the DB column form), deserialized, and used for a DB lookup,
+/// resolves the same row. The scheme tag is metadata-only: bytes are
+/// the lookup key, and `Display` (not `Serialize`) is what carries the
+/// `v2:` prefix on the URL/log surface.
+#[tokio::test]
+#[expect(clippy::disallowed_methods)]
+async fn canonical_hash_serde_round_trip_through_db() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.rt_{id}]
+routing = ["dummy"]
+
+[models.rt_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.rt_fn_{id}]
+type = "chat"
+
+[functions.rt_fn_{id}.variants.only]
+type = "chat_completion"
+model = "rt_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    postgres.write_config_snapshot(&snapshot).await.unwrap();
+
+    let canonical = snapshot.config.canonical_hash().expect("canonical");
+
+    // Wire form: canonical hashes carry the `can:` prefix on the wire
+    // (Display/Serialize). Legacy hashes are bare decimal. DB-row
+    // structs that hit numeric columns (`UInt256` / `NUMERIC(78,0)`)
+    // opt out via the `serialize_optional_hash_bare_decimal` helper —
+    // tested separately at the type level.
+    let wire = serde_json::to_string(&canonical).expect("serialize");
+    assert!(
+        wire.contains("can:"),
+        "canonical wire form must carry the `can:` prefix; got: {wire}"
+    );
+
+    // The display form carries the same prefix for URL routing.
+    let displayed = canonical.to_string();
+    assert!(
+        displayed.starts_with("can:"),
+        "Display must carry the `can:` prefix; got: {displayed}",
+    );
+
+    // Round-trip via the wire form recovers the scheme tag and the
+    // bytes — `from_str` of `can:DECIMAL` re-derives `Canonical`.
+    let parsed_back: SnapshotHash = wire.trim_matches('"').parse().expect("FromStr can:DECIMAL");
+    assert_eq!(parsed_back.scheme(), SnapshotHashScheme::Canonical);
+
+    let retrieved = postgres
+        .get_config_snapshot(parsed_back)
+        .await
+        .expect("lookup after round-trip");
+    let original_json = serde_json::to_value(&snapshot.config).unwrap();
+    let retrieved_json = serde_json::to_value(&retrieved.config).unwrap();
+    assert_eq!(original_json, retrieved_json);
+}
+
+/// Migration safety net: legacy rows that predate the `config_jsonb`
+/// column (or whose backfill skipped them due to a TOML parse error)
+/// still load via the deprecated TOML column. This is the only path that
+/// reads `config TEXT`; it's expected to disappear when the TOML column
+/// is dropped post-`hash_v2`.
+#[tokio::test]
+async fn get_config_snapshot_falls_back_to_toml_for_legacy_null_rows() {
+    let postgres = get_test_postgres().await;
+    let id = Uuid::now_v7();
+    let config_toml = format!(
+        r#"
+[models.l_{id}]
+routing = ["dummy"]
+
+[models.l_{id}.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.l_fn_{id}]
+type = "chat"
+
+[functions.l_fn_{id}.variants.only]
+type = "chat_completion"
+model = "l_{id}"
+"#
+    );
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, HashMap::new()).expect("parse");
+    let hash = snapshot.hash.clone();
+
+    // Insert as a pre-backfill legacy row: TOML present, JSONB NULL.
+    // This is exactly the shape of rows written by gateways before the
+    // `config_jsonb` column existed.
+    insert_legacy_snapshot_row(&postgres, &snapshot).await;
+
+    // Read via the public API. Should succeed via the TOML fallback.
+    let retrieved = postgres.get_config_snapshot(hash.clone()).await.unwrap();
+    assert_eq!(
+        retrieved.hash.to_hex_string(),
+        hash.to_hex_string(),
+        "fallback path must preserve the original hash",
+    );
+    let original_json = serde_json::to_value(&snapshot.config).unwrap();
+    let retrieved_json = serde_json::to_value(&retrieved.config).unwrap();
+    assert_eq!(
+        retrieved_json, original_json,
+        "fallback path must return content-equal config",
     );
 }
 

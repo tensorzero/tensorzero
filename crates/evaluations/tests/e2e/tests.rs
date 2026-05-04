@@ -2885,6 +2885,7 @@ async fn test_evaluation_with_dynamic_variant() {
         }),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let evaluation_run_id = Uuid::now_v7();

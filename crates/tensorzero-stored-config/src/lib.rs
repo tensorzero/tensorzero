@@ -12,6 +12,7 @@ mod stored_function_config;
 mod stored_gateway_config;
 mod stored_metric_config;
 pub mod stored_model_config;
+mod stored_object_metadata;
 mod stored_optimizer_info;
 mod stored_postgres_config;
 mod stored_provider_types_config;
@@ -77,6 +78,7 @@ pub use stored_model_config::{
     STORED_MODEL_CONFIG_SCHEMA_REVISION, StoredContentBlockType, StoredHostedProviderKind,
     StoredModelConfig, StoredModelProvider, StoredOpenAIAPIType, StoredProviderConfig,
 };
+pub use stored_object_metadata::{ConfigObjectMetadata, PerObjectMetadata};
 pub use stored_optimizer_info::{
     STORED_OPTIMIZER_CONFIG_SCHEMA_REVISION, StoredDiclOptimizationConfig,
     StoredFireworksOptimizerSFTConfig, StoredGCPVertexGeminiOptimizerSFTConfig, StoredGEPAConfig,

@@ -19,6 +19,15 @@ pub enum StoredFunctionConfig {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredChatFunctionConfig {
+    /// Author-managed editorial version label. `None` means "row predates
+    /// the `version` field"; on conversion to `UninitializedFunctionConfigChat`
+    /// it maps to the default `0` (omitted in serialized output).
+    ///
+    /// This field IS part of the canonical content of a function config:
+    /// changing it is a deliberate authorial signal that the function shape
+    /// has been iterated. Bumping it produces a new snapshot canonical hash
+    /// (because it ends up in `config_jsonb`).
+    pub version: Option<u32>,
     pub variants: Option<BTreeMap<String, StoredVariantRef>>,
     pub system_schema: Option<StoredFileRef>,
     pub user_schema: Option<StoredFileRef>,
@@ -35,6 +44,8 @@ pub struct StoredChatFunctionConfig {
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StoredJsonFunctionConfig {
+    /// See `StoredChatFunctionConfig::version`.
+    pub version: Option<u32>,
     pub variants: Option<BTreeMap<String, StoredVariantRef>>,
     pub system_schema: Option<StoredFileRef>,
     pub user_schema: Option<StoredFileRef>,

@@ -39,11 +39,14 @@ fn default_write_params(config: &UninitializedConfig) -> WriteStoredConfigParams
     // the lifetime bookkeeping simple.
     static EMPTY_TEMPLATES: std::sync::OnceLock<HashMap<String, String>> =
         std::sync::OnceLock::new();
+    static EMPTY_METADATA: std::sync::OnceLock<tensorzero_stored_config::PerObjectMetadata> =
+        std::sync::OnceLock::new();
     WriteStoredConfigParams {
         config,
         creation_source: "ui",
         source_autopilot_session_id: None,
         extra_templates: EMPTY_TEMPLATES.get_or_init(HashMap::new),
+        metadata: EMPTY_METADATA.get_or_init(tensorzero_stored_config::PerObjectMetadata::new),
     }
 }
 

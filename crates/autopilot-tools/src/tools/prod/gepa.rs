@@ -747,6 +747,7 @@ async fn init_eval_step(
             inner: UninitializedVariantConfig::ChatCompletion(variant_config.clone()),
             timeouts: None,
             namespace: None,
+            version: 0,
         };
 
         let (function_name, evaluator_names) = if params.evaluation_name.is_some() {
@@ -805,6 +806,7 @@ async fn eval_variant_step(
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let (function_name, evaluator_names) = if params.evaluation_name.is_some() {
@@ -872,6 +874,7 @@ async fn eval_analyze_mutate_step(
         inner: UninitializedVariantConfig::ChatCompletion(params.variant_config.clone()),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let (function_name, evaluator_names) = if params.evaluation_name.is_some() {

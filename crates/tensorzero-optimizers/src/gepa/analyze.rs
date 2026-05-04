@@ -303,6 +303,7 @@ async fn analyze_inference(
         inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
         timeouts: None,
         namespace: None,
+        version: 0,
     };
 
     let arguments = build_analyze_input(eval_info, function_context, variant_config)?;

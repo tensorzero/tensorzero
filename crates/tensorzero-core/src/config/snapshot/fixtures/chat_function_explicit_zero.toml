@@ -1,0 +1,19 @@
+# Same shape as `chat_function_unversioned.toml` but with `version = 0`
+# stated explicitly in TOML. Must hash IDENTICALLY to the unversioned
+# fixture: the canonical form drops `version = 0`, so the hash inputs are
+# byte-equal.
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.my_chat_fn]
+type = "chat"
+version = 0
+
+[functions.my_chat_fn.variants.baseline]
+type = "chat_completion"
+model = "dummy"
+version = 0

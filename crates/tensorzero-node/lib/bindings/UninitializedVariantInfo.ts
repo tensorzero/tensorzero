@@ -10,6 +10,12 @@ import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNCon
 export type UninitializedVariantInfo = {
   timeouts?: TimeoutsConfig;
   namespace?: Namespace;
+  /**
+   * Version of this variant. `0` means unversioned (the field is omitted
+   * when serialized). Persisted in `config_snapshots.config_jsonb` so
+   * snapshots can be queried by variant version via JSONB containment.
+   */
+  version: number;
 } & (
   | ({ type: "chat_completion" } & UninitializedChatCompletionConfig)
   | ({

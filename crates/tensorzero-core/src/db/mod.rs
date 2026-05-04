@@ -243,6 +243,42 @@ pub trait ConfigQueries: Send + Sync {
     async fn write_config_snapshot(&self, snapshot: &ConfigSnapshot) -> Result<(), DelayedError>;
 }
 
+/// Search snapshots by their canonical-JSON shape.
+///
+/// Distinct from `ConfigQueries` because the indexed-JSONB form has no
+/// direct ClickHouse equivalent: ClickHouse's `JSONHas`/`JSONExtract*` is
+/// always full-scan over a `String` column, so a CH impl would be
+/// best-effort. Only Postgres implements this trait today; CH support is
+/// explicitly out of V0 (per the Config-in-Database roadmap).
+///
+/// Both methods return snapshot hashes ordered by `created_at ASC`,
+/// `hash ASC` (deterministic when `created_at` ties).
+#[async_trait]
+pub trait ConfigSnapshotSearch: Send + Sync {
+    /// Returns the hashes of all snapshots whose canonical JSON contains
+    /// `fragment` as a sub-tree (Postgres `@>` containment).
+    ///
+    /// Indexed via `config_snapshots_config_jsonb_gin` (operator class
+    /// `jsonb_path_ops`) on Postgres.
+    async fn snapshots_containing(
+        &self,
+        fragment: serde_json::Value,
+    ) -> Result<Vec<SnapshotHash>, Error>;
+
+    /// Returns the hashes of all snapshots whose canonical JSON has
+    /// `value` at `path`. `path` segments are split on `/` and `.`;
+    /// equivalent to `snapshots_containing` with a nested fragment.
+    ///
+    /// Limitations: simple property paths only. No array indexing
+    /// (`tools[0]`), no wildcards. For richer queries, build the
+    /// containment fragment yourself and call `snapshots_containing`.
+    async fn snapshots_with_path_value(
+        &self,
+        path: &str,
+        value: &serde_json::Value,
+    ) -> Result<Vec<SnapshotHash>, Error>;
+}
+
 #[async_trait]
 pub trait DeploymentIdQueries: Send + Sync {
     async fn get_deployment_id(&self) -> Result<String, DelayedError>;
