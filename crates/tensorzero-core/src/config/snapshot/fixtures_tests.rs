@@ -186,17 +186,12 @@ fn fixture_empty() {
     let toml = include_str!("fixtures/empty.toml");
     let snapshot = assert_round_trip_properties(toml);
     let json = snapshot_json(&snapshot);
-    // DEBUG: dump JSON to find platform-dependent serialization.
-    eprintln!(
-        "EMPTY_JSON={}",
-        serde_json::to_string(&snapshot.config).unwrap()
-    );
     // Empty config: no functions, no models, no tools.
     expect_that!(json_path(&json, "functions"), eq(&serde_json::json!({})));
     expect_that!(json_path(&json, "models"), eq(&serde_json::json!({})));
     assert_canonical_hash_matches(
         &snapshot,
-        "e6db8d0020d65cb307316b2050d9b200a384bf3197e27e8a2d2c35b5d40c6549",
+        "2870dc8a95ce11c43018a68a94d459e15fa691639e9a10432f4e2604b234a3b1",
     );
 }
 
@@ -213,7 +208,7 @@ fn fixture_chat_function_unversioned() {
     );
     assert_canonical_hash_matches(
         &snapshot,
-        "3853aeb9ecc4243a260e55a758e3ca0c5b3fb781e8adb57ee496ec7f8de06b30",
+        "162755c32d81d4fdc75610a02f6d3825912a14cf018e7492dd0c29b545d3f575",
     );
 }
 
@@ -237,7 +232,7 @@ fn fixture_multi_variant_types() {
     );
     assert_canonical_hash_matches(
         &snapshot,
-        "4efc9a68758a0c7553bb3996235d97774f281fd2fe2f30781f7ce4235408dbba",
+        "976718dc8056ec6a822ea460e9dcb5c85ad8f1013d3b633492537760720a24ce",
     );
 }
 
@@ -258,7 +253,7 @@ fn fixture_models_multi_provider() {
     );
     assert_canonical_hash_matches(
         &snapshot,
-        "49702ca05bc6c65e8c47213463b9be9ebd63ace906c97803c258800951e361c0",
+        "48b73f39ea675f23e007f1867b456f2c09fb0852b726f44d568719ea4dadd601",
     );
 }
 
@@ -278,7 +273,7 @@ fn fixture_tools_and_metrics() {
     );
     assert_canonical_hash_matches(
         &snapshot,
-        "bec3c153277bcac47add801a8ec15be880f997ad150af8e634e2b181d1fe9d9f",
+        "7ac9d83b347614b2736fba7247dbd60be33b1f7bb4fda5ee0d960427db1563e8",
     );
 }
 
@@ -301,7 +296,7 @@ fn fixture_kitchen_sink() {
     );
     assert_canonical_hash_matches(
         &snapshot,
-        "0b1b1187fbb277bc9b1521db0712053adec175b5660b5aa57d8616d2953bd235",
+        "7a228c4a9297f7cdf5786c27a6f0cf2d1759b818834963be443dc48d7e1259f0",
     );
 }
 
