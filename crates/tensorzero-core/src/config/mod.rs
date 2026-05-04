@@ -1638,7 +1638,7 @@ impl Config {
 
         let http_client = TensorzeroHttpClient::new(
             gateway_config.global_outbound_http_timeout,
-            gateway_config.global_outbound_http_read_timeout,
+            gateway_config.global_outbound_http_intra_stream_read_timeout,
         )?;
         let relay_mode = gateway_config.relay.is_some();
 

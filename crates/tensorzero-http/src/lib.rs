@@ -164,8 +164,8 @@ pub struct TensorzeroHttpClient {
     fallback_client: Arc<LimitedClient>,
     global_outbound_http_timeout: Duration,
     /// Per-read timeout (resets on each successful read). `None` disables it.
-    /// Configured via `gateway.global_outbound_http_read_timeout_ms`.
-    global_outbound_http_read_timeout: Option<Duration>,
+    /// Configured via `gateway.global_outbound_http_intra_stream_read_timeout_ms`.
+    global_outbound_http_intra_stream_read_timeout: Option<Duration>,
 }
 
 #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
@@ -184,7 +184,7 @@ impl TensorzeroHttpClient {
     }
     pub fn new(
         global_outbound_http_timeout: Duration,
-        global_outbound_http_read_timeout: Option<Duration>,
+        global_outbound_http_intra_stream_read_timeout: Option<Duration>,
     ) -> Result<Self, Error> {
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
@@ -195,11 +195,11 @@ impl TensorzeroHttpClient {
                 concurrent_requests: Arc::new(AtomicU8::new(0)),
                 client: build_client(
                     global_outbound_http_timeout,
-                    global_outbound_http_read_timeout,
+                    global_outbound_http_intra_stream_read_timeout,
                 )?,
             }),
             global_outbound_http_timeout,
-            global_outbound_http_read_timeout,
+            global_outbound_http_intra_stream_read_timeout,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -213,7 +213,7 @@ impl TensorzeroHttpClient {
                     concurrent_requests: Arc::new(AtomicU8::new(0)),
                     client: build_client(
                         self.global_outbound_http_timeout,
-                        self.global_outbound_http_read_timeout,
+                        self.global_outbound_http_intra_stream_read_timeout,
                     )?,
                 })
             }) {
@@ -730,7 +730,7 @@ pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 
 fn build_client(
     global_outbound_http_timeout: Duration,
-    global_outbound_http_read_timeout: Option<Duration>,
+    global_outbound_http_intra_stream_read_timeout: Option<Duration>,
 ) -> Result<Client, Error> {
     let to_std = |d: Duration, field: &str| {
         d.to_std().map_err(|e| {
@@ -747,9 +747,11 @@ fn build_client(
         )?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
-    if let Some(read_timeout) = global_outbound_http_read_timeout {
-        http_client_builder = http_client_builder
-            .read_timeout(to_std(read_timeout, "global_outbound_http_read_timeout")?);
+    if let Some(read_timeout) = global_outbound_http_intra_stream_read_timeout {
+        http_client_builder = http_client_builder.read_timeout(to_std(
+            read_timeout,
+            "global_outbound_http_intra_stream_read_timeout",
+        )?);
     }
 
     #[cfg(feature = "e2e_tests")]
