@@ -64,7 +64,7 @@ export const MixedVersions: Story = {
 export const SessionMismatch: Story = {
   args: {
     sessions: [
-      buildSession("d1a0b0c0-0000-0000-0000-000000000006", 0, "2026.4.2"),
+      buildSession("d1a0b0c0-0000-0000-0000-000000000006", 0, "2026.5.0"),
     ],
     gatewayVersion: "2026.1.0",
     uiVersion: "2026.1.0",

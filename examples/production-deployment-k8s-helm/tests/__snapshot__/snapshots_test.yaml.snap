@@ -19,7 +19,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero
   2: |
@@ -33,7 +33,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -58,7 +58,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -81,7 +81,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -121,7 +121,7 @@ should match snapshot with all features enabled:
                     secretKeyRef:
                       key: OPENAI_API_KEY
                       name: tensorzero-secret
-              image: tensorzero/gateway:2026.4.2
+              image: tensorzero/gateway:2026.5.0
               imagePullPolicy: IfNotPresent
               name: tensorzero
               ports:
@@ -159,7 +159,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-storage
     spec:
@@ -178,7 +178,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -203,7 +203,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -226,7 +226,7 @@ should match snapshot with all features enabled:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -252,7 +252,7 @@ should match snapshot with all features enabled:
                     secretKeyRef:
                       key: TENSORZERO_GATEWAY_URL
                       name: tensorzero-secret
-              image: tensorzero/ui:2026.4.2
+              image: tensorzero/ui:2026.5.0
               imagePullPolicy: IfNotPresent
               name: ui
               ports:
@@ -297,7 +297,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero
   2: |
@@ -309,7 +309,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -333,7 +333,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -356,7 +356,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -396,7 +396,7 @@ should match snapshot with default values:
                     secretKeyRef:
                       key: OPENAI_API_KEY
                       name: tensorzero-secret
-              image: tensorzero/gateway:2026.4.2
+              image: tensorzero/gateway:2026.5.0
               imagePullPolicy: IfNotPresent
               name: tensorzero
               ports:
@@ -428,7 +428,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -452,7 +452,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -475,7 +475,7 @@ should match snapshot with default values:
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-ui
     spec:
@@ -501,7 +501,7 @@ should match snapshot with default values:
                     secretKeyRef:
                       key: TENSORZERO_GATEWAY_URL
                       name: tensorzero-secret
-              image: tensorzero/ui:2026.4.2
+              image: tensorzero/ui:2026.5.0
               imagePullPolicy: IfNotPresent
               name: ui
               ports:
@@ -545,7 +545,7 @@ should match snapshot with minimal config (no UI, no ingress, no persistence):
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero
   2: |
@@ -557,7 +557,7 @@ should match snapshot with minimal config (no UI, no ingress, no persistence):
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -580,7 +580,7 @@ should match snapshot with minimal config (no UI, no ingress, no persistence):
         app.kubernetes.io/instance: RELEASE-NAME
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: tensorzero
-        app.kubernetes.io/version: 2026.4.2
+        app.kubernetes.io/version: 2026.5.0
         helm.sh/chart: tensorzero-0.0.0
       name: RELEASE-NAME-tensorzero-gateway
     spec:
@@ -620,7 +620,7 @@ should match snapshot with minimal config (no UI, no ingress, no persistence):
                     secretKeyRef:
                       key: OPENAI_API_KEY
                       name: tensorzero-secret
-              image: tensorzero/gateway:2026.4.2
+              image: tensorzero/gateway:2026.5.0
               imagePullPolicy: IfNotPresent
               name: tensorzero
               ports:
