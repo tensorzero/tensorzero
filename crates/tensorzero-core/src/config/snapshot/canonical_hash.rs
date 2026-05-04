@@ -29,6 +29,92 @@
 //! `Value` is deterministic via `serde_json::to_value`; `Value` → bytes
 //! is whatever this module decides; this module is the only source of
 //! truth for the canonical encoding.
+//!
+//! # Schema changes — what drifts the hash, and what it costs you
+//!
+//! The hash is computed by walking `serde_json::to_value(self)` for a
+//! given `StoredConfig`. So the **JSON shape** of `StoredConfig` is
+//! the contract — anything that changes the JSON shape changes the
+//! hash, even if the logical config is the same. The categories are:
+//!
+//! | Change to `StoredConfig` shape                                                                  | Drifts the hash? |
+//! |-------------------------------------------------------------------------------------------------|------------------|
+//! | Add `Option<T>` field with `#[serde(skip_serializing_if = "Option::is_none")]`, default `None`   | **No**           |
+//! | Add `Option<T>` field that newly serializes a default value (e.g. `Some(...)` from default)      | **Yes**          |
+//! | Add a non-`Option` field (always serializes)                                                     | **Yes**          |
+//! | Remove a field                                                                                  | **Yes**          |
+//! | Rename a field (or change `#[serde(rename = "...")]`)                                            | **Yes**          |
+//! | Change a field's type (`Vec → HashSet`, `u32 → f64`, etc.)                                       | **Yes**          |
+//! | Change `From<UninitializedConfig> for StoredConfig` so a different value reaches the wire        | **Yes**          |
+//! | Reorder JSON object keys                                                                         | **No** — we sort |
+//! | Format a float as `0.7` vs `0.6999…` after a `serde_json` / `toml` crate bump                    | **No** — IEEE bits |
+//! | Change `serde_json` / `toml` crate versions without changing the typed shape                     | **No**           |
+//!
+//! ## What "drift" actually means in production
+//!
+//! When the `StoredConfig` shape changes between deploys, the same
+//! logical config produces a different canonical hash before and after
+//! the deploy. Concretely:
+//!
+//! 1. **Old `config_snapshots` rows already in the DB are unaffected.**
+//!    Their persisted `canonical_hash` column was written by the *old*
+//!    serializer and is preserved verbatim. The read path
+//!    (`ConfigSnapshot::from_stored_with_hash`) pairs the row's stored
+//!    hash with its stored `config_jsonb`; it does **not** recompute.
+//!    Old `inferences.snapshot_hash` references continue to resolve.
+//!
+//! 2. **Old rows look up by their old hash, not by the new
+//!    re-canonicalization.** If you take an old config snapshot, drop
+//!    it through the new `StoredConfig` shape, and call
+//!    `canonical_hash()`, you get a *different* value than what's in
+//!    the column. That's expected. Always look up old rows by the hash
+//!    you wrote — i.e. by the value already in `inferences.snapshot_hash`,
+//!    not by recomputing.
+//!
+//! 3. **New writes get the new hash.** A re-bootstrap of the same
+//!    logical config after the schema change produces a new
+//!    `config_snapshots` row with a new `canonical_hash`. New
+//!    inference rows reference that new hash. Old inferences keep
+//!    pointing at the old row; new inferences point at the new row.
+//!    Two rows for the "same" config from a human's perspective is
+//!    fine — they reflect what the gateway actually saw at the time.
+//!
+//! 4. **JSONB containment queries (`@>`, `@?`, `@@`) still work**, but
+//!    over the *stored* JSON shape. A query written against the new
+//!    field layout won't match documents stored under the old layout
+//!    unless the change was purely additive at the same path. For
+//!    historical search across a schema cutover, query against the
+//!    old shape (and let it match nothing in the new partition) or
+//!    use containment fragments compatible with both.
+//!
+//! ## Rules for changing `StoredConfig`
+//!
+//! - **Always read** [`stored/AGENTS.md`](../AGENTS.md) **before changing
+//!   any `Stored*` type.** It documents the historical-snapshot
+//!   compatibility contract: stored types do **not** use
+//!   `#[serde(deny_unknown_fields)]`, and a deprecated field must keep
+//!   parsing for some window even after it's removed from the
+//!   `Uninitialized*` mirror.
+//! - **Prefer purely-additive changes.** New `Option<T>` fields with
+//!   `skip_serializing_if = "Option::is_none"` and a `None` default
+//!   keep every existing canonical hash valid.
+//! - **Run the fixture suite.** `crates/tensorzero-core/src/config/snapshot/fixtures_tests.rs`
+//!   locks the canonical hash bytes against committed TOML fixtures
+//!   (kitchen sink, multi-variant, etc.). A schema change that drifts
+//!   the bytes will fail those tests; review the diff, decide if the
+//!   drift is intentional, and update the expected hexes deliberately.
+//!   Don't update them blindly — every drifted hex is a real
+//!   incompatibility window.
+//! - **Document the change in the PR description** with the categories
+//!   above so reviewers can confirm the drift is expected.
+//!
+//! There is no automatic migration of historical hashes. The dual-
+//! dispatch on `SnapshotHashScheme` (`LegacyToml` vs `Canonical`) is
+//! how we stay correct across the *initial* TOML→JSON cutover. Across
+//! future structural changes inside `Canonical`, we rely on "the
+//! stored hash is the authoritative hash" via `from_stored_with_hash`.
+//! That model survives any schema evolution as long as old rows are
+//! looked up by their stored hash.
 
 use blake3::Hasher;
 use num_bigint::BigUint;
