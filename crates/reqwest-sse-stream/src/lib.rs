@@ -10,16 +10,21 @@ pub use sse_stream::{Sse, SseStream};
 pub type EventStream =
     Pin<Box<dyn Stream<Item = Result<Event, ReqwestSseStreamError>> + Send + 'static>>;
 
+// `ReqwestError` and `SseError` deliberately do not interpolate the inner error in their
+// `Display` strings. The inner error is exposed via `#[source]` so that callers walking the
+// `std::error::Error::source()` chain (e.g. `format_error_chain` in
+// `tensorzero-core/src/providers/helpers.rs`) get the full transport cause without it being
+// duplicated by the top-level `Display`.
 #[derive(Debug, Error)]
 pub enum ReqwestSseStreamError {
-    #[error("Reqwest error: {0}")]
-    ReqwestError(reqwest::Error),
+    #[error("Reqwest error")]
+    ReqwestError(#[source] reqwest::Error),
     #[error("Invalid status code: {0}")]
     InvalidStatusCode(reqwest::StatusCode, reqwest::Response),
     #[error("Expected content-type 'text/event-stream', got {0:?}")]
     InvalidContentType(http::header::HeaderValue, reqwest::Response),
-    #[error("SSE error: {0}")]
-    SseError(sse_stream::Error),
+    #[error("SSE error")]
+    SseError(#[source] sse_stream::Error),
 }
 
 /// An SSE message event with guaranteed data field.
