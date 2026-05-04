@@ -10,11 +10,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
-napi = { version = "3.8.5", default-features = false, features = [
+napi = { version = "3.8.6", default-features = false, features = [
     "napi4",
     "tokio_rt",
 ] }
-napi-derive = "3.5.4"
+napi-derive = "3.5.5"
 serde_json.workspace = true
 secrecy.workspace = true
 tokio = { workspace = true, features = ["sync"] }

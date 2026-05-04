@@ -71,7 +71,7 @@ http-body-util = "0.1.3"
 futures = "0.3.32"
 thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
-sse-stream = "0.2.1"
+sse-stream = "0.2.3"
 reqwest-sse-stream = { path = "reqwest-sse-stream" }
 minijinja = { version = "2.19.0", features = [
     "loader",
@@ -115,12 +115,12 @@ sqlx = { version = "0.9.0-alpha.1", features = [
     "sqlx-toml",
 ] }
 rlt = "0.5.0"
-metrics-exporter-prometheus = { version = "0.18.1", features = [
+metrics-exporter-prometheus = { version = "0.18.3", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
 serde_arrow = { version = "0.14", features = ["arrow-58"] }
-blake3 = "1.8.4"
+blake3 = "1.8.5"
 moka = { version = "0.12.15", features = ["sync"] }
 durable = { git = "https://github.com/tensorzero/durable", rev = "b5f2664bc12e154a3ed00281c1a14a8c7406eae1" }
 durable-tools-spawn = { path = "durable-tools-spawn" }

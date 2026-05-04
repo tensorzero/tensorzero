@@ -10,7 +10,7 @@ tensorzero-core = { path = "../tensorzero-core" }
 autopilot-tools = { path = "../autopilot-tools" }
 autopilot-client = { path = "../autopilot-client" }
 durable-tools = { path = "../durable-tools" }
-rmcp = { version = "1.5.0", features = [
+rmcp = { version = "1.6.0", features = [
     "server",
     "macros",
     "transport-streamable-http-server",
