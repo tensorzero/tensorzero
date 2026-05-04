@@ -32,6 +32,7 @@ pub struct StoredGatewayConfig {
     #[serde(default)]
     pub auth: AuthConfig,
     pub global_outbound_http_timeout_ms: Option<u64>,
+    pub global_outbound_http_intra_stream_read_timeout_ms: Option<u64>,
     #[serde(default)]
     pub relay: Option<UninitializedRelayConfig>,
     #[serde(default)]
@@ -55,6 +56,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             fetch_and_encode_input_files_before_inference,
             auth,
             global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms,
             relay,
             metrics,
             cache,
@@ -74,6 +76,7 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
             fetch_and_encode_input_files_before_inference,
             auth: auth.unwrap_or_default(),
             global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms,
             relay,
             metrics: metrics.unwrap_or_default(),
             cache: cache.unwrap_or_default().into(),
@@ -96,6 +99,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             fetch_and_encode_input_files_before_inference,
             auth,
             global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms,
             relay,
             metrics,
             cache,
@@ -115,6 +119,7 @@ impl From<StoredGatewayConfig> for UninitializedGatewayConfig {
             fetch_and_encode_input_files_before_inference,
             auth: Some(auth),
             global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms,
             relay,
             metrics: Some(metrics),
             cache: Some(cache.into()),

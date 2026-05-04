@@ -163,6 +163,9 @@ pub struct TensorzeroHttpClient {
     clients: Arc<[OnceCell<LimitedClient>]>,
     fallback_client: Arc<LimitedClient>,
     global_outbound_http_timeout: Duration,
+    /// Per-read timeout (resets on each successful read). `None` disables it.
+    /// Configured via `gateway.global_outbound_http_intra_stream_read_timeout_ms`.
+    global_outbound_http_intra_stream_read_timeout: Option<Duration>,
 }
 
 #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
@@ -177,9 +180,12 @@ impl Default for TensorzeroHttpClient {
 impl TensorzeroHttpClient {
     #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
     pub fn new_testing() -> Result<Self, Error> {
-        Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT)
+        Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT, None)
     }
-    pub fn new(global_outbound_http_timeout: Duration) -> Result<Self, Error> {
+    pub fn new(
+        global_outbound_http_timeout: Duration,
+        global_outbound_http_intra_stream_read_timeout: Option<Duration>,
+    ) -> Result<Self, Error> {
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
             .collect::<Vec<_>>();
@@ -187,9 +193,13 @@ impl TensorzeroHttpClient {
             clients: clients.into(),
             fallback_client: Arc::new(LimitedClient {
                 concurrent_requests: Arc::new(AtomicU8::new(0)),
-                client: build_client(global_outbound_http_timeout)?,
+                client: build_client(
+                    global_outbound_http_timeout,
+                    global_outbound_http_intra_stream_read_timeout,
+                )?,
             }),
             global_outbound_http_timeout,
+            global_outbound_http_intra_stream_read_timeout,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -201,7 +211,10 @@ impl TensorzeroHttpClient {
             let client = match client_cell.get_or_try_init(|| {
                 Ok::<_, Error>(LimitedClient {
                     concurrent_requests: Arc::new(AtomicU8::new(0)),
-                    client: build_client(self.global_outbound_http_timeout)?,
+                    client: build_client(
+                        self.global_outbound_http_timeout,
+                        self.global_outbound_http_intra_stream_read_timeout,
+                    )?,
                 })
             }) {
                 Ok(client) => client,
@@ -715,15 +728,31 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 // Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
 pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 
-fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
-    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
-    let mut http_client_builder = Client::builder()
-        .timeout(global_outbound_http_timeout.to_std().map_err(|e| {
+fn build_client(
+    global_outbound_http_timeout: Duration,
+    global_outbound_http_intra_stream_read_timeout: Option<Duration>,
+) -> Result<Client, Error> {
+    let to_std = |d: Duration, field: &str| {
+        d.to_std().map_err(|e| {
             Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to convert Duration to std::time::Duration: {e}"),
+                message: format!("Failed to convert `{field}` to std::time::Duration: {e}"),
             })
-        })?)
+        })
+    };
+
+    let mut http_client_builder = Client::builder()
+        .timeout(to_std(
+            global_outbound_http_timeout,
+            "global_outbound_http_timeout",
+        )?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
+
+    if let Some(read_timeout) = global_outbound_http_intra_stream_read_timeout {
+        http_client_builder = http_client_builder.read_timeout(to_std(
+            read_timeout,
+            "global_outbound_http_intra_stream_read_timeout",
+        )?);
+    }
 
     #[cfg(feature = "e2e_tests")]
     if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
@@ -792,6 +821,17 @@ mod tests {
                         Ok(Event::default().data("[DONE]")),
                     ]))
                 }),
+            )
+            // Sends one SSE event then stalls forever — used to verify per-byte `read_timeout`.
+            .route(
+                "/stalling-stream",
+                get(|_req: Request| async {
+                    let stream = futures::stream::once(async {
+                        Ok::<_, String>(Event::default().data("first"))
+                    })
+                    .chain(futures::stream::pending());
+                    Sse::new(stream)
+                }),
             );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -810,6 +850,58 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Verifies the per-byte `read_timeout` fires when a stream stalls after the first chunk,
+    /// rather than waiting on the much larger total `timeout`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_read_timeout_fires_on_stalled_stream() {
+        let (addr, _handle) = start_target_server().await;
+
+        let total_timeout = chrono::Duration::seconds(60);
+        let read_timeout = chrono::Duration::milliseconds(150);
+        let client = super::TensorzeroHttpClient::new(total_timeout, Some(read_timeout))
+            .expect("Failed to build client");
+
+        let mut event_source = client
+            .get(format!("http://{addr}/stalling-stream"))
+            .eventsource()
+            .await
+            .expect("eventsource handshake should succeed");
+
+        // First yield is the synthetic Event::Open emitted by reqwest-sse-stream.
+        let open = event_source
+            .next()
+            .await
+            .expect("expected an event for Event::Open")
+            .expect("Open should be Ok");
+        assert!(matches!(open, reqwest_sse_stream::Event::Open));
+
+        // Then the server sends one chunk before stalling. After that, `read_timeout`
+        // should produce a body error well before the 60s total timeout.
+        let started_waiting = std::time::Instant::now();
+        let mut got_message = false;
+        let mut got_error = false;
+        while let Some(event) = event_source.next().await {
+            match event {
+                Ok(reqwest_sse_stream::Event::Message(_)) => {
+                    got_message = true;
+                }
+                Ok(reqwest_sse_stream::Event::Open) => {}
+                Err(_) => {
+                    got_error = true;
+                    break;
+                }
+            }
+        }
+        let elapsed = started_waiting.elapsed();
+
+        assert!(got_message, "expected the first SSE chunk to arrive");
+        assert!(got_error, "expected a stream error after the stall");
+        assert!(
+            elapsed < std::time::Duration::from_secs(10),
+            "read_timeout should have fired well before total timeout, but waited {elapsed:?}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

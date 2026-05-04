@@ -186,6 +186,11 @@ pub struct UninitializedGatewayConfig {
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
     pub auth: Option<AuthConfig>,
     pub global_outbound_http_timeout_ms: Option<u64>,
+    /// Per-read timeout (milliseconds) applied to each read of the response body. Reset on every
+    /// successful read, so this bounds how long we wait for the *next* byte rather than the
+    /// entire response. Useful for catching mid-stream stalls in SSE responses where the global
+    /// total-deadline timeout wouldn't fire for a long time. `None` (the default) disables it.
+    pub global_outbound_http_intra_stream_read_timeout_ms: Option<u64>,
     pub relay: Option<UninitializedRelayConfig>,
     pub metrics: Option<MetricsConfig>,
     pub cache: Option<ModelInferenceCacheConfig>,
@@ -249,6 +254,9 @@ impl UninitializedGatewayConfig {
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
                 .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
+            global_outbound_http_intra_stream_read_timeout: self
+                .global_outbound_http_intra_stream_read_timeout_ms
+                .map(|ms| Duration::milliseconds(ms as i64)),
             relay,
             metrics,
             cache: self.cache.unwrap_or_default(),
@@ -441,6 +449,8 @@ impl TryFrom<StoredGatewayConfig> for UninitializedGatewayConfig {
                 .fetch_and_encode_input_files_before_inference,
             auth: stored.auth.map(Into::into),
             global_outbound_http_timeout_ms: stored.global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms: stored
+                .global_outbound_http_intra_stream_read_timeout_ms,
             relay,
             metrics: stored.metrics.map(Into::into),
             cache: stored.cache.map(Into::into),
@@ -519,6 +529,8 @@ impl From<UninitializedGatewayConfig> for StoredGatewayConfig {
                 }),
             }),
             global_outbound_http_timeout_ms: config.global_outbound_http_timeout_ms,
+            global_outbound_http_intra_stream_read_timeout_ms: config
+                .global_outbound_http_intra_stream_read_timeout_ms,
             relay: config.relay.map(|r| StoredRelayConfig {
                 gateway_url: r.gateway_url.map(|u| u.to_string()),
                 api_key_location: r
@@ -559,6 +571,9 @@ pub struct GatewayConfig {
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
     pub global_outbound_http_timeout: Duration,
+    /// Per-read timeout for the outbound HTTP client. `None` disables it (preserving prior
+    /// behavior where mid-stream stalls only fail when `global_outbound_http_timeout` fires).
+    pub global_outbound_http_intra_stream_read_timeout: Option<Duration>,
     #[serde(skip)]
     pub relay: Option<TensorzeroRelay>,
     pub metrics: MetricsConfig,
@@ -580,6 +595,7 @@ impl Default for GatewayConfig {
             fetch_and_encode_input_files_before_inference: Default::default(),
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
+            global_outbound_http_intra_stream_read_timeout: None,
             relay: Default::default(),
             metrics: Default::default(),
             cache: Default::default(),
@@ -785,6 +801,7 @@ mod tests {
                 }),
             }),
             global_outbound_http_timeout_ms: Some(9_876),
+            global_outbound_http_intra_stream_read_timeout_ms: Some(1_234),
             relay: Some(UninitializedRelayConfig {
                 gateway_url: Some(Url::parse("https://relay.example.com/").unwrap()),
                 api_key_location: Some(CredentialLocationWithFallback::WithFallback {

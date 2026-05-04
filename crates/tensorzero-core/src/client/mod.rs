@@ -966,6 +966,7 @@ impl ClientBuilder {
             TensorzeroHttpClient::new(
                 // The timeout may be overridden in `send_and_parse_http_response`
                 DEFAULT_HTTP_CLIENT_TIMEOUT,
+                None,
             )
             .map_err(|e| {
                 ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
