@@ -186,6 +186,11 @@ fn fixture_empty() {
     let toml = include_str!("fixtures/empty.toml");
     let snapshot = assert_round_trip_properties(toml);
     let json = snapshot_json(&snapshot);
+    // DEBUG: dump JSON to find platform-dependent serialization.
+    eprintln!(
+        "EMPTY_JSON={}",
+        serde_json::to_string(&snapshot.config).unwrap()
+    );
     // Empty config: no functions, no models, no tools.
     expect_that!(json_path(&json, "functions"), eq(&serde_json::json!({})));
     expect_that!(json_path(&json, "models"), eq(&serde_json::json!({})));
