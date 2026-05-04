@@ -1,17 +1,35 @@
 //! Structural hashing for `StoredConfig`.
 //!
-//! The historical hash on `main` is computed from canonical *TOML bytes*,
-//! which is fragile: float reformatting (`0.7` → `0.6999999…`), TOML crate
-//! version bumps, and any change to canonicalization rules drift the hash
-//! and invalidate every `inferences.snapshot_hash` reference. The plan
-//! (called `hash_v2` in the Config-in-Database roadmap) replaces it with a
-//! structural hash that:
+//! The historical hash on `main` is computed from canonical *TOML bytes*.
+//! That makes it sensitive to things that aren't logical config changes —
+//! float reformatting (`0.7` → `0.6999999…`), TOML crate version bumps,
+//! and tweaks to canonicalization rules all drift the hash even when the
+//! semantic content is unchanged.
 //!
-//! - Operates on the **logical content** of the config, not on its
-//!   serialized text.
-//! - Is preserved by every `StoredConfig → JSON → StoredConfig` and
+//! Drift doesn't invalidate existing data: every old `config_snapshots`
+//! row keeps its old hash, every old `inferences.snapshot_hash` reference
+//! keeps resolving, and a drifted next-boot just writes a new row — no
+//! different from the user editing the config file. What drift *does*
+//! cost is identity:
+//!
+//! - **Content-addressed dedupe.** Two gateway versions running the same
+//!   logical config should write *one* `config_snapshots` row, not one
+//!   per toml-crate version. The TOML-bytes hash can't guarantee that.
+//! - **Multi-gateway consistency.** Two gateways with different transitive
+//!   dependency versions running against the same DB should agree on
+//!   what hash the same config produces.
+//! - **JSONB roundtrip identity.** Once the snapshot row stores
+//!   `config_jsonb` (PR #2 of this stack), re-deriving the hash from
+//!   the stored JSON should match the stored hash — otherwise reads
+//!   that recompute can't verify they got the same content back.
+//!
+//! The structural hash addresses all three by operating on the **logical
+//! content** of the config rather than its serialized text:
+//!
+//! - Preserved by every `StoredConfig → JSON → StoredConfig` and
 //!   `StoredConfig → TOML → StoredConfig` round-trip.
-//! - Does not depend on third-party crate formatting choices.
+//! - Independent of third-party crate formatting choices.
+//! - Stable across machine architectures and process restarts.
 //!
 //! The implementation walks the `serde_json::Value` form of the config
 //! with a self-describing canonical encoding:
