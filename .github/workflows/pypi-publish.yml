@@ -33,11 +33,8 @@ jobs:
     needs: [build-wheels]
     environment: pypi-publish
     permissions:
-      # Use to sign the release artifacts
       id-token: write # Required for OIDC-backed build or publish tooling.
-      # Used to upload release artifacts
       contents: write # Required to push generated branch changes.
-      # Used to generate artifact attestation
       attestations: write # Required to publish artifact attestations.
     # Download all of the wheel artifacts published by the other jobs,
     # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.

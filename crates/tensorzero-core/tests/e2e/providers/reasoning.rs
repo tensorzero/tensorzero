@@ -97,7 +97,11 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     }
 
     assert!(found_text, "Expected to find a text block");
-    assert!(found_thought, "Expected to find a thought block");
+    // Gemini's thought summaries are non-deterministic even with `includeThoughts=true`
+    // (per Google's docs), so don't require a thought block for `gcp_vertex_gemini`.
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(found_thought, "Expected to find a thought block");
+    }
     // We only check that the response contains digits rather than a specific answer,
     // since models can make arithmetic mistakes.
     assert!(
@@ -172,7 +176,9 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
     }
 
     assert!(found_text, "Expected to find a text block");
-    assert!(found_thought, "Expected to find a thought block");
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(found_thought, "Expected to find a thought block");
+    }
     assert_eq!(clickhouse_content, text_content);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
@@ -268,12 +274,14 @@ pub async fn test_reasoning_inference_request_simple_nonstreaming_with_provider(
             .any(|c| matches!(c, StoredContentBlock::Text(_))),
         "Missing text block in output: {output:#?}"
     );
-    assert!(
-        output
-            .iter()
-            .any(|c| matches!(c, StoredContentBlock::Thought(_))),
-        "Missing thought block in output: {output:#?}"
-    );
+    if provider.model_provider_name != "gcp_vertex_gemini" {
+        assert!(
+            output
+                .iter()
+                .any(|c| matches!(c, StoredContentBlock::Thought(_))),
+            "Missing thought block in output: {output:#?}"
+        );
+    }
 
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(

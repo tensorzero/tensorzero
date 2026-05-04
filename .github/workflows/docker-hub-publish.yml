@@ -17,15 +17,10 @@ on:
         required: false
         default: true
     secrets:
-      DOCKERHUB_USERNAME:
-        required: true
-      DOCKERHUB_TOKEN:
+      DOCKERHUB_DANGEROUS_TOKEN:
         required: true
   release:
     types: [released]
-
-env:
-  DOCKERHUB_USER: tensorzero
 
 concurrency:
   group: docker-hub-publish-${{ github.event.pull_request.number || github.ref || github.run_id }}
@@ -35,6 +30,7 @@ jobs:
   build:
     name: Build and push Docker image to Docker Hub
     runs-on: ${{ matrix.platform.runner }}
+    environment: dockerhub-publish
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -75,8 +71,8 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_DANGEROUS_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -107,7 +103,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          tags: tensorzero/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: true
           no-cache: ${{ github.event_name == 'release' }}
@@ -136,6 +132,7 @@ jobs:
     name: merge
     permissions:
       actions: read # Required to read workflow run, cache, or artifact metadata.
+    environment: dockerhub-publish
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -157,8 +154,8 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_DANGEROUS_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -167,7 +164,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          images: tensorzero/${{ matrix.container.name }}
           flavor: |
             latest=false
           tags: |
@@ -179,13 +176,13 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${DOCKERHUB_USER}/${MATRIX_CONTAINER_NAME}@sha256:%s " *)
+            $(printf "tensorzero/${MATRIX_CONTAINER_NAME}@sha256:%s " *)
         env:
           MATRIX_CONTAINER_NAME: ${{ matrix.container.name }}
 
       - name: Wait for image to be available on Docker Hub
         run: |
-          IMAGE="${DOCKERHUB_USER}/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
+          IMAGE="tensorzero/${MATRIX_CONTAINER_NAME}:${STEPS_META_OUTPUTS_VERSION}"
           echo "Waiting for ${IMAGE} to be available on Docker Hub..."
           for i in $(seq 1 30); do
             if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
