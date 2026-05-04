@@ -37,7 +37,10 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
     let mut message = err.to_string();
     let mut current = err.source();
     while let Some(next) = current {
-        message.push_str(&format!("; caused by: {next}"));
+        message.push_str(&format!(
+            "; caused by: {}",
+            DisplayOrDebugGateway::new(next)
+        ));
         current = next.source();
     }
     message
@@ -76,16 +79,19 @@ pub async fn convert_stream_error(
             .into()
         }
         reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(inner) => {
-            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Timeouts at the reqwest level come from either `gateway.global_outbound_http_timeout_ms`
+            // (the total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms`
+            // (the per-byte read timeout). `reqwest::Error::is_timeout()` returns true for both and
+            // does not distinguish between them, so we surface both knobs in the message.
             // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
             // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
             let message = if inner.is_timeout() {
                 match request_id {
                     Some(id) => format!(
-                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message}) [request_id: {id}]"
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms` (total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms` (per-byte read timeout). Consider increasing the relevant value in your configuration if you expect inferences to take longer to complete. ({base_message}) [request_id: {id}]"
                     ),
                     None => format!(
-                        "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({base_message})"
+                        "Request timed out due to `gateway.global_outbound_http_timeout_ms` (total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms` (per-byte read timeout). Consider increasing the relevant value in your configuration if you expect inferences to take longer to complete. ({base_message})"
                     ),
                 }
             } else {
@@ -337,12 +343,15 @@ pub async fn inject_extra_request_data_and_send_with_headers(
         .await
         .map_err(|e| {
             let status_code = e.status();
-            // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+            // Timeouts at the reqwest level come from either `gateway.global_outbound_http_timeout_ms`
+            // (the total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms`
+            // (the per-byte read timeout). `reqwest::Error::is_timeout()` returns true for both and
+            // does not distinguish between them, so we surface both knobs in the message.
             // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
             // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
             let message = if e.is_timeout() {
                 format!(
-                    "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({})",
+                    "Request timed out due to `gateway.global_outbound_http_timeout_ms` (total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms` (per-byte read timeout). Consider increasing the relevant value in your configuration if you expect inferences to take longer to complete. ({})",
                     DisplayOrDebugGateway::new(&e)
                 )
             } else {
@@ -427,14 +436,17 @@ pub async fn inject_extra_request_data_and_send_eventsource_with_headers(
                     (message, body)
                 }
                 other => {
-                    // Timeouts at the reqwest level are from `gateway.global_outbound_http_timeout_ms`.
+                    // Timeouts at the reqwest level come from either `gateway.global_outbound_http_timeout_ms`
+                    // (the total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms`
+                    // (the per-byte read timeout). `reqwest::Error::is_timeout()` returns true for both
+                    // and does not distinguish between them, so we surface both knobs in the message.
                     // Variant/model/provider-level timeouts are handled via `tokio::time::timeout`
                     // and produce distinct error types (VariantTimeout, ModelTimeout, ModelProviderTimeout).
                     let is_timeout = matches!(&other, reqwest_sse_stream::ReqwestSseStreamError::ReqwestError(e) if e.is_timeout());
                     let chain = format_error_chain(&other);
                     let message = if is_timeout {
                         format!(
-                            "Request timed out due to `gateway.global_outbound_http_timeout_ms`. Consider increasing this value in your configuration if you expect inferences to take longer to complete. ({chain})"
+                            "Request timed out due to `gateway.global_outbound_http_timeout_ms` (total deadline) or `gateway.global_outbound_http_intra_stream_read_timeout_ms` (per-byte read timeout). Consider increasing the relevant value in your configuration if you expect inferences to take longer to complete. ({chain})"
                         )
                     } else {
                         format!("Error sending request: {chain}")
@@ -1070,12 +1082,20 @@ mod tests {
 
     #[test]
     fn test_format_error_chain_walks_sources() {
-        #[derive(Debug)]
+        // `format_error_chain` formats sources via `DisplayOrDebugGateway`, which switches to
+        // the `Debug` representation when the gateway-level debug flag is on (always on under
+        // `e2e_tests`, which flows in via dev-deps). To keep this test deterministic regardless
+        // of that flag, we make `Debug` produce the same output as `Display`.
         struct Layered {
             msg: &'static str,
             source: Option<Box<dyn std::error::Error + Send + Sync>>,
         }
         impl std::fmt::Display for Layered {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.msg)
+            }
+        }
+        impl std::fmt::Debug for Layered {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.write_str(self.msg)
             }
