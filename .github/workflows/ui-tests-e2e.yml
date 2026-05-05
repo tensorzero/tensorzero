@@ -141,6 +141,9 @@ jobs:
         timeout-minutes: 20
         run: |
           for attempt in 1 2 3; do
+            # Wait for any background apt operation to finish before each attempt —
+            # `--with-deps` shells out to apt-get and otherwise races the dpkg lock.
+            ./ci/wait-for-dpkg.sh 120
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
             if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
@@ -277,6 +280,9 @@ jobs:
         timeout-minutes: 20
         run: |
           for attempt in 1 2 3; do
+            # Wait for any background apt operation to finish before each attempt —
+            # `--with-deps` shells out to apt-get and otherwise races the dpkg lock.
+            ./ci/wait-for-dpkg.sh 120
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
             if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
@@ -420,6 +426,9 @@ jobs:
         timeout-minutes: 20
         run: |
           for attempt in 1 2 3; do
+            # Wait for any background apt operation to finish before each attempt —
+            # `--with-deps` shells out to apt-get and otherwise races the dpkg lock.
+            ./ci/wait-for-dpkg.sh 120
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
             if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
@@ -669,6 +678,9 @@ jobs:
         timeout-minutes: 20
         run: |
           for attempt in 1 2 3; do
+            # Wait for any background apt operation to finish before each attempt —
+            # `--with-deps` shells out to apt-get and otherwise races the dpkg lock.
+            ./ci/wait-for-dpkg.sh 120
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
             if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
