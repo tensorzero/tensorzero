@@ -23,7 +23,7 @@ moka = { version = "0.12.15", features = ["sync"] }
 pin-project = "1.1.11"
 rcgen = "0.14.7"
 reqwest.workspace = true
-rustls = { version = "0.23.39", features = ["ring"] }
+rustls = { version = "0.23.40", features = ["ring"] }
 serde = { workspace = true }
 serde_json.workspace = true
 sha2 = "0.11.0"

@@ -559,6 +559,8 @@ pub enum ErrorDetails {
     },
     FatalStreamError {
         message: String,
+        #[serde(serialize_with = "serialize_status")]
+        status_code: Option<StatusCode>,
         provider_type: String,
         api_type: ApiType,
         #[serde(serialize_with = "serialize_if_debug")]
@@ -1030,6 +1032,7 @@ impl ErrorDetails {
                 .last()
                 .and_then(|error| error.underlying_status_code()),
             ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::FatalStreamError { status_code, .. } => *status_code,
             ErrorDetails::Relay { status_code, .. } => *status_code,
             ErrorDetails::AllModelProvidersFailed { provider_errors } => provider_errors
                 .values()
@@ -2505,9 +2508,62 @@ mod tests {
     }
 
     #[test]
+    fn test_underlying_status_code_propagates_from_fatal_stream_error() {
+        // A FatalStreamError carrying an upstream status (e.g. 401 from
+        // `inject_extra_request_data_and_send_eventsource_with_headers`) must surface that
+        // status via `underlying_status_code()` even when wrapped in
+        // `AllModelProvidersFailed` and `AllVariantsFailed`.
+        let fatal = Error::new(ErrorDetails::FatalStreamError {
+            message: "Error sending request: InvalidStatusCode(401 Unauthorized)".to_string(),
+            status_code: Some(StatusCode::UNAUTHORIZED),
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: Some(r#"{"error":"unauthorized"}"#.to_string()),
+        });
+        assert_eq!(
+            fatal.underlying_status_code(),
+            Some(StatusCode::UNAUTHORIZED),
+        );
+
+        let mut provider_errors = IndexMap::new();
+        provider_errors.insert("openai".to_string(), fatal);
+        let providers_failed =
+            Error::new(ErrorDetails::AllModelProvidersFailed { provider_errors });
+        assert_eq!(
+            providers_failed.underlying_status_code(),
+            Some(StatusCode::UNAUTHORIZED),
+            "AllModelProvidersFailed should surface FatalStreamError's status via underlying_status_code()",
+        );
+
+        let mut variant_errors = IndexMap::new();
+        variant_errors.insert("gpt-4o-mini".to_string(), providers_failed);
+        let variants_failed = Error::new(ErrorDetails::AllVariantsFailed {
+            errors: variant_errors,
+        });
+        assert_eq!(
+            variants_failed.underlying_status_code(),
+            Some(StatusCode::UNAUTHORIZED),
+            "AllVariantsFailed wrapping AllModelProvidersFailed(FatalStreamError) should surface 401 via underlying_status_code()",
+        );
+
+        // FatalStreamError with no captured status code yields None.
+        let fatal_no_status = Error::new(ErrorDetails::FatalStreamError {
+            message: "transport error".to_string(),
+            status_code: None,
+            provider_type: "openai".to_string(),
+            api_type: ApiType::ChatCompletions,
+            raw_request: None,
+            raw_response: None,
+        });
+        assert_eq!(fatal_no_status.underlying_status_code(), None);
+    }
+
+    #[test]
     fn test_extract_from_fatal_stream_error() {
         let error = Error::new(ErrorDetails::FatalStreamError {
             message: "stream died".to_string(),
+            status_code: None,
             provider_type: "openai".to_string(),
             api_type: ApiType::ChatCompletions,
             raw_request: None,

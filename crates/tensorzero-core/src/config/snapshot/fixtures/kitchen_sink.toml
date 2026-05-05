@@ -1,0 +1,53 @@
+# Mixed integration fixture: many sections together. Catches drift in
+# canonicalization or round-tripping that only surfaces when sections
+# interact (key ordering across a wide tree, etc.).
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+[models.dummy]
+routing = ["a"]
+
+[models.dummy.providers.a]
+type = "dummy"
+model_name = "test"
+
+[embedding_models.embed]
+routing = ["a"]
+
+[embedding_models.embed.providers.a]
+type = "dummy"
+model_name = "test"
+
+[functions.featured]
+type = "chat"
+description = "A featured function with versioning"
+
+[functions.featured.variants.main]
+type = "chat_completion"
+model = "dummy"
+weight = 0.6
+temperature = 0.4
+
+[functions.featured.variants.fallback]
+type = "chat_completion"
+model = "dummy"
+weight = 0.4
+
+[functions.legacy_json]
+type = "json"
+
+[functions.legacy_json.variants.only]
+type = "chat_completion"
+model = "dummy"
+
+[tools.echo]
+description = "Echo the input"
+
+[tools.echo.parameters]
+__tensorzero_remapped_path = "tensorzero::tools::echo::parameters"
+__data = "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}}}"
+
+[metrics.score]
+type = "float"
+optimize = "max"
+level = "inference"

@@ -1,0 +1,22 @@
+# Multiple model providers and an embedding model — exercises the
+# `models` and `embedding_models` round-trip surfaces.
+[models.openai_model]
+routing = ["openai"]
+
+[models.openai_model.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
+
+[models.anthropic_model]
+routing = ["anthropic"]
+
+[models.anthropic_model.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-5-haiku-latest"
+
+[embedding_models.embed]
+routing = ["openai"]
+
+[embedding_models.embed.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"

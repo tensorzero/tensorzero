@@ -1,0 +1,34 @@
+# Tools and metrics — both are HashMap-shaped resources that must
+# canonicalize deterministically. Tool `parameters` paths are written in
+# their post-resolution form (the `__tensorzero_remapped_path` / `__data`
+# pair) because the snapshot path skips path resolution.
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[tools.get_weather]
+description = "Look up the weather"
+
+[tools.get_weather.parameters]
+__tensorzero_remapped_path = "tensorzero::tools::get_weather::parameters"
+__data = "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}}}"
+
+[tools.get_time]
+description = "Look up the time"
+
+[tools.get_time.parameters]
+__tensorzero_remapped_path = "tensorzero::tools::get_time::parameters"
+__data = "{\"type\":\"object\"}"
+
+[metrics.correctness]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.cost]
+type = "float"
+optimize = "min"
+level = "episode"

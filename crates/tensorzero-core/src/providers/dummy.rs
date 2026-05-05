@@ -839,6 +839,7 @@ impl InferenceProvider for DummyProvider {
                 if fatal_stream_error && i == 2 {
                     yield Err(Error::new(ErrorDetails::FatalStreamError {
                         message: "Dummy fatal error".to_string(),
+                        status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),
@@ -861,6 +862,7 @@ impl InferenceProvider for DummyProvider {
                 if fatal_stream_error_with_raw && i == 2 {
                     yield Err(Error::new(ErrorDetails::FatalStreamError {
                         message: "Dummy fatal error with raw response".to_string(),
+                        status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                         api_type: ApiType::ChatCompletions,
                         raw_request: Some("raw request".to_string()),

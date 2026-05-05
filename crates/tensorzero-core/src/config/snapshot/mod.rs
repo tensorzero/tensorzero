@@ -9,12 +9,16 @@
 //! when fields are added or removed from either the stored or uninitialized types.
 
 mod cache_config;
+pub(crate) mod canonical_hash;
 pub(crate) mod config_snapshot;
 pub use config_snapshot::ConfigSnapshot;
 mod embedding_model_config;
 mod gateway_config;
 mod observability_config;
 mod optimizer_info;
+
+#[cfg(test)]
+mod fixtures_tests;
 
 pub use cache_config::StoredCacheConfig;
 pub use embedding_model_config::{StoredEmbeddingModelConfig, StoredEmbeddingProviderConfig};
