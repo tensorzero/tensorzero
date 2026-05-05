@@ -1,9 +1,9 @@
 name: security
 
 on:
-  push:
-  pull_request:
   merge_group:
+  pull_request:
+  push:
 
 # Don't cancel in-progress runs: cancelling can abort the SARIF upload mid-flight,
 # leaving the PR head SHA with no Code Scanning results and blocking branch protection.
