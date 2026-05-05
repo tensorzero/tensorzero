@@ -12,6 +12,7 @@ jobs:
   build-mock-provider-api-container:
     name: build-mock-provider-api-container
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository

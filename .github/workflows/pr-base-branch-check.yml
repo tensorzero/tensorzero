@@ -17,6 +17,7 @@ jobs:
   check-base-branch:
     name: check-base-branch
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read # Required for checkout or repository metadata reads.
       pull-requests: write # Required for adding/removing labels

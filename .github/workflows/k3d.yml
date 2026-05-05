@@ -12,6 +12,7 @@ on:
 jobs:
   deploy-k3d:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     name: Run 'examples/production-deployment-k8s-helm' on k3d
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

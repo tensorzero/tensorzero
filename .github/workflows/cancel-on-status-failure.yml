@@ -16,6 +16,7 @@ jobs:
   cancel-on-failure:
     name: Cancel General Checks on Failure
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: |
       github.repository == 'tensorzero/tensorzero' && (
         (github.event_name == 'status' && (github.event.state == 'failure' || github.event.state == 'error'))

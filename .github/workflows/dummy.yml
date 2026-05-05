@@ -15,6 +15,7 @@ jobs:
   merge-checks-buildkite:
     name: merge-checks-buildkite
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"

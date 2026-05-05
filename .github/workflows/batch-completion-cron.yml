@@ -24,6 +24,7 @@ jobs:
     name: openai-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -103,6 +104,7 @@ jobs:
     name: google-vertex-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -194,6 +196,7 @@ jobs:
     name: anthropic-batch
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -252,6 +255,7 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     needs: [openai-batch, google-vertex-batch, anthropic-batch]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Log completion
         run: |

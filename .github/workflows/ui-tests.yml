@@ -25,6 +25,7 @@ jobs:
   ui-tests:
     name: ui-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
@@ -46,7 +47,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -65,7 +66,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if npm install -g pnpm@10.15.0; then
+            if timeout 5m npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -79,7 +80,7 @@ jobs:
       - name: Install `pnpm` dependencies
         run: |
           for attempt in 1 2 3; do
-            if pnpm install --frozen-lockfile; then
+            if timeout 5m pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then

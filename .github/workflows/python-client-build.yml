@@ -22,6 +22,7 @@ jobs:
   linux:
     name: linux
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 60
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -51,7 +52,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -90,6 +91,7 @@ jobs:
   musllinux:
     name: musllinux
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 60
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -107,7 +109,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -155,6 +157,7 @@ jobs:
   windows:
     name: windows
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 60
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -170,7 +173,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -219,6 +222,7 @@ jobs:
   macos:
     name: macos
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 60
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
@@ -238,7 +242,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -285,6 +289,7 @@ jobs:
   sdist:
     name: sdist
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -312,7 +317,7 @@ jobs:
       - name: Check local sdist
         run: |
           for attempt in 1 2 3; do
-            if ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
+            if timeout 5m ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -331,6 +336,7 @@ jobs:
     name: check-artifacts
     needs: [linux, musllinux, windows, macos, sdist]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

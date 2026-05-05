@@ -17,6 +17,7 @@ jobs:
     name: auto-approve-workflows
     if: github.repository == 'tensorzero/tensorzero'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.
       pull-requests: read # Required to inspect PR metadata and labels.

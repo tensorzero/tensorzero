@@ -14,6 +14,7 @@ jobs:
   cancel-workflows:
     name: Cancel Workflow Runs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.repository == 'tensorzero/tensorzero' && github.event.reason != 'merged'
     permissions:
       actions: write # Required to approve, cancel, rerun, or dispatch workflow runs.

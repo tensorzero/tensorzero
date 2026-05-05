@@ -107,7 +107,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then

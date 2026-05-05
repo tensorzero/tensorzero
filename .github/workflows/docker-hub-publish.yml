@@ -30,6 +30,7 @@ jobs:
   build:
     name: Build and push Docker image to Docker Hub
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 90
     environment: dockerhub-publish
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
@@ -141,6 +142,7 @@ jobs:
           - name: ${{ inputs.is_dev && 'gateway-dev' || 'gateway' }}
           - name: ${{ inputs.is_dev && 'evaluations-dev' || 'evaluations' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - build
     steps:

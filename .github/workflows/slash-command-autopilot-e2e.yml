@@ -18,6 +18,7 @@ jobs:
   trigger-autopilot-e2e:
     name: trigger-autopilot-e2e
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: false # autopilot integration disabled; see header comment
     permissions:
       pull-requests: write # Required to update PR comments, labels, or branches.

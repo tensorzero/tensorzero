@@ -17,6 +17,7 @@ jobs:
   upgrade-dependencies:
     name: Upgrade TensorZero dependencies across all projects
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
 
     permissions:

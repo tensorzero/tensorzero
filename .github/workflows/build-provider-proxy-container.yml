@@ -12,6 +12,7 @@ jobs:
   build-provider-proxy-container:
     name: build-provider-proxy-container
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository

@@ -25,6 +25,7 @@ jobs:
   check-fork:
     name: check-fork
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       pull-requests: write # Required to update PR comments, labels, or branches.
