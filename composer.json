@@ -1,0 +1,17 @@
+{
+  "name": "tensorzero/tensorzero",
+  "description": "Next-generation machine learning infrastructure",
+  "type": "library",
+  "license": "Apache-2.0",
+  "homepage": "https://www.tensorzero.com",
+  "authors": [
+    {
+      "name": "TensorZero",
+      "email": "hello@tensorzero.com"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/tensorzero/tensorzero/issues",
+    "source": "https://github.com/tensorzero/tensorzero"
+  }
+}
