@@ -257,7 +257,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -272,7 +272,7 @@ jobs:
         working-directory: crates/tensorzero-node
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -322,7 +322,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -341,7 +341,7 @@ jobs:
       - name: Generate Python schemas
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm generate-python-schemas; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm generate-python-schemas; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -373,7 +373,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -395,7 +395,7 @@ jobs:
       - name: Install Python 3.10
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m uv python install 3.10; then
+            if perl -e 'alarm shift; exec @ARGV' 300 uv python install 3.10; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -438,7 +438,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup toolchain install stable --component clippy && rustup default stable; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup toolchain install stable --component clippy && rustup default stable; then
               break
             fi
           done
@@ -480,7 +480,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -502,7 +502,7 @@ jobs:
       - name: Install Python 3.10
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m uv python install 3.10; then
+            if perl -e 'alarm shift; exec @ARGV' 300 uv python install 3.10; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -565,7 +565,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -587,7 +587,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -601,7 +601,7 @@ jobs:
       - name: Install JS dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -650,7 +650,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -697,7 +697,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -746,7 +746,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -768,7 +768,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -787,7 +787,7 @@ jobs:
       - name: Install JS dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1005,7 +1005,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1095,7 +1095,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1219,7 +1219,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1690,7 +1690,7 @@ jobs:
       - name: Install pnpm
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -1704,7 +1704,7 @@ jobs:
         working-directory: docs
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then

@@ -49,7 +49,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -74,7 +74,7 @@ jobs:
         if: runner.os == 'windows'
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m uv python install 3.10; then
+            if perl -e 'alarm shift; exec @ARGV' 300 uv python install 3.10; then
               break
             fi
             if [ $attempt -eq 3 ]; then

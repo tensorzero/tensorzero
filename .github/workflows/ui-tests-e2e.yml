@@ -114,7 +114,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -127,7 +127,7 @@ jobs:
       - name: Install `pnpm` dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -142,7 +142,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
-            if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -250,7 +250,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -263,7 +263,7 @@ jobs:
       - name: Install `pnpm` dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -278,7 +278,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
-            if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -393,7 +393,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -406,7 +406,7 @@ jobs:
       - name: Install `pnpm` dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -421,7 +421,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
-            if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -642,7 +642,7 @@ jobs:
       - name: Setup `pnpm`
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m npm install -g pnpm@10.15.0; then
+            if perl -e 'alarm shift; exec @ARGV' 300 npm install -g pnpm@10.15.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -655,7 +655,7 @@ jobs:
       - name: Install `pnpm` dependencies
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m pnpm install --frozen-lockfile; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm install --frozen-lockfile; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -670,7 +670,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             # Per-attempt timeout so a hung apt fetch is killed and the retry actually fires.
-            if timeout 5m pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
+            if perl -e 'alarm shift; exec @ARGV' 300 pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium; then
               break
             fi
             if [ $attempt -eq 3 ]; then
