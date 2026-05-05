@@ -52,7 +52,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -109,7 +109,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -173,7 +173,7 @@ jobs:
         working-directory: crates
         run: |
           for attempt in 1 2 3; do
-            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
+            if timeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -240,9 +240,10 @@ jobs:
 
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
+        # macOS GH runners ship coreutils via Homebrew but as `gtimeout`, not `timeout`.
         run: |
           for attempt in 1 2 3; do
-            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
+            if gtimeout 5m rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -317,7 +318,7 @@ jobs:
       - name: Check local sdist
         run: |
           for attempt in 1 2 3; do
-            if perl -e 'alarm shift; exec @ARGV' 300 ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
+            if timeout 5m ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
               break
             fi
             if [ $attempt -eq 3 ]; then
