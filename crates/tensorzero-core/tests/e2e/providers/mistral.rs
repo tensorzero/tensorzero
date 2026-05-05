@@ -92,13 +92,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "mistral-reasoning".to_string(),
-        model_name: "magistral-small-latest".into(),
-        model_provider_name: "mistral".into(),
-        credentials: HashMap::new(),
-    }];
+    // TODO: re-enable mistral reasoning tests once the upstream failures are resolved.
+    // let reasoning_providers = vec![E2ETestProvider {
+    //     supports_batch_inference: false,
+    //     variant_name: "mistral-reasoning".to_string(),
+    //     model_name: "magistral-small-latest".into(),
+    //     model_provider_name: "mistral".into(),
+    //     credentials: HashMap::new(),
+    // }];
+    let reasoning_providers: Vec<E2ETestProvider> = vec![];
 
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "mistral".to_string(),

@@ -723,7 +723,10 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
         // Use \\N to indicate NULL
         params.insert("project_name", project_name.unwrap_or("\\N"));
         params.insert("run_display_name", run_display_name.unwrap_or("\\N"));
-        params.insert("snapshot_hash", &**snapshot_hash);
+        // ClickHouse `toUInt256OrNull` expects a raw decimal — no scheme
+        // prefix. Use `to_decimal_string` rather than the `Display` impl
+        // (which prefixes canonical hashes with `can:`).
+        params.insert("snapshot_hash", snapshot_hash.to_decimal_string());
 
         self.run_query_synchronous(query.to_string(), &params)
             .await?;
@@ -769,7 +772,10 @@ impl WorkflowEvaluationQueries for ClickHouseConnectionInfo {
         // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
         params.insert("datapoint_name", task_name.unwrap_or("\\N"));
         params.insert("tags", tags_str.as_str());
-        params.insert("snapshot_hash", &**snapshot_hash);
+        // ClickHouse `toUInt256OrNull` expects a raw decimal — no scheme
+        // prefix. Use `to_decimal_string` rather than the `Display` impl
+        // (which prefixes canonical hashes with `can:`).
+        params.insert("snapshot_hash", snapshot_hash.to_decimal_string());
 
         self.run_query_synchronous(query.to_string(), &params)
             .await?;

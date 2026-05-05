@@ -1342,12 +1342,14 @@ pub(super) fn with_request_id(error: Error, request_id: Option<&str>) -> Error {
     match error.get_details() {
         ErrorDetails::FatalStreamError {
             message,
+            status_code,
             provider_type,
             api_type,
             raw_request,
             raw_response,
         } => Error::new(ErrorDetails::FatalStreamError {
             message: format!("{message} [request_id: {request_id}]"),
+            status_code: *status_code,
             provider_type: provider_type.clone(),
             api_type: *api_type,
             raw_request: raw_request.clone(),
@@ -5963,6 +5965,7 @@ mod tests {
         // Test with FatalStreamError
         let error = Error::new(ErrorDetails::FatalStreamError {
             message: "Stream error".to_string(),
+            status_code: None,
             provider_type: PROVIDER_TYPE.to_string(),
             api_type: ApiType::ChatCompletions,
             raw_request: Some("request".to_string()),

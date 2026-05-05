@@ -24,6 +24,7 @@ pub struct StoredGatewayConfig {
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
     pub auth: Option<StoredAuthConfig>,
     pub global_outbound_http_timeout_ms: Option<u64>,
+    pub global_outbound_http_intra_stream_read_timeout_ms: Option<u64>,
     pub relay: Option<StoredRelayConfig>,
     pub metrics: Option<StoredGatewayMetricsConfig>,
     pub cache: Option<StoredModelInferenceCacheConfig>,

@@ -1,0 +1,16 @@
+# Baseline chat function, no `version` field. The hash of this fixture
+# must remain identical for all eternity — every `chat_inferences` row
+# referencing this hash assumes byte-stable canonicalization.
+[models.dummy]
+routing = ["dummy"]
+
+[models.dummy.providers.dummy]
+type = "dummy"
+model_name = "test"
+
+[functions.my_chat_fn]
+type = "chat"
+
+[functions.my_chat_fn.variants.baseline]
+type = "chat_completion"
+model = "dummy"
