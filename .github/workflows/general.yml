@@ -378,7 +378,6 @@ jobs:
         shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
           workspaces: "crates -> target"
       - name: Install uv
@@ -438,7 +437,6 @@ jobs:
         shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          cache-provider: "buildjet"
           shared-key: "lint-rust-cache"
           save-if: ${{ github.event_name == 'merge_group' }}
           workspaces: "crates -> target"
@@ -1006,7 +1004,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          cache-provider: "buildjet"
           save-if: false
           workspaces: "crates -> target"
 
@@ -1096,7 +1093,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
           workspaces: "crates -> target"
@@ -1219,7 +1215,6 @@ jobs:
         shell: bash
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
-          cache-provider: "buildjet"
           shared-key: "build-gateway-cache"
           save-if: false
           workspaces: "crates -> target"
