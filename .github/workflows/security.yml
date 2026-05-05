@@ -9,7 +9,7 @@ on:
 # leaving the PR head SHA with no Code Scanning results and blocking branch protection.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read # Required for checkout or repository metadata reads.
