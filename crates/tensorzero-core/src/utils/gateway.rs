@@ -1065,6 +1065,25 @@ pub async fn setup_clickhouse(
                 .unwrap_or(false),
         })
         .await?;
+
+        // Best-effort backfill of `ConfigSnapshot.canonical_hash` for rows
+        // that predate migration 0054. Idempotent (filters by sentinel
+        // `canonical_hash = 0`); per-row failures log at `error!` level
+        // and continue, so a single unparseable legacy row does not
+        // block startup.
+        if let Err(e) =
+            crate::db::clickhouse::config_queries::backfill_config_snapshot_canonical_hash(
+                &clickhouse_connection_info,
+            )
+            .await
+        {
+            tracing::error!(
+                "ConfigSnapshot canonical_hash backfill failed at boot — \
+                 startup continues; canonical-hash lookups against \
+                 pre-migration rows will return not-found until the \
+                 next successful boot. Error: {e}"
+            );
+        }
     }
     Ok(clickhouse_connection_info)
 }
