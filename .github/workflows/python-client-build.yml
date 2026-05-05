@@ -240,10 +240,13 @@ jobs:
 
       - name: Install Rust (from rust-toolchain.toml)
         working-directory: crates
-        # macOS GH runners ship coreutils via Homebrew but as `gtimeout`, not `timeout`.
+        # macOS GH runners don't ship GNU coreutils, so `timeout` isn't on
+        # PATH. Use perl's alarm() instead — it's preinstalled, and the
+        # alarm timer is preserved across exec on POSIX, so the exec'd
+        # rustup process is killed when SIGALRM fires.
         run: |
           for attempt in 1 2 3; do
-            if gtimeout 5m rustup show; then
+            if perl -e 'alarm shift; exec @ARGV' 300 rustup show; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -318,7 +321,9 @@ jobs:
       - name: Check local sdist
         run: |
           for attempt in 1 2 3; do
-            if timeout 5m ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
+            # No per-attempt timeout: this builds the wheel from the sdist
+            # (full Rust compile, ~10 min), not a network op.
+            if ./ci/check-local-wheel.sh ./crates/tensorzero-python/dist/tensorzero-*.tar.gz; then
               break
             fi
             if [ $attempt -eq 3 ]; then
