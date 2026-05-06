@@ -6,7 +6,9 @@ use sqlx::PgPool;
 
 use tensorzero_auth::{
     key::{TensorZeroApiKey, TensorZeroAuthError},
-    postgres::{AuthResult, KeyInfo, check_key, create_key, disable_key, list_key_info},
+    postgres::{
+        AuthResult, KeyInfo, check_key, create_key, disable_key, get_key_info, list_key_info,
+    },
 };
 
 #[sqlx::test]
@@ -334,6 +336,28 @@ async fn test_disable_key_workflow(pool: PgPool) {
         check_disabled_at, disabled_at,
         "Timestamps should match between list_key_info and check_key"
     );
+}
+
+#[sqlx::test]
+async fn test_get_key_info(pool: PgPool) {
+    let api_key = create_key("test_org", "test_workspace", Some("Test key"), None, &pool)
+        .await
+        .unwrap();
+    let parsed_key = TensorZeroApiKey::parse(api_key.expose_secret()).unwrap();
+
+    let info = get_key_info(&parsed_key.public_id, &pool)
+        .await
+        .unwrap()
+        .expect("key should exist");
+    assert_eq!(info.public_id, parsed_key.public_id);
+    assert_eq!(info.organization, "test_org");
+    assert_eq!(info.workspace, "test_workspace");
+    assert_eq!(info.description, Some("Test key".to_string()));
+    assert_eq!(info.disabled_at, None);
+    assert_eq!(info.expires_at, None);
+
+    let missing = get_key_info("aaaaaaaaaaaa", &pool).await.unwrap();
+    assert!(missing.is_none(), "missing key should return None");
 }
 
 #[sqlx::test]

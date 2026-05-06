@@ -206,6 +206,24 @@ pub async fn update_key_description(
     Ok(key)
 }
 
+/// Fetches metadata for a single API key by its `public_id`.
+/// Returns `Ok(None)` if no key with that `public_id` exists.
+pub async fn get_key_info(
+    public_id: &str,
+    pool: &PgPool,
+) -> Result<Option<KeyInfo>, TensorZeroAuthError> {
+    let key = sqlx::query_as!(
+        KeyInfo,
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at \
+         FROM tensorzero_auth_api_key \
+         WHERE public_id = $1",
+        public_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(key)
+}
+
 /// Lists all API keys in the database, optionally filtered by organization,
 /// with an optional limit and offset.
 pub async fn list_key_info(
