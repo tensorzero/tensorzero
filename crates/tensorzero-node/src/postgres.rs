@@ -72,7 +72,7 @@ impl PostgresClient {
             .get_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
-        let keys = tensorzero_auth::postgres::list_key_info(None, limit, offset, pool)
+        let keys = tensorzero_auth::postgres::list_key_info(None, None, limit, offset, pool)
             .await
             .map_err(|e| napi::Error::from_reason(format!("Failed to list API keys: {e}")))?;
 

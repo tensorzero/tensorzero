@@ -224,18 +224,20 @@ pub async fn get_key_info(
     Ok(key)
 }
 
-/// Lists all API keys in the database, optionally filtered by organization,
-/// with an optional limit and offset.
+/// Lists all API keys in the database, optionally filtered by organization
+/// and/or workspace, with an optional limit and offset.
 pub async fn list_key_info(
     organization: Option<String>,
+    workspace: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
     pool: &PgPool,
 ) -> Result<Vec<KeyInfo>, TensorZeroAuthError> {
     let keys = sqlx::query_as!(
         KeyInfo,
-        "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) AND (workspace = $2 OR $2 is NULL) ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         organization,
+        workspace,
         // We take in a 'u32' and convert to 'i64' to avoid any weirdness around negative values
         // Postgres does the right thing when the LIMIT or OFFSET is null (it gets ignored)
         limit.map(i64::from),

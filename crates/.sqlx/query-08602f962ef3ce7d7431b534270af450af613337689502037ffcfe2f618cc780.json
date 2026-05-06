@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) AND (workspace = $2 OR $2 is NULL) ORDER BY created_at DESC LIMIT $3 OFFSET $4",
   "describe": {
     "columns": [
       {
@@ -84,6 +84,7 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Int8",
         "Int8"
       ]
@@ -98,5 +99,5 @@
       true
     ]
   },
-  "hash": "97c1ae769f9c03c5eda14cde29d338153023b36becd12a4a1c708b2058e7462a"
+  "hash": "08602f962ef3ce7d7431b534270af450af613337689502037ffcfe2f618cc780"
 }
