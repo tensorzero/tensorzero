@@ -8141,6 +8141,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "tensorzero-http",
  "tensorzero-types",
  "thiserror 2.0.18",
  "tracing",
@@ -8168,11 +8169,11 @@ dependencies = [
  "reqwest-sse-stream",
  "serde",
  "serde_json",
- "tensorzero-error",
- "tensorzero-types",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-futures",
+ "ts-rs",
 ]
 
 [[package]]
@@ -8342,6 +8343,7 @@ dependencies = [
  "serde_path_to_error",
  "sqlx",
  "tensorzero-derive",
+ "tensorzero-http",
  "thiserror 2.0.18",
  "tracing",
  "ts-rs",

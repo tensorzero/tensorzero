@@ -390,6 +390,58 @@ impl From<ErrorDetails> for Error {
     }
 }
 
+impl From<tensorzero_http::HttpClientError> for Error {
+    fn from(err: tensorzero_http::HttpClientError) -> Self {
+        match err {
+            tensorzero_http::HttpClientError::BuildClient { message } => {
+                Error::new(ErrorDetails::AppState {
+                    message: format!("Failed to build HTTP client: {message}"),
+                })
+            }
+            tensorzero_http::HttpClientError::ConvertDuration { field, message } => {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Failed to convert `{field}` to std::time::Duration: {message}"
+                    ),
+                })
+            }
+            tensorzero_http::HttpClientError::InvalidProxyUrl { message } => {
+                Error::new(ErrorDetails::AppState {
+                    message: format!("Invalid proxy URL: {message}"),
+                })
+            }
+            tensorzero_http::HttpClientError::InferenceClient {
+                message,
+                status_code,
+                provider_type,
+                api_type,
+                raw_request,
+                raw_response,
+            } => Error::new(ErrorDetails::InferenceClient {
+                message,
+                status_code,
+                provider_type,
+                api_type,
+                raw_request,
+                raw_response,
+            }),
+            tensorzero_http::HttpClientError::InferenceServer {
+                message,
+                provider_type,
+                api_type,
+                raw_request,
+                raw_response,
+            } => Error::new(ErrorDetails::InferenceServer {
+                message,
+                provider_type,
+                api_type,
+                raw_request,
+                raw_response,
+            }),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 #[serde(rename_all = "snake_case")]

@@ -19,10 +19,10 @@ reqwest.workspace = true
 reqwest-sse-stream.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tensorzero-error = { path = "../tensorzero-error" }
-tensorzero-types = { path = "../tensorzero-types" }
+thiserror.workspace = true
 tracing.workspace = true
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+ts-rs.workspace = true
 
 [features]
 default = []

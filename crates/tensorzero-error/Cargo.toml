@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+tensorzero-http = { path = "../tensorzero-http" }
 tensorzero-types = { path = "../tensorzero-types" }
 http = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }

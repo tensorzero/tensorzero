@@ -3,19 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::serde_utils::decimal_float_option;
+pub use tensorzero_http::ApiType;
 
-/// The type of API used for a model inference.
-/// Used in raw usage reporting to help consumers interpret provider-specific usage data.
-#[derive(ts_rs::TS, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-pub enum ApiType {
-    ChatCompletions,
-    Responses,
-    Embeddings,
-    Other,
-}
+use crate::serde_utils::decimal_float_option;
 
 /// A single entry in the raw response array, representing raw response data from one model inference.
 /// This preserves the original provider-specific response string that TensorZero normalizes.
