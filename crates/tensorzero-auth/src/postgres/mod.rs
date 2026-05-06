@@ -226,6 +226,9 @@ pub async fn get_key_info(
 
 /// Lists all API keys in the database, optionally filtered by organization
 /// and/or workspace, with an optional limit and offset.
+///
+/// Workspace names are not unique across organizations, so the `workspace`
+/// filter requires an `organization` filter to be set.
 pub async fn list_key_info(
     organization: Option<String>,
     workspace: Option<String>,
@@ -233,6 +236,9 @@ pub async fn list_key_info(
     offset: Option<u32>,
     pool: &PgPool,
 ) -> Result<Vec<KeyInfo>, TensorZeroAuthError> {
+    if workspace.is_some() && organization.is_none() {
+        return Err(TensorZeroAuthError::WorkspaceFilterRequiresOrganization);
+    }
     let keys = sqlx::query_as!(
         KeyInfo,
         "SELECT public_id, organization, workspace, description, created_at, disabled_at, expires_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) AND (workspace = $2 OR $2 is NULL) ORDER BY created_at DESC LIMIT $3 OFFSET $4",

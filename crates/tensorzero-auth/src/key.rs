@@ -122,6 +122,8 @@ pub enum TensorZeroAuthError {
     InvalidKeyFormat(&'static str),
     #[error("Invalid `expires_at` value: {0}")]
     InvalidExpiresAt(String),
+    #[error("`workspace` filter requires `organization` filter to be set")]
+    WorkspaceFilterRequiresOrganization,
     #[error("Database error: {0}")]
     Sqlx(Arc<sqlx::Error>),
     #[error("Migration error: {message}")]

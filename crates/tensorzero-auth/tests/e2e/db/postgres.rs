@@ -256,30 +256,6 @@ async fn test_list_keys(pool: PgPool) {
     );
 
     assert_eq!(
-        list_key_info(None, Some("my_workspace".to_string()), None, None, &pool)
-            .await
-            .unwrap(),
-        vec![
-            collide_workspace_name_info.clone(),
-            second_key_info.clone(),
-            first_key_info.clone(),
-        ]
-    );
-
-    assert_eq!(
-        list_key_info(
-            None,
-            Some("my_second_workspace".to_string()),
-            None,
-            None,
-            &pool
-        )
-        .await
-        .unwrap(),
-        vec![same_org_different_workspace_info.clone()]
-    );
-
-    assert_eq!(
         list_key_info(
             Some("my_org".to_string()),
             Some("my_workspace".to_string()),
@@ -290,6 +266,19 @@ async fn test_list_keys(pool: PgPool) {
         .await
         .unwrap(),
         vec![second_key_info.clone(), first_key_info.clone()]
+    );
+
+    assert_eq!(
+        list_key_info(
+            Some("my_org".to_string()),
+            Some("my_second_workspace".to_string()),
+            None,
+            None,
+            &pool
+        )
+        .await
+        .unwrap(),
+        vec![same_org_different_workspace_info.clone()]
     );
 
     assert_eq!(
@@ -307,19 +296,6 @@ async fn test_list_keys(pool: PgPool) {
 
     assert_eq!(
         list_key_info(
-            None,
-            Some("missing_workspace".to_string()),
-            None,
-            None,
-            &pool
-        )
-        .await
-        .unwrap(),
-        vec![]
-    );
-
-    assert_eq!(
-        list_key_info(
             Some("my_org".to_string()),
             Some("different_workspace".to_string()),
             None,
@@ -329,6 +305,19 @@ async fn test_list_keys(pool: PgPool) {
         .await
         .unwrap(),
         vec![]
+    );
+
+    // Setting a workspace filter without an organization filter is an error,
+    // since workspace names are not unique across organizations.
+    let err = list_key_info(None, Some("my_workspace".to_string()), None, None, &pool)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            err,
+            TensorZeroAuthError::WorkspaceFilterRequiresOrganization
+        ),
+        "Expected `WorkspaceFilterRequiresOrganization`, got: {err:?}"
     );
 }
 
