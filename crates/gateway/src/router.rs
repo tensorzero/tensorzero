@@ -72,6 +72,10 @@ pub async fn build_axum_router(
             pool: app_state.postgres_connection_info().get_pool().cloned(),
             error_json: config.gateway.unstable_error_json,
             base_path: (!base_path.is_empty()).then(|| base_path.to_string()),
+            // The standalone gateway always reads the API key from the `Authorization`
+            // header. Other consumers of `tensorzero-auth` may set this to a different
+            // header name.
+            auth_header: None,
         });
         router = router.layer(middleware::from_fn_with_state(
             state,

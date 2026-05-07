@@ -22,6 +22,10 @@ tracing = { workspace = true }
 serde_json = { workspace = true }
 ts-rs.workspace = true
 
+[dev-dependencies]
+googletest = { workspace = true }
+http = { workspace = true }
+
 [lints]
 workspace = true
 

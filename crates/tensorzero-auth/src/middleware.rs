@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{
     Json,
     extract::{MatchedPath, Request, State},
-    http::{self, StatusCode},
+    http::{self, HeaderName, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -71,6 +71,10 @@ pub struct TensorzeroAuthMiddlewareStateInner {
     pub error_json: bool,
     /// Optional base path prefix for all routes (e.g., "/custom/prefix")
     pub base_path: Option<String>,
+    /// Header to read the API key from. Defaults to `Authorization` when `None`.
+    /// The value must be prefixed with `Bearer ` if the header is `Authorization`
+    /// or `Proxy-Authorization`.
+    pub auth_header: Option<HeaderName>,
 }
 
 #[axum::debug_middleware]
@@ -102,26 +106,7 @@ pub async fn tensorzero_auth_middleware(
     // We use `.instrument` on this future, so that we don't include the '.next.run(request)' inside
     // of our `tensorzero_auth` OpenTelemetry span.
     let do_auth = async {
-        let Some(auth_header) = headers.get(http::header::AUTHORIZATION) else {
-            return Err(TensorZeroAuthError::Middleware {
-                message: "Authorization header is required".to_string(),
-                key_info: None,
-            });
-        };
-        let auth_header_value =
-            auth_header
-                .to_str()
-                .map_err(|e| TensorZeroAuthError::Middleware {
-                    message: format!("Invalid authorization header: {e}"),
-                    key_info: None,
-                })?;
-        let raw_api_key = auth_header_value.strip_prefix("Bearer ").ok_or_else(|| {
-            TensorZeroAuthError::Middleware {
-                message: "Authorization header must start with 'Bearer '".to_string(),
-                key_info: None,
-            }
-        })?;
-
+        let raw_api_key = extract_raw_api_key(headers, state.auth_header.as_ref())?;
         let parsed_key = TensorZeroApiKey::parse(raw_api_key)?;
 
         // Record the public ID immediately, in case we fail to look up the key in the database/cache
@@ -234,6 +219,40 @@ pub async fn tensorzero_auth_middleware(
     }
 }
 
+/// Reads the API key from the configured request header.
+/// When `auth_header` is `None` or `Authorization`, the value must start with `Bearer `
+/// and the prefix is stripped. For any other header, the raw value is returned as-is.
+fn extract_raw_api_key<'a>(
+    headers: &'a http::HeaderMap,
+    auth_header: Option<&HeaderName>,
+) -> Result<&'a str, TensorZeroAuthError> {
+    let header_name = auth_header.unwrap_or(&http::header::AUTHORIZATION);
+    let Some(auth_header) = headers.get(header_name) else {
+        return Err(TensorZeroAuthError::Middleware {
+            message: format!("{header_name} header is required"),
+            key_info: None,
+        });
+    };
+    let auth_header_value = auth_header
+        .to_str()
+        .map_err(|e| TensorZeroAuthError::Middleware {
+            message: format!("Invalid {header_name} header: {e}"),
+            key_info: None,
+        })?;
+    if header_name == http::header::AUTHORIZATION
+        || header_name == http::header::PROXY_AUTHORIZATION
+    {
+        auth_header_value
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| TensorZeroAuthError::Middleware {
+                message: format!("{header_name} header must start with 'Bearer '"),
+                key_info: None,
+            })
+    } else {
+        Ok(auth_header_value)
+    }
+}
+
 // Our auth middleware stores this in the request extensions when auth is enabled,
 // *and* the API key is valid.
 // This is used to get access to the API key (e.g. for rate-limiting), *not* to require that a route is authenticated -
@@ -242,4 +261,71 @@ pub async fn tensorzero_auth_middleware(
 pub struct RequestApiKeyExtension {
     pub api_key: Arc<TensorZeroApiKey>,
     pub key_info: KeyInfo,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use googletest::prelude::*;
+    use http::{HeaderMap, HeaderValue};
+
+    fn headers_with(name: HeaderName, value: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(name, HeaderValue::from_str(value).unwrap());
+        h
+    }
+
+    #[gtest]
+    fn extracts_authorization_header_by_default() {
+        let headers = headers_with(http::header::AUTHORIZATION, "Bearer my-key");
+        let result = extract_raw_api_key(&headers, None).expect("should succeed");
+        assert_that!(result, eq("my-key"));
+    }
+
+    #[gtest]
+    fn missing_default_header_errors_with_authorization_name() {
+        let headers = HeaderMap::new();
+        let err = extract_raw_api_key(&headers, None).expect_err("should fail");
+        let message = err.to_string();
+        assert_that!(message, contains_substring("authorization"));
+    }
+
+    #[gtest]
+    fn default_header_without_bearer_prefix_errors() {
+        let headers = headers_with(http::header::AUTHORIZATION, "my-key");
+        let err = extract_raw_api_key(&headers, None).expect_err("should fail");
+        assert_that!(err.to_string(), contains_substring("Bearer"));
+    }
+
+    #[gtest]
+    fn explicit_authorization_header_still_requires_bearer_prefix() {
+        let headers = headers_with(http::header::AUTHORIZATION, "my-key");
+        let err = extract_raw_api_key(&headers, Some(&http::header::AUTHORIZATION))
+            .expect_err("should fail");
+        assert_that!(err.to_string(), contains_substring("Bearer"));
+    }
+
+    #[gtest]
+    fn custom_header_returns_raw_value_without_bearer_prefix() {
+        let custom = HeaderName::from_static("x-api-key");
+        let headers = headers_with(custom.clone(), "my-key");
+        let result = extract_raw_api_key(&headers, Some(&custom)).expect("should succeed");
+        assert_that!(result, eq("my-key"));
+    }
+
+    #[gtest]
+    fn custom_header_does_not_strip_bearer_prefix() {
+        let custom = HeaderName::from_static("x-api-key");
+        let headers = headers_with(custom.clone(), "Bearer my-key");
+        let result = extract_raw_api_key(&headers, Some(&custom)).expect("should succeed");
+        assert_that!(result, eq("Bearer my-key"));
+    }
+
+    #[gtest]
+    fn missing_custom_header_errors_with_custom_name() {
+        let custom = HeaderName::from_static("x-api-key");
+        let headers = HeaderMap::new();
+        let err = extract_raw_api_key(&headers, Some(&custom)).expect_err("should fail");
+        assert_that!(err.to_string(), contains_substring("x-api-key"));
+    }
 }

@@ -296,7 +296,7 @@ async fn test_tensorzero_missing_auth() {
         let text = response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header is required\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: authorization header is required\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -314,7 +314,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_auth_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Error performing authentication: Authorization header must start with 'Bearer '\"}"
+            "{\"error\":\"TensorZero authentication error: Error performing authentication: authorization header must start with 'Bearer '\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
