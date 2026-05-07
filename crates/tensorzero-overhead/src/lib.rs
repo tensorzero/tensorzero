@@ -86,7 +86,10 @@ use tracing_subscriber::{
     registry::{ExtensionsMut, LookupSpan, SpanData},
 };
 
+mod connection_drop_guard;
 mod disjoint_intervals;
+
+pub use connection_drop_guard::{ConnectionDropGuard, HttpMetricData};
 
 /// Computes the 'overhead' of TensorZero,
 /// defined as the duration of a certain span (e.g. `POST /inference`) minus
