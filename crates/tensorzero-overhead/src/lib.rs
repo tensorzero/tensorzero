@@ -56,7 +56,7 @@
 //!   The total 'external' duration is the sum of the durations of all of the disjoint intervals.
 //!   For example, a `best_of_n` variant might create the following external HTTP spans:
 //!
-//!   ```
+//!   ```text
 //!   [ ---- Candidate 1 ---- ]
 //!      [ --------- Candidate 2 ----------- ]
 //!     [ --------- Candidate 3 --------- ]
@@ -73,9 +73,9 @@
 //!
 use std::time::{Duration, Instant};
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::observability::disjoint_intervals::DisjointIntervals;
+use crate::disjoint_intervals::DisjointIntervals;
 use metrics::Label;
+use tensorzero_error::IMPOSSIBLE_ERROR_MESSAGE;
 use tracing::{
     Span, Subscriber,
     span::{Attributes, Id},
@@ -85,6 +85,8 @@ use tracing_subscriber::{
     layer::Context,
     registry::{ExtensionsMut, LookupSpan, SpanData},
 };
+
+mod disjoint_intervals;
 
 /// Computes the 'overhead' of TensorZero,
 /// defined as the duration of a certain span (e.g. `POST /inference`) minus

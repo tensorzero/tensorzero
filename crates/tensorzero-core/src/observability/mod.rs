@@ -50,7 +50,6 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
-use crate::observability::overhead_timing::OverheadTimingLayer;
 use crate::observability::span_leak_detector::SpanLeakDetector;
 use crate::utils::spawn_ignoring_shutdown;
 use axum::extract::MatchedPath;
@@ -72,6 +71,7 @@ use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use std::str::FromStr;
+use tensorzero_overhead::OverheadTimingLayer;
 use tokio_util::task::TaskTracker;
 use tokio_util::task::task_tracker::TaskTrackerToken;
 use tonic::metadata::AsciiMetadataKey;
@@ -92,11 +92,9 @@ use crate::config::gateway::MetricsConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
-mod disjoint_intervals;
 mod exporter_wrapper;
 pub mod genai_conventions;
 pub mod internal_metrics;
-pub mod overhead_timing;
 pub mod request_logging;
 mod span_leak_detector;
 pub mod tracing_bug;

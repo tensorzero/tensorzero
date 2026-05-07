@@ -36,12 +36,12 @@ use crate::inference::types::{
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
-use crate::observability::overhead_timing::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::{
     ActiveRateLimitKey, FailedRateLimit, RateLimitResource, RateLimitingScopeKey,
 };
 use crate::tool::{ToolCall, ToolCallChunk};
+use tensorzero_http::TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME;
 
 const PROVIDER_NAME: &str = "Dummy";
 pub const PROVIDER_TYPE: &str = "dummy";

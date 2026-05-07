@@ -1,0 +1,16 @@
+[package]
+name = "tensorzero-overhead"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+metrics = "0.24.3"
+tensorzero-error = { path = "../tensorzero-error" }
+tensorzero-http = { path = "../tensorzero-http" }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.23" }
+
+[lints]
+workspace = true

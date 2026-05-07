@@ -23,9 +23,7 @@ use tracing::{Level, Span};
 use tracing_futures::Instrument;
 use uuid::Uuid;
 
-use crate::observability::overhead_timing::{
-    OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME,
-};
+use tensorzero_overhead::{OverheadSpanExt, TENSORZERO_TRACK_OVERHEAD_ATTRIBUTE_NAME};
 
 /// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {

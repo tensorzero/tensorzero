@@ -33,6 +33,7 @@ members = [
     "tensorzero-error",
     "tensorzero-http",
     "tensorzero-inference-types",
+    "tensorzero-overhead",
     "tensorzero-unsafe-helpers",
     "ts-executor-pool",
 ]

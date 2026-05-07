@@ -8092,6 +8092,7 @@ dependencies = [
  "tensorzero-error",
  "tensorzero-http",
  "tensorzero-inference-types",
+ "tensorzero-overhead",
  "tensorzero-stored-config",
  "tensorzero-types",
  "tensorzero-types-providers",
@@ -8277,6 +8278,17 @@ dependencies = [
  "ts-rs",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tensorzero-overhead"
+version = "2026.5.0"
+dependencies = [
+ "metrics",
+ "tensorzero-error",
+ "tensorzero-http",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
