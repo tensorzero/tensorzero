@@ -23,6 +23,7 @@ use reqwest::{NoProxy, Proxy};
 use reqwest_sse_stream::{Event, RequestBuilderExt, ReqwestSseStreamError};
 use serde::{Serialize, de::DeserializeOwned};
 
+use std::borrow::Cow;
 use std::ops::Deref;
 
 pub mod api_type;
@@ -36,6 +37,11 @@ const IMPOSSIBLE_ERROR_MESSAGE: &str = "This should never happen, please file a 
 pub const TENSORZERO_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub const TENSORZERO_EXTERNAL_SPAN_ATTRIBUTE_NAME: &str = "tensorzero.overhead.external_span";
+
+/// Default environment variable consulted (when the `e2e_tests` feature is
+/// enabled) for an outbound HTTP proxy URL. Override via
+/// [`TensorzeroHttpClient::new_with_proxy_env_var`].
+pub const DEFAULT_PROXY_ENV_VAR: &str = "TENSORZERO_E2E_PROXY";
 
 /// This is `Cow` without the `T: Clone` bound.
 /// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
@@ -171,6 +177,10 @@ pub struct TensorzeroHttpClient {
     /// Per-read timeout (resets on each successful read). `None` disables it.
     /// Configured via `gateway.global_outbound_http_intra_stream_read_timeout_ms`.
     global_outbound_http_intra_stream_read_timeout: Option<Duration>,
+    /// Name of the env var consulted for an outbound HTTP proxy URL when the
+    /// `e2e_tests` feature is enabled. Stored regardless of feature flag so
+    /// that callers do not need to feature-gate construction.
+    proxy_env_var: Cow<'static, str>,
 }
 
 #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
@@ -191,6 +201,22 @@ impl TensorzeroHttpClient {
         global_outbound_http_timeout: Duration,
         global_outbound_http_intra_stream_read_timeout: Option<Duration>,
     ) -> Result<Self, HttpClientError> {
+        Self::new_with_proxy_env_var(
+            global_outbound_http_timeout,
+            global_outbound_http_intra_stream_read_timeout,
+            Cow::Borrowed(DEFAULT_PROXY_ENV_VAR),
+        )
+    }
+
+    /// Like [`Self::new`], but lets the caller override the env var consulted
+    /// for an outbound HTTP proxy URL. The env var is only read when the
+    /// `e2e_tests` feature is enabled.
+    pub fn new_with_proxy_env_var(
+        global_outbound_http_timeout: Duration,
+        global_outbound_http_intra_stream_read_timeout: Option<Duration>,
+        proxy_env_var: impl Into<Cow<'static, str>>,
+    ) -> Result<Self, HttpClientError> {
+        let proxy_env_var = proxy_env_var.into();
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
             .collect::<Vec<_>>();
@@ -201,10 +227,12 @@ impl TensorzeroHttpClient {
                 client: build_client(
                     global_outbound_http_timeout,
                     global_outbound_http_intra_stream_read_timeout,
+                    &proxy_env_var,
                 )?,
             }),
             global_outbound_http_timeout,
             global_outbound_http_intra_stream_read_timeout,
+            proxy_env_var,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -219,6 +247,7 @@ impl TensorzeroHttpClient {
                     client: build_client(
                         self.global_outbound_http_timeout,
                         self.global_outbound_http_intra_stream_read_timeout,
+                        &self.proxy_env_var,
                     )?,
                 })
             }) {
@@ -725,7 +754,10 @@ pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(15 * 60);
 fn build_client(
     global_outbound_http_timeout: Duration,
     global_outbound_http_intra_stream_read_timeout: Option<Duration>,
+    proxy_env_var: &str,
 ) -> Result<Client, HttpClientError> {
+    #[cfg(not(feature = "e2e_tests"))]
+    let _ = proxy_env_var;
     let to_std = |d: Duration, field: &str| {
         d.to_std().map_err(|e| HttpClientError::ConvertDuration {
             field: field.to_string(),
@@ -748,8 +780,8 @@ fn build_client(
     }
 
     #[cfg(feature = "e2e_tests")]
-    if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
-        tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+    if let Ok(proxy_url) = std::env::var(proxy_env_var) {
+        tracing::info!("Using proxy URL from {proxy_env_var}: {proxy_url}");
         http_client_builder = http_client_builder
                 .proxy(
                     Proxy::all(proxy_url)
