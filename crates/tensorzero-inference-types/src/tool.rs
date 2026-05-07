@@ -382,3 +382,14 @@ fn serialize_to_py<'py, T: Serialize>(py: Python<'py>, val: &T) -> PyResult<Boun
 fn value_to_py_dict<'py>(py: Python<'py>, value: &Value) -> PyResult<Bound<'py, PyAny>> {
     serialize_to_py(py, value)
 }
+
+impl From<&FunctionTool> for crate::FunctionToolDef {
+    fn from(tool: &FunctionTool) -> Self {
+        Self {
+            name: tool.name.clone(),
+            description: tool.description.clone(),
+            parameters: tool.parameters.clone(),
+            strict: tool.strict,
+        }
+    }
+}

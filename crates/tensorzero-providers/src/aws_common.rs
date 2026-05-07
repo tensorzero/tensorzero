@@ -13,13 +13,11 @@ use reqwest::StatusCode;
 use secrecy::{ExposeSecret, SecretString};
 use url::Url;
 
-use crate::{
-    endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
-    http::TensorzeroHttpClient,
-    inference::types::ApiType,
-    model::{CredentialLocation, CredentialLocationOrHardcoded},
-};
+use tensorzero_error::{Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::credentials::{CredentialLocation, CredentialLocationOrHardcoded};
+use tensorzero_types::ApiType;
+use tensorzero_types::inference_params::InferenceCredentials;
 
 /// Parse and validate AWS region configuration.
 ///
@@ -36,7 +34,7 @@ pub fn parse_aws_region(
 ) -> Result<AWSRegion, Error> {
     // Emit deprecation warning if allow_auto_detect_region is used
     if allow_auto_detect_region {
-        crate::utils::deprecation_warning(&format!(
+        tensorzero_inference_types::utils::deprecation_warning(&format!(
             "The `allow_auto_detect_region` field is deprecated for `{provider_type}`. \
              Use `region = \"sdk\"` instead to enable auto-detection. (#5596)"
         ));

@@ -15,18 +15,21 @@ use super::aws_common::{
     warn_if_credential_exfiltration_risk,
 };
 use super::helpers::inject_extra_request_data;
-use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::{
-    ApiType, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, batch::StartBatchProviderInferenceResponse,
+use tensorzero_error::{Error, ErrorDetails};
+use tensorzero_http::TensorzeroHttpClient;
+use tensorzero_inference_types::credentials::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::provider_trait::{
+    InferenceProvider, TensorZeroEventError, WrappedProvider,
 };
-use crate::inference::{InferenceProvider, TensorZeroEventError, WrappedProvider};
-use crate::model::{ModelProviderRequestInfo, ProviderInferenceRequest};
+use tensorzero_inference_types::{BatchRequestRow, PollBatchInferenceResponse};
+use tensorzero_inference_types::{
+    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, StartBatchProviderInferenceResponse,
+};
+use tensorzero_types::ApiType;
+use tensorzero_types::inference_params::InferenceCredentials;
 
-use crate::model::{CredentialLocation, CredentialLocationOrHardcoded};
+use tensorzero_inference_types::credentials::{CredentialLocation, CredentialLocationOrHardcoded};
 
 #[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Sagemaker";
