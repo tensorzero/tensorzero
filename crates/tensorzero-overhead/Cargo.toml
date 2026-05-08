@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 http.workspace = true
 metrics = "0.24.3"
-tensorzero-error = { path = "../tensorzero-error" }
 tensorzero-http = { path = "../tensorzero-http" }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.23" }

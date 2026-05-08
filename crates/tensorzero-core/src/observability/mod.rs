@@ -1157,7 +1157,8 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
     };
 
     // This layer only makes sense when we construct top-level HTTP overhead-tracking spans
-    let overhead_timing_layer = is_http_gateway.then(OverheadTimingLayer::new);
+    let overhead_timing_layer = is_http_gateway
+        .then(|| OverheadTimingLayer::new("tensorzero_inference_latency_overhead_seconds"));
 
     // IMPORTANT: If you add any new layers here that have per-layer filtering applied
     // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`

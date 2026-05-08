@@ -8289,7 +8289,6 @@ version = "2026.5.0"
 dependencies = [
  "http 1.4.0",
  "metrics",
- "tensorzero-error",
  "tensorzero-http",
  "tracing",
  "tracing-subscriber",

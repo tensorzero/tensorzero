@@ -74,8 +74,7 @@
 use std::time::{Duration, Instant};
 
 use crate::disjoint_intervals::DisjointIntervals;
-use metrics::Label;
-use tensorzero_error::IMPOSSIBLE_ERROR_MESSAGE;
+use metrics::{Label, SharedString};
 use tracing::{
     Span, Subscriber,
     span::{Attributes, Id},
@@ -97,13 +96,15 @@ pub use connection_drop_guard::{ConnectionDropGuard, HttpMetricData};
 /// The 'external' spans may run in parallel (e.g. for best_of_n/mixture_of_n), so we record
 /// the time interval for each of the 'external' spans, and account for overlap
 pub struct OverheadTimingLayer {
-    _private: (),
+    metric_name: SharedString,
 }
 
 impl OverheadTimingLayer {
-    #[expect(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Creates a new `OverheadTimingLayer` that records the overhead histogram under `metric_name`.
+    pub fn new(metric_name: impl Into<SharedString>) -> Self {
+        Self {
+            metric_name: metric_name.into(),
+        }
     }
 }
 
@@ -157,15 +158,11 @@ impl OverheadSpanExt for Span {
                     Duration::ZERO
                 });
 
+                let metric_name = overhead_data.metric_name;
                 if let Some(extra_labels) = extra_labels {
-                    metrics::histogram!(
-                        "tensorzero_inference_latency_overhead_seconds",
-                        extra_labels
-                    )
-                    .record(overhead.as_secs_f64());
+                    metrics::histogram!(metric_name, extra_labels).record(overhead.as_secs_f64());
                 } else {
-                    metrics::histogram!("tensorzero_inference_latency_overhead_seconds")
-                        .record(overhead.as_secs_f64());
+                    metrics::histogram!(metric_name).record(overhead.as_secs_f64());
                 }
             } else {
                 error_within_tracing(&format!("No OverheadSpanData found for span {self:?}"));
@@ -189,6 +186,7 @@ where
                 if let Some(data) = ctx.span(id) {
                     data.extensions_mut().insert(OverheadSpanData {
                         excluded_intervals: DisjointIntervals::new(),
+                        metric_name: self.metric_name.clone(),
                     });
                 } else {
                     error_within_tracing(&format!(
@@ -249,13 +247,14 @@ where
 fn error_within_tracing(message: &str) {
     #![expect(clippy::print_stderr)]
     eprintln!(
-        "ERROR: Internal error in TensorZero tracing code: {message}. {IMPOSSIBLE_ERROR_MESSAGE}"
+        "ERROR: Internal error in TensorZero tracing code: {message}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports"
     );
 }
 
 /// Marks spans with the `tensorzero.overhead.track` attribute applied.
 pub struct OverheadSpanData {
     excluded_intervals: DisjointIntervals<Instant>,
+    metric_name: SharedString,
 }
 
 /// Marks spans with the `tensorzero.overhead.external_span` attribute applied.
