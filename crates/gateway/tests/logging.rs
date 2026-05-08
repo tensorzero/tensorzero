@@ -60,7 +60,7 @@ async fn test_logging_rust_log_debug_on() {
 async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tensorzero_core::observability=debug,warn"),
+        Some("gateway=debug,tensorzero_core::observability=debug,tensorzero_overhead=debug,warn"),
     )
     .await;
 
@@ -252,7 +252,7 @@ async fn test_log_early_drop_non_streaming() {
 async fn test_no_early_drop_warning_on_head() {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tensorzero_core::observability=debug,warn"),
+        Some("gateway=debug,tensorzero_core::observability=debug,tensorzero_overhead=debug,warn"),
     )
     .await;
     let response = reqwest::Client::new()
