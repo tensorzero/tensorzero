@@ -48,7 +48,7 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceResponse,
 };
 use crate::inference::types::chat_completion_inference_params::{
-    ChatCompletionInferenceParamsV2, warn_inference_parameter_not_supported,
+    ChatCompletionInferenceParamsV2, ServiceTier, warn_inference_parameter_not_supported,
 };
 use crate::inference::types::resolved_input::LazyFileExt;
 use crate::inference::types::usage::raw_usage_entries_from_value;
@@ -1116,6 +1116,17 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         tracing::info!("Making request with URL: {}", self.request_url);
         let start_time = Instant::now();
         let builder = http_client.post(&self.request_url).headers(auth_headers);
+        let builder = if let Some(tier_headers) = get_service_tier_headers(
+            provider_request
+                .request
+                .inference_params_v2
+                .service_tier
+                .as_ref(),
+        ) {
+            builder.headers(tier_headers)
+        } else {
+            builder
+        };
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
@@ -1231,6 +1242,13 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let builder = http_client
             .post(&self.streaming_request_url)
             .headers(auth_headers);
+        let builder = if let Some(tier_headers) =
+            get_service_tier_headers(request.inference_params_v2.service_tier.as_ref())
+        {
+            builder.headers(tier_headers)
+        } else {
+            builder
+        };
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
             ApiType::ChatCompletions,
@@ -1261,6 +1279,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        // If service_tier is set for a batch request, warn that it is generally not supported
+        for request in requests {
+            if request.inference_params_v2.service_tier.is_some() {
+                warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier (batch)", None);
+                break;
+            }
+        }
+
         let Some(model_id) = self.model_id.as_ref() else {
             return Err(ErrorDetails::InvalidProviderConfig {
                 message: "Model ID is required for batch inference (not endpoint ID)".to_string(),
@@ -1979,13 +2005,51 @@ pub(super) struct GCPVertexGeminiRequest<'a> {
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
+fn get_service_tier_headers(service_tier: Option<&ServiceTier>) -> Option<HeaderMap> {
+    if let Some(tier) = service_tier {
+        let mut headers = HeaderMap::new();
+        match tier {
+            ServiceTier::Auto => return None,
+            ServiceTier::Default => {
+                headers.insert(
+                    "X-Vertex-AI-LLM-Request-Type",
+                    HeaderValue::from_static("shared"),
+                );
+            }
+            ServiceTier::Priority => {
+                headers.insert(
+                    "X-Vertex-AI-LLM-Request-Type",
+                    HeaderValue::from_static("shared"),
+                );
+                headers.insert(
+                    "X-Vertex-AI-LLM-Shared-Request-Type",
+                    HeaderValue::from_static("priority"),
+                );
+            }
+            ServiceTier::Flex => {
+                headers.insert(
+                    "X-Vertex-AI-LLM-Request-Type",
+                    HeaderValue::from_static("shared"),
+                );
+                headers.insert(
+                    "X-Vertex-AI-LLM-Shared-Request-Type",
+                    HeaderValue::from_static("flex"),
+                );
+            }
+        }
+        Some(headers)
+    } else {
+        None
+    }
+}
+
 fn apply_inference_params(
     request: &mut GCPVertexGeminiRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
-        service_tier,
+        service_tier: _,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -2011,10 +2075,6 @@ fn apply_inference_params(
                 response_schema: None,
             });
         }
-    }
-
-    if service_tier.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -5556,7 +5616,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            service_tier: None,
+            service_tier: Some(ServiceTier::Priority),
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -5590,6 +5650,50 @@ mod tests {
         assert!(logs_contain(
             "GCP Vertex Gemini does not support the inference parameter `verbosity`"
         ));
+
+        // Assert that no service tier warning is logged
+        assert!(!logs_contain(
+            "GCP Vertex Gemini does not support the inference parameter `service_tier`"
+        ));
+    }
+
+    #[test]
+    fn test_get_service_tier_headers() {
+        // Test Auto
+        assert!(get_service_tier_headers(Some(&ServiceTier::Auto)).is_none());
+
+        // Test None
+        assert!(get_service_tier_headers(None).is_none());
+
+        // Test Default
+        let headers = get_service_tier_headers(Some(&ServiceTier::Default)).unwrap();
+        assert_eq!(
+            headers.get("X-Vertex-AI-LLM-Request-Type").unwrap(),
+            "shared"
+        );
+        assert!(headers.get("X-Vertex-AI-LLM-Shared-Request-Type").is_none());
+
+        // Test Priority
+        let headers = get_service_tier_headers(Some(&ServiceTier::Priority)).unwrap();
+        assert_eq!(
+            headers.get("X-Vertex-AI-LLM-Request-Type").unwrap(),
+            "shared"
+        );
+        assert_eq!(
+            headers.get("X-Vertex-AI-LLM-Shared-Request-Type").unwrap(),
+            "priority"
+        );
+
+        // Test Flex
+        let headers = get_service_tier_headers(Some(&ServiceTier::Flex)).unwrap();
+        assert_eq!(
+            headers.get("X-Vertex-AI-LLM-Request-Type").unwrap(),
+            "shared"
+        );
+        assert_eq!(
+            headers.get("X-Vertex-AI-LLM-Shared-Request-Type").unwrap(),
+            "flex"
+        );
     }
 
     #[tokio::test]
