@@ -1,5 +1,6 @@
 use googletest::prelude::*;
 use serde_json::{Value, json};
+use tensorzero::ListInferencesRequest;
 use uuid::Uuid;
 
 use super::common::{McpTestClient, insert_inference};
@@ -13,10 +14,11 @@ async fn test_mcp_list_inferences_basic() {
     let response: Value = mcp
         .call_tool(
             "list_inferences",
-            json!({
-                "function_name": "basic_test",
-                "limit": 10,
-            }),
+            ListInferencesRequest {
+                function_name: Some("basic_test".to_string()),
+                limit: Some(10),
+                ..Default::default()
+            },
         )
         .await;
 
@@ -45,10 +47,11 @@ async fn test_mcp_list_inferences_with_limit() {
     let response: Value = mcp
         .call_tool(
             "list_inferences",
-            json!({
-                "function_name": "basic_test",
-                "limit": 2,
-            }),
+            ListInferencesRequest {
+                function_name: Some("basic_test".to_string()),
+                limit: Some(2),
+                ..Default::default()
+            },
         )
         .await;
 
@@ -68,9 +71,10 @@ async fn test_mcp_list_inferences_unknown_function() {
     let result = mcp
         .call_tool_raw(
             "list_inferences",
-            json!({
-                "function_name": nonexistent,
-            }),
+            ListInferencesRequest {
+                function_name: Some(nonexistent),
+                ..Default::default()
+            },
         )
         .await;
 

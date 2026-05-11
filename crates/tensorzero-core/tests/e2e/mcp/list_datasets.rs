@@ -1,5 +1,6 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
+use tensorzero::ListDatasetsRequest;
 
 use super::common::{McpTestClient, create_test_datapoint};
 
@@ -10,7 +11,9 @@ async fn test_mcp_list_datasets_basic() {
     create_test_datapoint("mcp_test_list_datasets").await;
 
     let mcp = McpTestClient::connect().await;
-    let response: Value = mcp.call_tool("list_datasets", json!({})).await;
+    let response: Value = mcp
+        .call_tool("list_datasets", ListDatasetsRequest::default())
+        .await;
 
     let datasets = response["datasets"]
         .as_array()
@@ -32,9 +35,10 @@ async fn test_mcp_list_datasets_with_function_filter() {
     let response: Value = mcp
         .call_tool(
             "list_datasets",
-            json!({
-                "function_name": "basic_test",
-            }),
+            ListDatasetsRequest {
+                function_name: Some("basic_test".to_string()),
+                ..Default::default()
+            },
         )
         .await;
 
@@ -58,9 +62,10 @@ async fn test_mcp_list_datasets_with_limit() {
     let response: Value = mcp
         .call_tool(
             "list_datasets",
-            json!({
-                "limit": 1,
-            }),
+            ListDatasetsRequest {
+                limit: Some(1),
+                ..Default::default()
+            },
         )
         .await;
 

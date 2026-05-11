@@ -1,7 +1,7 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::common::McpTestClient;
+use super::common::{InferenceToolParams, McpTestClient, chat_input, chat_input_without_system};
 
 #[gtest]
 #[tokio::test]
@@ -10,13 +10,11 @@ async fn test_mcp_inference_basic() {
     let response: Value = mcp
         .call_tool(
             "inference",
-            json!({
-                "function_name": "basic_test",
-                "input": {
-                    "system": {"assistant_name": "TestBot"},
-                    "messages": [{"role": "user", "content": "Hello"}]
-                },
-            }),
+            InferenceToolParams {
+                function_name: Some("basic_test".to_string()),
+                variant_name: None,
+                input: chat_input("Hello"),
+            },
         )
         .await;
 
@@ -33,14 +31,11 @@ async fn test_mcp_inference_with_variant_name() {
     let response: Value = mcp
         .call_tool(
             "inference",
-            json!({
-                "function_name": "basic_test",
-                "variant_name": "test",
-                "input": {
-                    "system": {"assistant_name": "TestBot"},
-                    "messages": [{"role": "user", "content": "Hello"}]
-                },
-            }),
+            InferenceToolParams {
+                function_name: Some("basic_test".to_string()),
+                variant_name: Some("test".to_string()),
+                input: chat_input("Hello"),
+            },
         )
         .await;
 
@@ -57,12 +52,11 @@ async fn test_mcp_inference_invalid_function() {
     let result = mcp
         .call_tool_raw(
             "inference",
-            json!({
-                "function_name": "nonexistent_function",
-                "input": {
-                    "messages": [{"role": "user", "content": "Hello"}]
-                },
-            }),
+            InferenceToolParams {
+                function_name: Some("nonexistent_function".to_string()),
+                variant_name: None,
+                input: chat_input_without_system("Hello"),
+            },
         )
         .await;
 

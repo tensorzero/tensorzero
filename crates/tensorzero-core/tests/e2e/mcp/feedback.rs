@@ -1,7 +1,8 @@
 use googletest::prelude::*;
 use serde_json::{Value, json};
+use tensorzero::FeedbackParams;
 
-use super::common::{McpTestClient, insert_inference, poll_mcp_tool};
+use super::common::{FeedbackByTargetIdToolParams, McpTestClient, insert_inference, poll_mcp_tool};
 
 #[gtest]
 #[tokio::test]
@@ -12,11 +13,12 @@ async fn test_mcp_feedback_comment() {
     let response: Value = mcp
         .call_tool(
             "feedback",
-            json!({
-                "inference_id": inference_id,
-                "metric_name": "comment",
-                "value": "This was a great response",
-            }),
+            FeedbackParams {
+                inference_id: Some(inference_id.parse().expect("inference ID should be a UUID")),
+                metric_name: "comment".to_string(),
+                value: json!("This was a great response"),
+                ..Default::default()
+            },
         )
         .await;
 
@@ -34,11 +36,12 @@ async fn test_mcp_feedback_boolean_metric() {
     let response: Value = mcp
         .call_tool(
             "feedback",
-            json!({
-                "inference_id": inference_id,
-                "metric_name": "task_success",
-                "value": true,
-            }),
+            FeedbackParams {
+                inference_id: Some(inference_id.parse().expect("inference ID should be a UUID")),
+                metric_name: "task_success".to_string(),
+                value: json!(true),
+                ..Default::default()
+            },
         )
         .await;
 
@@ -48,10 +51,11 @@ async fn test_mcp_feedback_boolean_metric() {
     let feedback_response = poll_mcp_tool(
         &mcp,
         "get_feedback_by_target_id",
-        json!({
-            "target_id": inference_id,
-            "limit": 10,
-        }),
+        serde_json::to_value(FeedbackByTargetIdToolParams {
+            target_id: inference_id.parse().expect("inference ID should be a UUID"),
+            limit: Some(10),
+        })
+        .expect("feedback params should serialize"),
         |r| r["feedback"].as_array().is_some_and(|f| !f.is_empty()),
     )
     .await;
@@ -73,11 +77,12 @@ async fn test_mcp_feedback_episode_level() {
     let response: Value = mcp
         .call_tool(
             "feedback",
-            json!({
-                "episode_id": episode_id,
-                "metric_name": "comment",
-                "value": "Episode-level feedback",
-            }),
+            FeedbackParams {
+                episode_id: Some(episode_id.parse().expect("episode ID should be a UUID")),
+                metric_name: "comment".to_string(),
+                value: json!("Episode-level feedback"),
+                ..Default::default()
+            },
         )
         .await;
 

@@ -1,7 +1,8 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
+use tensorzero::{CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest};
 
-use super::common::McpTestClient;
+use super::common::{DatasetToolParams, McpTestClient, chat_input, chat_output};
 
 #[gtest]
 #[tokio::test]
@@ -10,18 +11,20 @@ async fn test_mcp_create_datapoints_basic() {
     let response: Value = mcp
         .call_tool(
             "create_datapoints",
-            json!({
-                "dataset_name": "mcp_test_create_datapoints",
-                "datapoints": [{
-                    "type": "chat",
-                    "function_name": "basic_test",
-                    "input": {
-                        "system": {"assistant_name": "TestBot"},
-                        "messages": [{"role": "user", "content": "Hello"}]
-                    },
-                    "output": [{"type": "text", "text": "Hi there!"}]
-                }]
-            }),
+            DatasetToolParams {
+                dataset_name: "mcp_test_create_datapoints".to_string(),
+                request: CreateDatapointsRequest {
+                    datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                        function_name: "basic_test".to_string(),
+                        episode_id: None,
+                        input: chat_input("Hello"),
+                        output: Some(chat_output("Hi there!")),
+                        dynamic_tool_params: Default::default(),
+                        tags: None,
+                        name: None,
+                    })],
+                },
+            },
         )
         .await;
 
@@ -39,29 +42,31 @@ async fn test_mcp_create_datapoints_multiple() {
     let response: Value = mcp
         .call_tool(
             "create_datapoints",
-            json!({
-                "dataset_name": "mcp_test_create_datapoints_multi",
-                "datapoints": [
-                    {
-                        "type": "chat",
-                        "function_name": "basic_test",
-                        "input": {
-                            "system": {"assistant_name": "TestBot"},
-                            "messages": [{"role": "user", "content": "First"}]
-                        },
-                        "output": [{"type": "text", "text": "Response 1"}]
-                    },
-                    {
-                        "type": "chat",
-                        "function_name": "basic_test",
-                        "input": {
-                            "system": {"assistant_name": "TestBot"},
-                            "messages": [{"role": "user", "content": "Second"}]
-                        },
-                        "output": [{"type": "text", "text": "Response 2"}]
-                    }
-                ]
-            }),
+            DatasetToolParams {
+                dataset_name: "mcp_test_create_datapoints_multi".to_string(),
+                request: CreateDatapointsRequest {
+                    datapoints: vec![
+                        CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                            function_name: "basic_test".to_string(),
+                            episode_id: None,
+                            input: chat_input("First"),
+                            output: Some(chat_output("Response 1")),
+                            dynamic_tool_params: Default::default(),
+                            tags: None,
+                            name: None,
+                        }),
+                        CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                            function_name: "basic_test".to_string(),
+                            episode_id: None,
+                            input: chat_input("Second"),
+                            output: Some(chat_output("Response 2")),
+                            dynamic_tool_params: Default::default(),
+                            tags: None,
+                            name: None,
+                        }),
+                    ],
+                },
+            },
         )
         .await;
 
@@ -78,19 +83,20 @@ async fn test_mcp_create_datapoints_with_tags() {
     let response: Value = mcp
         .call_tool(
             "create_datapoints",
-            json!({
-                "dataset_name": "mcp_test_create_datapoints_tags",
-                "datapoints": [{
-                    "type": "chat",
-                    "function_name": "basic_test",
-                    "input": {
-                        "system": {"assistant_name": "TestBot"},
-                        "messages": [{"role": "user", "content": "Hello"}]
-                    },
-                    "output": [{"type": "text", "text": "Hi!"}],
-                    "tags": {"source": "mcp_test"}
-                }]
-            }),
+            DatasetToolParams {
+                dataset_name: "mcp_test_create_datapoints_tags".to_string(),
+                request: CreateDatapointsRequest {
+                    datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                        function_name: "basic_test".to_string(),
+                        episode_id: None,
+                        input: chat_input("Hello"),
+                        output: Some(chat_output("Hi!")),
+                        dynamic_tool_params: Default::default(),
+                        tags: Some([("source".to_string(), "mcp_test".to_string())].into()),
+                        name: None,
+                    })],
+                },
+            },
         )
         .await;
 
@@ -107,10 +113,10 @@ async fn test_mcp_create_datapoints_empty_list() {
     let result = mcp
         .call_tool_raw(
             "create_datapoints",
-            json!({
-                "dataset_name": "mcp_test_create_empty",
-                "datapoints": []
-            }),
+            DatasetToolParams {
+                dataset_name: "mcp_test_create_empty".to_string(),
+                request: CreateDatapointsRequest { datapoints: vec![] },
+            },
         )
         .await;
 
