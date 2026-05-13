@@ -16,6 +16,10 @@ concurrency:
 jobs:
   check-base-branch:
     name: check-base-branch
+    # Skip this workflow for PRs from forks - external contributors should always
+    # target 'main', and the workflow lacks the token permissions to manage labels
+    # on fork PRs anyway.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
