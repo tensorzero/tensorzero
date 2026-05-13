@@ -46,18 +46,9 @@ The feedback from the judge is sent as feedback to the TensorZero Gateway.
 Initially, the haiku writer has no knowledge of the judge's idiosyncratic preferences, so the haikus will receive a fairly low score.
 
 At this point, your ClickHouse database will contain inferences in a structured format along with feedback on how they went.
-You can now use TensorZero recipes to learn from this experience to produce better variants of the haiku writer.
+You can now use TensorZero optimization workflows to learn from this experience to produce better variants of the haiku writer.
 We recommend starting with supervised fine-tuning of a custom OpenAI model using the TensorZero UI (`http://localhost:4000/optimization/supervised-fine-tuning`).
 You can also easily experiment with other models, prompts you think might be better, or combinations thereof by editing the configuration.
-
-<details>
-<summary>
-<b>Fine-Tuning Programmatically</b>
-</summary>
-
-Alternatively, you can run a fine-tuning recipe programmatically using the Jupyter notebook in `recipes/supervised_fine_tuning/`.
-
-</details>
 
 Once you finish fine-tuning, you'll see additional configuration blocks.
 For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.

@@ -66,13 +66,13 @@ You might notice that the best performing LLM is GPT-4o from OpenAI (not surpris
 ## Improving the NER System
 
 At this point, your Postgres database will include inferences in a structured format along with feedback on how they went.
-You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
+You can now use TensorZero optimization workflows to learn from this experience to produce better variants of the NER system.
 
-You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
+You can run fine-tuning by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
 Let's run fine-tuning on GPT-4o Mini with OpenAI using the `exact_match` metric.
 Go grab a coffee as fine-tuning can take some time.
 
-Alternatively, you can run other optimization recipes like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/optimization/dynamic-in-context-learning-dicl).
+Alternatively, you can run other optimization workflows like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/optimization/dynamic-in-context-learning-dicl).
 
 Once you finish fine-tuning, you'll see additional configuration blocks.
 For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.

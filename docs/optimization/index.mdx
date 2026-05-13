@@ -8,7 +8,7 @@ You can also create your own workflows to cover your specific needs.
 
 The TensorZero Gateway collects structured inference data and the downstream [metrics and feedback](/gateway/guides/metrics-feedback) associated with it.
 This dataset sets the perfect foundation for building and optimizing LLM applications.
-As this dataset builds up, you can use these recipes to generate powerful variants for your functions.
+As this dataset builds up, you can use these workflows to generate powerful variants for your functions.
 For example, you can use this dataset to curate data to fine-tune a custom LLM, or run an automated prompt engineering workflow.
 
 ## Model Optimizations
@@ -20,18 +20,14 @@ Supervised Fine-Tuning (SFT) trains a language model on curated examples of good
 TensorZero has fine-tuning integrations with OpenAI, GCP Vertex AI, Fireworks AI, and Together AI.
 See the [Supervised Fine-Tuning Guide](/optimization/supervised-fine-tuning-sft) to learn more.
 
-Additionally, we provide recipes for self-hosted fine-tuning with [`axolotl`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/axolotl/), [`torchtune`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/torchtune/), and [`unsloth`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/).
-
 ### Reinforcement Fine-tuning (RFT)
 
 _Guide coming soon..._
 
 ### Direct Preference Optimization (DPO)
 
-A direct preference optimization (DPO) &mdash; also known as preference fine-tuning &mdash; recipe fine-tunes an LLM on a dataset of preference pairs.
+Direct preference optimization (DPO) &mdash; also known as preference fine-tuning &mdash; fine-tunes an LLM on a dataset of preference pairs.
 You can use demonstration feedback collected with TensorZero to curate a dataset of preference pairs and fine-tune an LLM on it.
-
-We provide a recipe for [DPO (Preference Fine-tuning) with OpenAI](https://github.com/tensorzero/tensorzero/blob/main/recipes/dpo/openai/).
 
 ## Prompt Optimization
 
@@ -61,13 +57,11 @@ Instead of incorporating static examples manually in your prompts, DICL selects 
 
 See the [Dynamic In-Context Learning (DICL) Guide](/optimization/dynamic-in-context-learning-dicl) to learn more.
 
-## Custom Recipes
+## Custom Workflows
 
-You can also create your own recipes.
-Put simply, a recipe takes inference and feedback data collected by TensorZero and generates a new set of variants for your functions.
-You should should be able to use virtually any LLM engineering workflow with TensorZero, ranging from automated prompt engineering to advanced RLHF workflows.
-
-For example, see our recipes for self-hosted supervised fine-tuning (SFT) with [`axolotl`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/axolotl/), [`torchtune`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/torchtune/), and [`unsloth`](https://github.com/tensorzero/tensorzero/tree/main/recipes/supervised_fine_tuning/unsloth/).
+You can also create your own optimization workflows.
+Put simply, an optimization workflow takes inference and feedback data collected by TensorZero and generates a new set of variants for your functions.
+You should be able to use virtually any LLM engineering workflow with TensorZero, ranging from automated prompt engineering to advanced RLHF workflows.
 
 ## Examples
 

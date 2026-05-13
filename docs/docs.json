@@ -430,14 +430,6 @@
       "destination": "/quickstart"
     },
     {
-      "source": "/recipes",
-      "destination": "/optimization"
-    },
-    {
-      "source": "/recipes/",
-      "destination": "/optimization"
-    },
-    {
       "source": "/gateway/guides/streaming-inference",
       "destination": "/gateway"
     },

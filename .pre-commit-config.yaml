@@ -177,24 +177,7 @@ repos:
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
-        exclude: ^recipes/.*/_nb\.py$|^recipes/.*_nb\.py$
       - id: ruff-format
-
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.391
-    hooks:
-      - id: pyright
-        name: "pyright: recipes"
-        files: ^recipes/
-        args: ["--project", "recipes/pyrightconfig.json"]
-        additional_dependencies:
-          - clickhouse-connect
-          - pandas
-          - pandas-stubs
-          - pydantic
-          - tensorzero
-          - tiktoken
-          - toml
 
   - repo: https://github.com/losisin/helm-values-schema-json
     rev: v2.3.0
@@ -207,12 +190,3 @@ repos:
           - "--output"
           - "examples/production-deployment-k8s-helm/values.schema.json"
         files: ^examples/production-deployment-k8s-helm/values\.yaml$
-
-  - repo: local
-    hooks:
-      - id: compile-check-notebooks
-        name: compile-check-notebooks
-        entry: ci/compile-check-notebooks.sh all
-        language: system # run in the host environment (needs uvx)
-        # Restrict to files that matter so other commits don't pay the cost
-        files: ^recipes/.*(\.ipynb|_nb\.py)$

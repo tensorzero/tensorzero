@@ -56,7 +56,6 @@ jobs:
               - '!docs/**'
               - '!examples/**'
               - '!for-agents/**'
-              - '!recipes/**'
               - '!ui/**'
             code:
               - '**'
@@ -71,7 +70,6 @@ jobs:
               - '!docs/**'
               - '!examples/**'
               - '!for-agents/**'
-              - '!recipes/**'
               - '!ui/**'
 
   check-version-consistency:
@@ -532,20 +530,6 @@ jobs:
         working-directory: crates/tensorzero-python
         run: |
           uv run stubtest tensorzero.tensorzero
-
-      - name: "Python: Recipes: Install dependencies"
-        working-directory: recipes
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: Recipes: pyright"
-        working-directory: recipes
-        run: |
-          uv run pyright
-
-      - name: Compile / validate notebooks
-        run: ci/compile-check-notebooks.sh
 
   validate-node:
     name: validate-node

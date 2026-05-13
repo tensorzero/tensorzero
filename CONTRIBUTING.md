@@ -100,20 +100,6 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 **macOS users:** If you see Rust build errors about missing dynamic libraries for Python, set up a Python virtual environment at `tensorzero/.venv` (e.g. `uv venv` from the `tensorzero` directory)
 This ensures the correct Python libraries are available for the build.
 
-### Optimization Recipes
-
-We maintain optimization recipes as Jupyter notebooks in `recipes/`.
-These notebooks serve as manual workflows for optimizing (e.g. fine-tuning) TensorZero functions.
-
-Jupyter notebooks are notoriously hard to test, maintain, and review.
-To address these issues, each notebook has an accompanying Python script ending in `_nb.py` that serves the same purpose.
-We automatically keep these two files in sync using [Jupytext](https://jupytext.readthedocs.io/en/latest/).
-
-To convert a notebook to a script, run `ci/compile-notebook-to-script.sh path/to/notebook.ipynb`.
-To convert a script to a notebook, run `ci/compile-script-to-notebook.sh path/to/script_nb.py`.
-
-In `pre-commit` and CI, we check that the notebooks match the relevant scripts using a script `ci/compile-check-notebooks.sh`.
-
 ### Tests
 
 #### Rust Unit Tests
