@@ -61,8 +61,8 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 json-pointer = { workspace = true }
-jsonschema = "0.46.3"
-jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
+jsonschema = "0.46.4"
+jsonwebtoken = { version = "10.4", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
 metrics-exporter-prometheus = { workspace = true }
