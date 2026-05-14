@@ -127,6 +127,7 @@ durable = { git = "https://github.com/tensorzero/durable", rev = "b5f2664bc12e15
 durable-tools-spawn = { path = "durable-tools-spawn" }
 tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
+tensorzero-http = { path = "tensorzero-http", features = ["ts-rs"] }
 regex = "1.12.2"
 redis = { version = "1.2.0", features = [
     "tokio-comp",
