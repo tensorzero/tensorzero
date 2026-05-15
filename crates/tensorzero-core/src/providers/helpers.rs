@@ -128,19 +128,47 @@ pub async fn convert_stream_error(
             }
             .into()
         }
-        reqwest_sse_stream::ReqwestSseStreamError::SseError(_) => {
+        reqwest_sse_stream::ReqwestSseStreamError::SseError(inner) => {
             let message = match request_id {
                 Some(id) => format!("{base_message} [request_id: {id}]"),
                 None => base_message,
             };
-            ErrorDetails::InferenceServer {
-                message,
-                raw_request: Some(raw_request),
-                raw_response: None,
-                provider_type,
-                api_type,
+            // `reqwest-sse-stream` always builds the underlying body with
+            // `Body<Error = reqwest::Error>`, so when `sse_stream::Error::Body(_)`
+            // fires the inner error is a `reqwest::Error`. Treat it as fatal only
+            // when it's specifically a body/decode failure — i.e. hyper/h2 said the
+            // response body itself broke (e.g. an HTTP/2 RST_STREAM mid-stream).
+            // In that case no more chunks can possibly arrive, so we surface a
+            // `FatalStreamError` and let `wrap_provider_stream` bail out promptly
+            // instead of holding the dead stream open until shutdown.
+            // Other `SseError` variants (parse errors, etc.) stay as
+            // `InferenceServer` to preserve the prior recoverable behavior.
+            let is_fatal_body_error = match &inner {
+                reqwest_sse_stream::SseStreamError::Body(body_err) => body_err
+                    .downcast_ref::<reqwest::Error>()
+                    .is_some_and(|e| e.is_body() || e.is_decode()),
+                _ => false,
+            };
+            if is_fatal_body_error {
+                ErrorDetails::FatalStreamError {
+                    message,
+                    status_code: None,
+                    provider_type,
+                    api_type,
+                    raw_request: Some(raw_request),
+                    raw_response: None,
+                }
+                .into()
+            } else {
+                ErrorDetails::InferenceServer {
+                    message,
+                    raw_request: Some(raw_request),
+                    raw_response: None,
+                    provider_type,
+                    api_type,
+                }
+                .into()
             }
-            .into()
         }
     }
 }
@@ -1159,6 +1187,69 @@ mod tests {
         impl std::error::Error for Bare {}
         assert_eq!(format_error_chain(&Bare), "standalone error");
     }
+
+    #[tokio::test]
+    async fn test_convert_stream_error_sse_parse_is_not_fatal() {
+        // SSE *parse* errors (invalid line, duplicated event line, etc.) don't
+        // necessarily imply the underlying transport is dead, so they stay as
+        // `InferenceServer` (the pre-existing behavior). The fatal-body path is
+        // covered end-to-end in `tests/e2e/streaming_errors.rs`, because
+        // `reqwest::Error` has no public constructor and the fatal classification
+        // hinges on downcasting to it.
+        let sse_err = reqwest_sse_stream::ReqwestSseStreamError::SseError(
+            reqwest_sse_stream::SseStreamError::InvalidLine,
+        );
+        let err = convert_stream_error(
+            "raw req".to_string(),
+            "openai".to_string(),
+            ApiType::ChatCompletions,
+            sse_err,
+            None,
+        )
+        .await;
+        assert!(
+            matches!(err.get_details(), ErrorDetails::InferenceServer { .. }),
+            "expected InferenceServer for SSE parse error, got: {:?}",
+            err.get_details()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_convert_stream_error_sse_body_non_reqwest_is_not_fatal() {
+        // Defensive: if some future call site wraps a non-`reqwest::Error` inside
+        // `sse_stream::Error::Body(_)`, the downcast fails and we conservatively
+        // keep the prior `InferenceServer` behavior rather than guessing the
+        // underlying transport is dead.
+        let sse_err = reqwest_sse_stream::ReqwestSseStreamError::SseError(
+            reqwest_sse_stream::SseStreamError::Body(Box::new(std::io::Error::other(
+                "synthetic non-reqwest body error",
+            ))),
+        );
+        let err = convert_stream_error(
+            "raw req".to_string(),
+            "openai".to_string(),
+            ApiType::ChatCompletions,
+            sse_err,
+            None,
+        )
+        .await;
+        assert!(
+            matches!(err.get_details(), ErrorDetails::InferenceServer { .. }),
+            "expected InferenceServer for non-reqwest body error, got: {:?}",
+            err.get_details()
+        );
+    }
+
+    // The positive case — an `sse_stream::Error::Body` wrapping a real
+    // `reqwest::Error` of kind `Body`/`Decode` producing a `FatalStreamError`
+    // with the verbatim production-shape message — lives in
+    // `tests/e2e/streaming_errors.rs::test_convert_stream_error_h2_rst_stream_is_fatal`.
+    // We do it as an e2e test because the only way to reliably reproduce the
+    // exact wire-level chain ending in `h2::Error("stream error received:
+    // unexpected internal error encountered")` is to negotiate HTTP/2 with a
+    // self-signed TLS cert via ALPN, which in turn relies on the existing
+    // `e2e_tests`-feature-flagged path in `tensorzero-http` that enables
+    // `danger_accept_invalid_certs(true)` when `TENSORZERO_E2E_PROXY` is set.
 
     #[tokio::test]
     async fn test_peek_empty() {

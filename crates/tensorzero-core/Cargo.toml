@@ -163,6 +163,9 @@ durable-tools = { path = "../durable-tools" }
 http-body-util = { workspace = true }
 image = "0.25.10"
 gag = "1.0.0"
+h2 = "0.4"
+rcgen = "0.14"
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs"] }
 log = "0.4.29"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
