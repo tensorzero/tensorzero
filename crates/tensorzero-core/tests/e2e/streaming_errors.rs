@@ -6,8 +6,12 @@ use axum::Router;
 use axum::body::Body;
 use axum::response::Response;
 use axum::routing::post;
+use bytes::Bytes;
 use futures::StreamExt;
 use http::StatusCode;
+use rcgen::generate_simple_self_signed;
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde_json::json;
 use tensorzero::{
     Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
@@ -16,6 +20,7 @@ use tensorzero::{
 use tensorzero_core::inference::types::usage::ApiType;
 use tensorzero_core::inference::types::{Arguments, System, Text};
 use tensorzero_error::ErrorDetails;
+use tokio_rustls::TlsAcceptor;
 
 use crate::common::get_gateway_endpoint;
 use reqwest_sse_stream::{Event, RequestBuilderExt};
@@ -265,12 +270,6 @@ model_name = "gpt-4.1-mini"
 /// `RST_STREAM` and prevents a race where the reset arrives before the client
 /// has finished reading headers.
 async fn spawn_h2_rst_stream_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
-    use bytes::Bytes;
-    use rcgen::generate_simple_self_signed;
-    use rustls::ServerConfig;
-    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-    use tokio_rustls::TlsAcceptor;
-
     // Self-signed cert valid for 127.0.0.1 + localhost. The client's
     // `danger_accept_invalid_certs(true)` (set by tensorzero-http when
     // `TENSORZERO_E2E_PROXY` is present under the `e2e_tests` feature) is what
@@ -448,12 +447,6 @@ async fn test_streaming_h2_rst_stream_is_fatal() {
             assert_eq!(*api_type, ApiType::ChatCompletions);
             assert_eq!(raw_request.as_deref(), Some("raw req"));
             assert_eq!(raw_response.as_deref(), None);
-            // Exact, locked-down `Display` message. The chain matches the
-            // in-the-wild OpenAI failure that motivated this classification
-            // verbatim: SSE error wrapping a `body error` wrapping reqwest
-            // Decode → Body → hyper → h2 `RST_STREAM(INTERNAL_ERROR)`. If
-            // `reqwest`/`hyper`/`h2` change their `Display` representation in
-            // a future bump, update this literal.
             // Exact, locked-down `Display` message. The chain matches the
             // in-the-wild OpenAI failure that motivated this classification
             // verbatim: SSE error wrapping a `body error` wrapping reqwest
