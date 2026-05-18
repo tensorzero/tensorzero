@@ -470,6 +470,10 @@ pub struct Args {
     /// The saved request body is not used when reading from the cache.
     #[arg(long, default_value = "true")]
     pub save_request_body: bool,
+    /// If `true`, requires OpenRouter requests to include the `X-Title` and `HTTP-Referer`
+    /// headers identifying TensorZero, returning a 400 response otherwise.
+    #[arg(long, default_value = "true")]
+    pub check_openrouter_headers: bool,
 }
 
 fn find_duplicate_header(headers: &http::HeaderMap) -> Option<HeaderName> {
@@ -567,7 +571,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                     // On OpenRouter requests we want to take advantage of their custom headers identifying the referer.
                     // If these are missing, we fail with a bad request so an E2E test catches it in the CI.
                     tracing::debug!("Headers: {:?}", &parts.headers);
-                    if is_openrouter_request(&parts.uri) {
+                    if args.check_openrouter_headers && is_openrouter_request(&parts.uri) {
                         let has_title = parts.headers.get("X-Title").map(|v| v.as_bytes() == b"TensorZero").unwrap_or(false);
                         let has_referer = parts.headers.get("HTTP-Referer").map(|v| v.as_bytes() == b"https://www.tensorzero.com/").unwrap_or(false);
 
