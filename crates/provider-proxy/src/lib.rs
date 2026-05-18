@@ -472,7 +472,7 @@ pub struct Args {
     pub save_request_body: bool,
     /// If `true`, requires OpenRouter requests to include the `X-Title` and `HTTP-Referer`
     /// headers identifying TensorZero, returning a 400 response otherwise.
-    #[arg(long, default_value = "true")]
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub check_openrouter_headers: bool,
 }
 
