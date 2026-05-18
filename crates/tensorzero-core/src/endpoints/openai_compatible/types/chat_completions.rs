@@ -125,6 +125,7 @@ pub struct OpenAICompatibleParams {
     pub tool_choice: Option<ChatCompletionToolChoiceOption>,
     pub top_p: Option<f32>,
     pub parallel_tool_calls: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_stop_sequences")]
     pub stop: Option<Vec<String>>,
     pub reasoning_effort: Option<String>,
     pub service_tier: Option<ServiceTier>,
@@ -165,6 +166,25 @@ pub struct OpenAICompatibleParams {
     pub tensorzero_include_raw_response: bool,
     #[serde(flatten)]
     pub unknown_fields: HashMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StopSequences {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+fn deserialize_stop_sequences<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(
+        Option::<StopSequences>::deserialize(deserializer)?.map(|stop| match stop {
+            StopSequences::Single(stop) => vec![stop],
+            StopSequences::Multiple(stop) => stop,
+        }),
+    )
 }
 
 // ============================================================================
@@ -940,6 +960,40 @@ mod tests {
         assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
         assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
         assert_eq!(params.tags, tensorzero_tags);
+    }
+
+    #[test]
+    fn test_openai_compatible_stop_accepts_single_string() {
+        let params: OpenAICompatibleParams = serde_json::from_value(json!({
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "model": "tensorzero::function_name::test_function",
+            "stop": "\n",
+        }))
+        .expect("OpenAI-compatible params should deserialize");
+
+        let params = Params::try_from_openai(params).expect("params should convert");
+
+        assert_eq!(
+            params.params.chat_completion.stop_sequences,
+            Some(vec!["\n".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_openai_compatible_stop_accepts_string_array() {
+        let params: OpenAICompatibleParams = serde_json::from_value(json!({
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "model": "tensorzero::function_name::test_function",
+            "stop": ["END", "DONE"],
+        }))
+        .expect("OpenAI-compatible params should deserialize");
+
+        let params = Params::try_from_openai(params).expect("params should convert");
+
+        assert_eq!(
+            params.params.chat_completion.stop_sequences,
+            Some(vec!["END".to_string(), "DONE".to_string()])
+        );
     }
 
     #[test]

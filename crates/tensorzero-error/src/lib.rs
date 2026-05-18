@@ -75,6 +75,26 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+/// e2e-tests-only escape hatch that initializes `DEBUG` directly, bypassing the
+/// `e2e_tests` early-return in [`set_debug`]. Use this to make a single e2e
+/// test assert on `Display`-formatted error chains (debug=false) without
+/// changing the default `e2e_tests` behavior, which is to lazy-init `DEBUG`
+/// to `true` on first read.
+///
+/// Must be called *before* anything in the process reads `is_debug()` (e.g. at
+/// the very top of the test). Returns an error if `DEBUG` has already been
+/// initialized, mirroring `set_debug`'s semantics.
+#[cfg(feature = "e2e_tests")]
+pub fn force_set_debug(debug: bool) -> Result<(), Error> {
+    DEBUG.set(debug).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to force-set debug mode: DEBUG was already initialized. \
+                      `force_set_debug` must be called before any code reads `is_debug()`."
+                .to_string(),
+        })
+    })
+}
+
 static UNSTABLE_ERROR_JSON: OnceLock<bool> = OnceLock::new();
 
 pub fn set_unstable_error_json(unstable_error_json: bool) -> Result<(), Error> {

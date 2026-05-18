@@ -631,6 +631,12 @@ impl OtlpConfig {
                     if let Some(total_tokens) = usage.total_tokens() {
                         span.set_attribute("llm.token_count.total", total_tokens as i64);
                     }
+                    if let Some(cache_read) = usage.provider_cache_read_input_tokens {
+                        span.set_attribute(
+                            "llm.token_count.prompt_details.cache_read",
+                            cache_read as i64,
+                        );
+                    }
                 }
                 None | Some(OtlpTracesFormat::OpenTelemetry) => {
                     if let Some(input_tokens) = usage.input_tokens {
@@ -683,6 +689,40 @@ impl OtlpConfig {
                 }
                 None | Some(OtlpTracesFormat::OpenTelemetry) => {}
             }
+        }
+    }
+
+    /// Sets the OpenInference `llm.prompt_template.*` attributes on a span when
+    /// `format = OpenInference` is enabled. No-op for any other format.
+    ///
+    /// `version` is the variant name (TensorZero variants are the unit of
+    /// prompt-template versioning). `template` is the raw template source
+    /// (typically the variant's `system` template), and `variables_json` is a
+    /// pre-serialized JSON object of the bindings supplied for that template
+    /// (the `System::Template` arguments from the input). Either may be
+    /// omitted when the variant or input does not carry that data.
+    pub fn apply_openinference_prompt_template(
+        &self,
+        span: &Span,
+        version: &str,
+        template: Option<&str>,
+        variables_json: Option<&str>,
+    ) {
+        let Some(traces) = &self.traces else {
+            return;
+        };
+        if !traces.enabled.unwrap_or(false) {
+            return;
+        }
+        if !matches!(traces.format, Some(OtlpTracesFormat::OpenInference)) {
+            return;
+        }
+        span.set_attribute("llm.prompt_template.version", version.to_string());
+        if let Some(template) = template {
+            span.set_attribute("llm.prompt_template.template", template.to_string());
+        }
+        if let Some(variables_json) = variables_json {
+            span.set_attribute("llm.prompt_template.variables", variables_json.to_string());
         }
     }
 }

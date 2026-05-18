@@ -22,12 +22,15 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
-ts-rs.workspace = true
+
+# Feature-gated deps
+ts-rs = { workspace = true, optional = true }
 
 [features]
 default = []
 e2e_tests = []
 pyo3 = []
+ts-rs = ["dep:ts-rs"]
 
 [dev-dependencies]
 axum = { workspace = true }
