@@ -9388,9 +9388,12 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             } else {
                 assert_eq!(response.finish_reason, Some(FinishReason::StopSequence));
             }
-            // TGI gives us a finish_reason of StopSequence, but still include the stop sequence in the response
+            // TGI gives us a finish_reason of StopSequence, but still include the stop sequence in the response.
+            // xAI's newer Grok models (e.g. grok-4.20-0309-non-reasoning) accept the `stop` parameter and report
+            // finish_reason=stop, but likewise include the stop sequence in the response content.
             if !(provider.model_provider_name == "tgi"
-                || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi")
+                || provider.model_name == "gemma-3-1b-aws-sagemaker-tgi"
+                || provider.model_provider_name == "xai")
             {
                 // Thought content blocks can contain the stop-sequence on some providers,
                 // so just check the text content blocks
@@ -12833,8 +12836,9 @@ pub async fn test_reasoning_multi_turn_thought_non_streaming_with_provider(
     provider: E2ETestProvider,
 ) {
     skip_for_postgres!();
-    if provider.variant_name == "together-deepseek-r1" {
-        // This produces invalid tool calls within text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
+    if provider.variant_name == "together-deepseek-v4-pro" {
+        // DeepSeek (R1 historically, now V4-Pro) produces invalid tool calls within
+        // text blocks (e.g 🛠\u{fe0f}\n\n```json\n{\n  \"too)
         return;
     }
 
@@ -13008,7 +13012,7 @@ pub async fn test_reasoning_multi_turn_thought_streaming_with_provider(provider:
     }
 
     // TODO: https://github.com/tensorzero/tensorzero/issues/5270
-    if provider.variant_name == "together-deepseek-r1" {
+    if provider.variant_name == "together-deepseek-v4-pro" {
         return;
     }
 

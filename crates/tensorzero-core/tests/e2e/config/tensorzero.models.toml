@@ -479,27 +479,33 @@ routing = ["openai"]
 type = "openai"
 model_name = "o3-mini"
 
-[models."grok_4_1_fast_non_reasoning"]
+# Direct xAI Grok 4.20 non-reasoning (used as the standard xAI variant in basic tests).
+# Replaces the retired `grok-4-1-fast-non-reasoning` slug. We use the explicit
+# `grok-4.20-0309-non-reasoning` model rather than letting xAI redirect to `grok-4.3`
+# because `grok-4.3` rejects the `stop` parameter, which several tests rely on.
+[models."grok-4p20-0309-non-reasoning"]
 routing = ["xai"]
 
-[models."grok_4_1_fast_non_reasoning".providers.xai]
+[models."grok-4p20-0309-non-reasoning".providers.xai]
 type = "xai"
-model_name = "grok-4-1-fast-non-reasoning"
+model_name = "grok-4.20-0309-non-reasoning"
 
-[models."grok_4_1_fast_non_reasoning-dynamic"]
+[models."grok-4p20-0309-non-reasoning-dynamic"]
 routing = ["xai"]
 
-[models."grok_4_1_fast_non_reasoning-dynamic".providers.xai]
+[models."grok-4p20-0309-non-reasoning-dynamic".providers.xai]
 type = "xai"
-model_name = "grok-4-1-fast-non-reasoning"
+model_name = "grok-4.20-0309-non-reasoning"
 api_key_location = "dynamic::xai_api_key"
 
-[models."grok-code-fast-1"]
+# Direct xAI Grok 4.3 (for effort-based reasoning tests).
+# Replaces the retired `grok-code-fast-1` slug.
+[models."grok-4p3"]
 routing = ["xai"]
 
-[models."grok-code-fast-1".providers.xai]
+[models."grok-4p3".providers.xai]
 type = "xai"
-model_name = "grok-code-fast-1"
+model_name = "grok-4.3"
 
 [models."grok-4-fast-reasoning"]
 routing = ["xai"]
@@ -544,12 +550,14 @@ routing = ["deepseek"]
 type = "deepseek"
 model_name = "deepseek-chat"
 
-[models."together-deepseek-r1"]
+# Together DeepSeek V4 Pro reasoning model.
+# Replaces `deepseek-ai/DeepSeek-R1`, which Together moved off serverless.
+[models."together-deepseek-v4-pro"]
 routing = ["together"]
 
-[models."together-deepseek-r1".providers.together]
+[models."together-deepseek-v4-pro".providers.together]
 type = "together"
-model_name = "deepseek-ai/DeepSeek-R1"
+model_name = "deepseek-ai/DeepSeek-V4-Pro"
 
 [models."together-kimi"]
 routing = ["together"]
@@ -576,13 +584,15 @@ type = "openrouter"
 model_name = "openai/gpt-4o-mini"
 api_key_location = "dynamic::openrouter_api_key"
 
-# OpenRouter Grok 3 Mini (for effort-based reasoning tests)
-[models."grok-code-fast-1-openrouter"]
+# OpenRouter Grok 4.3 (for effort-based reasoning tests).
+# Replaces the retired `x-ai/grok-code-fast-1` slug; OpenRouter does not
+# transparently redirect deprecated slugs.
+[models."grok-4p3-openrouter"]
 routing = ["openrouter"]
 
-[models."grok-code-fast-1-openrouter".providers.openrouter]
+[models."grok-4p3-openrouter".providers.openrouter]
 type = "openrouter"
-model_name = "x-ai/grok-code-fast-1"
+model_name = "x-ai/grok-4.3"
 
 # OpenRouter Claude Haiku 4.5 (for max_tokens-based reasoning tests)
 [models."claude-haiku-4-5-openrouter"]

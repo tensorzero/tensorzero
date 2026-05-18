@@ -74,9 +74,9 @@ system_template = "../../../fixtures/config/functions/json_success/prompt/system
 json_mode = "off"
 max_tokens = 800
 
-[functions.json_math.variants.together-deepseek-r1]
+[functions.json_math.variants.together-deepseek-v4-pro]
 type = "chat_completion"
-model = "together-deepseek-r1"
+model = "together-deepseek-v4-pro"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "off"
 max_tokens = 1000
@@ -113,7 +113,7 @@ extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true 
 
 [functions.json_math.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1-openrouter"
+model = "grok-4p3-openrouter"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "on"
 max_tokens = 2048
@@ -129,7 +129,7 @@ thinking_budget_tokens = 1024
 
 [functions.json_math.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1"
+model = "grok-4p3"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "on"
 max_tokens = 800

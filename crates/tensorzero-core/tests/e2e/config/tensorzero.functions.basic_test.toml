@@ -693,39 +693,39 @@ extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true 
 
 [functions.basic_test.variants.xai]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.xai-extra-body]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.xai-extra-headers]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_headers = [{ name = "Authorization", value = "Bearer invalid_xai_auth" }]
 
 [functions.basic_test.variants.xai-dynamic]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning-dynamic"
+model = "grok-4p20-0309-non-reasoning-dynamic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.xai-shorthand]
 type = "chat_completion"
-model = "xai::grok-4-1-fast-non-reasoning"
+model = "xai::grok-4.20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1"
+model = "grok-4p3"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
@@ -795,9 +795,9 @@ model = "deepseek-reasoner"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
-[functions.basic_test.variants.together-deepseek-r1]
+[functions.basic_test.variants.together-deepseek-v4-pro]
 type = "chat_completion"
-model = "together-deepseek-r1"
+model = "together-deepseek-v4-pro"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 1000
 
@@ -945,10 +945,10 @@ max_tokens = 2048
 
 # OpenRouter reasoning variants
 
-# Grok 3 Mini with effort-based reasoning
+# Grok 4.3 with effort-based reasoning
 [functions.basic_test.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1-openrouter"
+model = "grok-4p3-openrouter"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
 reasoning_effort = "low"

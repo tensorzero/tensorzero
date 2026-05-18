@@ -214,9 +214,9 @@ model = "fireworks-kimi"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 1200
 
-[functions.weather_helper.variants.together-deepseek-r1]
+[functions.weather_helper.variants.together-deepseek-v4-pro]
 type = "chat_completion"
-model = "together-deepseek-r1"
+model = "together-deepseek-v4-pro"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 1200
 
@@ -298,7 +298,7 @@ extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = true 
 
 [functions.weather_helper.variants.xai]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -310,16 +310,16 @@ max_tokens = 800
 
 [functions.weather_helper.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1"
+model = "grok-4p3"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 800
 
 # OpenRouter reasoning variants
 
-# Grok 3 Mini with `reasoning_effort`-based reasoning
+# Grok 4.3 with `reasoning_effort`-based reasoning
 [functions.weather_helper.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1-openrouter"
+model = "grok-4p3-openrouter"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 2048
 reasoning_effort = "low"

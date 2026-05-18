@@ -81,8 +81,8 @@ async fn get_providers() -> E2ETestProviders {
     let reasoning_providers = vec![
         E2ETestProvider {
             supports_batch_inference: false,
-            variant_name: "together-deepseek-r1".to_string(),
-            model_name: "together-deepseek-r1".to_string(),
+            variant_name: "together-deepseek-v4-pro".to_string(),
+            model_name: "together-deepseek-v4-pro".to_string(),
             model_provider_name: "together".to_string(),
             credentials: HashMap::new(),
         },

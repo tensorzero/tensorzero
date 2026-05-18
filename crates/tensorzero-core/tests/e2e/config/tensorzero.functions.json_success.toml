@@ -204,9 +204,9 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "off"
 max_tokens = 800
 
-[functions.json_success.variants.together-deepseek-r1]
+[functions.json_success.variants.together-deepseek-v4-pro]
 type = "chat_completion"
-model = "together-deepseek-r1"
+model = "together-deepseek-v4-pro"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -489,10 +489,10 @@ max_tokens = 100
 
 # OpenRouter reasoning variants
 
-# Grok 3 Mini with `reasoning_effort`-based reasoning
+# Grok 4.3 with `reasoning_effort`-based reasoning
 [functions.json_success.variants.openrouter-grok-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1-openrouter"
+model = "grok-4p3-openrouter"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -646,7 +646,7 @@ max_tokens = 800
 
 [functions.json_success.variants.xai]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -654,7 +654,7 @@ max_tokens = 100
 
 [functions.json_success.variants.xai-strict]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "strict"
@@ -709,9 +709,9 @@ user_template = "../../../fixtures/config/functions/json_success/prompt/user_tem
 json_mode = "off"
 max_tokens = 1500
 
-[functions.json_success.variants.together_deepseek_r1_json_mode_off]
+[functions.json_success.variants.together_deepseek_v4_pro_json_mode_off]
 type = "chat_completion"
-model = "together-deepseek-r1"
+model = "together-deepseek-v4-pro"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -825,7 +825,7 @@ extra_body = [{ pointer = "/chat_template_kwargs/enable_thinking", value = false
 
 [functions.json_success.variants.xai_json_mode_off]
 type = "chat_completion"
-model = "grok_4_1_fast_non_reasoning"
+model = "grok-4p20-0309-non-reasoning"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -841,7 +841,7 @@ max_tokens = 800
 
 [functions.json_success.variants.xai-reasoning]
 type = "chat_completion"
-model = "grok-code-fast-1"
+model = "grok-4p3"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
