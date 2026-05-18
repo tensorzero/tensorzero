@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use anyhow::Result;
 use regex::Regex;
 use serde_json::Value;
@@ -5,6 +8,24 @@ use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::evaluations::RegexConfig;
 use tensorzero_core::inference::types::ContentBlockChatOutput;
 use tracing::{debug, instrument};
+
+/// Cache for compiled regex patterns, keyed by pattern string.
+/// Compiled regexes are reused across evaluations to avoid the overhead
+/// of recompilation on every inference.
+static REGEX_CACHE: Mutex<Option<HashMap<String, Regex>>> = Mutex::new(None);
+
+/// Returns a compiled `Regex` for the given pattern, using a global cache
+/// to avoid recompiling the same pattern on every evaluation.
+fn get_or_compile_regex(pattern: &str) -> Result<Regex> {
+    let mut cache = REGEX_CACHE.lock().unwrap();
+    let cache = cache.get_or_insert_with(HashMap::new);
+    if let Some(re) = cache.get(pattern) {
+        return Ok(re.clone());
+    }
+    let re = Regex::new(pattern)?;
+    cache.insert(pattern.to_string(), re.clone());
+    Ok(re)
+}
 
 /// Extracts text content from an inference response.
 ///
@@ -33,18 +54,17 @@ pub(super) fn run_regex_evaluator(
     inference_response: &InferenceResponse,
     config: &RegexConfig,
 ) -> Result<Option<Value>> {
-    // TODO(#6584): Precompile regexes instead of rebuilding on every inference for performance.
     let Some(text) = extract_text(inference_response) else {
         debug!("No text content found in inference response");
 
-        // If there's no "must match", then "no output" should be treated as success.
+        // If there is no "must match", then "no output" should be treated as success.
         let result = config.must_match.is_none();
         return Ok(Some(Value::Bool(result)));
     };
 
     let must_match_ok = match &config.must_match {
         Some(pattern) => {
-            let re = Regex::new(pattern)?;
+            let re = get_or_compile_regex(pattern)?;
             re.is_match(&text)
         }
         None => true,
@@ -52,7 +72,7 @@ pub(super) fn run_regex_evaluator(
 
     let must_not_match_ok = match &config.must_not_match {
         Some(pattern) => {
-            let re = Regex::new(pattern)?;
+            let re = get_or_compile_regex(pattern)?;
             !re.is_match(&text)
         }
         None => true,
