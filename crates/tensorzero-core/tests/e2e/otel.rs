@@ -741,6 +741,37 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
+
+            // `llm.prompt_template.version` is the variant name (TensorZero variants
+            // are the unit of prompt-template versioning). The default function used
+            // here has no system template or system input, so `.template` and
+            // `.variables` are omitted.
+            assert_eq!(
+                variant_attr_map["llm.prompt_template.version"],
+                model_name.clone().into()
+            );
+            assert!(!variant_attr_map.contains_key("llm.prompt_template.template"));
+            assert!(!variant_attr_map.contains_key("llm.prompt_template.variables"));
+
+            // `llm.input_messages.*` mirrors the request messages sent to the
+            // provider. The dummy provider receives a single user text message.
+            assert_eq!(
+                model_provider_attr_map["llm.input_messages.0.message.role"],
+                "user".into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.input_messages.0.message.content"],
+                "What is your name?".into()
+            );
+            assert!(
+                !model_provider_attr_map.contains_key("llm.input_messages.1.message.role"),
+                "Only one input message expected"
+            );
+
+            // Dummy provider does not report cached input tokens.
+            assert!(
+                !model_provider_attr_map.contains_key("llm.token_count.prompt_details.cache_read")
+            );
         }
     }
     assert_eq!(model_attr_map["stream"], streaming.into());
@@ -1687,4 +1718,36 @@ fn test_capture_content_ignored_for_openinference_format() {
     assert_eq!(attrs["input.mime_type"], "application/json".into());
     assert!(attrs.contains_key("input.value"));
     assert!(attrs.contains_key("output.value"));
+
+    // `llm.input_messages.*` carries the system text + user message in
+    // flattened indexed form.
+    assert_eq!(attrs["llm.input_messages.0.message.role"], "system".into());
+    assert_eq!(
+        attrs["llm.input_messages.0.message.content"],
+        "be helpful".into()
+    );
+    assert_eq!(attrs["llm.input_messages.1.message.role"], "user".into());
+    assert_eq!(
+        attrs["llm.input_messages.1.message.content"],
+        "What is your name?".into()
+    );
+    assert!(!attrs.contains_key("llm.input_messages.2.message.role"));
+
+    // `llm.prompt_template.version` is the variant name. The default function
+    // has no system template, and the input uses `System::Text` (not
+    // `System::Template`), so `.template` and `.variables` are omitted.
+    let variant_span = spans
+        .root_spans
+        .iter()
+        .flat_map(|root| spans.span_children.get(&root.span_context.span_id()))
+        .flatten()
+        .find(|s| s.name == "variant_inference")
+        .expect("variant_inference span not found");
+    let variant_attrs = attrs_to_map(&variant_span.attributes);
+    assert_eq!(
+        variant_attrs["llm.prompt_template.version"],
+        "dummy::good".into()
+    );
+    assert!(!variant_attrs.contains_key("llm.prompt_template.template"));
+    assert!(!variant_attrs.contains_key("llm.prompt_template.variables"));
 }

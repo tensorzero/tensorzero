@@ -28,6 +28,7 @@ use crate::error::TimeoutKind;
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::Role;
+use crate::inference::types::System;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
@@ -354,6 +355,35 @@ impl VariantConfig {
     }
 }
 
+/// Sets the OpenInference `llm.prompt_template.*` attributes on the current
+/// variant span. The `version` is the variant name; the template source
+/// (typically the variant's `system` template) and serialized arguments are
+/// emitted when available.
+fn apply_openinference_variant_prompt_template(
+    inner: &VariantConfig,
+    input: &LazyResolvedInput,
+    inference_config: &InferenceConfig,
+    clients: &InferenceClients,
+) {
+    let template = match inner {
+        VariantConfig::ChatCompletion(params) => params
+            .templates()
+            .get_implicit_system_template()
+            .map(|t| t.template.contents.as_str()),
+        _ => None,
+    };
+    let variables_json = match &input.system {
+        Some(System::Template(args)) => serde_json::to_string(&args.0).ok(),
+        _ => None,
+    };
+    clients.otlp_config.apply_openinference_prompt_template(
+        &tracing::Span::current(),
+        &inference_config.variant_name,
+        template,
+        variables_json.as_deref(),
+    );
+}
+
 impl Variant for VariantInfo {
     #[instrument(
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=false),
@@ -373,6 +403,12 @@ impl Variant for VariantInfo {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
+        apply_openinference_variant_prompt_template(
+            &self.inner,
+            &input,
+            &inference_config,
+            &clients,
+        );
 
         let fut = async {
             match &self.inner {
@@ -478,6 +514,12 @@ impl Variant for VariantInfo {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
+        apply_openinference_variant_prompt_template(
+            &self.inner,
+            &input,
+            &inference_config,
+            &clients,
+        );
         let variant_name = inference_config.variant_name.clone();
         let fut = async {
             match &self.inner {

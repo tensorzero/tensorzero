@@ -43,6 +43,7 @@ use crate::observability::genai_conventions;
 use crate::observability::internal_metrics::{
     TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
 };
+use crate::observability::openinference_conventions;
 use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
 use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -2657,6 +2658,12 @@ impl ModelProvider {
                 if let Some(model_name) = self.genai_model_name() {
                     span.set_attribute("llm.model_name", model_name.to_string());
                 }
+
+                openinference_conventions::apply_input_messages(
+                    span,
+                    request.request.system.as_deref(),
+                    &request.request.messages,
+                );
             }
         }
     }
