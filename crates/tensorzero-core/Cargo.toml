@@ -61,8 +61,8 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 json-pointer = { workspace = true }
-jsonschema = "0.46.3"
-jsonwebtoken = { version = "10.3", features = ["aws_lc_rs"] }
+jsonschema = "0.46.4"
+jsonwebtoken = { version = "10.4", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.3"
 metrics-exporter-prometheus = { workspace = true }
@@ -96,7 +96,7 @@ tensorzero-inference-types = { path = "../tensorzero-inference-types" }
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-error = { path = "../tensorzero-error", features = ["axum", "otel", "sqlx", "redis", "autopilot-client"] }
-tensorzero-http = { path = "../tensorzero-http" }
+tensorzero-http.workspace = true
 tensorzero-overhead = { path = "../tensorzero-overhead" }
 tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
@@ -163,6 +163,9 @@ durable-tools = { path = "../durable-tools" }
 http-body-util = { workspace = true }
 image = "0.25.10"
 gag = "1.0.0"
+h2 = "0.4"
+rcgen = "0.14"
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs"] }
 log = "0.4.29"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }

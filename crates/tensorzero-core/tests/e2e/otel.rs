@@ -16,12 +16,18 @@ use tensorzero::{
 };
 use tensorzero::{
     InferenceParams, System,
-    test_helpers::{make_embedded_gateway_with_config, make_embedded_gateway_with_rate_limiting},
+    test_helpers::{
+        make_embedded_gateway_with_config, make_embedded_gateway_with_config_path,
+        make_embedded_gateway_with_rate_limiting,
+    },
 };
 use tensorzero_core::observability::{
     enter_fake_http_request_otel, setup_observability_with_exporter_override,
 };
-use tensorzero_core::{config::OtlpTracesFormat, inference::types::Text};
+use tensorzero_core::{
+    config::OtlpTracesFormat,
+    inference::types::{Arguments, Text},
+};
 use tensorzero_core::{
     endpoints::inference::ChatCompletionInferenceParams, observability::LogFormat,
 };
@@ -741,6 +747,37 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
+
+            // `llm.prompt_template.version` is the variant name (TensorZero variants
+            // are the unit of prompt-template versioning). The default function used
+            // here has no system template or system input, so `.template` and
+            // `.variables` are omitted.
+            assert_eq!(
+                variant_attr_map["llm.prompt_template.version"],
+                model_name.clone().into()
+            );
+            assert!(!variant_attr_map.contains_key("llm.prompt_template.template"));
+            assert!(!variant_attr_map.contains_key("llm.prompt_template.variables"));
+
+            // `llm.input_messages.*` mirrors the request messages sent to the
+            // provider. The dummy provider receives a single user text message.
+            assert_eq!(
+                model_provider_attr_map["llm.input_messages.0.message.role"],
+                "user".into()
+            );
+            assert_eq!(
+                model_provider_attr_map["llm.input_messages.0.message.content"],
+                "What is your name?".into()
+            );
+            assert!(
+                !model_provider_attr_map.contains_key("llm.input_messages.1.message.role"),
+                "Only one input message expected"
+            );
+
+            // Dummy provider does not report cached input tokens.
+            assert!(
+                !model_provider_attr_map.contains_key("llm.token_count.prompt_details.cache_read")
+            );
         }
     }
     assert_eq!(model_attr_map["stream"], streaming.into());
@@ -1494,6 +1531,22 @@ fn find_model_provider_span(spans: &SpanMap) -> &SpanData {
     panic!("model_provider_inference span not found");
 }
 
+fn find_variant_span(spans: &SpanMap) -> &SpanData {
+    for children in spans.span_children.values() {
+        for child in children {
+            if child.name == "variant_inference" {
+                return child;
+            }
+        }
+    }
+    for root in &spans.root_spans {
+        if root.name == "variant_inference" {
+            return root;
+        }
+    }
+    panic!("variant_inference span not found");
+}
+
 #[test]
 fn test_capture_content_off_by_default_omits_content_attrs() {
     let config = r#"
@@ -1687,4 +1740,166 @@ fn test_capture_content_ignored_for_openinference_format() {
     assert_eq!(attrs["input.mime_type"], "application/json".into());
     assert!(attrs.contains_key("input.value"));
     assert!(attrs.contains_key("output.value"));
+
+    // `llm.input_messages.*` carries the system text + user message in
+    // flattened indexed form.
+    assert_eq!(attrs["llm.input_messages.0.message.role"], "system".into());
+    assert_eq!(
+        attrs["llm.input_messages.0.message.content"],
+        "be helpful".into()
+    );
+    assert_eq!(attrs["llm.input_messages.1.message.role"], "user".into());
+    assert_eq!(
+        attrs["llm.input_messages.1.message.content"],
+        "What is your name?".into()
+    );
+    assert!(!attrs.contains_key("llm.input_messages.2.message.role"));
+
+    // `llm.prompt_template.version` is the variant name. The default function
+    // has no system template, and the input uses `System::Text` (not
+    // `System::Template`), so `.template` and `.variables` are omitted.
+    let variant_span = find_variant_span(&spans);
+    let variant_attrs = attrs_to_map(&variant_span.attributes);
+    assert_eq!(
+        variant_attrs["llm.prompt_template.version"],
+        "dummy::good".into()
+    );
+    assert!(!variant_attrs.contains_key("llm.prompt_template.template"));
+    assert!(!variant_attrs.contains_key("llm.prompt_template.variables"));
+}
+
+/// Positive case for `llm.token_count.prompt_details.cache_read`: the
+/// `dummy::cache_read` model reports `provider_cache_read_input_tokens = 7`,
+/// which should surface on the `model_provider_inference` span when
+/// `format = "openinference"`.
+#[test]
+fn test_openinference_emits_cache_read_attribute() {
+    let config = r#"
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = "openinference"
+    "#;
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let exporter = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
+        let client = make_embedded_gateway_with_config(config).await;
+        client
+            .inference(ClientInferenceParams {
+                model_name: Some("dummy::cache_read".to_string()),
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "Hi".to_string(),
+                        })],
+                    }],
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        drop(client);
+        exporter
+    });
+    drop(runtime);
+
+    let spans = build_span_map(exporter.take_spans());
+    let attrs = attrs_to_map(&find_model_provider_span(&spans).attributes);
+    assert_eq!(
+        attrs["llm.token_count.prompt_details.cache_read"],
+        7_i64.into(),
+        "cache_read should be passed through from Usage.provider_cache_read_input_tokens"
+    );
+    // The other token counts should still be present alongside cache_read.
+    assert_eq!(attrs["llm.token_count.prompt"], 10_i64.into());
+}
+
+/// Positive case for `llm.prompt_template.*`: when the variant has a
+/// `system_template` defined and the input supplies `System::Template(args)`,
+/// the template source and serialized arguments should be emitted on the
+/// `variant_inference` span (alongside the variant name as `version`).
+#[test]
+fn test_openinference_emits_prompt_template_attributes() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let template_body = "You are {{ persona }}.";
+    let schema_body = r#"{
+        "type": "object",
+        "properties": { "persona": { "type": "string" } },
+        "required": ["persona"]
+    }"#;
+    std::fs::write(
+        temp_dir.path().join("system_template.minijinja"),
+        template_body,
+    )
+    .expect("write template");
+    std::fs::write(temp_dir.path().join("system_schema.json"), schema_body).expect("write schema");
+    let config_body = r#"
+[functions.test_template]
+type = "chat"
+system_schema = "system_schema.json"
+
+[functions.test_template.variants.main]
+type = "chat_completion"
+model = "dummy::good"
+system_template = "system_template.minijinja"
+
+[gateway.export.otlp.traces]
+enabled = true
+format = "openinference"
+"#;
+    let config_path = temp_dir.path().join("tensorzero.toml");
+    std::fs::write(&config_path, config_body).expect("write config");
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let exporter = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
+        let client = make_embedded_gateway_with_config_path(Some(config_path.as_path())).await;
+        let args = Arguments(serde_json::Map::from_iter([(
+            "persona".to_string(),
+            serde_json::Value::String("Megumin".to_string()),
+        )]));
+        client
+            .inference(ClientInferenceParams {
+                function_name: Some("test_template".to_string()),
+                variant_name: Some("main".to_string()),
+                input: Input {
+                    system: Some(System::Template(args)),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "Cast a spell.".to_string(),
+                        })],
+                    }],
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        drop(client);
+        exporter
+    });
+    drop(runtime);
+    drop(temp_dir);
+
+    let spans = build_span_map(exporter.take_spans());
+    let variant_attrs = attrs_to_map(&find_variant_span(&spans).attributes);
+
+    assert_eq!(variant_attrs["llm.prompt_template.version"], "main".into());
+    assert_eq!(
+        variant_attrs["llm.prompt_template.template"],
+        template_body.into()
+    );
+    // The variables attribute is a JSON string; parse it back to compare
+    // structurally rather than depending on serializer key order.
+    let variables_attr = match &variant_attrs["llm.prompt_template.variables"] {
+        Value::String(s) => s.to_string(),
+        other => panic!("expected string, got {other:?}"),
+    };
+    let variables: serde_json::Value =
+        serde_json::from_str(&variables_attr).expect("variables should be JSON");
+    assert_eq!(variables, serde_json::json!({ "persona": "Megumin" }));
 }

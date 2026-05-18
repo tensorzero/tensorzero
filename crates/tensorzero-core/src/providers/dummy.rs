@@ -111,6 +111,13 @@ impl DummyProvider {
                 provider_cache_write_input_tokens: None,
                 cost: None,
             },
+            "cache_read" => Usage {
+                input_tokens: Some(10),
+                output_tokens: Some(output_tokens),
+                provider_cache_read_input_tokens: Some(7),
+                provider_cache_write_input_tokens: None,
+                cost: None,
+            },
             _ => Usage {
                 input_tokens: Some(10),
                 output_tokens: Some(output_tokens),

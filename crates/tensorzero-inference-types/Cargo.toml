@@ -24,7 +24,7 @@ tensorzero-derive = { path = "../tensorzero-derive" }
 tokio.workspace = true
 tracing.workspace = true
 tensorzero-error = { path = "../tensorzero-error" }
-tensorzero-http = { path = "../tensorzero-http" }
+tensorzero-http.workspace = true
 tensorzero-stored-config = { path = "../tensorzero-stored-config" }
 tensorzero-types = { path = "../tensorzero-types" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }

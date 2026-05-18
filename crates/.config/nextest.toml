@@ -186,6 +186,11 @@ filter = 'binary(e2e) and test(providers::together::)'
 retries = { backoff = "exponential", count = 10, delay = "5s", jitter = true, max-delay = "120s" }
 
 [[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::fireworks::)'
+# Fireworks rate-limits the Kimi models under burst load, so we need extra retries
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+
+[[profile.default.overrides]]
 filter = 'test(test_clickhouse_migration_manager)'
 test-group = 'clickhouse_migration'
 

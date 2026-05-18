@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt};
 use http_body::Body;
 use thiserror::Error;
 
-pub use sse_stream::{Sse, SseStream};
+pub use sse_stream::{Error as SseStreamError, Sse, SseStream};
 
 /// A boxed event stream that is `Unpin` and `Send`.
 pub type EventStream =
