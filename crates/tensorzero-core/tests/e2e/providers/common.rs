@@ -7363,10 +7363,11 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
     let raw_arguments = raw_arguments.as_object().unwrap();
 
-    let arguments = content_block.get("arguments").unwrap();
-    let arguments = arguments.as_object().unwrap();
-
-    assert_eq!(arguments, raw_arguments);
+    // `arguments` is null when the model's tool call fails JSON-schema validation
+    // (e.g. Gemini occasionally invents extra fields like `fast` or wrong-case enum values).
+    if let Some(arguments) = content_block.get("arguments").unwrap().as_object() {
+        assert_eq!(arguments, raw_arguments);
+    }
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
