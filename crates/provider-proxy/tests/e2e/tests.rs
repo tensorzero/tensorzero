@@ -104,6 +104,7 @@ async fn test_provider_proxy() {
             health_port: 0,
             mode: CacheMode::ReadWrite,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -261,6 +262,7 @@ async fn test_read_old_write_new() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -373,6 +375,7 @@ async fn test_read_old_write_new() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -423,6 +426,7 @@ async fn test_dropped_stream_body() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -541,6 +545,7 @@ async fn test_read_only_require_hit() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadWrite,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -607,6 +612,7 @@ async fn test_read_only_require_hit() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOnlyRequireHit,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -676,6 +682,7 @@ async fn test_stream_body() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadOldWriteNew,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
@@ -753,6 +760,7 @@ async fn test_skip_write_when_newer_file_exists() {
             remove_user_agent_non_amazon: false,
             mode: CacheMode::ReadWrite,
             save_request_body: true,
+            check_openrouter_headers: true,
         },
         server_started_tx,
     ));
