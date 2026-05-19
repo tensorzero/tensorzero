@@ -234,7 +234,7 @@ max_tokens = 1500
 
 [functions.basic_test.variants.fireworks-shorthand]
 type = "chat_completion"
-model = "fireworks::accounts/fireworks/models/llama-v3p3-70b-instruct"
+model = "fireworks::accounts/fireworks/models/kimi-k2p5"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/simple_system_template.minijinja"
 max_tokens = 100
 
