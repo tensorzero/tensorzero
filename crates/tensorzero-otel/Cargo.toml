@@ -23,6 +23,8 @@ opentelemetry-otlp = { version = "0.31.1", features = [
     "grpc-tonic",
     "tls",
     "tls-roots",
+    "http-proto",
+    "reqwest-client",
 ] }
 opentelemetry-semantic-conventions = "0.31.0"
 opentelemetry_sdk = "0.31.0"

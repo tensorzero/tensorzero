@@ -29,6 +29,8 @@ use opentelemetry::ContextGuard;
 use opentelemetry::trace::Status;
 use opentelemetry::trace::{Tracer, TracerProvider as _};
 use opentelemetry::{Context, KeyValue};
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::WithHttpConfig;
 use opentelemetry_otlp::WithTonicConfig;
 use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_sdk::Resource;
@@ -65,6 +67,19 @@ pub enum LogFormat {
     Json,
 }
 
+/// Transport used for OTLP trace export. Mirrors the OpenTelemetry
+/// `OTEL_EXPORTER_OTLP_PROTOCOL` spec values, restricted to the two transports
+/// we actually wire up: gRPC (over tonic) and HTTP with protobuf payloads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum OtlpProtocol {
+    /// gRPC over HTTP/2 using `tonic`. The default OTLP transport.
+    #[default]
+    Grpc,
+    /// HTTP/1.1 with protobuf-encoded payloads (`http/protobuf` in the OTel
+    /// spec). Uses `reqwest` under the hood.
+    HttpBinary,
+}
+
 /// Knobs that used to be hardcoded inside this crate. Callers pass these in so
 /// the same plumbing can drive any gateway — `service.name`, the tracer name,
 /// the overhead histogram label, and the env-filter directives all come from
@@ -91,6 +106,11 @@ pub struct ObservabilitySettings {
     /// non-HTTP entry points (e.g. embedded clients) where no top-level
     /// overhead span exists.
     pub register_overhead_layer: bool,
+    /// Transport to use for OTLP trace export. Controls whether the
+    /// underlying `SpanExporter` is built with `.with_tonic()` (gRPC) or
+    /// `.with_http()` (HTTP/protobuf). The endpoint and other knobs are still
+    /// read from the standard `OTEL_*` environment variables.
+    pub otlp_protocol: OtlpProtocol,
 }
 
 /// TensorZero gateway defaults — preserves the strings that lived inside this
@@ -103,6 +123,7 @@ pub const TENSORZERO_DEFAULTS: ObservabilitySettings = ObservabilitySettings {
     default_log_directives: "warn,gateway=info,tensorzero_core=info,tensorzero_otel=info",
     debug_log_directives: "warn,gateway=debug,tensorzero_core=debug,tensorzero_otel=debug",
     register_overhead_layer: true,
+    otlp_protocol: OtlpProtocol::Grpc,
 };
 
 /// Same as [`TENSORZERO_DEFAULTS`] but with `register_overhead_layer = false`,
@@ -114,6 +135,7 @@ pub const TENSORZERO_EMBEDDED_DEFAULTS: ObservabilitySettings = ObservabilitySet
     default_log_directives: TENSORZERO_DEFAULTS.default_log_directives,
     debug_log_directives: TENSORZERO_DEFAULTS.debug_log_directives,
     register_overhead_layer: false,
+    otlp_protocol: TENSORZERO_DEFAULTS.otlp_protocol,
 };
 
 #[derive(Clone, Debug)]
@@ -295,16 +317,11 @@ fn build_tracer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
     settings: &ObservabilitySettings,
 ) -> Result<(SdkTracerProvider, SdkTracer), Error> {
-    let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
-    #[cfg(feature = "e2e_tests")]
-    let tls_config = add_local_self_signed_cert(tls_config);
-
-    let exporter = opentelemetry_otlp::SpanExporter::builder()
-        .with_tonic()
-        .with_metadata(key.extra_headers)
-        .with_tls_config(tls_config)
-        .build()
-        .map_err(|e| Error::observability(format!("Failed to create OTLP exporter: {e}")))?;
+    let CustomTracerKey {
+        extra_headers,
+        extra_resources,
+        extra_attributes,
+    } = key;
 
     // Per the OTel spec, `OTEL_SERVICE_NAME` overrides any service.name set
     // in code. Honor that — callers' `settings.service_name` is the default,
@@ -319,25 +336,69 @@ fn build_tracer<T: SpanExporter + 'static>(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 service_name,
             ))
-            .with_attributes(key.extra_resources)
+            .with_attributes(extra_resources)
             .build(),
     );
 
     if let Some(override_exporter) = override_exporter {
         builder = builder.with_simple_exporter(TensorZeroExporterWrapper::new(
             override_exporter,
-            key.extra_attributes,
+            extra_attributes,
         ));
     } else {
-        builder = builder.with_batch_exporter(TensorZeroExporterWrapper::new(
-            exporter,
-            key.extra_attributes,
-        ));
+        builder = match settings.otlp_protocol {
+            OtlpProtocol::Grpc => {
+                let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
+                #[cfg(feature = "e2e_tests")]
+                let tls_config = add_local_self_signed_cert(tls_config);
+                let exporter = opentelemetry_otlp::SpanExporter::builder()
+                    .with_tonic()
+                    .with_metadata(extra_headers)
+                    .with_tls_config(tls_config)
+                    .build()
+                    .map_err(|e| {
+                        Error::observability(format!("Failed to create OTLP gRPC exporter: {e}"))
+                    })?;
+                builder
+                    .with_batch_exporter(TensorZeroExporterWrapper::new(exporter, extra_attributes))
+            }
+            OtlpProtocol::HttpBinary => {
+                let headers = metadata_to_http_headers(&extra_headers)?;
+                let exporter = opentelemetry_otlp::SpanExporter::builder()
+                    .with_http()
+                    .with_headers(headers)
+                    .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
+                    .build()
+                    .map_err(|e| {
+                        Error::observability(format!("Failed to create OTLP HTTP exporter: {e}"))
+                    })?;
+                builder
+                    .with_batch_exporter(TensorZeroExporterWrapper::new(exporter, extra_attributes))
+            }
+        };
     }
     let provider = builder.build();
 
     let tracer = provider.tracer(settings.tracer_name);
     Ok((provider, tracer))
+}
+
+/// Convert a tonic `MetadataMap` (the gRPC OTLP exporter's native header shape)
+/// into the `HashMap<String, String>` that the HTTP OTLP exporter expects.
+/// Binary metadata values (`*-bin` keys) aren't valid HTTP header values and
+/// will produce an error rather than being silently dropped.
+fn metadata_to_http_headers(metadata: &MetadataMap) -> Result<HashMap<String, String>, Error> {
+    let mut out = HashMap::with_capacity(metadata.len());
+    for (name, value) in metadata.as_ref() {
+        let value_str = value.to_str().map_err(|e| {
+            Error::observability(format!(
+                "Failed to convert OTLP header `{}` value to string for HTTP export: {e}",
+                name.as_str()
+            ))
+        })?;
+        out.insert(name.as_str().to_string(), value_str.to_string());
+    }
+    Ok(out)
 }
 
 impl Tracer for TracerWrapper {
