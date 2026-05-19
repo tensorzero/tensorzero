@@ -1,10 +1,11 @@
-import { Dialog as DialogPrimitive } from "radix-ui";
+import { Dialog as DialogPrimitive, VisuallyHidden } from "radix-ui";
 import { X } from "lucide-react";
 import {
   Dialog,
   DialogContentBox,
   DialogOverlay,
   DialogPortal,
+  DialogTitle,
 } from "~/components/ui/dialog";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/utils/common";
@@ -35,6 +36,10 @@ export function ErrorDialog({
             onOpenAutoFocus={(e) => e.preventDefault()}
           >
             <DialogContentBox className="max-h-[90vh] w-fit gap-0 overflow-hidden rounded-lg p-0">
+              <VisuallyHidden.Root>
+                <DialogTitle>{label}</DialogTitle>
+              </VisuallyHidden.Root>
+
               {children}
 
               <DialogPrimitive.Close
