@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { data, useFetcher, type LoaderFunctionArgs } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
@@ -54,6 +54,12 @@ export interface CountsData {
   curatedInferenceCount: number | null;
 }
 
+interface CountFetcherParams {
+  functionName?: string;
+  metricName?: string;
+  threshold?: number;
+}
+
 /**
  * A hook that fetches counts for inferences, feedbacks, and curated inferences based on function, metric, and threshold parameters.
  * This hook automatically refetches when any of the parameters change.
@@ -67,14 +73,12 @@ export interface CountsData {
  *  - curatedInferenceCount: Number of curated inferences meeting the threshold criteria
  *  - isLoading: Whether the counts are currently being fetched
  */
-export function useCountFetcher(params: {
-  functionName?: string;
-  metricName?: string;
-  threshold?: number;
-}): CountsData & { isLoading: boolean } {
+export function useCountFetcher(
+  params: CountFetcherParams,
+): CountsData & { isLoading: boolean } {
   const countFetcher = useFetcher();
 
-  useEffect(() => {
+  const countFetchEvent = useEffectEvent((params: CountFetcherParams) => {
     if (params.functionName) {
       const searchParams = new URLSearchParams();
       searchParams.set("function", params.functionName);
@@ -84,8 +88,14 @@ export function useCountFetcher(params: {
 
       countFetcher.load(`/api/curated_inferences/count?${searchParams}`);
     }
-    // TODO: Fix and stop ignoring lint rule
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  });
+
+  useEffect(() => {
+    countFetchEvent({
+      functionName: params.functionName,
+      metricName: params.metricName,
+      threshold: params.threshold,
+    });
   }, [params.functionName, params.metricName, params.threshold]);
 
   return {

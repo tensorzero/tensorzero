@@ -1,4 +1,4 @@
-import { useState, memo, useEffect, useMemo } from "react";
+import { useState, memo, useEffect, useMemo, useEffectEvent } from "react";
 import { useFetcher } from "react-router";
 import { FormLabel } from "~/components/ui/form";
 import { useConfig } from "~/context/config";
@@ -55,13 +55,17 @@ export default function InferenceFilterBuilder({
 }: InferenceFilterBuilder) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackResponse>();
 
+  const metricsFetchEvent = useEffectEvent(
+    (functionName: string | null | undefined) => {
+      if (functionName) {
+        metricsFetcher.load(
+          `/api/function/${encodeURIComponent(functionName)}/feedback_counts`,
+        );
+      }
+    },
+  );
   useEffect(() => {
-    if (functionName) {
-      metricsFetcher.load(
-        `/api/function/${encodeURIComponent(functionName)}/feedback_counts`,
-      );
-    }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    metricsFetchEvent(functionName);
   }, [functionName]);
 
   const validMetricNames = useMemo((): Set<string> | null => {

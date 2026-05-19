@@ -9,7 +9,7 @@ import {
   Breadcrumbs,
 } from "~/components/layout/PageLayout";
 import { useToast } from "~/hooks/use-toast";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useFetcher } from "react-router";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { AskAutopilotButton } from "~/components/autopilot/AskAutopilotButton";
@@ -156,17 +156,22 @@ export default function DatasetDetailPage({
   const fetcher = useFetcher();
 
   // Use useEffect to show toast only after component mounts
+  const rowsAddedEvent = useEffectEvent(
+    (rowsAdded: number | null): (() => void) | undefined => {
+      if (rowsAdded !== null) {
+        const { dismiss } = toast.success({
+          title: "Dataset Updated",
+          description: `Added ${rowsAdded} rows to the dataset.`,
+        });
+        return () => dismiss({ immediate: true });
+      }
+      return undefined;
+    },
+  );
   useEffect(() => {
-    if (rowsAdded !== null) {
-      const { dismiss } = toast.success({
-        title: "Dataset Updated",
-        description: `Added ${rowsAdded} rows to the dataset.`,
-      });
-      return () => dismiss({ immediate: true });
-    }
-    return;
-    // TODO: Fix and stop ignoring lint rule
-  }, [rowsAdded, toast]);
+    const dismiss = rowsAddedEvent(rowsAdded);
+    return dismiss;
+  }, [rowsAdded]);
 
   const handleDelete = () => {
     const formData = new FormData();

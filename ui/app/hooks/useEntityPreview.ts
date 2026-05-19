@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useFetcher } from "react-router";
 import { toEpisodePreviewApi, toInferencePreviewApi } from "~/utils/urls";
 
@@ -35,15 +35,16 @@ export function useEntityPreview<T>({
   const url = getPreviewUrl(type, id);
   const fetcher = useFetcher<T>({ key: url });
 
-  useEffect(() => {
+  // Re-runs when url or enabled changes, which covers the hovercard
+  // open/close lifecycle.
+  const fetcherEvent = useEffectEvent((enabled: boolean, url: string) => {
     if (enabled && fetcher.state === "idle" && !fetcher.data) {
       fetcher.load(url);
     }
-    // Intentionally omits fetcher from deps to avoid infinite loops.
-    // Re-runs when url or enabled changes, which covers the hovercard
-    // open/close lifecycle.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, enabled]);
+  });
+  useEffect(() => {
+    fetcherEvent(enabled, url);
+  }, [enabled, url]);
 
   return {
     data: (fetcher.data as T) ?? null,

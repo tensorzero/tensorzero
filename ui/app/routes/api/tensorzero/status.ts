@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { useEffect, useMemo } from "react";
+import { useEffect, useEffectEvent, useMemo } from "react";
 import { logger } from "~/utils/logger";
 import type { StatusResponse } from "~/types/tensorzero";
 
@@ -25,11 +25,13 @@ export function useTensorZeroStatusFetcher() {
   const status = statusFetcher.data;
   const isLoading = statusFetcher.state === "loading";
 
-  useEffect(() => {
+  const fetcherEvent = useEffectEvent(() => {
     if (statusFetcher.state === "idle" && !statusFetcher.data) {
       statusFetcher.load("/api/tensorzero/status");
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    fetcherEvent();
   }, []); // Empty dependency array - only run on mount
 
   return useMemo(() => ({ status, isLoading }), [status, isLoading]);

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useFetcher } from "react-router";
 import type { ResolveUuidResponse } from "~/types/tensorzero";
 import { toResolveUuidApi } from "~/utils/urls";
@@ -35,7 +35,7 @@ export function useResolveUuid(uuid: string): {
     resolvedUuids.set(normalizedUuid, fetcher.data);
   }
 
-  useEffect(() => {
+  const fetcherEvent = useEffectEvent((normalizedUuid: string) => {
     if (
       fetcher.state === "idle" &&
       !fetcher.data &&
@@ -43,7 +43,9 @@ export function useResolveUuid(uuid: string): {
     ) {
       fetcher.load(toResolveUuidApi(normalizedUuid));
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    fetcherEvent(normalizedUuid);
   }, [normalizedUuid]);
 
   const data = fetcher.data ?? resolvedUuids.get(normalizedUuid) ?? null;

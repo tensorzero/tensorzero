@@ -30,7 +30,7 @@ import {
 } from "~/components/ui/command";
 import { Input } from "~/components/ui/input";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useId, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackResponse } from "~/types/tensorzero";
 import clsx from "clsx";
@@ -98,14 +98,17 @@ export default function CurationMetricSelector<
     setInputValue(input);
   };
 
+  const metricsFetchEvent = useEffectEvent(
+    (functionValue: PathValue<T, Path<T>>) => {
+      if (functionValue && typeof functionValue === "string") {
+        metricsFetcher.load(
+          `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
+        );
+      }
+    },
+  );
   useEffect(() => {
-    if (functionValue && typeof functionValue === "string") {
-      metricsFetcher.load(
-        `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
-      );
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    metricsFetchEvent(functionValue);
   }, [functionValue]);
 
   const validMetrics = useMemo(() => {
@@ -123,26 +126,31 @@ export default function CurationMetricSelector<
   const metricComboboxId = `${metricLabelId}-combobox`;
 
   // Inform parent when the internal metrics fetcher loading state changes
+  const onMetricsLoadingChangeEvent = useEffectEvent((loading: boolean) => {
+    onMetricsLoadingChange?.(loading);
+  });
   useEffect(() => {
-    onMetricsLoadingChange?.(metricsLoading);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    onMetricsLoadingChangeEvent(metricsLoading);
   }, [metricsLoading]);
 
   // Reset metric value if the selected function does not have the previously selected metric
+  const onMetricValueChangeEvent = useEffectEvent(
+    (functionValue: PathValue<T, Path<T>>, validMetrics: Set<string>) => {
+      const metricValue = getValues(name);
+      if (
+        functionValue &&
+        metricValue &&
+        typeof metricValue === "string" &&
+        !validMetrics.has(metricValue)
+      ) {
+        // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
+        setValue(name, null as PathValue<T, Path<T>>);
+      }
+    },
+  );
   useEffect(() => {
-    const metricValue = getValues(name);
-    if (
-      functionValue &&
-      metricValue &&
-      typeof metricValue === "string" &&
-      !validMetrics.has(metricValue)
-    ) {
-      // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
-      setValue(name, null as PathValue<T, Path<T>>);
-    }
-    // TODO: Fix and stop ignoring lint rule
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [functionValue, validMetrics, getValues, setValue]);
+    onMetricValueChangeEvent(functionValue, validMetrics);
+  }, [functionValue, validMetrics]);
 
   return (
     <FormField
