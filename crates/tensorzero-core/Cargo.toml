@@ -103,10 +103,10 @@ tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 minijinja-utils = { path = "../minijinja-utils" }
 clap = { workspace = true }
-opentelemetry_sdk = "0.31.0"
-opentelemetry = "0.31.0"
+opentelemetry_sdk = "0.32.0"
+opentelemetry = "0.32.0"
 tracing-opentelemetry = "0.32.1"
-opentelemetry-otlp = { version = "0.31.1", default-features = false, features = [
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
     "grpc-tonic",
     "tls",
     "tls-roots",
@@ -116,7 +116,7 @@ opentelemetry-otlp = { version = "0.31.1", default-features = false, features = 
     "logs",
     "internal-logs",
 ] }
-opentelemetry-semantic-conventions = "0.31.0"
+opentelemetry-semantic-conventions = "0.32.0"
 init-tracing-opentelemetry = { version = "0.37.0", features = ["xray"] }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
@@ -135,7 +135,7 @@ enum-map = "2.7.3"
 tokio-util = { workspace = true }
 ts-rs.workspace = true
 moka = { workspace = true }
-tonic = { version = "0.14.5", default-features = false }
+tonic = { version = "0.14.6", default-features = false }
 sqlx = { workspace = true }
 pin-project = { workspace = true }
 once_cell = "1.21.4"
@@ -148,7 +148,7 @@ tensorzero-auth = { path = "../tensorzero-auth" }
 autopilot-client = { path = "../autopilot-client" }
 durable-tools-spawn = { path = "../durable-tools-spawn" }
 schemars = { workspace = true, features = ["uuid1"] }
-opentelemetry-http = "0.31.0"
+opentelemetry-http = "0.32.0"
 # durable.workspace = true
 regex = { workspace = true }
 dashmap = "6.1.0"
