@@ -24,7 +24,6 @@ opentelemetry-otlp = { version = "0.31.1", default-features = false, features = 
     "tls",
     "tls-roots",
     "http-proto",
-    "reqwest-client",
     "trace",
     "metrics",
     "logs",
