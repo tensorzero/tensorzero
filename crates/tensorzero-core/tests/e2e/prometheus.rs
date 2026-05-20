@@ -36,8 +36,8 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
         .unwrap();
 
     assert!(response.status().is_success());
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after = get_metric_u32(&client, prometheus_metric_name).await;
@@ -128,8 +128,8 @@ async fn test_prometheus_metrics_inference_streaming() {
 
     assert!(response.status().is_success());
 
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after = get_metric_u32(&client, prometheus_metric_name).await;
@@ -477,8 +477,8 @@ async fn test_prometheus_metrics_feedback_comment() {
 
     assert!(response.status().is_success());
 
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after = get_metric_u32(&client, prometheus_metric_name).await;
@@ -506,8 +506,8 @@ async fn test_prometheus_metrics_feedback_comment() {
 
     assert!(response.status().is_success());
 
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after_dryrun = get_metric_u32(&client, prometheus_metric_name).await;
@@ -548,8 +548,8 @@ async fn test_prometheus_metrics_feedback_demonstration() {
 
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     let prometheus_metric_name =
         "tensorzero_requests_total{endpoint=\"feedback\",metric_name=\"demonstration\"}";
@@ -571,8 +571,8 @@ async fn test_prometheus_metrics_feedback_demonstration() {
         .unwrap();
     assert!(response.status().is_success());
 
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after = get_metric_u32(&client, prometheus_metric_name).await;
@@ -600,8 +600,8 @@ async fn test_prometheus_metrics_feedback_demonstration() {
 
     assert!(response.status().is_success());
 
-    // Sleep for 1 second to allow metrics to update
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep for 6 seconds to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
     // Get metrics after inference
     let request_count_after_dryrun = get_metric_u32(&client, prometheus_metric_name).await;

@@ -64,7 +64,7 @@ json-pointer = { workspace = true }
 jsonschema = "0.46.4"
 jsonwebtoken = { version = "10.4", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
-metrics = "0.24.3"
+metrics = "0.24.5"
 metrics-exporter-prometheus = { workspace = true }
 minijinja = { workspace = true }
 num-bigint = "0.4"
