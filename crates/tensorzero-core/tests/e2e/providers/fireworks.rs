@@ -86,7 +86,7 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "fireworks-shorthand".to_string(),
-        model_name: "fireworks::accounts/fireworks/models/llama-v3p3-70b-instruct".into(),
+        model_name: "fireworks::accounts/fireworks/models/kimi-k2p5".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
