@@ -61,10 +61,10 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 json-pointer = { workspace = true }
-jsonschema = "0.46.4"
+jsonschema = "0.46.5"
 jsonwebtoken = { version = "10.4", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
-metrics = "0.24.3"
+metrics = "0.24.6"
 metrics-exporter-prometheus = { workspace = true }
 minijinja = { workspace = true }
 num-bigint = "0.4"
@@ -151,7 +151,7 @@ schemars = { workspace = true, features = ["uuid1"] }
 opentelemetry-http = "0.31.0"
 # durable.workspace = true
 regex = { workspace = true }
-dashmap = "6.1.0"
+dashmap = "6.2.1"
 redis = { workspace = true }
 rustls = { workspace = true }
 serde_with = { workspace = true }
@@ -176,7 +176,7 @@ log = "0.4.29"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 redis-test = { workspace = true }
-rmcp = { version = "1.6.0", features = ["client", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "1.7.0", features = ["client", "transport-streamable-http-client-reqwest"] }
 
 [build-dependencies]
 built = "0.8.0"

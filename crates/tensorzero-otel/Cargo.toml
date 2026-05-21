@@ -14,7 +14,7 @@ clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 init-tracing-opentelemetry = { version = "0.37.0", features = ["xray"] }
-metrics = "0.24.3"
+metrics = "0.24.6"
 metrics-exporter-prometheus = { workspace = true }
 moka = { workspace = true }
 once_cell = "1.21.4"
