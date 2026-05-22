@@ -2,7 +2,7 @@ import {
   isTensorZeroServerError,
   TensorZeroServerError,
 } from "~/utils/tensorzero";
-import { isErrorLike, JSONParseError } from "~/utils/common";
+import { isErrorLike } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import type { ClientInferenceParams } from "~/types/tensorzero";
 import { getExtraInferenceOptions } from "~/utils/feature_flags.server";
@@ -11,12 +11,22 @@ import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
+  const data = formData.get("data");
+  if (typeof data !== "string") {
+    return Response.json({ error: "Missing request data" }, { status: 400 });
+  }
+
+  let parsed: ClientInferenceParams;
   try {
-    const data = formData.get("data");
-    if (typeof data !== "string") {
-      return Response.json({ error: "Missing request data" }, { status: 400 });
-    }
-    const parsed = JSON.parse(data) as ClientInferenceParams;
+    parsed = JSON.parse(data) as ClientInferenceParams;
+  } catch {
+    return Response.json(
+      { error: "Error parsing request data" },
+      { status: 400 },
+    );
+  }
+
+  try {
     const extraOptions = getExtraInferenceOptions();
     const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
     const tensorZeroClient = getTensorZeroClient();
@@ -34,12 +44,6 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
       logger.warn("Error in inference action:", error);
     }
 
-    if (error instanceof JSONParseError) {
-      return Response.json(
-        { error: "Error parsing request data" },
-        { status: 400 },
-      );
-    }
     if (isTensorZeroServerError(error)) {
       return Response.json({ error: error.message }, { status: error.status });
     }
