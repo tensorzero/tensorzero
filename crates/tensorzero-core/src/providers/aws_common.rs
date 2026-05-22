@@ -1000,7 +1000,7 @@ pub struct AwsRequestResponse {
 /// This handles: header setup, request signing, sending, reading response,
 /// and status validation. Returns the raw response text on success.
 #[expect(clippy::too_many_arguments)]
-pub async fn send_aws_request(
+pub async fn sign_and_send_aws_request(
     http_client: &TensorzeroHttpClient,
     url: &str,
     extra_headers: http::HeaderMap,
@@ -1036,11 +1036,39 @@ pub async fn send_aws_request(
         api_type,
     )?;
 
+    send_aws_request(
+        http_client,
+        url,
+        signed_headers,
+        body_bytes,
+        service,
+        provider_type,
+        raw_request,
+        api_type,
+    )
+    .await
+}
+
+/// Send an AWS HTTP request and handle common error patterns.
+///
+/// This handles: sending, reading response,
+/// and status validation. Returns the raw response text on success.
+#[expect(clippy::too_many_arguments)]
+pub async fn send_aws_request(
+    http_client: &TensorzeroHttpClient,
+    url: &str,
+    headers: http::HeaderMap,
+    body_bytes: Vec<u8>,
+    service: &str,
+    provider_type: &str,
+    raw_request: &str,
+    api_type: ApiType,
+) -> Result<AwsRequestResponse, Error> {
     // Send request
     let start_time = Instant::now();
     let response = http_client
         .post(url)
-        .headers(signed_headers)
+        .headers(headers)
         .body(body_bytes)
         .send()
         .await
@@ -1069,87 +1097,6 @@ pub async fn send_aws_request(
     if !status.is_success() {
         return Err(Error::new(ErrorDetails::InferenceServer {
             message: format!("AWS {service} returned error status {status}: {raw_response}"),
-            raw_request: Some(raw_request.to_string()),
-            raw_response: Some(raw_response),
-            provider_type: provider_type.to_string(),
-            api_type,
-        }));
-    }
-
-    Ok(AwsRequestResponse {
-        raw_response,
-        response_time,
-    })
-}
-
-/// Send an AWS Bedrock request with API key (bearer token) authentication.
-///
-/// This is used when an API key is configured instead of IAM credentials.
-/// Uses `Authorization: Bearer <token>` header instead of SigV4 signing.
-#[expect(clippy::too_many_arguments)]
-pub async fn send_aws_request_with_api_key(
-    http_client: &TensorzeroHttpClient,
-    url: &str,
-    extra_headers: http::HeaderMap,
-    body_bytes: Vec<u8>,
-    api_key: &SecretString,
-    provider_type: &str,
-    raw_request: &str,
-    api_type: ApiType,
-) -> Result<AwsRequestResponse, Error> {
-    // Build headers with content-type, accept, and authorization
-    let mut headers = extra_headers;
-    headers.insert(
-        http::header::CONTENT_TYPE,
-        http::header::HeaderValue::from_static("application/json"),
-    );
-    headers.insert(
-        http::header::ACCEPT,
-        http::header::HeaderValue::from_static("application/json"),
-    );
-    headers.insert(
-        http::header::AUTHORIZATION,
-        http::header::HeaderValue::from_str(&format!("Bearer {}", api_key.expose_secret()))
-            .map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Invalid API key format: {e}"),
-                })
-            })?,
-    );
-
-    // Send request (no signing needed for bearer auth)
-    let start_time = Instant::now();
-    let response = http_client
-        .post(url)
-        .headers(headers)
-        .body(body_bytes)
-        .send()
-        .await
-        .map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error sending request to AWS Bedrock: {e}"),
-                raw_request: Some(raw_request.to_string()),
-                raw_response: None,
-                provider_type: provider_type.to_string(),
-                api_type,
-            })
-        })?;
-
-    let response_time = start_time.elapsed();
-    let status = response.status();
-    let raw_response = response.text().await.map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error reading response from AWS Bedrock: {e}"),
-            raw_request: Some(raw_request.to_string()),
-            raw_response: None,
-            provider_type: provider_type.to_string(),
-            api_type,
-        })
-    })?;
-
-    if !status.is_success() {
-        return Err(Error::new(ErrorDetails::InferenceServer {
-            message: format!("AWS Bedrock returned error status {status}: {raw_response}"),
             raw_request: Some(raw_request.to_string()),
             raw_response: Some(raw_response),
             provider_type: provider_type.to_string(),

@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use super::aws_common::{
     AWSEndpointUrl, AWSIAMCredentials, AWSRegion, check_eventstream_exception, config_with_region,
-    parse_aws_region, resolve_request_credentials, send_aws_request, sign_request,
+    parse_aws_region, resolve_request_credentials, sign_and_send_aws_request, sign_request,
     warn_if_credential_exfiltration_risk,
 };
 use super::helpers::inject_extra_request_data;
@@ -230,7 +230,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         let region = self.get_region(dynamic_api_keys, ApiType::ChatCompletions)?;
 
         // Send signed request
-        let aws_response = send_aws_request(
+        let aws_response = sign_and_send_aws_request(
             http_client,
             &url,
             http_extra_headers,
