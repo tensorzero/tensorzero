@@ -84,7 +84,13 @@ ARCH=$(dpkg --print-architecture)
 echo "deb https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
 # Update apt package lists
 sudo apt-get update
-sudo apt-get install -y clickhouse-client
+# Pin to 26.4.3.37: 26.5.1.882 forces the ParquetV3 reader for `INSERT FROM INFILE`
+# and rejects our committed `large_*.parquet` fixtures with `Code: 117 (INCORRECT_DATA)`,
+# ignoring `input_format_parquet_use_native_reader_v3=0`.
+CLICKHOUSE_CLIENT_VERSION=26.4.3.37
+sudo apt-get install -y \
+    "clickhouse-client=${CLICKHOUSE_CLIENT_VERSION}" \
+    "clickhouse-common-static=${CLICKHOUSE_CLIENT_VERSION}"
 
 curl \
     --retry 20 --retry-delay 5 --retry-max-time 300 --retry-all-errors --max-time 15 \
