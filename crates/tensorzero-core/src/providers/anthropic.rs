@@ -468,7 +468,7 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
-fn stream_anthropic(
+pub(super) fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProviderRequestInfo,
@@ -948,7 +948,7 @@ pub(super) struct AnthropicMessagesConfig {
 /// Returns true if we should use JSON prefill for this request.
 /// Prefill is only used for json_mode=on. For json_mode=strict, we use
 /// the beta structured outputs feature with output_format instead.
-fn needs_json_prefill(request: &ModelInferenceRequest<'_>) -> bool {
+pub(super) fn needs_json_prefill(request: &ModelInferenceRequest<'_>) -> bool {
     matches!(request.json_mode, ModelInferenceRequestJsonMode::On)
         && matches!(request.function_type, FunctionType::Json)
 }
@@ -1121,7 +1121,8 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-opus-4-1"
     {
         Ok(32_000)
-    } else if model_name.starts_with("claude-opus-4-6") {
+    } else if model_name.starts_with("claude-opus-4-6") || model_name.starts_with("claude-opus-4-7")
+    {
         Ok(128_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
@@ -1137,7 +1138,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
     }
 }
 
-fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
+pub(super) fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
     let mut messages = messages;
     // Add a JSON-prefill message for Anthropic's JSON mode
     messages.push(AnthropicMessage {
@@ -1149,7 +1150,7 @@ fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage
     messages
 }
 
-pub(crate) fn prefill_json_response(
+pub(super) fn prefill_json_response(
     content: Vec<ContentBlockOutput>,
 ) -> Result<Vec<ContentBlockOutput>, Error> {
     // Check if the content is a single text block
@@ -1171,7 +1172,7 @@ pub(crate) fn prefill_json_response(
     Ok(content)
 }
 
-pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseChunk) {
+pub(super) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseChunk) {
     if chunk.content.is_empty() {
         chunk.content = vec![ContentBlockChunk::Text(TextChunk {
             text: "{".to_string(),
@@ -1310,7 +1311,7 @@ impl AnthropicUsage {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct AnthropicResponse {
+pub(super) struct AnthropicResponse {
     id: String,
     r#type: String, // this is always "message"
     role: String,   // this is always "assistant"
@@ -1348,7 +1349,7 @@ impl AnthropicStopReason {
 
 #[derive(Debug)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-struct AnthropicResponseWithMetadata<'a> {
+pub(super) struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
@@ -1358,6 +1359,32 @@ struct AnthropicResponseWithMetadata<'a> {
     model_name: &'a str,
     provider_name: &'a str,
     model_inference_id: Uuid,
+}
+
+impl<'a> AnthropicResponseWithMetadata<'a> {
+    pub(super) fn new(
+        response: AnthropicResponse,
+        raw_response: String,
+        latency: Latency,
+        raw_request: String,
+        generic_request: &'a ModelInferenceRequest<'a>,
+        input_messages: Vec<RequestMessage>,
+        model_name: &'a str,
+        provider_name: &'a str,
+        model_inference_id: Uuid,
+    ) -> Self {
+        Self {
+            response,
+            raw_response,
+            latency,
+            raw_request,
+            generic_request,
+            input_messages,
+            model_name,
+            provider_name,
+            model_inference_id,
+        }
+    }
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {

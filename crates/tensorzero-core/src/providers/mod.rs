@@ -1,6 +1,7 @@
 pub mod anthropic;
 pub mod aws_bedrock;
 pub mod aws_bedrock_converse;
+pub mod aws_bedrock_messages;
 pub mod aws_common;
 pub mod aws_sagemaker;
 pub mod azure;

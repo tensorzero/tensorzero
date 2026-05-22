@@ -61,6 +61,8 @@ pub enum StoredProviderConfig {
         access_key_id: Option<StoredCredentialLocation>,
         secret_access_key: Option<StoredCredentialLocation>,
         session_token: Option<StoredCredentialLocation>,
+        api_type: Option<String>,
+        provider_tools: Option<Vec<serde_json::Value>>,
     },
     #[serde(rename = "aws_sagemaker")]
     AWSSagemaker {

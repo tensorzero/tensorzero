@@ -1,9 +1,11 @@
 //! AWS Bedrock model provider using direct HTTP calls.
 //!
 //! Uses the Bedrock runtime endpoint for for Converse API,
+//! and the Bedrock mantle endpoint for for Messages API.
 
 use aws_types::region::Region;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -39,6 +41,9 @@ pub struct AWSBedrockProvider {
     endpoint_url: Option<AWSEndpointUrl>,
     #[serde(skip)]
     credentials: AWSBedrockCredentials,
+    api_type: BedrockApiType,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    provider_tools: Vec<Value>,
 }
 
 /// Build AWS Bedrock provider configuration from config fields.
@@ -103,18 +108,62 @@ pub async fn build_aws_bedrock_provider_config(
     Ok((aws_region, endpoint_url, auth))
 }
 
+/// Which Bedrock API to use for inference.
+#[derive(ts_rs::TS, Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum BedrockApiType {
+    /// Always use the Bedrock Converse API on the Bedrock runtime endpoint.
+    #[serde(rename = "aws_converse")]
+    AWSConverse,
+    /// Always use the Anthropic Messages API on the Bedrock mantle endpoint.
+    Anthropic,
+    /// Use the Anthropic Messages API for Claude models, Converse API for other models.
+    #[default]
+    Auto,
+}
+
+impl BedrockApiType {
+    pub fn from_stored(value: Option<&str>) -> Self {
+        match value {
+            Some("aws_converse") => Self::AWSConverse,
+            Some("anthropic") => Self::Anthropic,
+            Some("auto") | None => Self::Auto,
+            Some(value) => {
+                tracing::warn!(
+                    "Unknown `api_type` value `{value}` for `{PROVIDER_TYPE}`. Using `auto`. \
+                    Valid values are `aws_converse`, `anthropic`, or `auto`."
+                );
+                Self::Auto
+            }
+        }
+    }
+
+    pub fn to_stored(self) -> Option<String> {
+        match self {
+            Self::AWSConverse => Some("aws_converse".to_string()),
+            Self::Anthropic => Some("anthropic".to_string()),
+            Self::Auto => None,
+        }
+    }
+}
+
 impl AWSBedrockProvider {
     pub fn new(
         model_id: String,
         region: AWSRegion,
         endpoint_url: Option<AWSEndpointUrl>,
         credentials: AWSBedrockCredentials,
+        api_type: BedrockApiType,
+        provider_tools: Vec<Value>,
     ) -> Self {
         Self {
             model_id,
             region,
             endpoint_url,
             credentials,
+            api_type,
+            provider_tools,
         }
     }
 
@@ -133,11 +182,22 @@ impl AWSBedrockProvider {
             Ok(url.to_string().trim_end_matches('/').to_string())
         } else {
             let region = self.get_region(dynamic_api_keys, api_type)?;
-            Ok(format!(
-                "https://bedrock-runtime.{}.amazonaws.com",
-                region.as_ref()
-            ))
+            if self.use_mantle_endpoint() {
+                Ok(format!(
+                    "https://bedrock-mantle.{}.api.aws",
+                    region.as_ref()
+                ))
+            } else {
+                Ok(format!(
+                    "https://bedrock-runtime.{}.amazonaws.com",
+                    region.as_ref()
+                ))
+            }
         }
+    }
+
+    pub(super) fn provider_tools(&self) -> &[Value] {
+        &self.provider_tools
     }
 
     /// Get the region for this request.
@@ -153,6 +213,18 @@ impl AWSBedrockProvider {
         };
         self.region
             .resolve_with_sdk_config(dynamic_api_keys, sdk_config, PROVIDER_TYPE, api_type)
+    }
+
+    fn is_model_supported_on_mantle_endpoint(&self) -> bool {
+        self.model_id.starts_with("anthropic.claude")
+    }
+
+    fn use_mantle_endpoint(&self) -> bool {
+        match self.api_type {
+            BedrockApiType::AWSConverse => false,
+            BedrockApiType::Anthropic => true,
+            BedrockApiType::Auto => self.is_model_supported_on_mantle_endpoint(),
+        }
     }
 
     pub(super) async fn build_request_headers(
@@ -220,8 +292,13 @@ impl InferenceProvider for AWSBedrockProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<ProviderInferenceResponse, Error> {
-        self.infer_converse(request, http_client, dynamic_api_keys, model_provider)
-            .await
+        if self.use_mantle_endpoint() {
+            self.infer_anthropic(request, http_client, dynamic_api_keys, model_provider)
+                .await
+        } else {
+            self.infer_converse(request, http_client, dynamic_api_keys, model_provider)
+                .await
+        }
     }
 
     async fn infer_stream<'a>(
@@ -231,8 +308,13 @@ impl InferenceProvider for AWSBedrockProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProviderRequestInfo,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        self.infer_stream_converse(request, http_client, dynamic_api_keys, model_provider)
-            .await
+        if self.use_mantle_endpoint() {
+            self.infer_stream_anthropic(request, http_client, dynamic_api_keys, model_provider)
+                .await
+        } else {
+            self.infer_stream_converse(request, http_client, dynamic_api_keys, model_provider)
+                .await
+        }
     }
 
     async fn start_batch_inference<'a>(
@@ -265,7 +347,17 @@ mod tests {
     use super::*;
     use crate::utils::testing::reset_capture_logs;
     use googletest::prelude::*;
-    use tensorzero_types::Usage;
+
+    fn test_provider(model_id: &str, api_type: BedrockApiType) -> AWSBedrockProvider {
+        AWSBedrockProvider::new(
+            model_id.to_string(),
+            AWSRegion::Static(Region::new("us-east-1")),
+            None,
+            AWSBedrockCredentials::ApiKey(secrecy::SecretString::new("test".into())),
+            api_type,
+            vec![],
+        )
+    }
 
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
@@ -288,7 +380,14 @@ mod tests {
         .await
         .unwrap();
 
-        let _provider = AWSBedrockProvider::new("test".to_string(), region.clone(), None, auth);
+        let _provider = AWSBedrockProvider::new(
+            "test".to_string(),
+            region.clone(),
+            None,
+            auth,
+            BedrockApiType::Auto,
+            vec![],
+        );
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -302,7 +401,14 @@ mod tests {
                 .await
                 .unwrap();
 
-        let _provider = AWSBedrockProvider::new("test".to_string(), region, None, auth);
+        let _provider = AWSBedrockProvider::new(
+            "test".to_string(),
+            region,
+            None,
+            auth,
+            BedrockApiType::Auto,
+            vec![],
+        );
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -336,7 +442,14 @@ mod tests {
                 .await
                 .unwrap();
 
-        let _provider = AWSBedrockProvider::new("test".to_string(), region, None, auth);
+        let _provider = AWSBedrockProvider::new(
+            "test".to_string(),
+            region,
+            None,
+            auth,
+            BedrockApiType::Auto,
+            vec![],
+        );
 
         assert!(logs_contain(
             "Creating new AWS config for region: me-shire-2"
@@ -344,37 +457,62 @@ mod tests {
     }
 
     #[gtest]
-    fn test_aws_bedrock_usage_with_cache_tokens() {
-        use tensorzero_types_providers::aws_bedrock;
+    fn test_bedrock_api_type_stored_roundtrip() {
+        expect_that!(&BedrockApiType::Auto.to_stored(), eq(&None));
+        expect_that!(
+            BedrockApiType::from_stored(Some("aws_converse")),
+            eq(BedrockApiType::AWSConverse)
+        );
+        expect_that!(
+            BedrockApiType::from_stored(Some("anthropic")),
+            eq(BedrockApiType::Anthropic)
+        );
+        expect_that!(
+            BedrockApiType::from_stored(Some("unknown")),
+            eq(BedrockApiType::Auto)
+        );
+    }
 
-        let bedrock_usage = aws_bedrock::Usage {
-            input_tokens: 50,
-            output_tokens: 30,
-            total_tokens: Some(80),
-            cache_read_input_tokens: Some(40),
-            cache_write_input_tokens: Some(10),
-        };
+    #[gtest]
+    fn test_bedrock_endpoint_routing() {
+        let credentials = InferenceCredentials::new();
 
-        // Replicate the conversion logic from the provider:
-        // total_input_tokens includes cache tokens since Bedrock reports them separately
-        let total_input_tokens = bedrock_usage.input_tokens as u32
-            + bedrock_usage.cache_read_input_tokens.unwrap_or(0) as u32
-            + bedrock_usage.cache_write_input_tokens.unwrap_or(0) as u32;
-        let usage = Usage {
-            input_tokens: Some(total_input_tokens),
-            output_tokens: Some(bedrock_usage.output_tokens as u32),
-            provider_cache_read_input_tokens: bedrock_usage
-                .cache_read_input_tokens
-                .map(|v| v as u32),
-            provider_cache_write_input_tokens: bedrock_usage
-                .cache_write_input_tokens
-                .map(|v| v as u32),
-            cost: None,
-        };
+        let claude_auto = test_provider(
+            "anthropic.claude-sonnet-4-20250514-v1:0",
+            BedrockApiType::Auto,
+        );
+        expect_that!(
+            claude_auto
+                .get_base_url(&credentials, ApiType::ChatCompletions)
+                .expect("base URL should resolve"),
+            eq("https://bedrock-mantle.us-east-1.api.aws")
+        );
 
-        expect_that!(usage.input_tokens, eq(Some(100)));
-        expect_that!(usage.output_tokens, eq(Some(30)));
-        expect_that!(usage.provider_cache_read_input_tokens, eq(Some(40)));
-        expect_that!(usage.provider_cache_write_input_tokens, eq(Some(10)));
+        let nova_auto = test_provider("amazon.nova-lite-v1:0", BedrockApiType::Auto);
+        expect_that!(
+            nova_auto
+                .get_base_url(&credentials, ApiType::ChatCompletions)
+                .expect("base URL should resolve"),
+            eq("https://bedrock-runtime.us-east-1.amazonaws.com")
+        );
+
+        let claude_converse = test_provider(
+            "anthropic.claude-sonnet-4-20250514-v1:0",
+            BedrockApiType::AWSConverse,
+        );
+        expect_that!(
+            claude_converse
+                .get_base_url(&credentials, ApiType::ChatCompletions)
+                .expect("base URL should resolve"),
+            eq("https://bedrock-runtime.us-east-1.amazonaws.com")
+        );
+
+        let nova_mantle = test_provider("amazon.nova-lite-v1:0", BedrockApiType::Anthropic);
+        expect_that!(
+            nova_mantle
+                .get_base_url(&credentials, ApiType::ChatCompletions)
+                .expect("base URL should resolve"),
+            eq("https://bedrock-mantle.us-east-1.api.aws")
+        );
     }
 }

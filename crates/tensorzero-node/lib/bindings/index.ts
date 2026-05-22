@@ -33,6 +33,7 @@ export * from "./Base64File";
 export * from "./Base64FileMetadata";
 export * from "./BaseModelTable";
 export * from "./BatchConfig";
+export * from "./BedrockApiType";
 export * from "./BestOfNEvaluatorConfig";
 export * from "./BestOfNSamplingConfig";
 export * from "./BooleanMetricFeedbackRow";

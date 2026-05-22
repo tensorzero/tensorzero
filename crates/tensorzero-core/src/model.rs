@@ -44,7 +44,9 @@ use crate::observability::internal_metrics::{
     TENSORZERO_INPUT_TOKENS_TOTAL, TENSORZERO_OUTPUT_TOKENS_TOTAL,
 };
 use crate::observability::openinference_conventions;
-use crate::providers::aws_bedrock::build_aws_bedrock_provider_config;
+use crate::providers::aws_bedrock::{
+    AWSBedrockProvider, BedrockApiType, build_aws_bedrock_provider_config,
+};
 use crate::providers::aws_sagemaker::{AWSSagemakerProvider, build_aws_sagemaker_config};
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -94,12 +96,11 @@ use serde::{Deserialize, Serialize};
 use tensorzero_stored_config::{StoredExtraBodyConfig, StoredExtraHeadersConfig};
 
 use crate::providers::{
-    anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-    deepseek::DeepSeekProvider, fireworks::FireworksProvider,
-    gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
-    groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    anthropic::AnthropicProvider, azure::AzureProvider, deepseek::DeepSeekProvider,
+    fireworks::FireworksProvider, gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+    gcp_vertex_gemini::GCPVertexGeminiProvider, groq::GroqProvider, mistral::MistralProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, together::TogetherProvider,
+    vllm::VLLMProvider, xai::XAIProvider,
 };
 
 pub(crate) fn record_usage_metrics(usage: &Usage) {
@@ -377,6 +378,8 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 access_key_id,
                 secret_access_key,
                 session_token,
+                api_type,
+                provider_tools,
             } => Ok(Self::AWSBedrock {
                 model_id,
                 region: region.map(CredentialLocationOrHardcoded::from),
@@ -386,6 +389,8 @@ impl TryFrom<StoredProviderConfig> for UninitializedProviderConfig {
                 access_key_id: access_key_id.map(CredentialLocation::from),
                 secret_access_key: secret_access_key.map(CredentialLocation::from),
                 session_token: session_token.map(CredentialLocation::from),
+                api_type: BedrockApiType::from_stored(api_type.as_deref()),
+                provider_tools: provider_tools.unwrap_or_default(),
             }),
             StoredProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1757,6 +1762,11 @@ pub enum UninitializedProviderConfig {
         secret_access_key: Option<CredentialLocation>,
         #[ts(type = "string | null")]
         session_token: Option<CredentialLocation>,
+        /// Which Bedrock API to use. Defaults to `auto` (Anthropic Messages API for Claude models).
+        #[serde(default)]
+        api_type: BedrockApiType,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     #[strum(serialize = "aws_sagemaker")]
     #[serde(rename = "aws_sagemaker")]
@@ -1929,6 +1939,8 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                 access_key_id,
                 secret_access_key,
                 session_token,
+                api_type,
+                provider_tools,
             } => StoredProviderConfig::AWSBedrock {
                 model_id: model_id.clone(),
                 region: region
@@ -1944,6 +1956,8 @@ impl From<&UninitializedProviderConfig> for StoredProviderConfig {
                     .as_ref()
                     .map(StoredCredentialLocation::from),
                 session_token: session_token.as_ref().map(StoredCredentialLocation::from),
+                api_type: api_type.to_stored(),
+                provider_tools: (!provider_tools.is_empty()).then(|| provider_tools.clone()),
             },
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -2214,6 +2228,8 @@ impl UninitializedProviderConfig {
                 access_key_id,
                 secret_access_key,
                 session_token,
+                api_type,
+                provider_tools,
             } => {
                 let (region, endpoint_url, auth) = build_aws_bedrock_provider_config(
                     region,
@@ -2231,6 +2247,8 @@ impl UninitializedProviderConfig {
                     region,
                     endpoint_url,
                     auth,
+                    api_type,
+                    provider_tools.clone(),
                 ))
             }
             UninitializedProviderConfig::AWSSagemaker {
