@@ -103,21 +103,12 @@ tensorzero-config-paths = { path = "../tensorzero-config-paths" }
 tensorzero-types-providers = { path = "../tensorzero-types-providers" }
 minijinja-utils = { path = "../minijinja-utils" }
 clap = { workspace = true }
-opentelemetry_sdk = "0.31.0"
-opentelemetry = "0.31.0"
-tracing-opentelemetry = "0.32.1"
-opentelemetry-otlp = { version = "0.31.1", default-features = false, features = [
-    "grpc-tonic",
-    "tls",
-    "tls-roots",
-    "http-proto",
-    "trace",
-    "metrics",
-    "logs",
-    "internal-logs",
-] }
-opentelemetry-semantic-conventions = "0.31.0"
-init-tracing-opentelemetry = { version = "0.37.0", features = ["xray"] }
+opentelemetry_sdk = { workspace = true }
+opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+init-tracing-opentelemetry = { workspace = true }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
@@ -148,7 +139,7 @@ tensorzero-auth = { path = "../tensorzero-auth" }
 autopilot-client = { path = "../autopilot-client" }
 durable-tools-spawn = { path = "../durable-tools-spawn" }
 schemars = { workspace = true, features = ["uuid1"] }
-opentelemetry-http = "0.31.0"
+opentelemetry-http = { workspace = true }
 # durable.workspace = true
 regex = { workspace = true }
 dashmap = "6.2.1"

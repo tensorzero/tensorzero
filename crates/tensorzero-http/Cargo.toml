@@ -12,8 +12,8 @@ futures.workspace = true
 http.workspace = true
 http-body = "1"
 once_cell = "1"
-opentelemetry = "0.31"
-opentelemetry-http = "0.31"
+opentelemetry = { workspace = true }
+opentelemetry-http = { workspace = true }
 pin-project.workspace = true
 reqwest.workspace = true
 reqwest-sse-stream.workspace = true

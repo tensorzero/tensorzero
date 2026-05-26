@@ -99,7 +99,23 @@ ts-rs = { version = "12.0.1", features = [
 ] }
 pin-project = "1.1.13"
 chrono = { version = "0.4.43", features = ["serde"] }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.32.5", features = [
+opentelemetry = "0.32.0"
+opentelemetry-http = "0.32.0"
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
+    "grpc-tonic",
+    "tls",
+    "tls-roots",
+    "http-proto",
+    "trace",
+    "metrics",
+    "logs",
+    "internal-logs",
+] }
+opentelemetry-semantic-conventions = "0.32.0"
+opentelemetry_sdk = "0.32.0"
+tracing-opentelemetry = "0.33.0"
+init-tracing-opentelemetry = { version = "0.38.0", features = ["xray"] }
+tracing-opentelemetry-instrumentation-sdk = { version = "0.38.0", features = [
     "tracing_level_info",
 ] }
 tower-http = { version = "0.6.10", features = ["trace"] }

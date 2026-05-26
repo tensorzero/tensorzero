@@ -13,24 +13,15 @@ axum = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
-init-tracing-opentelemetry = { version = "0.37.0", features = ["xray"] }
+init-tracing-opentelemetry = { workspace = true }
 metrics = "0.24.6"
 metrics-exporter-prometheus = { workspace = true }
 moka = { workspace = true }
 once_cell = "1.21.4"
-opentelemetry = "0.31.0"
-opentelemetry-otlp = { version = "0.31.1", default-features = false, features = [
-    "grpc-tonic",
-    "tls",
-    "tls-roots",
-    "http-proto",
-    "trace",
-    "metrics",
-    "logs",
-    "internal-logs",
-] }
-opentelemetry-semantic-conventions = "0.31.0"
-opentelemetry_sdk = "0.31.0"
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry-semantic-conventions = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }
 tensorzero-overhead = { path = "../tensorzero-overhead" }
@@ -41,7 +32,7 @@ tokio-util = { workspace = true }
 tonic = { version = "0.14.5", default-features = false }
 tracing = { workspace = true }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
-tracing-opentelemetry = "0.32.1"
+tracing-opentelemetry = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
 ] }
