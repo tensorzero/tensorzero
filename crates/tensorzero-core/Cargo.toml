@@ -126,7 +126,7 @@ enum-map = "2.7.3"
 tokio-util = { workspace = true }
 ts-rs.workspace = true
 moka = { workspace = true }
-tonic = { version = "0.14.5", default-features = false }
+tonic = { version = "0.14.6", default-features = false }
 sqlx = { workspace = true }
 pin-project = { workspace = true }
 once_cell = "1.21.4"

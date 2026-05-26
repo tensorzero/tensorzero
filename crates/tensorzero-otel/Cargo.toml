@@ -29,7 +29,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
-tonic = { version = "0.14.5", default-features = false }
+tonic = { version = "0.14.6", default-features = false }
 tracing = { workspace = true }
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry = { workspace = true }
