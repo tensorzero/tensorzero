@@ -11,7 +11,7 @@ CLA_DOC_URL = "https://github.com/tensorzero/tensorzero/blob/main/CLA.md"
 CHECK_NAME = "cla"
 SIGN_PHRASE = "I have read the Contributor License Agreement (CLA) and hereby sign the CLA."
 RECHECK_PHRASE = "recheck"
-ALLOWLIST = "claude,cursoragent,dependabot[bot],TensorZero-Experimental-CI-Bot[bot]"
+ALLOWLIST = "claude,copilot,cursoragent,dependabot[bot],TensorZero-Experimental-CI-Bot[bot]"
 
 # Secrets (set via `wrangler secret put`):
 #   GITHUB_APP_ID
