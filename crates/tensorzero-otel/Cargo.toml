@@ -45,6 +45,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 gag = "1.0.0"
+googletest = { workspace = true }
 log = "0.4.29"
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

@@ -8323,6 +8323,7 @@ dependencies = [
  "clap",
  "futures",
  "gag",
+ "googletest",
  "http 1.4.0",
  "init-tracing-opentelemetry",
  "log",
