@@ -33,7 +33,7 @@ RUN pnpm install --frozen-lockfile --prod
 
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:1.93.0 AS tensorzero-node-build-env
+FROM rust:1.94.0 AS tensorzero-node-build-env
 ARG DEBUG_BUILD
 
 # Install Node.js 24 (required by @napi-rs/cli v3)

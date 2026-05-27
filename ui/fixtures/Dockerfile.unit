@@ -6,7 +6,7 @@ RUN npm install -g pnpm
 
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:1.93.0 AS tensorzero-node-build-env
+FROM rust:1.94.0 AS tensorzero-node-build-env
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
