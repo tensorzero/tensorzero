@@ -9,6 +9,14 @@ import { getExtraInferenceOptions } from "~/utils/feature_flags.server";
 import { logger } from "~/utils/logger";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
+function parseInferenceRequestData(data: string): ClientInferenceParams {
+  try {
+    return JSON.parse(data) as ClientInferenceParams;
+  } catch (error) {
+    throw new JSONParseError("Error parsing request data", error);
+  }
+}
+
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
   try {
@@ -16,7 +24,7 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     if (typeof data !== "string") {
       return Response.json({ error: "Missing request data" }, { status: 400 });
     }
-    const parsed = JSON.parse(data) as ClientInferenceParams;
+    const parsed = parseInferenceRequestData(data);
     const extraOptions = getExtraInferenceOptions();
     const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
     const tensorZeroClient = getTensorZeroClient();
