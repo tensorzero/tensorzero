@@ -8,7 +8,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-aws-smithy-types = { version = "1.4.7", features = ["byte-stream-poll-next"] }
+aws-smithy-types = { version = "1.4.8", features = ["byte-stream-poll-next"] }
 chrono.workspace = true
 durable.workspace = true
 hex = "0.4.3"

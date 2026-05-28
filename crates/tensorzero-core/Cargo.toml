@@ -38,15 +38,15 @@ aws-config = { version = "1.8", default-features = false, features = [
     "credentials-process",
     "sso",
 ] }
-aws-smithy-types = { version = "1.4.7", features = [
+aws-smithy-types = { version = "1.4.8", features = [
     "serde-deserialize",
     "serde-serialize",
 ] }
-aws-types = "1.3.6"
+aws-types = "1.3.16"
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }
-aws-sigv4 = "1.3"
+aws-sigv4 = "1.4"
 aws-smithy-eventstream = "0.60"
 aws-smithy-runtime-api = "1.11.0"
 axum = { workspace = true }
@@ -170,4 +170,4 @@ redis-test = { workspace = true }
 rmcp = { version = "1.7.0", features = ["client", "transport-streamable-http-client-reqwest"] }
 
 [build-dependencies]
-built = "0.8.0"
+built = "0.8.1"
