@@ -52,6 +52,19 @@ spec:
                   key: {{ .key }}
             {{- end }}
             {{- end }}
+            {{- range $name, $value := .Values.gateway.additionalEnv.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- if .Values.monitoring.otel.useNodeIp }}
+            {{- /* Inject NODE_IP from the Kubernetes Downward API to build the DaemonSet collector endpoint */}}
+            - name: TENSORZERO_OTEL_NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: "http://$(TENSORZERO_OTEL_NODE_IP):{{ .Values.monitoring.otel.nodePort }}"
+            {{- end }}
           volumeMounts:
             - name: config-volume
               mountPath: /app/config

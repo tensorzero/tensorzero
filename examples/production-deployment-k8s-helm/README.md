@@ -12,6 +12,7 @@ Our CI pipeline automatically bumps the chart's version and publishes it to [Art
 - StorageClass configured for persistent volumes (e.g. `ebs-gp3-retain`)
 - Sufficient resources for running ClickHouse and TensorZero services (recommend at least 4GB memory for minikube)
 - If `monitoring.metrics.enabled` is set, [Prometheus Operator](https://prometheus-operator.dev/) needs to be installed in your cluster
+- If `monitoring.otel.useNodeIp` is set to `true`, an OpenTelemetry Collector DaemonSet must be running on your nodes (e.g. via the [OpenTelemetry Agent](https://opentelemetry.io/docs/collector/deploy/agent/))
 
 ## Installing the Chart
 
@@ -115,6 +116,66 @@ The following table lists the configurable parameters of the chart and their def
 | `monitoring.metrics.enabled`  | Enable ServiceMonitor creation                | `false` |
 | `monitoring.metrics.interval` | Scrape interval                               | `"30s"` |
 | `monitoring.metrics.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
+
+#### OpenTelemetry Tracing
+
+OTel tracing is configured in two places:
+
+1. **`tensorzero.toml`** (inside `configMap.data`) — enables tracing and controls span format/content:
+
+```toml
+[gateway.export.otlp.traces]
+enabled = true
+format = "opentelemetry"   # or "openinference" for Arize/Phoenix
+# include_content = true   # opt-in to log full prompt/response content in spans
+```
+
+2. **Collector endpoint** — set via `gateway.additionalEnv.env` (static collector) or `monitoring.otel.useNodeIp` (DaemonSet collector).
+
+**Static endpoint** — for a fixed Collector URL (e.g. a central OTel Collector Service), use `gateway.additionalEnv.env`:
+
+```yaml
+gateway:
+  additionalEnv:
+    env:
+      OTEL_SERVICE_NAME: "tensorzero-gateway"
+```
+
+**Node-IP endpoint (DaemonSet mode)** — when your OTel Collector runs as a DaemonSet (one per node), each gateway pod should send traces to the Collector on its own node. The chart injects `status.hostIP` via the Kubernetes Downward API and builds `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` as `http://<NODE_IP>:<nodePort>` automatically:
+
+```yaml
+monitoring:
+  otel:
+    useNodeIp: true
+    nodePort: 4317
+
+gateway:
+  additionalEnv:
+    env:
+      OTEL_SERVICE_NAME: "tensorzero-gateway"
+```
+
+| Parameter                   | Description                                                        | Default |
+| --------------------------- | ------------------------------------------------------------------ | ------- |
+| `monitoring.otel.useNodeIp` | Build endpoint from node IP — for DaemonSet Collector deployments | `false` |
+| `monitoring.otel.nodePort`  | Collector port used when `useNodeIp` is true                      | `4317`  |
+
+
+#### Non-Secret (Plain) Environment Variables
+
+Use `gateway.additionalEnv.env` to inject plain (non-secret) environment variables directly into the gateway pod. This is suitable for public configuration such as `RUST_LOG` or any `OTEL_*` variables that don't contain credentials.
+
+```yaml
+gateway:
+  additionalEnv:
+    env:
+      RUST_LOG: "warn,gateway=info"
+      OTEL_SERVICE_NAME: "tensorzero-gateway"
+```
+
+| Parameter                  | Description                                              | Default |
+| -------------------------- | -------------------------------------------------------- | ------- |
+| `gateway.additionalEnv.env` | Map of plain env var names to values (non-secret)       | `{}`    |
 
 ### ClickHouse Configuration
 

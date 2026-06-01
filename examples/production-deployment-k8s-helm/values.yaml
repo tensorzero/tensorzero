@@ -14,6 +14,12 @@ monitoring:
     # Additional label key-values to attach to the created ServiceMonitor.
     labels: {}
 
+  # OpenTelemetry tracing configuration
+  otel:
+    useNodeIp: false
+    # Port your DaemonSet Collector listens on (used when useNodeIp is true).
+    nodePort: 4317
+
 # Gateway Configuration
 gateway:
   replicaCount: 1
@@ -42,6 +48,8 @@ gateway:
       - name: OPENAI_API_KEY
         key: OPENAI_API_KEY
       # TODO: include other model provider credentials as needed
+    # Non-secret environment variables injected directly (plain key/value pairs).
+    env: {}
 
   resources:
     limits:

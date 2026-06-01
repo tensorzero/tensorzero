@@ -40,6 +40,13 @@
                         },
                         "secretName": {
                             "type": "string"
+                        },
+                        "env": {
+                            "description": "Non-secret environment variables injected directly into the gateway pod (plain key/value pairs).",
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 },
@@ -193,6 +200,20 @@
                         },
                         "labels": {
                             "type": "object"
+                        }
+                    }
+                },
+                "otel": {
+                    "type": "object",
+                    "description": "OpenTelemetry DaemonSet node-IP configuration. Set useNodeIp to true when running an OTel Collector as a DaemonSet so each pod sends traces to the Collector on its own node.",
+                    "properties": {
+                        "useNodeIp": {
+                            "type": "boolean",
+                            "description": "Inject OTEL_EXPORTER_OTLP_TRACES_ENDPOINT built from the node IP (status.hostIP). Use for DaemonSet-style OTel Collectors."
+                        },
+                        "nodePort": {
+                            "type": "integer",
+                            "description": "Collector port used when useNodeIp is true."
                         }
                     }
                 }
