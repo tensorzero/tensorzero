@@ -57,7 +57,7 @@ TensorZero is used by companies ranging from frontier AI startups to the Fortune
 > <img width="600" alt="Bar chart showing baseline vs. optimized scores across diverse LLM tasks" src="https://github.com/user-attachments/assets/aa474fe3-b55a-48aa-9f0d-e7c2f8e32ccd" />
 > <br>
 >
-> **[Learn more →](https://www.tensorzero.com/blog/automated-ai-engineer/)**&emsp;&emsp;**[Schedule a demo →](https://www.tensorzero.com/schedule-demo)**
+> \*\*[Learn more →](https://www.tensorzero.com/blog/automated-ai-engineer/)
 
 ### 🌐 LLM Gateway
 
