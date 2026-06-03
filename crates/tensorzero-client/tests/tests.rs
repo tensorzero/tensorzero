@@ -33,7 +33,8 @@ pub fn get_gateway_endpoint(endpoint: Option<&str>) -> Url {
 /// configured store, so this test builds an embedded gateway whose
 /// `[object_storage]` matches the `kind` of the `StoragePath` it resolves
 /// rather than relying on the shared long-running gateway (which has
-/// `object_storage.type = "disabled"` in `tensorzero.misc.toml`).
+/// `object_storage.type = "disabled"` via the default
+/// `object-storage-disabled.gateway.toml` e2e override).
 const S3_OBJECT_STORAGE_CONFIG: &str = r#"
 [object_storage]
 type = "s3_compatible"

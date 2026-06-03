@@ -11,8 +11,11 @@ export.otlp.traces.extra_headers."x-config-override-header" = "config-original-v
 unstable_error_json = true
 disable_pseudonymous_usage_analytics = true
 
-[object_storage]
-type = "disabled"
+# `[object_storage]` lives in `object-storage-disabled.gateway.toml` (default) or
+# `object-storage-s3.gateway.toml`, selected by `get_e2e_config_path` / its
+# `_with_object_storage` variant in `tensorzero-core/src/test_helpers.rs`. The
+# default e2e glob includes the `disabled` file; tests that need to resolve a
+# `StoragePath` through the hardened endpoint use the s3 file instead.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

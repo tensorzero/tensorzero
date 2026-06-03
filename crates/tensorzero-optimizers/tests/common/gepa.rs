@@ -57,7 +57,8 @@ pub async fn test_gepa_optimization_chat() {
     let clickhouse = get_clickhouse().await;
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
+    config_path
+        .push("../tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Arc::new(
@@ -197,7 +198,8 @@ pub async fn test_gepa_optimization_chat_evaluator_names() {
     let clickhouse = get_clickhouse().await;
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
+    config_path
+        .push("../tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Arc::new(
@@ -315,7 +317,8 @@ pub async fn test_gepa_optimization_json() {
     let clickhouse = get_clickhouse().await;
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
+    config_path
+        .push("../tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml");
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Arc::new(

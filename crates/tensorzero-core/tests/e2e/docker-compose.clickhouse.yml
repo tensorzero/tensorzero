@@ -33,7 +33,11 @@ services:
       target: gateway
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-    command: [--config-file, tensorzero-core/tests/e2e/config/tensorzero.*.toml]
+    command:
+      [
+        --config-file,
+        "tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml",
+      ]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro

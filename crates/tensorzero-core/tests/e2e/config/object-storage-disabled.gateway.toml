@@ -1,0 +1,9 @@
+# Default `[object_storage]` override for the e2e test glob.
+# Selected by `get_e2e_config_path` in `tensorzero-core/src/test_helpers.rs`.
+# Tests that need to resolve a `StoragePath` through the hardened
+# `/internal/object_storage` endpoint or `Client::resolve` should call
+# `get_e2e_config_path_with_object_storage` instead, which swaps this file
+# for `object-storage-s3.gateway.toml`.
+
+[object_storage]
+type = "disabled"

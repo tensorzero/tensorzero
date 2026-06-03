@@ -33,7 +33,7 @@ from uuid_utils.compat import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml",
 )
 
 

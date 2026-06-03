@@ -78,7 +78,7 @@ GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml",
 )
 
 # Test image with File block
@@ -2911,7 +2911,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(  # pyright: ignore[reportDeprecated]
         client,
-        config_file="../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        config_file="../../crates/tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(

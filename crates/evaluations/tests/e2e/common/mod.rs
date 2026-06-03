@@ -16,7 +16,7 @@ use tensorzero_core::db::stored_datapoint::{StoredChatInferenceDatapoint, Stored
 use tensorzero_core::db::test_helpers::TestDatabaseHelpers;
 use uuid::Uuid;
 
-pub use tensorzero::test_helpers::get_e2e_config_path;
+pub use tensorzero::test_helpers::{get_e2e_config_path, get_e2e_config_path_with_object_storage};
 
 pub fn init_tracing_for_tests() {
     let _ = tracing_subscriber::fmt().try_init();

@@ -321,7 +321,7 @@ jobs:
             -v $GITHUB_WORKSPACE/crates/tensorzero-core:/app/tensorzero-core:ro \
             -v $GITHUB_WORKSPACE/ui/fixtures:/app/ui/fixtures:ro \
             tensorzero/gateway-e2e:sha-$GITHUB_SHA \
-            --config-file '/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml'
+            --config-file '/app/tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml'
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
