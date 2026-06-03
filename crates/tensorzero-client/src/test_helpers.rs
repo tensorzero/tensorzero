@@ -12,6 +12,7 @@ use uuid::Uuid;
 // Re-export e2e test helpers from tensorzero-core
 pub use tensorzero_core::test_helpers::{
     get_e2e_config, get_e2e_config_path, get_e2e_config_path_for_datastore,
+    get_e2e_config_path_with_object_storage,
 };
 
 pub async fn make_http_gateway() -> Client {

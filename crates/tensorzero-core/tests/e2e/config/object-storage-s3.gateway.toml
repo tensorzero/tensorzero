@@ -1,0 +1,11 @@
+# `[object_storage]` override for tests that resolve a `StoragePath` through
+# the hardened `/internal/object_storage` endpoint or `Client::resolve`. The
+# hardened code path fetches strictly from the gateway's configured store, so
+# the gateway must be configured against the same bucket the fixtures point at
+# (`tensorzero-e2e-test-images`). Selected by `get_e2e_config_path_with_object_storage`
+# in `tensorzero-core/src/test_helpers.rs`.
+
+[object_storage]
+type = "s3_compatible"
+bucket_name = "tensorzero-e2e-test-images"
+region = "us-east-1"

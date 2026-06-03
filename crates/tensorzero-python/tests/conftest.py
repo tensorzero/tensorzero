@@ -45,13 +45,13 @@ def pytest_configure(config: pytest.Config) -> None:
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../crates/tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml",
 )
 
 # Config glob that also includes pg.gateway.toml (sets observability.backend = "postgres")
 TEST_CONFIG_FILE_POSTGRES = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../crates/tensorzero-core/tests/e2e/config/{tensorzero,postgres}.*.toml",
+    "../../../crates/tensorzero-core/tests/e2e/config/{tensorzero,postgres,object-storage-disabled}.*.toml",
 )
 
 GATEWAY_URL = os.environ.get("TENSORZERO_GATEWAY_URL", "http://localhost:3000")

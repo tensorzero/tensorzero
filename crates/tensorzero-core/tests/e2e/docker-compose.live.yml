@@ -56,7 +56,7 @@ services:
     command:
       [
         --config-file,
-        "tensorzero-core/tests/e2e/config/${GATEWAY_CONFIG_GLOB:-tensorzero.*.toml}",
+        "tensorzero-core/tests/e2e/config/${GATEWAY_CONFIG_GLOB:-{tensorzero,object-storage-disabled}.*.toml}",
       ]
     volumes:
       # Mount the e2e directory so the config path exists inside the container

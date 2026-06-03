@@ -40,7 +40,10 @@ use tensorzero_core::stored_inference::StoredInferenceDatabase;
 use tokio::time::sleep;
 use url::Url;
 
-use common::{get_config, get_e2e_config_path, init_tracing_for_tests};
+use common::{
+    get_config, get_e2e_config_path, get_e2e_config_path_with_object_storage,
+    init_tracing_for_tests,
+};
 use evaluations::{
     Args, EvaluationCoreArgs, EvaluationFunctionConfig, EvaluationVariant, OutputFormat,
     run_evaluation, run_evaluation_core_streaming,
@@ -1110,7 +1113,10 @@ async fn run_image_evaluation() {
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = get_e2e_config_path();
+    // Resolving the image fixture needs the hardened `Client::resolve` path,
+    // which only reads from the gateway's configured `[object_storage]`. Use
+    // the s3 override so the gateway's store matches the fixture bucket.
+    let config_path = get_e2e_config_path_with_object_storage();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
@@ -1325,7 +1331,10 @@ async fn check_invalid_image_evaluation() {
         &HashMap::from([("baz".to_string(), dataset_name.clone())]),
     )
     .await;
-    let config_path = get_e2e_config_path();
+    // Same as `run_image_evaluation`: the eval flow resolves the image
+    // fixture through the hardened `Client::resolve` path, which requires
+    // the gateway's `[object_storage]` to point at the fixture bucket.
+    let config_path = get_e2e_config_path_with_object_storage();
     let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,

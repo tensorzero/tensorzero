@@ -172,7 +172,7 @@ jobs:
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-$GITHUB_SHA \
-            --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
+            --config-file 'tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml'
           count=0
           max_attempts=20
           while ! curl http://localhost:3000/health; do
@@ -195,7 +195,7 @@ jobs:
             -v $(pwd)/crates/tensorzero-core/tests/e2e:/app/tensorzero-core/tests/e2e:ro \
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             tensorzero/gateway-e2e:sha-$GITHUB_SHA \
-            --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml' \
+            --config-file 'tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml' \
             --run-clickhouse-migrations
           # Start the gateway connected to the first replica (port 8123)
           # Tests will query the second replica (port 8124) to verify replication
@@ -209,7 +209,7 @@ jobs:
             -v $(pwd)/crates/tensorzero-core/fixtures:/app/tensorzero-core/fixtures:ro \
             --add-host howdy.tensorzero.com:127.0.0.1 \
             tensorzero/gateway-e2e:sha-$GITHUB_SHA \
-            --config-file 'tensorzero-core/tests/e2e/config/tensorzero.*.toml'
+            --config-file 'tensorzero-core/tests/e2e/config/{tensorzero,object-storage-disabled}.*.toml'
           count=0
           max_attempts=40
           while ! curl http://localhost:3000/health; do
