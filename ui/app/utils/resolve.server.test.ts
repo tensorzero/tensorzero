@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockGetObject = vi.fn<(storagePath: unknown) => Promise<string>>();
+const mockGetObject = vi.fn<(path: string) => Promise<string>>();
 
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({

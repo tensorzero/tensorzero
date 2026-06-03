@@ -6,10 +6,7 @@ TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Sch
 
 import { z } from "zod";
 import { BaseTensorZeroClient } from "./base-client";
-import {
-  ZodJsonValueSchema,
-  type ZodStoragePath,
-} from "~/utils/clickhouse/common";
+import { ZodJsonValueSchema } from "~/utils/clickhouse/common";
 import { logger } from "~/utils/logger";
 import type {
   ApplyConfigTomlRequest,
@@ -540,8 +537,8 @@ export class TensorZeroClient extends BaseTensorZeroClient {
     return (await response.json()) as GetDatapointCountResponse;
   }
 
-  async getObject(storagePath: ZodStoragePath): Promise<string> {
-    const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+  async getObject(path: string): Promise<string> {
+    const endpoint = `/internal/object_storage?path=${encodeURIComponent(path)}`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
       const message = await this.getErrorText(response);

@@ -13,7 +13,6 @@ use tensorzero_core::config::provider_types::{
     OpenAIDefaults, OpenRouterDefaults, SGLangDefaults, TGIDefaults, TogetherDefaults,
     VLLMDefaults, XAIDefaults,
 };
-use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_inference_types::tool::Tool;
 
 use axum::body::Body;
@@ -1422,8 +1421,12 @@ async fn check_object_fetch(
     storage_path: &StoragePath,
     expected_data: &[u8],
 ) {
-    check_object_fetch_via_embedded(data.clone(), storage_path, expected_data).await;
-    check_object_fetch_via_gateway(storage_path, expected_data).await;
+    // Note: there is no longer a `via_gateway` variant. The running e2e gateway has
+    // `[object_storage] type = "disabled"`, and the `/internal/object_storage`
+    // endpoint no longer accepts a caller-supplied `StorageKind` — it only fetches
+    // from the gateway's configured store. So we exercise the handler in the
+    // embedded mode where `data` carries the test-specific filesystem/S3 config.
+    check_object_fetch_via_embedded(data, storage_path, expected_data).await;
 }
 
 async fn check_object_fetch_via_embedded(
@@ -1434,7 +1437,7 @@ async fn check_object_fetch_via_embedded(
     let res = get_object_handler(
         State(data),
         Query(PathParams {
-            storage_path: serde_json::to_string(storage_path).unwrap(),
+            path: storage_path.path.as_ref().to_string(),
         }),
     )
     .await
@@ -1443,31 +1446,7 @@ async fn check_object_fetch_via_embedded(
         res.0,
         ObjectResponse {
             data: BASE64_STANDARD.encode(expected_data),
-            reused_object_store: true,
         }
-    );
-}
-
-async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
-    // Try using the running HTTP gateway (which is *not* configured with an object store)
-    // to fetch the `StoragePath`
-    let client = TensorzeroHttpClient::new_testing().unwrap();
-    let res = client
-        .get(get_gateway_endpoint(&format!(
-            "/internal/object_storage?storage_path={}",
-            serde_json::to_string(storage_path).unwrap()
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let response_json = res.json::<Value>().await.unwrap();
-    assert_eq!(
-        response_json,
-        serde_json::json!({
-            "data": BASE64_STANDARD.encode(expected_data),
-            "reused_object_store": false,
-        })
     );
 }
 

@@ -1016,7 +1016,7 @@ pub struct Client {
 impl StoragePathResolver for Client {
     async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
         Ok(self
-            .get_object(storage_path.clone())
+            .get_object(&storage_path.path)
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InternalError {
@@ -1298,9 +1298,16 @@ impl Client {
         }
     }
 
+    /// Fetches an object by path from the gateway's configured object store.
+    ///
+    /// `path` is the object's key inside the configured `[object_storage]` — the gateway
+    /// does not accept a caller-supplied filesystem root or S3 endpoint, so this method
+    /// can only read from the store the gateway itself is configured against. In-process
+    /// code that needs to resolve a `StoragePath` recorded under a different
+    /// configuration should call `endpoints::object_storage::get_object` directly.
     pub async fn get_object(
         &self,
-        storage_path: StoragePath,
+        path: &object_store::path::Path,
     ) -> Result<ObjectResponse, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
@@ -1317,25 +1324,18 @@ impl Client {
                         )
                         .into(),
                     })?;
-                let storage_path_json =
-                    serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
-                        source: Error::new(ErrorDetails::Serialization {
-                            message: format!("Failed to serialize storage path: {e}"),
-                        })
-                        .into(),
-                    })?;
                 let builder = client
                     .http_client
                     .get(url)
-                    .query(&[("storage_path", storage_path_json)]);
+                    .query(&[("path", path.as_ref())]);
                 Ok(client.send_and_parse_http_response(builder).await?.0)
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     let config = gateway.handle.app_state.config().load();
-                    crate::endpoints::object_storage::get_object(
+                    crate::endpoints::object_storage::fetch_from_configured_store(
                         config.object_store_info.as_ref(),
-                        storage_path,
+                        path,
                     )
                     .await
                     .map_err(err_to_http)

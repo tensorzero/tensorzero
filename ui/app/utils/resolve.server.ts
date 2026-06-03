@@ -115,7 +115,9 @@ async function resolveModelInferenceContent(
 async function resolveFile(
   content: ZodFileContent,
 ): Promise<ZodResolvedBase64File> {
-  const object = await getTensorZeroClient().getObject(content.storage_path);
+  const object = await getTensorZeroClient().getObject(
+    content.storage_path.path,
+  );
   const json = JSON.parse(object);
   return {
     // Keep the canonical internal representation as raw base64.
