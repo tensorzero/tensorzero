@@ -21,6 +21,12 @@
         "gateway": {
             "type": "object",
             "properties": {
+                "annotations": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "additionalEnv": {
                     "type": "object",
                     "properties": {
@@ -175,6 +181,24 @@
                     "type": "array"
                 }
             }
+        },
+        "configFromExternalSecret": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "mountPath": {
+                    "type": "string"
+                },
+                "secretName": {
+                    "type": "string"
+                }
+            }
+        },
+        "extraObjects": {
+            "type": "array",
+            "items": {}
         },
         "globalLabels": {
             "type": "object"
