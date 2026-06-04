@@ -17,6 +17,7 @@ use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
@@ -33,6 +34,40 @@ use tokio::sync::oneshot;
 use tracing::level_filters::LevelFilter;
 
 const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-cache";
+
+/// Tracks cache hits and total requests over the lifetime of the proxy.
+/// Printed on shutdown to report the cache hit ratio.
+#[derive(Debug, Default)]
+pub struct CacheStats {
+    cache_hits: AtomicU64,
+    total_requests: AtomicU64,
+}
+
+impl CacheStats {
+    fn record_request(&self, cache_hit: bool) {
+        self.total_requests.fetch_add(1, Ordering::Relaxed);
+        if cache_hit {
+            self.cache_hits.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn log_summary(&self) {
+        let cache_hits = self.cache_hits.load(Ordering::Relaxed);
+        let total_requests = self.total_requests.load(Ordering::Relaxed);
+        let ratio = if total_requests == 0 {
+            0.0
+        } else {
+            cache_hits as f64 / total_requests as f64
+        };
+        tracing::info!(
+            cache_hits,
+            total_requests,
+            ratio,
+            "provider-proxy cache stats: {cache_hits} / {total_requests} requests served from cache ({:.2}%)",
+            ratio * 100.0,
+        );
+    }
+}
 
 fn make_root_cert() -> rcgen::Issuer<'static, rcgen::KeyPair> {
     let mut param = rcgen::CertificateParams::default();
@@ -175,6 +210,7 @@ async fn check_cache<
 >(
     start_time: std::time::SystemTime,
     args: &Args,
+    stats: &CacheStats,
     mut request: hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
@@ -338,6 +374,7 @@ async fn check_cache<
         );
         if matches!(args.mode, CacheMode::ReadOnlyRequireHit) {
             tracing::error!("Cache miss in ReadOnlyRequireHit mode: {path_str}");
+            stats.record_request(false);
             let body = Full::new(Bytes::from(format!(
                 "provider-proxy: Cache miss in ReadOnlyRequireHit mode: {path_str}"
             )));
@@ -414,6 +451,7 @@ async fn check_cache<
             (response, HEADER_FALSE)
         }
     };
+    stats.record_request(cache_hit == HEADER_TRUE);
     // Insert this header at the very end, to ensure that we never store this
     // header in the cache.
     resp.headers_mut().insert(CACHE_HEADER_NAME, cache_hit);
@@ -526,6 +564,34 @@ async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + 
     }
 }
 
+/// Resolves when the process receives a shutdown signal (Ctrl-C / SIGINT, or SIGTERM on Unix).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("Failed to install SIGTERM handler: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
+}
+
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
@@ -542,6 +608,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
     let start_time = std::time::SystemTime::now();
 
     let args = Arc::new(args);
+    let stats = Arc::new(CacheStats::default());
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
@@ -559,12 +626,14 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     let client = reqwest::Client::new();
     let args_clone = args.clone();
+    let stats_clone = stats.clone();
     let (server_addr, server) = proxy
         .bind(
             ("0.0.0.0", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let client = client.clone();
                 let args = args_clone.clone();
+                let stats = stats_clone.clone();
                 async move {
                     let (parts, body) = req.into_parts();
 
@@ -615,7 +684,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                     // Add 1ms delay to simulate network latency
                     tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
-                    let response = check_cache(start_time, &args, bytes_request.clone(), || async {
+                    let response = check_cache(start_time, &args, &stats, bytes_request.clone(), || async {
                         let mut request: reqwest::Request =
                             bytes_request.try_into().with_context(|| {
                                 "Failed to convert Request from `hyper` to `reqwest`"
@@ -648,5 +717,13 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
     server_started
         .send(server_addr)
         .expect("Failed to send server started signal");
-    server.await;
+
+    tokio::select! {
+        () = server => {}
+        () = shutdown_signal() => {
+            tracing::info!("Received shutdown signal, shutting down provider-proxy");
+        }
+    }
+
+    stats.log_summary();
 }
