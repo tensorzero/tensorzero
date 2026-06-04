@@ -1514,7 +1514,9 @@ async fn run_llm_judge_evaluation_json_pretty() {
         max_datapoints: None,
         precision_targets: vec![],
         cutoffs: vec![
-            ("exact_match".to_string(), 0.6),
+            // Set above 1.0 so the cutoff always fails regardless of the
+            // non-deterministic exact_match score from the live model.
+            ("exact_match".to_string(), 1.01),
             ("count_sports".to_string(), 0.5),
         ],
     };
@@ -1535,7 +1537,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     assert!(output_str.contains("exact_match: "));
     let err = err.to_string();
     assert!(err.contains("Failed cutoffs for evaluators:"));
-    assert!(err.contains("exact_match (cutoff: 0.60, got: "));
+    assert!(err.contains("exact_match (cutoff: 1.01, got: "));
 }
 
 #[tokio::test]
