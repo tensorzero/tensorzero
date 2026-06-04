@@ -182,12 +182,72 @@ impl StoredConfig {
     ///   "logical config didn't change but hash drifted" — and it's
     ///   deliberate: a serialization-shape change *is* a real change.
     pub fn canonical_hash(&self) -> Result<SnapshotHash, Error> {
-        let value = serde_json::to_value(self).map_err(|e| {
+        Ok(self.to_canonical_form()?.hash)
+    }
+
+    /// Return the canonical JSON value AND its structural hash in one
+    /// pass.
+    ///
+    /// Both derivations share `serde_json::to_value(self)` as their
+    /// intermediate, so callers that need both — e.g. PG
+    /// `write_config_snapshot` populating `config_jsonb` and
+    /// `canonical_hash` together — should use this rather than calling
+    /// `serde_json::to_value(&self)` and `self.canonical_hash()`
+    /// separately. Avoids running the conversion twice and keeps the
+    /// canonical-form internals (i.e. "we hash the JSON form") inside
+    /// this module.
+    ///
+    /// Stability properties match `canonical_hash()` exactly — see its
+    /// doc above.
+    pub fn to_canonical_form(&self) -> Result<CanonicalForm, Error> {
+        let canonical_value = serde_json::to_value(self).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("StoredConfig should always serialize to JSON: {e}"),
             })
         })?;
-        Ok(canonical_hash_value(&value))
+        let hash = canonical_hash_value(&canonical_value);
+        Ok(CanonicalForm {
+            canonical_value,
+            hash,
+        })
+    }
+}
+
+/// Paired output of `StoredConfig::to_canonical_form` (and the
+/// `ConfigSnapshot::to_canonical_form` delegate): the canonical
+/// representation of the config alongside its structural identity
+/// hash. Both are derived from one walk; consumers receive them
+/// together so the conversion isn't repeated, and callers don't need
+/// to know which serialization mechanism produces the canonical
+/// form — that's an implementation detail of this module.
+pub struct CanonicalForm {
+    /// Canonical-form bytes of the config, suitable for persistence
+    /// in `config_snapshots.config_jsonb` (PG). Storage type happens
+    /// to be `serde_json::Value` because that's what `sqlx`'s
+    /// `JSONB` binding expects, but callers should treat it purely
+    /// as opaque content via `as_jsonb()` / `into_jsonb()`. Future
+    /// changes to the underlying mechanism don't need to touch
+    /// callers.
+    canonical_value: Value,
+    /// Structural hash of the canonical form, tagged as `Canonical`.
+    /// Persisted in `config_snapshots.canonical_hash` (PG/CH) and
+    /// used to look up the row by content-addressed identity.
+    pub hash: SnapshotHash,
+}
+
+impl CanonicalForm {
+    /// Borrowed canonical-form value, suitable for binding to a
+    /// PostgreSQL `JSONB` column. Callers should treat this purely as
+    /// "the storage representation"; the underlying type is an
+    /// implementation detail of `canonical_hash`.
+    pub fn as_jsonb(&self) -> &Value {
+        &self.canonical_value
+    }
+
+    /// Owned variant of [`Self::as_jsonb`] for callers that need to
+    /// move the value into a query builder.
+    pub fn into_jsonb(self) -> Value {
+        self.canonical_value
     }
 }
 

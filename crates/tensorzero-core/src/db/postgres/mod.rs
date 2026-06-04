@@ -414,6 +414,12 @@ pub async fn manual_run_postgres_migrations_with_url(postgres_url: &str) -> Resu
             message: e.to_string(),
         })
     })?;
+
+    // Backfill `config_jsonb` on rows that predate the column. Idempotent
+    // and tolerant of unparseable TOML; runs every boot but is a no-op once
+    // every row has been backfilled.
+    config_queries::backfill_config_snapshot_jsonb(&pool).await?;
+
     tensorzero_stored_config::postgres::make_migrator()
         .run(&pool)
         .await

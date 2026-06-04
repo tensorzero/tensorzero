@@ -49,7 +49,7 @@ pub use role::{
     ASSISTANT_TEXT_TEMPLATE_VAR, Role, SYSTEM_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR,
 };
 use serde::{Deserialize, Serialize};
-pub use snapshot::SnapshotHash;
+pub use snapshot::{SnapshotHash, SnapshotHashScheme};
 pub use storage::{StorageKind, StoragePath};
 use tensorzero_derive::TensorZeroDeserialize;
 pub use tool::{InferenceResponseToolCall, ToolCall, ToolCallWrapper, ToolChoice, ToolResult};
