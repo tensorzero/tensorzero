@@ -1,0 +1,75 @@
+# Compose for the can-ai-agents-improve-ai-agents starter.
+#
+# Three services:
+#   - postgres:                       metadata store. The `tensorzero/postgres:17`
+#                                     image ships with pg_cron + pgvector and
+#                                     is configured (`cron.database_name=tensorzero`)
+#                                     so the gateway's observability backend boots.
+#   - gateway-run-postgres-migrations: one-shot. Runs Postgres migrations after
+#                                     Postgres is healthy and exits 0.
+#   - gateway:                        TensorZero gateway. Mounts this directory
+#                                     read-write so the agent's edits to
+#                                     tensorzero.toml / functions/ / tools/ flow
+#                                     through after `docker compose restart gateway`.
+#
+# Usage:
+#   export OPENAI_API_KEY=sk-...   # or place in a .env file next to this compose
+#   docker compose up -d
+#   curl -sf http://localhost:3000/status
+#
+# After editing tensorzero.toml or any file under functions/ / tools/, restart:
+#   docker compose restart gateway
+
+services:
+  postgres:
+    image: tensorzero/postgres:17
+    # The `cron.database_name=tensorzero` flag is required for pg_cron, which
+    # the gateway expects when Postgres is the observability backend.
+    command: ["postgres", "-c", "cron.database_name=tensorzero"]
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  # One-shot: applies Postgres migrations, then exits.
+  gateway-run-postgres-migrations:
+    image: tensorzero/gateway:latest
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+    command: ["--run-postgres-migrations"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    image: tensorzero/gateway:latest
+    volumes:
+      - ./:/app/config
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3000/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway-run-postgres-migrations:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:

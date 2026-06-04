@@ -1,0 +1,51 @@
+[gateway.observability]
+backend = "postgres"
+
+[functions."yc_bench_tutorial_v0::yc_bench_act"]
+type = "chat"
+user_schema = "functions/yc_bench_tutorial_v0__yc_bench_act/user_schema.json"
+tools = ["run_command"]
+description = """
+Autonomous CEO agent for YC Bench, a deterministic business simulation. The agent drives \
+the simulation through a single `run_command` tool that invokes the `yc-bench` CLI to \
+observe company state (funds, prestige, employees, payroll), browse the market and \
+accept tasks, assign and dispatch employees, cancel hopeless tasks, advance simulated \
+time via `sim resume`, and maintain a persistent scratchpad for notes across context \
+truncation. The `tasks_succeeded` metric counts tasks completed at or before their \
+deadlines; episodes end on bankruptcy (funds < 0) or when the simulation horizon is \
+reached.
+"""
+
+[metrics.survived]
+type = "boolean"
+optimize = "max"
+level = "episode"
+
+[metrics.final_funds_cents]
+type = "float"
+optimize = "max"
+level = "episode"
+
+[metrics.tasks_succeeded]
+type = "float"
+optimize = "max"
+level = "episode"
+
+[metrics.tasks_failed]
+type = "float"
+optimize = "min"
+level = "episode"
+
+[tools.run_command]
+description = "Execute one benchmark CLI command inside the sandbox and return structured execution output."
+parameters = "tools/run_command.json"
+
+[functions."yc_bench_tutorial_v0::yc_bench_act".variants.initial]
+type = "chat_completion"
+model = "openai::gpt-5.4-mini"
+system_template = "functions/yc_bench_tutorial_v0__yc_bench_act/initial/system_template.minijinja"
+user_template = "functions/yc_bench_tutorial_v0__yc_bench_act/initial/user_template.minijinja"
+
+[functions."yc_bench_tutorial_v0::yc_bench_act".variants.initial.retries]
+num_retries = 0
+max_delay_s = 10

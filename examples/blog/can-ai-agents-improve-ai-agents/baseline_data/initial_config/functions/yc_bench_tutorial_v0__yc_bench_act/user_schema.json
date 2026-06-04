@@ -1,0 +1,11 @@
+{
+  "properties": {
+    "observation": {
+      "title": "Observation",
+      "type": "string"
+    }
+  },
+  "required": ["observation"],
+  "title": "YCBenchActUserSchema",
+  "type": "object"
+}
