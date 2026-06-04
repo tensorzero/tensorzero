@@ -1,8 +1,11 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
 use uuid::Uuid;
 
-use super::common::{McpTestClient, insert_inference, poll_mcp_tool, submit_boolean_feedback};
+use super::common::{
+    LatestFeedbackByMetricToolParams, McpTestClient, insert_inference, poll_mcp_tool,
+    submit_boolean_feedback,
+};
 
 #[gtest]
 #[tokio::test]
@@ -11,7 +14,10 @@ async fn test_mcp_get_latest_feedback_by_metric_basic() {
     let feedback_id = submit_boolean_feedback(&inference_id, "task_success", true).await;
 
     let mcp = McpTestClient::connect().await;
-    let params = json!({ "target_id": inference_id });
+    let params = serde_json::to_value(LatestFeedbackByMetricToolParams {
+        target_id: inference_id.parse().expect("inference ID should be a UUID"),
+    })
+    .expect("latest feedback params should serialize");
     let response = poll_mcp_tool(&mcp, "get_latest_feedback_by_metric", params, |r| {
         r["feedback_id_by_metric"]
             .as_object()
@@ -40,9 +46,9 @@ async fn test_mcp_get_latest_feedback_by_metric_no_feedback() {
     let response: Value = mcp
         .call_tool(
             "get_latest_feedback_by_metric",
-            json!({
-                "target_id": inference_id,
-            }),
+            LatestFeedbackByMetricToolParams {
+                target_id: inference_id.parse().expect("inference ID should be a UUID"),
+            },
         )
         .await;
 
@@ -57,15 +63,15 @@ async fn test_mcp_get_latest_feedback_by_metric_no_feedback() {
 #[gtest]
 #[tokio::test]
 async fn test_mcp_get_latest_feedback_by_metric_unknown_target() {
-    let unknown_id = Uuid::now_v7().to_string();
+    let unknown_id = Uuid::now_v7();
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp
         .call_tool(
             "get_latest_feedback_by_metric",
-            json!({
-                "target_id": unknown_id,
-            }),
+            LatestFeedbackByMetricToolParams {
+                target_id: unknown_id,
+            },
         )
         .await;
 
@@ -87,7 +93,10 @@ async fn test_mcp_get_latest_feedback_by_metric_returns_latest() {
     let latest_feedback_id = submit_boolean_feedback(&inference_id, "task_success", true).await;
 
     let mcp = McpTestClient::connect().await;
-    let params = json!({ "target_id": inference_id });
+    let params = serde_json::to_value(LatestFeedbackByMetricToolParams {
+        target_id: inference_id.parse().expect("inference ID should be a UUID"),
+    })
+    .expect("latest feedback params should serialize");
     let response = poll_mcp_tool(&mcp, "get_latest_feedback_by_metric", params, |r| {
         r["feedback_id_by_metric"].as_object().is_some_and(|m| {
             m.get("task_success")

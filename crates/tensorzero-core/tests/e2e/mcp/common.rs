@@ -1,6 +1,13 @@
 use rmcp::{RoleClient, ServiceExt, model::CallToolResult, service::RunningService};
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use tensorzero::{
+    ClientInferenceParams, CreateChatDatapointRequest, CreateDatapointRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsRequest, FeedbackParams, Input,
+    InputMessage, InputMessageContent, Role, System,
+};
+use tensorzero_core::inference::types::{Arguments, ContentBlockChatOutput, Text};
 
 use crate::common::get_gateway_endpoint;
 
@@ -18,7 +25,7 @@ impl McpTestClient {
 
     /// Call an MCP tool, assert it succeeded, and deserialize the response.
     /// Panics on error responses — use `call_tool_raw` for tests that expect failures.
-    pub async fn call_tool<T: DeserializeOwned>(&self, name: &str, params: Value) -> T {
+    pub async fn call_tool<T: DeserializeOwned, P: Serialize>(&self, name: &str, params: P) -> T {
         let result = self.call_tool_raw(name, params).await;
         assert!(
             !result.is_error.unwrap_or(false),
@@ -36,7 +43,8 @@ impl McpTestClient {
 
     /// Call an MCP tool and return the raw `CallToolResult` without assertions or deserialization.
     /// Use this for tests that need to inspect error responses.
-    pub async fn call_tool_raw(&self, name: &str, params: Value) -> CallToolResult {
+    pub async fn call_tool_raw<P: Serialize>(&self, name: &str, params: P) -> CallToolResult {
+        let params = serde_json::to_value(params).expect("tool params should serialize");
         let args = params
             .as_object()
             .expect("params must be a JSON object")
@@ -64,24 +72,116 @@ impl McpTestClient {
     }
 }
 
+#[derive(Serialize)]
+pub struct DatasetToolParams<T: Serialize> {
+    pub dataset_name: String,
+    #[serde(flatten)]
+    pub request: T,
+}
+
+#[derive(Serialize)]
+pub struct OptionalDatasetToolParams<T: Serialize> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dataset_name: Option<String>,
+    #[serde(flatten)]
+    pub request: T,
+}
+
+#[derive(Serialize)]
+pub struct InferenceToolParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant_name: Option<String>,
+    pub input: Input,
+}
+
+#[derive(Serialize)]
+pub struct FeedbackByTargetIdToolParams {
+    pub target_id: uuid::Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Serialize)]
+pub struct LatestFeedbackByMetricToolParams {
+    pub target_id: uuid::Uuid,
+}
+
+#[derive(Serialize)]
+pub struct FeedbackByVariantToolParams {
+    pub metric_name: String,
+    pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant_names: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+pub struct ListEpisodesToolParams {
+    pub limit: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function_name: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CreateDatapointsFromInferencesToolParams {
+    pub dataset_name: String,
+    pub params: CreateDatapointsFromInferenceRequestParams,
+}
+
+pub fn chat_input(message: &str) -> Input {
+    Input {
+        system: Some(System::Template(Arguments(
+            [("assistant_name".to_string(), json!("TestBot"))]
+                .into_iter()
+                .collect(),
+        ))),
+        messages: vec![InputMessage {
+            role: Role::User,
+            content: vec![InputMessageContent::Text(Text {
+                text: message.to_string(),
+            })],
+        }],
+    }
+}
+
+pub fn chat_input_without_system(message: &str) -> Input {
+    Input {
+        system: None,
+        messages: vec![InputMessage {
+            role: Role::User,
+            content: vec![InputMessageContent::Text(Text {
+                text: message.to_string(),
+            })],
+        }],
+    }
+}
+
+pub fn chat_output(text: &str) -> Vec<ContentBlockChatOutput> {
+    vec![ContentBlockChatOutput::Text(Text {
+        text: text.to_string(),
+    })]
+}
+
 /// Create a datapoint in the given dataset and return the datapoint ID.
 pub async fn create_test_datapoint(dataset_name: &str) -> String {
     let client = reqwest::Client::new();
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "basic_test".to_string(),
+            episode_id: None,
+            input: chat_input("Hello"),
+            output: Some(chat_output("Hi there!")),
+            dynamic_tool_params: Default::default(),
+            tags: None,
+            name: None,
+        })],
+    };
     let response = client
         .post(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "function_name": "basic_test",
-                "input": {
-                    "system": {"assistant_name": "TestBot"},
-                    "messages": [{"role": "user", "content": "Hello"}]
-                },
-                "output": [{"type": "text", "text": "Hi there!"}]
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -97,13 +197,15 @@ pub async fn create_test_datapoint(dataset_name: &str) -> String {
 /// Submit boolean feedback for an inference and return the feedback ID.
 pub async fn submit_boolean_feedback(inference_id: &str, metric_name: &str, value: bool) -> String {
     let client = reqwest::Client::new();
+    let request = FeedbackParams {
+        inference_id: Some(inference_id.parse().expect("inference ID should be a UUID")),
+        metric_name: metric_name.to_string(),
+        value: json!(value),
+        ..Default::default()
+    };
     let response = client
         .post(get_gateway_endpoint("/feedback"))
-        .json(&json!({
-            "inference_id": inference_id,
-            "metric_name": metric_name,
-            "value": value,
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -147,16 +249,15 @@ where
 /// Insert an inference and return (inference_id, episode_id).
 pub async fn insert_inference(function_name: &str) -> (String, String) {
     let client = reqwest::Client::new();
+    let request = ClientInferenceParams {
+        function_name: Some(function_name.to_string()),
+        input: chat_input("Hello"),
+        stream: Some(false),
+        ..Default::default()
+    };
     let response = client
         .post(get_gateway_endpoint("/inference"))
-        .json(&json!({
-            "function_name": function_name,
-            "input": {
-                "system": {"assistant_name": "TestBot"},
-                "messages": [{"role": "user", "content": "Hello"}]
-            },
-            "stream": false,
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();

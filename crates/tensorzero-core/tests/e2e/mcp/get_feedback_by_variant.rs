@@ -1,7 +1,10 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::common::{McpTestClient, insert_inference, poll_mcp_tool, submit_boolean_feedback};
+use super::common::{
+    FeedbackByVariantToolParams, McpTestClient, insert_inference, poll_mcp_tool,
+    submit_boolean_feedback,
+};
 
 #[gtest]
 #[tokio::test]
@@ -10,10 +13,12 @@ async fn test_mcp_get_feedback_by_variant_basic() {
     submit_boolean_feedback(&inference_id, "task_success", true).await;
 
     let mcp = McpTestClient::connect().await;
-    let params = json!({
-        "metric_name": "task_success",
-        "function_name": "basic_test",
-    });
+    let params = serde_json::to_value(FeedbackByVariantToolParams {
+        metric_name: "task_success".to_string(),
+        function_name: "basic_test".to_string(),
+        variant_names: None,
+    })
+    .expect("feedback-by-variant params should serialize");
     let response = poll_mcp_tool(&mcp, "get_feedback_by_variant", params, |r| {
         r.as_array().is_some_and(|v| !v.is_empty())
     })
@@ -38,10 +43,11 @@ async fn test_mcp_get_feedback_by_variant_no_data() {
     let response: Value = mcp
         .call_tool(
             "get_feedback_by_variant",
-            json!({
-                "metric_name": "nonexistent_metric",
-                "function_name": "basic_test",
-            }),
+            FeedbackByVariantToolParams {
+                metric_name: "nonexistent_metric".to_string(),
+                function_name: "basic_test".to_string(),
+                variant_names: None,
+            },
         )
         .await;
 
@@ -58,11 +64,11 @@ async fn test_mcp_get_feedback_by_variant_with_variant_filter() {
     submit_boolean_feedback(&inference_id, "task_success", true).await;
 
     let mcp = McpTestClient::connect().await;
-    let params = json!({
-        "metric_name": "task_success",
-        "function_name": "basic_test",
-        "variant_names": ["nonexistent_variant"],
-    });
+    let params = FeedbackByVariantToolParams {
+        metric_name: "task_success".to_string(),
+        function_name: "basic_test".to_string(),
+        variant_names: Some(vec!["nonexistent_variant".to_string()]),
+    };
     let response: Value = mcp.call_tool("get_feedback_by_variant", params).await;
 
     let variants = response.as_array().expect("Expected variants array");

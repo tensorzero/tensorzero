@@ -1,5 +1,6 @@
 use googletest::prelude::*;
 use serde_json::{Value, json};
+use tensorzero::{GetInferencesRequest, InferenceOutputSource};
 use uuid::Uuid;
 
 use super::common::{McpTestClient, insert_inference};
@@ -8,14 +9,17 @@ use super::common::{McpTestClient, insert_inference};
 #[tokio::test]
 async fn test_mcp_get_inferences_by_id() {
     let (inference_id, _) = insert_inference("basic_test").await;
+    let inference_uuid = inference_id.parse().expect("inference ID should be a UUID");
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp
         .call_tool(
             "get_inferences",
-            json!({
-                "ids": [inference_id],
-            }),
+            GetInferencesRequest {
+                ids: vec![inference_uuid],
+                function_name: None,
+                output_source: InferenceOutputSource::default(),
+            },
         )
         .await;
 
@@ -36,14 +40,18 @@ async fn test_mcp_get_inferences_by_id() {
 async fn test_mcp_get_inferences_multiple_ids() {
     let (id1, _) = insert_inference("basic_test").await;
     let (id2, _) = insert_inference("basic_test").await;
+    let uuid1 = id1.parse().expect("inference ID should be a UUID");
+    let uuid2 = id2.parse().expect("inference ID should be a UUID");
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp
         .call_tool(
             "get_inferences",
-            json!({
-                "ids": [id1, id2],
-            }),
+            GetInferencesRequest {
+                ids: vec![uuid1, uuid2],
+                function_name: None,
+                output_source: InferenceOutputSource::default(),
+            },
         )
         .await;
 
@@ -64,15 +72,17 @@ async fn test_mcp_get_inferences_multiple_ids() {
 #[gtest]
 #[tokio::test]
 async fn test_mcp_get_inferences_unknown_id() {
-    let unknown_id = Uuid::now_v7().to_string();
+    let unknown_id = Uuid::now_v7();
 
     let mcp = McpTestClient::connect().await;
     let response: Value = mcp
         .call_tool(
             "get_inferences",
-            json!({
-                "ids": [unknown_id],
-            }),
+            GetInferencesRequest {
+                ids: vec![unknown_id],
+                function_name: None,
+                output_source: InferenceOutputSource::default(),
+            },
         )
         .await;
 

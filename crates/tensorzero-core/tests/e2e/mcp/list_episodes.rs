@@ -1,7 +1,7 @@
 use googletest::prelude::*;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::common::{McpTestClient, insert_inference, poll_mcp_tool};
+use super::common::{ListEpisodesToolParams, McpTestClient, insert_inference, poll_mcp_tool};
 
 #[gtest]
 #[tokio::test]
@@ -13,9 +13,10 @@ async fn test_mcp_list_episodes_basic() {
     let response: Value = mcp
         .call_tool(
             "list_episodes",
-            json!({
-                "limit": 10,
-            }),
+            ListEpisodesToolParams {
+                limit: 10,
+                function_name: None,
+            },
         )
         .await;
 
@@ -45,10 +46,11 @@ async fn test_mcp_list_episodes_with_function_name() {
     let response = poll_mcp_tool(
         &mcp,
         "list_episodes",
-        json!({
-            "limit": 10,
-            "function_name": "basic_test",
-        }),
+        serde_json::to_value(ListEpisodesToolParams {
+            limit: 10,
+            function_name: Some("basic_test".to_string()),
+        })
+        .expect("list episodes params should serialize"),
         |r| {
             r["episodes"].as_array().is_some_and(|eps| {
                 eps.iter()
@@ -82,9 +84,10 @@ async fn test_mcp_list_episodes_with_limit() {
     let response: Value = mcp
         .call_tool(
             "list_episodes",
-            json!({
-                "limit": 2,
-            }),
+            ListEpisodesToolParams {
+                limit: 2,
+                function_name: None,
+            },
         )
         .await;
 
@@ -103,9 +106,10 @@ async fn test_mcp_list_episodes_limit_over_100() {
     let result = mcp
         .call_tool_raw(
             "list_episodes",
-            json!({
-                "limit": 101,
-            }),
+            ListEpisodesToolParams {
+                limit: 101,
+                function_name: None,
+            },
         )
         .await;
 
@@ -121,9 +125,10 @@ async fn test_mcp_list_episodes_limit_zero() {
     let result = mcp
         .call_tool_raw(
             "list_episodes",
-            json!({
-                "limit": 0,
-            }),
+            ListEpisodesToolParams {
+                limit: 0,
+                function_name: None,
+            },
         )
         .await;
 

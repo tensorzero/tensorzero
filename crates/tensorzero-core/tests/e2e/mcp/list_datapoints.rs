@@ -1,7 +1,8 @@
 use googletest::prelude::*;
 use serde_json::{Value, json};
+use tensorzero::ListDatapointsRequest;
 
-use super::common::{McpTestClient, create_test_datapoint};
+use super::common::{DatasetToolParams, McpTestClient, create_test_datapoint};
 
 #[gtest]
 #[tokio::test]
@@ -13,9 +14,10 @@ async fn test_mcp_list_datapoints_basic() {
     let response: Value = mcp
         .call_tool(
             "list_datapoints",
-            json!({
-                "dataset_name": dataset_name,
-            }),
+            DatasetToolParams {
+                dataset_name: dataset_name.to_string(),
+                request: ListDatapointsRequest::default(),
+            },
         )
         .await;
 
@@ -44,10 +46,13 @@ async fn test_mcp_list_datapoints_with_limit() {
     let response: Value = mcp
         .call_tool(
             "list_datapoints",
-            json!({
-                "dataset_name": dataset_name,
-                "limit": 2,
-            }),
+            DatasetToolParams {
+                dataset_name: dataset_name.to_string(),
+                request: ListDatapointsRequest {
+                    limit: Some(2),
+                    ..Default::default()
+                },
+            },
         )
         .await;
 
