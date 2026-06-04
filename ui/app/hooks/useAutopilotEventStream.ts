@@ -260,8 +260,13 @@ export function useAutopilotEventStream({
                   }
 
                   // Update pending user questions based on event type
+                  // Both `user_questions` and `auto_eval_example_labeling` events
+                  // require user input and share the same pending queue.
                   setPendingUserQuestions((prev) => {
-                    if (event.payload.type === "user_questions") {
+                    if (
+                      event.payload.type === "user_questions" ||
+                      event.payload.type === "auto_eval_example_labeling"
+                    ) {
                       if (prev.some((e) => e.id === event.id)) {
                         return prev;
                       }
@@ -271,9 +276,15 @@ export function useAutopilotEventStream({
                           new Date(b.created_at).getTime(),
                       );
                     }
-                    if (event.payload.type === "user_questions_answers") {
+                    if (
+                      event.payload.type === "user_questions_answers" ||
+                      event.payload.type ===
+                        "auto_eval_example_labeling_answers"
+                    ) {
                       const questionEventId =
-                        event.payload.user_questions_event_id;
+                        event.payload.type === "user_questions_answers"
+                          ? event.payload.user_questions_event_id
+                          : event.payload.auto_eval_example_labeling_event_id;
                       return prev.filter((e) => e.id !== questionEventId);
                     }
                     return prev;

@@ -22,6 +22,7 @@ import { Breadcrumbs } from "~/components/layout/PageLayout";
 import EventStream, {
   type OptimisticMessage,
 } from "~/components/autopilot/EventStream";
+import { AutoEvalExampleLabelingCard } from "~/components/autopilot/AutoEvalExampleLabeling";
 import { PendingToolCallCard } from "~/components/autopilot/PendingToolCallCard";
 import { PendingQuestionCard } from "~/components/autopilot/question-cards/PendingQuestionCard";
 import { ApplySessionConfigChangesButton } from "~/components/autopilot/ApplySessionConfigChangesButton";
@@ -689,6 +690,40 @@ function AutopilotSessionEventsPageContent({
     [sessionId, toast],
   );
 
+  const handleAnswerAutoEvalExampleLabeling = useCallback(
+    async (eventId: string, responses: Record<string, UserQuestionAnswer>) => {
+      if (questionSubmittedRef.current === eventId) return;
+      questionSubmittedRef.current = eventId;
+      setIsQuestionSubmitting(true);
+      try {
+        const res = await fetch(
+          `/api/autopilot/sessions/${encodeURIComponent(sessionId)}/events/answer-auto-eval-example-labeling`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              auto_eval_example_labeling_event_id: eventId,
+              responses,
+            }),
+          },
+        );
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+      } catch {
+        questionSubmittedRef.current = null;
+        toast.error({
+          title: "Failed to submit answers",
+          description:
+            "Could not submit example labeling responses. Please try again.",
+        });
+      } finally {
+        setIsQuestionSubmitting(false);
+      }
+    },
+    [sessionId, toast],
+  );
+
   // Handle interrupt session
   const handleInterruptSession = useCallback(() => {
     interruptedSessionRef.current = sessionId;
@@ -973,7 +1008,21 @@ function AutopilotSessionEventsPageContent({
                 </AutopilotStatusBanner>
               )}
               {oldestPendingUserQuestion &&
-              oldestPendingUserQuestion.payload.type === "user_questions" ? (
+              oldestPendingUserQuestion.payload.type ===
+                "auto_eval_example_labeling" ? (
+                <AutoEvalExampleLabelingCard
+                  key={oldestPendingUserQuestion.id}
+                  payload={oldestPendingUserQuestion.payload}
+                  isLoading={isQuestionSubmitting}
+                  onSubmit={(responses) =>
+                    handleAnswerAutoEvalExampleLabeling(
+                      oldestPendingUserQuestion.id,
+                      responses,
+                    )
+                  }
+                />
+              ) : oldestPendingUserQuestion &&
+                oldestPendingUserQuestion.payload.type === "user_questions" ? (
                 <PendingQuestionCard
                   key={oldestPendingUserQuestion.id}
                   eventId={oldestPendingUserQuestion.id}

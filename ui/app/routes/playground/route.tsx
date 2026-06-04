@@ -453,7 +453,10 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                           <h3 className="mb-2 text-sm font-medium text-gray-500">
                             Input
                           </h3>
-                          <InputElement input={inputs[index]} maxHeight={150} />
+                          <InputElement
+                            input={inputs[index]}
+                            overflow={{ type: "expandable", maxHeight: 150 }}
+                          />
                         </div>
                         <div>
                           <h3 className="mb-2 text-sm font-medium text-gray-500">
