@@ -4,7 +4,7 @@
 //! TOML document, validate edits against the config-loading pipeline, and
 //! apply them back to the stored-config tables with compare-and-swap.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use axum::Json;
 use axum::extract::State;
@@ -12,12 +12,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::Postgres;
 use tracing::instrument;
+use uuid::Uuid;
 
-#[cfg(test)]
-use crate::config::editable::config_to_toml;
-use crate::config::editable::{config_to_toml_with_errors, toml_to_config};
+use crate::config::editable::{config_to_toml, config_to_toml_with_errors, toml_to_config};
 use crate::config::{Config, ConfigLoadingError, UninitializedConfig};
-use crate::db::postgres::stored_config_queries::{load_config_from_db, merge_load_config_errors};
+use crate::db::postgres::stored_config_queries::{
+    load_config_from_db, load_editor_path_contents, merge_load_config_errors,
+};
 use crate::db::postgres::stored_config_writes::{
     WriteStoredConfigParams, write_stored_config_in_tx,
 };
@@ -62,8 +63,14 @@ impl GetConfigTomlResponse {
         hash: String,
         tags: HashMap<String, String>,
         loading_errors: Vec<ConfigLoadingError>,
+        free_files: HashMap<String, String>,
     ) -> Result<Self, Error> {
-        let (toml, path_contents) = config_to_toml_with_errors(&config, &loading_errors)?;
+        let (toml, canonical_path_contents) =
+            config_to_toml_with_errors(&config, &loading_errors)?;
+        // Merge free files with referenced files. Canonical (referenced) entries
+        // take precedence if a key appears in both.
+        let mut path_contents = free_files;
+        path_contents.extend(canonical_path_contents);
         let base_signature = editable_config_signature(&toml, &path_contents)?;
         Ok(Self {
             toml,
@@ -135,9 +142,21 @@ async fn load_db_authoritative_uninitialized_config(
 async fn load_db_authoritative_config_toml(
     app_state: &ResolvedAppStateData,
 ) -> Result<GetConfigTomlResponse, Error> {
-    let (uninitialized, hash, loading_errors) =
-        load_db_authoritative_uninitialized_config(app_state).await?;
-    GetConfigTomlResponse::from_uninitialized(uninitialized, hash, HashMap::new(), loading_errors)
+    let pool = app_state
+        .postgres_connection_info
+        .get_pool_result()
+        .map_err(|e| e.log())?;
+    let ((uninitialized, hash, loading_errors), all_path_contents) = tokio::try_join!(
+        load_db_authoritative_uninitialized_config(app_state),
+        load_editor_path_contents(pool)
+    )?;
+    GetConfigTomlResponse::from_uninitialized(
+        uninitialized,
+        hash,
+        HashMap::new(),
+        loading_errors,
+        all_path_contents,
+    )
 }
 
 async fn acquire_config_editor_lock(tx: &mut sqlx::Transaction<'_, Postgres>) -> Result<(), Error> {
@@ -225,6 +244,10 @@ pub async fn apply_config_toml_handler(
 ) -> Result<Json<ApplyConfigTomlResponse>, Error> {
     let app_state = swap_state.load_latest();
     let edited_config = toml_to_config(&request.toml, &request.path_contents)?;
+    // We only need canonical_path_contents to identify free files below. The
+    // response TOML is computed after commit from the reloaded DB state so it
+    // matches what the next GET (and next CAS check) will see.
+    let canonical_path_contents = config_to_toml(&edited_config)?.1;
 
     let pool = app_state
         .postgres_connection_info
@@ -243,19 +266,55 @@ pub async fn apply_config_toml_handler(
     // observe uncommitted state on `tx` — but that is fine here: at this
     // point `tx` has only acquired the lock, not written anything, so the
     // committed baseline is exactly what we want to CAS against.
-    let current_loaded = load_config_from_db(pool)
-        .await
-        .map_err(merge_load_config_errors)?;
+    let (current_loaded, current_all_path_contents) = tokio::try_join!(
+        async {
+            load_config_from_db(pool)
+                .await
+                .map_err(merge_load_config_errors)
+        },
+        load_editor_path_contents(pool)
+    )?;
     // Use config_to_toml_with_errors so the CAS signature matches what GET returns.
-    let (current_toml, current_path_contents) =
+    let (current_toml, current_canonical_path_contents) =
         config_to_toml_with_errors(&current_loaded.config, &current_loaded.loading_errors)?;
-    let current_signature = editable_config_signature(&current_toml, &current_path_contents)?;
+    // Compute the CAS signature the same way from_uninitialized does: start
+    // with all editor files, then let canonical entries overwrite. This ensures
+    // referenced files always use the version the config was built from, not a
+    // newer row for the same path that a content-addressed write may have left
+    // in stored_files.
+    let mut current_effective_path_contents = current_all_path_contents;
+    current_effective_path_contents.extend(current_canonical_path_contents);
+    let current_signature =
+        editable_config_signature(&current_toml, &current_effective_path_contents)?;
 
     if current_signature != request.base_signature {
         return Err(Error::new(ErrorDetails::ConfigCompareAndSwapConflict {
             message: "Config changed underneath you, reload the latest snapshot before applying your edits.".to_string(),
         }));
     }
+
+    // Files in the request that are not referenced by the canonical config are
+    // "free files" — they live in the UI editor but are not yet wired up to any
+    // config entry. Persist them into stored_files so they survive the
+    // normalize round-trip.
+    let new_free_files: HashMap<String, String> = request
+        .path_contents
+        .iter()
+        .filter(|(k, _)| !canonical_path_contents.contains_key(k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    // The set of paths that must remain active after this apply: everything
+    // the client sent, unioned with everything the canonical config
+    // references. The union guards against a client apply that omits a
+    // canonical file from `path_contents` — without it, the tombstone step
+    // in `write_free_files_in_tx` would tombstone a still-referenced file's
+    // active row.
+    let all_new_paths: HashSet<String> = request
+        .path_contents
+        .keys()
+        .cloned()
+        .chain(canonical_path_contents.keys().cloned())
+        .collect();
 
     // `write_stored_config_in_tx` validates `edited_config` internally and
     // returns the resulting `UnwrittenConfig`, so we can hot-swap the live
@@ -272,6 +331,8 @@ pub async fn apply_config_toml_handler(
         },
     ))
     .await?;
+
+    write_free_files_in_tx(&mut tx, &new_free_files, &all_new_paths, "ui-config-editor").await?;
 
     // Write the config snapshot and build new runtime dependencies **before**
     // committing the transaction, so a runtime-dependency failure (e.g. bad
@@ -302,11 +363,20 @@ pub async fn apply_config_toml_handler(
     // still has its `# BROKEN` block. Computing the response via plain
     // `config_to_toml` here would diverge from the next GET's signature
     // and cause a false CAS conflict on the very next save.
-    let post_loaded = load_config_from_db(pool)
-        .await
-        .map_err(merge_load_config_errors)?;
-    let (response_toml, response_path_contents) =
+    let (post_loaded, post_all_path_contents) = tokio::try_join!(
+        async {
+            load_config_from_db(pool)
+                .await
+                .map_err(merge_load_config_errors)
+        },
+        load_editor_path_contents(pool)
+    )?;
+    let (response_toml, response_canonical_path_contents) =
         config_to_toml_with_errors(&post_loaded.config, &post_loaded.loading_errors)?;
+    // Merge free files over canonical, matching from_uninitialized, so the
+    // client sees all files and the signature matches the next GET.
+    let mut response_path_contents = post_all_path_contents;
+    response_path_contents.extend(response_canonical_path_contents);
     let response_signature = editable_config_signature(&response_toml, &response_path_contents)?;
 
     Ok(Json(ApplyConfigTomlResponse {
@@ -315,6 +385,101 @@ pub async fn apply_config_toml_handler(
         hash: written_hash,
         base_signature: response_signature,
     }))
+}
+
+/// Inserts free files (files in `path_contents` not referenced by the TOML)
+/// into `tensorzero.stored_files` and tombstones files that were present in
+/// the editor but are absent from the new `path_contents`.
+///
+/// `stored_files` rows referenced by UUID from config tables are never
+/// queried with a `deleted_at` filter, so tombstoning only affects the
+/// editor view — it does not break any live config references.
+///
+/// At most one active row per `file_path` is maintained: if the content is
+/// unchanged the existing row is reused; if the content changed the old row
+/// is tombstoned before the new one is inserted.
+async fn write_free_files_in_tx(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    free_files: &HashMap<String, String>,
+    all_new_paths: &HashSet<String>,
+    creation_source: &str,
+) -> Result<(), Error> {
+    // Tombstone all non-deleted rows for file paths that the user removed
+    // from the editor (absent from the new path_contents entirely).
+    sqlx::query(
+        r"
+        UPDATE tensorzero.stored_files
+        SET deleted_at = NOW()
+        WHERE deleted_at IS NULL
+          AND file_path NOT IN (SELECT unnest($1::text[]))
+        ",
+    )
+    .bind(all_new_paths.iter().cloned().collect::<Vec<_>>())
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to tombstone removed files in stored_files: {e}"),
+        })
+    })?;
+
+    if free_files.is_empty() {
+        return Ok(());
+    }
+
+    // Precompute IDs and hashes for all free files.
+    let ids: Vec<Uuid> = free_files.keys().map(|_| Uuid::now_v7()).collect();
+    let paths: Vec<&str> = free_files.keys().map(String::as_str).collect();
+    let bodies: Vec<&str> = free_files.values().map(String::as_str).collect();
+    let hashes: Vec<Vec<u8>> = bodies
+        .iter()
+        .map(|body| blake3::hash(body.as_bytes()).as_bytes().to_vec())
+        .collect();
+
+    // In a single CTE:
+    //   1. Insert rows where no active row with the same (file_path, content_hash)
+    //      already exists — content-hash dedup in one SQL round-trip.
+    //   2. Tombstone any previously active rows for the same paths, so there is
+    //      never more than one active row per file_path.
+    sqlx::query(
+        r"
+        WITH new_rows AS (
+            INSERT INTO tensorzero.stored_files
+                (id, file_path, source_body, content_hash, creation_source)
+            SELECT input.id, input.file_path, input.source_body,
+                   input.content_hash, $5
+            FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::bytea[])
+                 AS input(id, file_path, source_body, content_hash)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM tensorzero.stored_files t
+                WHERE t.file_path  = input.file_path
+                  AND t.content_hash = input.content_hash
+                  AND t.deleted_at IS NULL
+            )
+            RETURNING id, file_path
+        )
+        UPDATE tensorzero.stored_files t
+        SET deleted_at = NOW()
+        FROM new_rows n
+        WHERE t.file_path  = n.file_path
+          AND t.deleted_at IS NULL
+          AND t.id        != n.id
+        ",
+    )
+    .bind(&ids)
+    .bind(&paths)
+    .bind(&bodies)
+    .bind(&hashes)
+    .bind(creation_source)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| {
+        Error::new(ErrorDetails::PostgresQuery {
+            message: format!("Failed to upsert free files into stored_files: {e}"),
+        })
+    })?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -368,6 +533,7 @@ mod tests {
             "test-hash".to_string(),
             HashMap::new(),
             vec![],
+            HashMap::new(),
         )
         .expect("TOML response generation should succeed");
 
