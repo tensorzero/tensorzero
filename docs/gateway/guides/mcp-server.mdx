@@ -1,0 +1,90 @@
+---
+title: Connect via MCP
+description: Connect AI coding tools to TensorZero using the Model Context Protocol (MCP) for direct access to observability, datasets, evaluations, and optimization.
+---
+
+The TensorZero gateway includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that lets AI coding tools like Claude Code and Codex interact directly with your TensorZero deployment.
+Through MCP, these tools can query inferences, manage datasets, run evaluations, launch optimizations, and more.
+
+<Note>
+
+MCP support is under active development and may have breaking changes.
+
+</Note>
+
+## Setup
+
+The MCP server runs automatically alongside the gateway at `http://<host>:<port>/mcp` using the Streamable HTTP transport.
+If your gateway is configured with a `base_path`, the MCP endpoint will be at `http://<host>:<port>/<base_path>/mcp` instead.
+No additional configuration is needed.
+
+## Client Setup
+
+### Claude Code
+
+```sh
+claude mcp add tensorzero --transport http http://localhost:3000/mcp
+```
+
+### Codex
+
+```sh
+codex mcp add --transport http --url http://localhost:3000/mcp tensorzero
+```
+
+Any MCP client that supports the Streamable HTTP transport should work with the gateway's MCP endpoint.
+
+## Authentication
+
+If you have [authentication enabled](/operations/set-up-auth-for-tensorzero) for your gateway, the MCP server inherits those settings.
+Your MCP client will need to include the appropriate credentials in its requests.
+
+## Available Tools
+
+### Inference & Feedback
+
+| Tool | Description |
+| --- | --- |
+| `inference` | Call the TensorZero inference endpoint |
+| `feedback` | Submit feedback (comments, demonstrations, float/boolean metrics) for an inference or episode |
+
+### Inference Queries
+
+| Tool | Description |
+| --- | --- |
+| `list_inferences` | List inferences with filtering by function, variant, episode, tags, metrics, and time range |
+| `get_inferences` | Retrieve specific inferences by ID |
+| `list_episodes` | List episodes with pagination and optional filtering |
+
+### Dataset Management
+
+| Tool | Description |
+| --- | --- |
+| `list_datasets` | List available datasets with metadata (datapoint count, last updated) |
+| `list_datapoints` | List datapoints in a dataset with optional filtering and pagination |
+| `get_datapoints` | Get specific datapoints by ID |
+| `create_datapoints` | Create new datapoints in a dataset |
+| `create_datapoints_from_inferences` | Create datapoints from existing inferences |
+| `update_datapoints` | Update existing datapoints (input, output, tags, metadata) |
+| `delete_datapoints` | Soft-delete datapoints by ID |
+
+### Feedback Analysis
+
+| Tool | Description |
+| --- | --- |
+| `get_feedback_by_target_id` | Get all feedback for a given inference or episode |
+| `get_feedback_by_variant` | Get feedback statistics (mean, variance, count) by variant for a function and metric |
+| `get_latest_feedback_by_metric` | Get the latest feedback ID for each metric for a given inference |
+
+### Configuration
+
+| Tool | Description |
+| --- | --- |
+| `get_config` | Get the live config snapshot or a historical snapshot by hash |
+| `write_config` | Write a config snapshot to storage |
+
+### Evaluation
+
+| Tool | Description |
+| --- | --- |
+| `run_evaluation` | Run an evaluation on a dataset with configured evaluators |
