@@ -242,7 +242,7 @@ max_tokens = 100
 type = "chat_completion"
 model = "gcp-gemini-2.5-flash"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/simple_system_template.minijinja"
-max_tokens = 200
+max_tokens = 400
 
 [functions.basic_test.variants.gcp-vertex-gemini-flash-extra-body]
 type = "chat_completion"
