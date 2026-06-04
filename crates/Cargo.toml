@@ -52,13 +52,13 @@ reqwest = { version = "0.13", features = ["multipart", "json", "query", "http2"]
 serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 serde_with = { version = "3.20.0", default-features = false, features = ["macros"] }
-uuid = { version = "1.22.0", features = ["serde", "v7"] }
-serde_json = { version = "1.0.143", features = ["preserve_order"] }
+uuid = { version = "1.23.2", features = ["serde", "v7"] }
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 toml = { version = "1.0.6", features = ["preserve_order"] }
 async-stream = "0.3.5"
 async-trait = "0.1.89"
-http = "1.4.0"
+http = "1.4.1"
 infer = "0.19.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.52.3", features = ["full"] }
@@ -75,7 +75,7 @@ thiserror = "2.0.18"
 lazy_static = { version = "1.5.0" }
 sse-stream = "0.2.3"
 reqwest-sse-stream = { path = "reqwest-sse-stream" }
-minijinja = { version = "2.19.0", features = [
+minijinja = { version = "2.20.0", features = [
     "loader",
     "debug",
     "json",
@@ -118,7 +118,7 @@ init-tracing-opentelemetry = { version = "0.38.0", features = ["xray"] }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.38.0", features = [
     "tracing_level_info",
 ] }
-tower-http = { version = "0.6.10", features = ["trace"] }
+tower-http = { version = "0.6.11", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
@@ -133,7 +133,7 @@ sqlx = { version = "0.9.0", features = [
     "sqlx-toml",
 ] }
 rlt = "0.5.0"
-metrics-exporter-prometheus = { version = "0.18.1", features = [
+metrics-exporter-prometheus = { version = "0.18.3", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
@@ -146,13 +146,13 @@ tensorzero = { path = "tensorzero-client" }
 tensorzero-core = { path = "tensorzero-core" }
 tensorzero-http = { path = "tensorzero-http", features = ["ts-rs"] }
 regex = "1.12.2"
-redis = { version = "1.2.1", features = [
+redis = { version = "1.2.2", features = [
     "tokio-comp",
     "connection-manager",
     "tls-rustls",
     "tokio-rustls-comp",
 ] }
-redis-test = { version = "1.0.3", features = ["aio"] }
+redis-test = { version = "1.0.4", features = ["aio"] }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 globset = "0.4.18"
 json-pointer = "0.3.4"

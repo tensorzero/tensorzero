@@ -163,11 +163,11 @@ gag = "1.0.0"
 h2 = "0.4"
 rcgen = "0.14"
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs"] }
-log = "0.4.29"
+log = "0.4.30"
 mockall = "0.14"
 tensorzero-unsafe-helpers = { path = "../tensorzero-unsafe-helpers" }
 redis-test = { workspace = true }
 rmcp = { version = "1.7.0", features = ["client", "transport-streamable-http-client-reqwest"] }
 
 [build-dependencies]
-built = "0.8.0"
+built = "0.8.1"

@@ -14,10 +14,10 @@ anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
 clap = { version = "4.6.1", features = ["derive"] }
 hex = "0.4.3"
-http = "1.4.0"
+http = "1.4.1"
 http-body-util = { workspace = true }
 http-serde-ext = "1.0.2"
-hyper = { version = "1.9.0", features = ["client", "server", "http1", "http2"] }
+hyper = { version = "1.10.1", features = ["client", "server", "http1", "http2"] }
 hyper-util = "0.1.19"
 moka = { version = "0.12.15", features = ["sync"] }
 pin-project = "1.1.13"
