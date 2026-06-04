@@ -87,7 +87,7 @@ const ROOT_TYPES: &[(&str, &str)] = &[
     ("UPDATE_DATAPOINTS_RESPONSE", "UpdateDatapointsResponse"),
     ("UPLOAD_DATASET_TOOL_OUTPUT", "UploadDatasetToolOutput"),
     ("GEPA_TOOL_OUTPUT", "GepaToolOutput"),
-    ("WRITE_CONFIG_RESPONSE", "WriteConfigResponse"),
+    ("WRITE_CONFIG_TOOL_OUTPUT", "WriteConfigToolOutput"),
     ("GET_CONFIG_RESPONSE", "GetConfigResponse"),
     ("FEEDBACK_BY_VARIANT", "FeedbackByVariant"),
     (
